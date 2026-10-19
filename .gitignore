@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+# Bubble run bundles and exports carry plugin code and API keys; they never belong in the repo
+import/static.js
+import/*.bubble
+import/exports/
+*.dynamic.js
+*.pem
