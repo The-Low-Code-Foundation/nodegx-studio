@@ -15,6 +15,10 @@ the Router; NodeGX half filed as P123-STU015-BASEURL in OpenNoodl's ledger); STU
 `editor/reusable.mjs`); the importer's grouping (`import/group.mjs`; on the template: "Horizontal Buttons" ×6, the
 pricing columns and logo blocks left alone for a different hover look; same 227 elements drawn as ungrouped).
 
+First: re-run `check:editor` on a quiet machine (30bfedc, STU-015-IMPORTED, was not run green: load average 64–88 from
+other jobs failed the same three timing checks on the committed code too; SCOPE.md says which). If those three still
+fail when quiet, make them wait for the file / the rebuild as the branch step does.
+
 Next, in order: (1) show Richard Make it reusable and the grouped template (pictures: his template converted again —
 the six feature rows are one reusable — and the todo Sign-in card made reusable); (2) STU-051's rest: a Conditional tab
 (his app's "page narrower than 768" rules show as a cut-off chip today — they are Expressions wired into the property),
