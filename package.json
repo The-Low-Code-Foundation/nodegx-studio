@@ -11,9 +11,10 @@
   "scripts": {
     "start": "node app/launch.mjs",
     "serve": "node editor/serve.mjs",
-    "check": "node editor/check.mjs && node import/check.mjs",
+    "check": "node editor/check.mjs && node import/check.mjs && node app/check.mjs",
     "check:editor": "node editor/check.mjs",
     "check:import": "node import/check.mjs",
+    "check:app": "node app/check.mjs",
     "smoke": "node app/launch.mjs --smoke"
   },
   "devDependencies": {

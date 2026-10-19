@@ -36,7 +36,7 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 | Live with outside edits — a file changed by Claude Code (MCP), VS Code or `git pull` is drawn without a reload; a clash with Studio's own edit asks | works (2026-10-19) | `check:editor` 46/46 |
 | Styles — global styles as NodeGX variants | works | `check:editor` |
 | Bubble importer — pages, elements, styles, workflows, expressions, option sets, reusables, custom states, data types, privacy rules → `nodegx.security.json`, backend workflows → cloud functions, Data-tab rows | spike, measured on a real 18-page app (0 validation errors) | `check:import` 26/26 |
-| Desktop app — Electron window, File → Open Project…, a smoke mode | first cut (2026-10-19) | `smoke` |
+| Desktop app — Electron window, a welcome screen (recent projects, NodeGX's templates, Import an app), File → Open Recent, a smoke mode | first cut (2026-10-19) | `check:app` 23/23, `smoke` |
 
 [history/](history/) is how it started (NodeGX phase 123, working title "Open Bubble"): the brief, the look, the
 first play test and every ruling taken.
@@ -99,6 +99,23 @@ change made outside. A second Studio window on the same project hears the first 
 Claude Code's `update_component` through the NodeGX MCP server added a button to the todo template's Sign in page
 and it was on Studio's screen and in the element tree **713 ms** after the file was written; the gate does the same
 with an atomic rename (`check:editor` 46/46, 8 new checks).
+
+**Done (STU-003, 2026-10-19).** With no folder named, the window opens on a welcome screen (`app/welcome.html`): the
+last project first with **Reopen**, the other recent ones (up to ten, newest first, kept in the app's user data
+folder as `recent-projects.json`; one moved or deleted is shown as *not found* with a ✕ to drop it), **Open a
+project…**, **Import an app…**, and **Start from a template** — the five templates NodeGX publishes to its community
+shelf, with the shelf's titles and summaries, copied from the checkout's `templates/` into a new folder the person
+names (the project takes the folder's name; the editor-written `.mcp.json` / `CLAUDE.md` are not copied). File gets
+**Welcome**, **Open Recent** and **Import an App…**. A destination that already holds files is refused before
+anything is written: the importer starts by deleting its output folder, so this guard is what stands between a
+mis-picked folder and its contents. An import runs the bundler when given a folder, then the converter, and names
+the project after its folder too (the source app's id stays in `metadata.imported.appId`); the report and the guided
+path are STU-040's. `app/check.mjs` drives the real Electron window over CDP with its dialogs answered by
+`NODEGX_STUDIO_TEST_PICKS` and a recent list of its own (`NODEGX_STUDIO_USER_DATA`), and reads the files and the
+list on disk: 23/23; with the progress message's guard removed it fails (a refusal used to be painted over by the
+"Copying…" message that travels on another channel and lands after it). Stopping the app with Ctrl-C / SIGTERM now
+takes its editor server with it. Not in it: a blank project (NodeGX's own blank, `hello-world`, is an object inside
+the editor's code, not a folder), and templates come from the checkout until STU-006 vendors them.
 
 Order: STU-002 first (it is what makes "local" feel alive, and STU-005 depends on it), then STU-003–005, then
 STU-006–007 when someone outside the team needs to run it.

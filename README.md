@@ -32,12 +32,13 @@ bash dev-docs/tasks/phase-112-your-own-nodegx/prototype/real/build.sh   # look.j
 
 # here
 npm install
-npm start                       # the desktop app; asks for a project folder
+npm start                       # the desktop app: recent projects, a template, or an import
 npm start -- /path/to/project   # or opens one directly
 npm run serve -- /path/to/project   # the same editor in your browser
 ```
 
-A project is any folder holding `nodegx.project.json` — a NodeGX template, a project made in the NodeGX editor, or
+With no folder named, Studio opens on its welcome screen: reopen the last project, pick a recent one, start from one of
+NodeGX's templates (a copy in a new folder you name), or import an app. A project is any folder holding `nodegx.project.json` — a NodeGX template, a project made in the NodeGX editor, or
 one the importer wrote.
 
 ## Import an app
@@ -60,14 +61,15 @@ another platform; this reads only your own app.
 ```bash
 npm run check:editor   # 46 checks: drives the editor headless against a copy of NodeGX's todo template
 npm run check:import   # the converter on the example editor requests (26 checks; 32 with a template bundle)
-npm run smoke -- /path/to/project   # the desktop app opens the project and the app draws
+npm run check:app      # 23 checks: drives the desktop app — welcome screen, a template, reopen, an import, the recent list
+npm run smoke -- /path/to/project   # the desktop app opens the project and the app draws (no path: the welcome screen)
 ```
 
 ## Layout
 
 | folder | what |
 |---|---|
-| `app/` | the Electron shell: starts the editor server for a project folder and shows it in a window |
+| `app/` | the Electron shell: the welcome screen (`welcome.html`, `actions.mjs`), the editor server for a project folder in a window, the gate |
 | `editor/` | `studio.html` (the whole editor, one file), `serve.mjs` (project files, save, the backend proxy), the gate |
 | `import/` | the Bubble importer, its fixtures (example editor requests) and its gate |
 | `lib/` | where the NodeGX checkout is |

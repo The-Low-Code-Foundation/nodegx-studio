@@ -19,6 +19,20 @@ export async function browser({ port = 9333, width = 1440, height = 900, chrome 
   if (typeof WebSocket === 'undefined') throw new Error(`the gate needs Node 22 or later (this is ${process.version}); see .nvmrc`);
   const profile = mkdtempSync(join(tmpdir(), 'nodegx-studio-chrome-'));
   const proc = spawn(chrome, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--use-mock-keychain', '--hide-scrollbars', `--window-size=${width},${height}`, 'about:blank'], { stdio: 'ignore' });
+  try {
+    return await attach({ port, width, height, onClose: async () => { proc.kill(); await wait(200); rmSync(profile, { recursive: true, force: true }); } });
+  } catch (err) {
+    proc.kill();
+    throw err;
+  }
+}
+
+/**
+ * The same driver on a page that something else started — the desktop app's window (`electron --remote-debugging-port`).
+ * `close` closes the connection only, unless `onClose` says more. `width`/`height` set the page's viewport when given.
+ */
+export async function attach({ port, width, height, onClose } = {}) {
+  if (typeof WebSocket === 'undefined') throw new Error(`the gate needs Node 22 or later (this is ${process.version}); see .nvmrc`);
   let target;
   for (let i = 0; i < 80 && !target; i++) {
     await wait(250);
@@ -26,7 +40,7 @@ export async function browser({ port = 9333, width = 1440, height = 900, chrome 
       target = await new Promise((res, rej) => http.get({ host: '127.0.0.1', port, path: '/json/list' }, (r) => { let b = ''; r.on('data', (d) => (b += d)); r.on('end', () => { try { res(JSON.parse(b).find((t) => t.type === 'page')); } catch (e) { rej(e); } }); }).on('error', rej));
     } catch { /* not up yet */ }
   }
-  if (!target) { proc.kill(); throw new Error('Chrome did not come up'); }
+  if (!target) throw new Error(`no page on the debugging port ${port}`);
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
   let seq = 0;
@@ -45,7 +59,7 @@ export async function browser({ port = 9333, width = 1440, height = 900, chrome 
   });
   await send('Runtime.enable');
   await send('Page.enable');
-  await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+  if (width && height) await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
   const evaluate = async (expression) => {
     const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
     if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
@@ -69,7 +83,7 @@ export async function browser({ port = 9333, width = 1440, height = 900, chrome 
     type: async (text) => { await send('Input.insertText', { text }); },
     key: async (key, code = key, vk) => { for (const type of ['keyDown', 'keyUp']) await send('Input.dispatchKeyEvent', { type, key, code, windowsVirtualKeyCode: vk }); },
     screenshot: async (file) => { const r = await send('Page.captureScreenshot', { format: 'png' }); writeFileSync(file, Buffer.from(r.data, 'base64')); return file; },
-    close: async () => { try { ws.close(); } catch {} proc.kill(); await wait(200); rmSync(profile, { recursive: true, force: true }); }
+    close: async () => { try { ws.close(); } catch {} await onClose?.(); }
   };
   return b;
 }
