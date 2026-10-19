@@ -47,7 +47,7 @@ try {
   const pjPath = join(project, 'nodegx.project.json');
   const pj = JSON.parse(readFileSync(pjPath, 'utf8'));
   pj.metadata ??= {};
-  pj.metadata.cloudservices = { instanceId: 'open_bubble_check', endpoint: `http://127.0.0.1:${backendPort}`, appId: 'open_bubble_check', type: 'nodegx' };
+  pj.metadata.cloudservices = { instanceId: 'studio_check', endpoint: `http://127.0.0.1:${backendPort}`, appId: 'studio_check', type: 'nodegx' };
   writeFileSync(pjPath, JSON.stringify(pj, null, 2));
   const port = await freePort();
   const server = spawn(process.execPath, [join(here, 'serve.mjs'), project, '--port', String(port)], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -248,7 +248,7 @@ try {
   ok(onDisk('nodegx.project.json').metadata.dbCollections.find((c) => c.name === 'Note').columns.some((c) => c.name === 'title'), 'a new field is written into the type');
   await wait(1200);
   await clickText('#datamain .bar button', 'New entry'); await wait(1500);
-  const rows = await fetch(`http://127.0.0.1:${backendPort}/classes/Note?limit=10`, { headers: { 'X-Parse-Application-Id': 'open_bubble_check' } }).then((r) => r.json());
+  const rows = await fetch(`http://127.0.0.1:${backendPort}/classes/Note?limit=10`, { headers: { 'X-Parse-Application-Id': 'studio_check' } }).then((r) => r.json());
   ok(rows.results?.length === 1, '"+ New entry" creates a row on the backend', { rows: rows.results?.length });
   await shot('data');
   {

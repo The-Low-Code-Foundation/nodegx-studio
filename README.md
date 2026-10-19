@@ -40,11 +40,13 @@ npm run serve -- /path/to/project   # the same editor in your browser
 A project is any folder holding `nodegx.project.json` — a NodeGX template, a project made in the NodeGX editor, or
 one the importer wrote.
 
-## Import a Bubble app
+## Import an app
+
+The importer brings across an app built on the Bubble™ platform.
 
 ```bash
-node import/bubble2nodegx.mjs /path/to/app.bubble.json /path/to/out   # a .bubble export, or…
-node import/bubble-run-bundle-to-export.mjs …                          # …your app's run-mode bundles (no paid plan)
+node import/app-to-nodegx.mjs /path/to/app.bubble.json /path/to/out   # a .bubble export, or…
+node import/bundles-to-export.mjs …                                   # …your app's run-mode bundles (no paid plan)
 npm start -- /path/to/out
 ```
 

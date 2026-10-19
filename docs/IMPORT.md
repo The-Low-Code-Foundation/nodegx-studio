@@ -16,7 +16,7 @@ our NodeGX Studio project … Turning Bubble JSON programmatically into NodeGX J
 size of the JSON exports we'd need it to be 90% programmatic if it's to be at all possible."*
 
 **The spike's answer: yes, and it is more than 90% programmatic on the subset this corpus covers.** A 500-line
-converter with no dependencies (`bubble2nodegx.mjs`, beside this file) takes Richard's 2023 test app
+converter with no dependencies (`app-to-nodegx.mjs`, beside this file) takes Richard's 2023 test app
 (`digital-bricks/bubbleExporter`, `v6/v6.json`: three pages, 22 elements, 40 styles, two workflows, an API Connector
 call, a repeating group, two data types) and writes a NodeGX v2 project that the kit validates with **0 errors**,
 `render_report` draws with **0 runtime errors**, and **NodeGX Studio opens as if it had been built there**: the element
@@ -53,7 +53,7 @@ NodeGX Studio drive uses the rebuilt preview bundle and shows the variant.
 
 ```sh
 # the converter: a .bubble / JSON export in, a NodeGX v2 project folder out (the folder is replaced)
-node import/bubble2nodegx.mjs /path/to/app.bubble.json /path/to/out
+node import/app-to-nodegx.mjs /path/to/app.bubble.json /path/to/out
 cat /path/to/out/docs/IMPORT-REPORT.md          # counts + every finding, with where and what
 # open it in NodeGX Studio (needs the runtime, the preview bundle and Orbit's modules: NEXT-SESSION-PROMPT.md)
 node editor/serve.mjs /path/to/out --port 47900
@@ -173,7 +173,7 @@ workflows**, then the `id_to_path` index of every page), and an XHR to `/api/1.1
 `dynamic.js` carries the app part plus its own tree, so one fetch per page is the whole app. The keys are abbreviated
 (`%p` properties, `%x` type, `%el` elements, `%wf` workflows, `%ed` reusables, `%p3` pages, `%h/%w/%l/%t` …): the
 same AST the paid export writes with long names, which is why the 2023 export's `id_to_path` already read
-`%p3.AAX.%el.bTGlI`. **`bubble-run-bundle-to-export.mjs`** (beside this file) turns a folder of `dynamic.js` files
+`%p3.AAX.%el.bTGlI`. **`bundles-to-export.mjs`** (beside this file) turns a folder of `dynamic.js` files
 into one export-shaped JSON through a 90-entry key dictionary (unknown keys are kept as-is and listed), and the
 converter reads it unchanged. Nothing is executed: the JS string literals are decoded as text and parsed as JSON.
 
@@ -188,8 +188,8 @@ for p in index faqs reset_pw; do
   curl -sL -A "Mozilla/5.0 Chrome/130.0" -o "$p.dynamic.js" "https://<app>.bubbleapps.io$d"
 done
 cp static.js .   # optional: plugin names for the report
-node import/bubble-run-bundle-to-export.mjs <folder> app.export.json
-node import/bubble2nodegx.mjs app.export.json <outdir>
+node import/bundles-to-export.mjs <folder> app.export.json
+node import/app-to-nodegx.mjs app.export.json <outdir>
 ```
 
 Put bundles under `import/exports/` or beside `static.js`: **`.gitignore` now ignores both**, because `static.js`
@@ -223,7 +223,7 @@ are Bubble's Google fonts that NodeGX will not link, hero background images map 
 "Text" until their inputs arrive, and the first run had every hidden section visible (52,474 px tall). Each of those
 was a measured fix or is a known next row; none is a wall.
 
-### The dictionary rows this app added (all in `bubble2nodegx.mjs`)
+### The dictionary rows this app added (all in `app-to-nodegx.mjs`)
 
 - **A hidden element is `mounted: false`, not `visible: false`**: NodeGX's `visible` keeps the space (the Group docs
   say so); Bubble collapses by default. Measured by an experiment of seven groups: every `visible: false`, however
@@ -320,7 +320,7 @@ Richard's boilerplate (a Top Shelf Templates landing page, free plan, `https://t
 one page, 188 elements, 14 workflows, 0 data. `exports/template/` (gitignored) holds its `index.dynamic.js`; his five
 screenshots of the Bubble original are in `template-screens/`; the NodeGX render before and after this round is
 `../look/import-template-nodegx-before.png` and `../look/import-template-nodegx.png` (preview-solo, 1440 wide, 0
-console errors, 0 validation errors, 188/188 elements mapped). The rows this page added to `bubble2nodegx.mjs`:
+console errors, 0 validation errors, 188/188 elements mapped). The rows this page added to `app-to-nodegx.mjs`:
 
 | Bubble | NodeGX | why it showed |
 |---|---|---|
@@ -362,14 +362,14 @@ every kind of backend workflow to the template app (`test112-14324`), one of eve
 `index.dynamic.js` and `static.js` refetched after he added the five are byte-identical to s4's (252,017 and 335,287
 bytes). The editor's `c5r6j` is the only source short of the paid export. It needs the person signed in to the Bubble
 editor: DevTools → Network → filter `c5r6j` → Response → save it as `<anything>c5r6j<anything>.json` beside the
-`*.dynamic.js` files, and `bubble-run-bundle-to-export.mjs` puts it under `api` (the paid export's own key is
+`*.dynamic.js` files, and `bundles-to-export.mjs` puts it under `api` (the paid export's own key is
 unmeasured; the converter reads `api` or `backend_workflows`).
 
 | Bubble | NodeGX | measured on |
 |---|---|---|
 | API workflow (`APIEvent`: `wf_name`, `parameters[{%k, %v type, is_list, optional}]`, `auth_unecessary`, `expose`) | `/#__cloud__/<wf_name>`: a Request with each parameter (`ptype-` from the type, `array` for a list; `preq-` from *optional*; Allow Unauthenticated from *can run without authentication*), the steps from Received, a Response at the end. `call` proposed `public`/`authenticated` | someApiWorkflow |
 | "Only when" on a backend workflow, with *return 200 if condition not met* | a Condition after Received; its false branch answers (a 200, or a failure when the box is off) | recurringEvent1 |
-| database trigger (`DatabaseTriggerEvent`, `data_trigger_type`) | `/#__cloud__/<name>` with Request params `record, action, collection, id` (the db-change payload) + a **db-change trigger** on that collection (`user` → `_User`), create/update/delete, in `backend/triggers.bubble.json` | someThingIsModified |
+| database trigger (`DatabaseTriggerEvent`, `data_trigger_type`) | `/#__cloud__/<name>` with Request params `record, action, collection, id` (the db-change payload) + a **db-change trigger** on that collection (`user` → `_User`), create/update/delete, in `backend/triggers.imported.json` | someThingIsModified |
 | recurring event (`RecurringEvent`, `custom_event_data_type`) | `/#__cloud__/<name>` with a `thing` param + a **schedule trigger written disabled** (daily midnight): Bubble's frequency is chosen per thing where it is scheduled, NodeGX's cron is per function — a person chooses | recurringEvent1 |
 | backend custom event (`CustomEvent`: `parameters[{param_name, btype_id}]`, `return_types[{%d}]`) | `/#__cloud__/shared/<name>`: Component Inputs (`run` + each parameter), Component Outputs (`done` + each return value); *Trigger a custom event* is an instance of it, its `arguments[{param_id, arg_value}]` wired by the parameter's name | someCustomEvent |
 | `APIEventParameter` / `CurrentWorkflowItem` (a custom event's parameter) / `CurrentDataItem` ("This thing now") | the Request's `pm-<name>` / the Component Inputs port / the Request's `pm-record` (or `pm-thing`) | all three |
@@ -388,14 +388,14 @@ unmeasured; the converter reads `api` or `backend_workflows`).
 crashes; `validate_project` **0 errors**, 331 nodes checked (265 without the backend part); the only cloud warning
 left is `public-write-door-unlimited` on *someThingIsModified*, which is the real point: a function a trigger runs
 must accept a call with no session (the dispatcher sends none — `dispatcher.ts` `runner.run(name, { body, headers: {} })`),
-so it is also a public door until `nodegx.security.json` says `"call": "nobody"` for it. `triggers.bubble.json`
+so it is also a public door until `nodegx.security.json` says `"call": "nobody"` for it. `triggers.imported.json`
 proposes exactly that; unmeasured is that a trigger's run skips the call rule (`runner.run` does not consult it; the
 `/functions/:name` route does). The page side is byte-identical to s4's output apart from timestamps and the two new
 report rows.
 
 **Not done, in order:** (1) the converter's own gate — it now has three fixtures in the repo
 (`backend-workflows/*.json`) and could assert 0 errors, 4 cloud components, no Log In in someApiWorkflow, and
-`rootNodeId` (P123-S5-NOHOME); (2) applying `triggers.bubble.json` to a bound backend and firing *someThingIsModified*
+`rootNodeId` (P123-S5-NOHOME); (2) applying `triggers.imported.json` to a bound backend and firing *someThingIsModified*
 by editing a User (the trigger has never run); (3) the parameters a *Schedule API workflow* sends — the filled example
 schedules one with none, so the key is unknown; (4) a NodeGX "record before the change" on the db-change payload, if
 Bubble apps lean on *Thing before change* (most database triggers compare before and now).
@@ -405,7 +405,7 @@ Bubble apps lean on *Thing before change* (most database triggers compare before
 Richard saved the Bubble editor's option-set request (`…/load_single_path/<app>/<version>/<hash>/dxr78ubfdtfq6tbmec`,
 `{ last_change, data }`) after making three sets in the template app: one with no values, one with a text attribute,
 and one with an attribute of every type (`option-sets/example-dxr78ubfdtfq6tbmec.json`). Saved beside the
-`*.dynamic.js` files as `<anything>dxr78ubfdtfq6tbmec<anything>.json`, `bubble-run-bundle-to-export.mjs` puts its
+`*.dynamic.js` files as `<anything>dxr78ubfdtfq6tbmec<anything>.json`, `bundles-to-export.mjs` puts its
 sets into `option_sets`, replacing a bundle's set of the same key (the bundles carry option sets too, the real app's 45
 with their attribute values; the editor's copy is the one the person is editing). The suffix looks like the editor's
 encoding of the path, so it should be the same in every app (`c5r6j` is `api`); unmeasured on a second app.
@@ -459,7 +459,7 @@ the real app against §11's output: only the 74 `collectionName`s change; 40 col
 
 Richard exported the template's three tables from Bubble's Data tab as JSON (`database-export/`, one sample row each,
 plus three empty rows of someOtherDataType; some fields can only be filled by a workflow, so they are empty).
-`bubble-data-to-nodegx.mjs <export.json> <data folder> <project> [--tz <zone>]` reads them against the app's types
+`data-to-nodegx.mjs <export.json> <data folder> <project> [--tz <zone>]` reads them against the app's types
 and writes `<project>/backend/data/<collection>.json` in the backend's own collection format (`nodegx-collection` v1:
 `schema.columns` + `records`), with `IMPORT-DATA.md` listing the `nodegx-backend import` commands and every value it
 could not read. File → type by Bubble's name for it (`export_All-<Type>s_<date>`); CSV or JSON.
@@ -493,7 +493,7 @@ only. Workaround documented in bubbleExporter's `docs/GETTING-YOUR-APP.md`: a `b
 the converter honour it). `test111-40009_jwk.pem` is the app's public JWT key, of no use for reading data.
 
 **Ids recovered (Richard's hint).** A Bubble id is `<creation time in ms>x<random>`: `1792241441972` = 12:50:41.972Z,
-and someDataType's export says *Oct 17, 2026 2:50 pm* (Paris). `bubble-data-to-nodegx.mjs` now gives every id another
+and someDataType's export says *Oct 17, 2026 2:50 pm* (Paris). `data-to-nodegx.mjs` now gives every id another
 table links to (and every Creator) to the one row of that type created in that minute, restoring `createdAt` to the
 millisecond. Measured: 1 recovered on the samples; imported into a fresh backend, someOtherDataType's Pointer resolves
 to someDataType's row. Control: `--tz UTC` recovers 0 and the report names `--tz`. Two rows of a type in one minute

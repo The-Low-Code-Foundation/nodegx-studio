@@ -16,7 +16,7 @@ import { nodegxRepo } from '../lib/nodegx.mjs';
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 const repo = nodegxRepo;
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bubble-check-'));
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'import-check-'));
 const checks = [];
 const check = (name, ok, detail) => { checks.push({ name, ok: !!ok }); console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${!ok && detail ? ' — ' + detail : ''}`); return !!ok; };
 const skip = (name, why) => console.log(`skip ${name} — ${why}`);
@@ -30,9 +30,9 @@ const mcpBuilt = exists(path.join(repo, 'packages/noodl-mcp/dist/noodl-mcp.cjs')
 
 function convert(name, inDir) {
   const out = path.join(tmp, name); const exp = path.join(out, 'app.export.json'); const project = path.join(out, 'project');
-  const b = run([path.join(here, 'bubble-run-bundle-to-export.mjs'), inDir, exp]);
+  const b = run([path.join(here, 'bundles-to-export.mjs'), inDir, exp]);
   if (!check(`${name}: the bundler exits 0`, b.status === 0, (b.stderr || b.stdout).slice(-400))) return null;
-  const c = run([path.join(here, 'bubble2nodegx.mjs'), exp, project]);
+  const c = run([path.join(here, 'app-to-nodegx.mjs'), exp, project]);
   if (!check(`${name}: the converter exits 0`, c.status === 0, (c.stderr || c.stdout).slice(-600))) return null;
   return { project, report: fs.readFileSync(path.join(project, 'docs', 'IMPORT-REPORT.md'), 'utf8'), out: c.stdout };
 }
@@ -60,7 +60,7 @@ const countBy = (text, re) => (text.match(re) || []).length;
     check('§10: four cloud components (three functions and one shared custom event)', cloudComponents === 4, String(cloudComponents));
     const api = path.join(cloudDir, 'someApiWorkflow', 'nodes.json');
     check('P123-S5B-DISABLEDSTEP: the disabled Log In step of someApiWorkflow is not converted', exists(api) && !fs.readFileSync(api, 'utf8').includes('net.noodl.user.LogIn'));
-    const trig = path.join(project, 'backend', 'triggers.bubble.json');
+    const trig = path.join(project, 'backend', 'triggers.imported.json');
     const t = exists(trig) ? readJson(trig) : null;
     check('§10: a db-change and a schedule trigger are written', t && t.triggers.map((x) => x.type).sort().join(',') === 'db-change,schedule', t && JSON.stringify(t.triggers.map((x) => x.type)));
     // s6: nodegx.security.json
@@ -104,7 +104,7 @@ const countBy = (text, re) => (text.match(re) || []).length;
         w2: { id: 'w2', type: 'ButtonClicked', properties: { element_id: 'b2' }, actions: {
           0: { id: 'a3', type: 'DeleteThing', properties: { thing_to_delete: { type: 'ElementParent' } } } } } } } };
     const out = path.join(tmp, 'synth'); fs.mkdirSync(out); const exp = path.join(out, 'app.export.json'); fs.writeFileSync(exp, JSON.stringify(synth));
-    const c = run([path.join(here, 'bubble2nodegx.mjs'), exp, path.join(out, 'project')]);
+    const c = run([path.join(here, 'app-to-nodegx.mjs'), exp, path.join(out, 'project')]);
     if (check('P123-S6-THINGTYPE: the synthetic page converts', c.status === 0, (c.stderr || c.stdout).slice(-600))) {
       const nodes = fs.readdirSync(path.join(out, 'project', 'components'), { recursive: true }).filter((f) => f.endsWith('nodes.json') && !f.includes('__cloud__')).map((f) => fs.readFileSync(path.join(out, 'project', 'components', f), 'utf8')).join('\n'); // the page and its row only: the backend fixture writes a deleted type, "thing", on purpose
       check('P123-S6-THINGTYPE: "Parent group\'s item" in a row is the row\'s type, and "Result of step 1" the same', countBy(nodes, /"collectionName": "someDataType"/g) === 2, `someDataType named ${countBy(nodes, /"collectionName": "someDataType"/g)} times`);

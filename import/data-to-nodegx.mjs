@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// bubble-data-to-nodegx — a Bubble app's data (the Data tab's exports) → files the NodeGX backend imports.
+// data-to-nodegx — a Bubble app's data (the Data tab's exports) → files the NodeGX backend imports.
 //
-//   node bubble-data-to-nodegx.mjs <export.json> <folder of Bubble data exports> <NodeGX project dir> [--tz Europe/Paris]
+//   node data-to-nodegx.mjs <export.json> <folder of Bubble data exports> <NodeGX project dir> [--tz Europe/Paris]
 //
-// <export.json> is the app definition bubble2nodegx.mjs read (it names each type's fields and their types). The
+// <export.json> is the app definition app-to-nodegx.mjs read (it names each type's fields and their types). The
 // folder holds Bubble's exports, one per data type, as Bubble names them (`export_All-<Type>s_<date>.json` or `.csv`).
 // For each one this writes `<project>/backend/data/<collection>.json` in the backend's own collection format, and
 // `backend/data/IMPORT-DATA.md` with the commands that load them and every value it could not read.
@@ -14,11 +14,11 @@ import path from 'node:path';
 
 const args = process.argv.slice(2); const tzAt = args.indexOf('--tz'); const tz = tzAt >= 0 ? args.splice(tzAt, 2)[1] : Intl.DateTimeFormat().resolvedOptions().timeZone;
 const [srcPath, dataDir, projectDir] = args;
-if (!srcPath || !dataDir || !projectDir) { console.error('usage: bubble-data-to-nodegx.mjs <export.json> <data folder> <project dir> [--tz <IANA zone>]'); process.exit(2); }
+if (!srcPath || !dataDir || !projectDir) { console.error('usage: data-to-nodegx.mjs <export.json> <data folder> <project dir> [--tz <IANA zone>]'); process.exit(2); }
 const app = JSON.parse(fs.readFileSync(srcPath, 'utf8'));
 const userTypes = app.user_types || {}; const optionSets = app.option_sets || {};
 const live = (o) => Object.entries(o || {}).filter(([, x]) => x && typeof x === 'object' && !x.deleted);
-const typeName = (k) => k === 'user' ? '_User' : userTypes[k]?.display || k; // as bubble2nodegx.mjs names the collection
+const typeName = (k) => k === 'user' ? '_User' : userTypes[k]?.display || k; // as app-to-nodegx.mjs names the collection
 const findings = []; const note = (where, what) => findings.push({ where, what });
 
 // ---------------------------------------------------------------- reading Bubble's exported text
@@ -127,7 +127,7 @@ for (const f of files) {
     if (!rec.objectId) noId++;
     records.push(rec);
   });
-  // the columns, as bubble2nodegx.mjs declares them, so the backend types each value
+  // the columns, as app-to-nodegx.mjs declares them, so the backend types each value
   const COL = { text: 'String', number: 'Number', boolean: 'Boolean', date: 'Date', image: 'String', file: 'String', geographic_address: 'Object', number_range: 'Object', date_range: 'Object', dateinterval: 'Number' };
   const columns = Object.entries(fields).map(([name, fd]) => ({ name, ...(fd.type.startsWith('list.') ? { type: 'Array' } : fd.type === 'user' || fd.type.startsWith('custom.') ? { type: 'Pointer', targetClass: typeName(fd.type.replace(/^custom\./, '')) } : { type: COL[fd.type] || 'String' }) }));
   if (records.some((r) => r.createdBy)) columns.push({ name: 'createdBy', type: 'Pointer', targetClass: '_User' });

@@ -1,20 +1,20 @@
 #!/usr/bin/env node
-// bubble-run-bundle-to-export — a Bubble app's run-mode bundles → one export-shaped JSON.
+// bundles-to-export — a Bubble app's run-mode bundles → one export-shaped JSON.
 //
-//   node bubble-run-bundle-to-export.mjs <folder with *.dynamic.js [and static.js]> <out.json>
+//   node bundles-to-export.mjs <folder with *.dynamic.js [and static.js]> <out.json>
 //
 // Bubble's run mode ships the app definition to the browser in `/package/dynamic_js/.../<page>/dynamic.js`:
 // `const app = JSON.parse('…')` (settings, user_types, option_sets, styles, reusable elements) and
 // `app['%p3']['<pageKey>'] = …JSON.parse('…')` (that page's elements and workflows), in Bubble's abbreviated key
 // form (`%p` properties, `%x` type, `%el` elements …). Each page's dynamic.js carries the whole app part and its own
 // page, so one file per page gives the whole app. This expands the abbreviated keys to the names the paid-plan
-// export uses, so `bubble2nodegx.mjs` reads either. `static.js` (optional) only lends plugin names.
+// export uses, so `app-to-nodegx.mjs` reads either. `static.js` (optional) only lends plugin names.
 // Nothing here is executed: the JS string literals are decoded as text and parsed as JSON.
 import fs from 'node:fs';
 import path from 'node:path';
 
 const [,, folder, outPath] = process.argv;
-if (!folder || !outPath) { console.error('usage: bubble-run-bundle-to-export.mjs <folder> <out.json>'); process.exit(2); }
+if (!folder || !outPath) { console.error('usage: bundles-to-export.mjs <folder> <out.json>'); process.exit(2); }
 
 // Bubble's abbreviated keys → the export's names (measured on a 22-page app of 2026-10; unknown keys are kept as-is)
 const KEYS = {

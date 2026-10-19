@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// bubble2nodegx — a spike: a Bubble app export (.bubble / JSON) → a NodeGX v2 project folder.
-// Usage: node bubble2nodegx.mjs <export.json> <outdir>
+// app-to-nodegx — a spike: a Bubble app export (.bubble / JSON) → a NodeGX v2 project folder.
+// Usage: node app-to-nodegx.mjs <export.json> <outdir>
 // No dependencies. Everything it cannot map is written to <outdir>/docs/IMPORT-REPORT.md as a finding,
 // and placed in the graph as a labelled placeholder so the page still opens.
 // Credit: the nonant reading order and the operators marked "bubble_ex" in OPS come from Rico Trevisan's bubble_ex
@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const [,, srcPath, outDir] = process.argv;
-if (!srcPath || !outDir) { console.error('usage: bubble2nodegx.mjs <export.json> <outdir>'); process.exit(2); }
+if (!srcPath || !outDir) { console.error('usage: app-to-nodegx.mjs <export.json> <outdir>'); process.exit(2); }
 const srcText = fs.readFileSync(srcPath, 'utf8'); const app = JSON.parse(srcText);
 
 // ---------------------------------------------------------------- bookkeeping
@@ -57,7 +57,7 @@ function optionRows(os) {
 const optionRow = (os, v) => { const vals = liveEntries(os?.values); const hit = vals.find(([, o]) => o.db_value === v) || vals.find(([k]) => k === v); return hit ? optionRows(os).find((r) => r.value === (hit[1].db_value ?? hit[0])) : undefined; };
 const OPEN_BUBBLE_ATTR_TYPES = { text: 'text', number: 'number', boolean: 'yes / no', date: 'date' }; // the rest show as text in NodeGX Studio, their Bubble type kept beside
 const customElements = app.custom_elements || {}; // reusable elements: id (key) → { name, properties, elements, workflows }
-// backend workflows (s5): the editor's `c5r6j` answer, put under `api` by bubble-run-bundle-to-export.mjs (the paid export's own key is unmeasured)
+// backend workflows (s5): the editor's `c5r6j` answer, put under `api` by bundles-to-export.mjs (the paid export's own key is unmeasured)
 const apiWorkflows = Object.values(app.api || app.backend_workflows || {}).filter((w) => w && typeof w === 'object' && w.type);
 const backendById = Object.fromEntries(apiWorkflows.map((w) => [w.id, w])); // ScheduleAPIEvent.api_event and TriggerCustomEvent.custom_event name a workflow by its `id`, not its key
 const pname = (s) => String(s ?? 'payload').replace(/\W+/g, '_');
@@ -73,7 +73,7 @@ for (const t of Object.values(userTypes)) for (const [fk, fd] of Object.entries(
 // hidden built-ins (Created Date, Modified Date, Created By) are not declared: reads go to createdAt, updatedAt, createdBy.
 const BUBBLE_COLUMN = { text: 'String', number: 'Number', boolean: 'Boolean', date: 'Date', image: 'String', file: 'String', geographic_address: 'Object', number_range: 'Object', date_range: 'Object', dateinterval: 'Number' };
 const bubbleColumn = (v) => { v = typeof v === 'string' ? v : 'text'; if (v.startsWith('list.')) return { type: 'Array' }; if (v === 'user' || v.startsWith('custom.')) return { type: 'Pointer', targetClass: collName(typeDisplay(v)) }; return { type: BUBBLE_COLUMN[v] || 'String' }; };
-// a field holding the thing's own unique id (`bubbleId`) is its objectId in bubble-data-to-nodegx.mjs, not a column
+// a field holding the thing's own unique id (`bubbleId`) is its objectId in data-to-nodegx.mjs, not a column
 const dbCollections = liveEntries(userTypes).filter(([, t]) => t.fields || t.display).map(([k, t]) => ({
   name: collName(typeDisplay(k)),
   columns: liveEntries(t.fields).filter(([fk, f]) => !/^(unique[ _]?id|_id|bubble[ _]?id)$/i.test(f.display || fk)).map(([fk, f]) => ({ name: f.display || fieldDisplay(k, fk), ...bubbleColumn(f.value), ...(f.default_val !== undefined ? { defaultValue: optionAttrValue(f.value, f.default_val) } : {}) })),
@@ -656,7 +656,7 @@ function convertAction(g, action, bubblePage, evLabel) {
 
 // ---------------------------------------------------------------- backend workflows → cloud functions (s5, from the editor's c5r6j answer)
 // API workflow → /#__cloud__/<wf_name> (a Request with its parameters, the steps, a Response);
-// database trigger and recurring event → a cloud function plus a trigger in backend/triggers.bubble.json;
+// database trigger and recurring event → a cloud function plus a trigger in backend/triggers.imported.json;
 // backend custom event → /#__cloud__/shared/<name> (Component Inputs with a Run signal, Component Outputs with Done).
 const triggersOut = []; // create_backend_trigger inputs, applied once a backend is bound
 const functionRules = {}; // a proposed nodegx.security.json `functions` block
@@ -740,7 +740,7 @@ function convertBackendWorkflow(wf) {
   if (pp.condition) { const c = compileExpr(g, pp.condition, { page: fake }); const cond = g.add({ id: fresh('wfc'), type: 'Condition', label: `Only when ${c.text}`, parameters: {} }); const ex = exprNode(g, `Only when ${c.text}`, c.js, c); g.wire(ex.id, 'result', cond.id, 'condition'); g.wire(req.id, 'receive', cond.id, 'eval'); from = { id: cond.id, port: 'ontrue' };
     const skipped = g.add({ id: fresh('res'), type: 'noodl.cloud.response', label: 'Not run (the condition was false)', parameters: pp.return_200_if_not_run === false ? { status: 'failure', errorMessage: 'not run' } : {} }); g.wire(cond.id, 'onfalse', skipped.id, 'send'); }
   ending(g, chainActions(g, wf, from.id, from.port, fake, `${wf.type} ${nm}`));
-  if (kind !== 'api') { functionRules[nm] = { call: 'nobody' }; ai(fake.name, `${nm} is run by its trigger, which sends no session, so its Request allows unauthenticated calls; backend/triggers.bubble.json proposes "call": "nobody" for it in nodegx.security.json so the public /functions/${nm} door is shut (unmeasured: that a trigger run skips the call rule)`); }
+  if (kind !== 'api') { functionRules[nm] = { call: 'nobody' }; ai(fake.name, `${nm} is run by its trigger, which sends no session, so its Request allows unauthenticated calls; backend/triggers.imported.json proposes "call": "nobody" for it in nodegx.security.json so the public /functions/${nm} door is shut (unmeasured: that a trigger run skips the call rule)`); }
   else functionRules[nm] = { call: allowNoAuth ? 'public' : 'authenticated' };
   cloud = null; wfCondition = null; wfThingType = null; wfParams = {};
 }
@@ -855,19 +855,19 @@ const registry = { $schema: 'https://opennoodl.dev/schemas/registry-v2.json', ve
 for (const g of components) {
   const rel = g.path.replace(/^\/#?/, ''); const dir = path.join(outDir, 'components', rel); fs.mkdirSync(dir, { recursive: true });
   const cid = uuid(g.path); const name = path.basename(g.path);
-  fs.writeFileSync(path.join(dir, 'component.json'), JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/component-v2.json', id: cid, name, path: g.path, type: g.kind, created: now, modified: now, modifiedBy: 'bubble2nodegx', description: g.description, ...(g.metadata ? { metadata: g.metadata } : {}) }, null, 2));
+  fs.writeFileSync(path.join(dir, 'component.json'), JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/component-v2.json', id: cid, name, path: g.path, type: g.kind, created: now, modified: now, modifiedBy: 'nodegx-studio-import', description: g.description, ...(g.metadata ? { metadata: g.metadata } : {}) }, null, 2));
   fs.writeFileSync(path.join(dir, 'nodes.json'), JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/nodes-v2.json', componentId: cid, version: 1, nodes: g.nodes }, null, 2));
   fs.writeFileSync(path.join(dir, 'connections.json'), JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/connections-v2.json', componentId: cid, version: 1, connections: g.connections }, null, 2));
   registry.components[rel] = { path: rel, type: g.kind === 'page' ? 'page' : g.kind === 'cloud' ? 'cloud' : 'visual', nodeCount: g.nodes.length, connectionCount: g.connections.length, modified: now, created: now };
 }
 fs.writeFileSync(path.join(outDir, 'components', '_registry.json'), JSON.stringify(registry, null, 2));
 const security = buildSecurity(); fs.writeFileSync(path.join(outDir, 'nodegx.security.json'), JSON.stringify(security.config, null, 2) + '\n');
-if (triggersOut.length || Object.keys(functionRules).length) { fs.mkdirSync(path.join(outDir, 'backend'), { recursive: true }); fs.writeFileSync(path.join(outDir, 'backend', 'triggers.bubble.json'), JSON.stringify({ note: 'From the Bubble import: a trigger lives on the backend, not in the project. Once a backend is bound, create each with the MCP tool create_backend_trigger (the objects below are its input). `functions` is the same block nodegx.security.json carries, for reference.', triggers: triggersOut, functions: functionRules }, null, 2)); }
+if (triggersOut.length || Object.keys(functionRules).length) { fs.mkdirSync(path.join(outDir, 'backend'), { recursive: true }); fs.writeFileSync(path.join(outDir, 'backend', 'triggers.imported.json'), JSON.stringify({ note: 'From the Bubble import: a trigger lives on the backend, not in the project. Once a backend is bound, create each with the MCP tool create_backend_trigger (the objects below are its input). `functions` is the same block nodegx.security.json carries, for reference.', triggers: triggersOut, functions: functionRules }, null, 2)); }
 const BUILTIN_FONTS = new Set(['Arial', 'Arial Black', 'Courier New', 'Helvetica', 'Impact', 'Lucida Console', 'Tahoma', 'Times New Roman', 'Verdana', 'Georgia', 'serif', 'sans-serif', 'monospace', 'system-ui']);
 const fontFamilies = [...fontsUsed].filter(([f]) => f && !BUILTIN_FONTS.has(f) && !/^var\(/.test(f)).map(([f, ws]) => `family=${encodeURIComponent(f).replace(/%20/g, '+')}${ws.size ? ':wght@' + [...ws].filter((w) => w >= 100 && w <= 900).sort((a, b) => a - b).join(';') : ''}`);
 if (usedMaterialIcons) fontFamilies.push('family=Material+Icons');
 const headCode = fontFamilies.length ? `<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link href="https://fonts.googleapis.com/css2?${fontFamilies.join('&')}&display=swap" rel="stylesheet">` : ''; // s4: Bubble links its Google fonts; the deploy and the in-page preview both apply settings.headCode
-fs.writeFileSync(path.join(outDir, 'nodegx.project.json'), JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/project-v2.json', name: app._id || 'Bubble import', version: '4', nodegxVersion: '1.1.0', rootNodeId: 'app_root', settings: { htmlTitle: cs.default_page_title || app._id, navigationPathType: 'path', bodyScroll: true, ...(headCode ? { headCode } : {}) }, structure: { componentsDir: 'components', assetsDir: 'assets' }, metadata: { designTokens: { version: 1, customTokens }, dbCollections, bubbleImport: { source: path.basename(srcPath), appId: app._id, bubbleVersion: cs.bubble_version, convertedAt: now } } }, null, 2));
+fs.writeFileSync(path.join(outDir, 'nodegx.project.json'), JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/project-v2.json', name: app._id || 'Imported app', version: '4', nodegxVersion: '1.1.0', rootNodeId: 'app_root', settings: { htmlTitle: cs.default_page_title || app._id, navigationPathType: 'path', bodyScroll: true, ...(headCode ? { headCode } : {}) }, structure: { componentsDir: 'components', assetsDir: 'assets' }, metadata: { designTokens: { version: 1, customTokens }, dbCollections, imported: { by: 'nodegx-studio', from: 'bubble', source: path.basename(srcPath), appId: app._id, platformVersion: cs.bubble_version, convertedAt: now } } }, null, 2));
 fs.writeFileSync(path.join(outDir, 'nodegx.styles.json'), JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/styles-v2.json', version: 1, variants }, null, 2));
 
 const pctOf = (a, b) => b ? Math.round((100 * a) / b) : 100;

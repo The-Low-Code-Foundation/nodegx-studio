@@ -82,7 +82,7 @@ Electron's own Node; `npm run smoke -- <dir>` opens a project headless and exits
 | id | task | done when |
 |---|---|---|
 | STU-002 | **Files changed outside Studio appear in Studio.** Watch the project folder; when a file changes that Studio did not write (Claude Code through MCP, VS Code, `git pull`), reload the project into the store and redraw, keeping the selection and the open tab. A change that conflicts with an unsaved Studio edit asks. | Claude Code adds a button through the NodeGX MCP server and it appears in Design within 2 s, without a manual reload; the gate does the same with a plain file write |
-| STU-003 | **Welcome screen and recent projects.** Open, New from a template (NodeGX's templates), Import from Bubble, and the last ten projects. | a first run with no argument shows it; reopening the app offers the last project |
+| STU-003 | **Welcome screen and recent projects.** Open, New from a template (NodeGX's templates), Import an app, and the last ten projects. | a first run with no argument shows it; reopening the app offers the last project |
 | STU-004 | **The project's backend, from the app.** A project that names a local backend gets it started on open (`nodegx-backend serve` on the project's own data folder) and stopped on close; the status bar says where it is. | open the todo template copy, add a row in Data, quit, reopen: the row is there |
 | STU-005 | **Work with Claude Code.** "Connect Claude Code" writes the project's `.mcp.json` entry for the NodeGX MCP server (the same writer the NodeGX editor uses, never a second one) and shows the one command to start a session in the folder. | from a fresh project, the button then `claude` in the folder lists the NodeGX tools |
 | STU-006 | **Runs without a NodeGX checkout.** A build step copies the kit pieces Studio uses (deploy runtime, in-page preview, look and specs modules, backend, MCP server) into `vendor/` at pinned NodeGX versions; `lib/nodegx.mjs` prefers `vendor/`. | a fresh clone + `npm install` + `npm start` works on a machine with no OpenNoodl folder |
@@ -205,7 +205,7 @@ query start/end and element draws, to measure).
 
 | id | task | done when |
 |---|---|---|
-| STU-040 | **File → Import from Bubble…** with the guided path from [IMPORT.md](IMPORT.md) (run-mode bundles, the editor requests, the Data tab), the report shown in the app. | an import from the welcome screen ends with the project open and the report beside it |
+| STU-040 | **File → Import an App…** with the guided path from [IMPORT.md](IMPORT.md) (run-mode bundles, the editor requests, the Data tab), the report shown in the app. | an import from the welcome screen ends with the project open and the report beside it |
 | STU-041 | **One home for the converter.** It currently also lives in `digital-bricks/bubbleExporter` and in the NodeGX repo's phase 123 folder; this repo becomes the source and the other two point here. | both other copies carry a pointer, and nothing is edited there any more |
 | STU-042 | **A fidelity gate** from Rico Trevisan's frozen cases (bubble_ex `test/support/fidelity`, fetched at a pinned commit, not vendored) — read his reply on ricotrevisan/bubble_ex#238 first. | the converter is graded against Bubble's own screenshots at 390 and 1440 px |
 | STU-043 | **Plugins.** A shim for Bubble's client-side plugin API (`instance.publishState`, `triggerEvent`, `data`) so a plugin's own code can run; licence ruling first. | one real plugin element runs in an imported app |
@@ -226,6 +226,9 @@ query start/end and element draws, to measure).
 
 Bubble's brand guidelines forbid the BUBBLE name (or anything confusingly like it) in a product, company, domain or
 handle. So: the product is **NodeGX Studio**; Bubble is named only to describe what Studio works with — "imports apps
-built on the Bubble™ platform" — never in the product's name, a logo or a menu title. The disclaimer in
-the README stays. Bubble's terms (§8(b)) let a person reuse their own app's design and workflows on another platform;
+built on the Bubble™ platform" — never in the product's name, a logo or a menu title. **The importer is no
+exception** (Richard, 2026-10-19): it is "the importer" / **File → Import an App…**, its scripts are
+`import/app-to-nodegx.mjs`, `import/bundles-to-export.mjs` and `import/data-to-nodegx.mjs`, and what it writes into a
+project is stamped `nodegx-studio` (`metadata.imported.by`; `from: "bubble"` is a plain fact about the source). Its
+help text may say it imports apps built on the Bubble™ platform. The disclaimer in the README stays. Bubble's terms (§8(b)) let a person reuse their own app's design and workflows on another platform;
 the importer reads only the person's own app.
