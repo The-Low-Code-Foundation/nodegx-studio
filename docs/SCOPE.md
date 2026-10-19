@@ -73,6 +73,23 @@ Counted on the pages of a real production Bubble app imported during phase 123 (
 
 ---
 
+## Next — Richard's first play test (2026-10-19): a Design tab a person can use
+
+Richard opened Studio on his Bubble template app (converted, `~/vscode_projects/NodeGX test projects/Bubble template
+(Studio)`) and said, in his words: *"I hated the way Bubble listed out all the components in one giant tree on the left
+for each page. It would be nice if we could group them into components like in the NodeGX editor and make the page
+level list of elements more condensed."* And: *"The properties panel on the right is pretty much an unusable list of
+free text fields. We need to bring the NodeGX props panel magic into Bubble, or at least go look at how Bubble
+structures it and use them as a guide. I can take screenshots of all the elements' props panels if you need them."*
+These two come before M2's remaining work and M3: he will play-test data in a second sitting.
+
+| id | task | done when |
+|---|---|---|
+| STU-050 | **A condensed element list, grouped into components.** The page's list shows the page as a few named parts (its components and top-level groups), each opening into its own elements, the way the NodeGX editor's component tree does, instead of every element of the page in one tree. A group of elements can be made into a component from the list. | on the converted template app the page list fits without scrolling at 1000 px tall, every element is still reachable in two clicks, and "make a component from this group" writes a component the app draws the same |
+| STU-051 | **A properties panel with real controls.** Typed controls in place of free text: sizes with units, colours and spacing from the project's tokens, alignment and layout pickers, fonts, images, enums as choices, grouped and ordered the way Bubble's panel is (Appearance / Layout / Conditional) and the NodeGX editor's is. Reuse the NodeGX editor's property editor types where they can run in Studio's page; Bubble's own panel (Richard offered screenshots of every element's) is the guide for grouping. | every property of a Group, Text, Button, Input and Image on the template app is edited through a typed control, and a token-valued colour reads as the token's name |
+
+---
+
 ## M1 — The desktop app
 
 **Why.** Local development is the pitch: your app is files on your disk, versioned in git, edited by you in Studio
