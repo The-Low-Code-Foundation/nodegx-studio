@@ -201,6 +201,17 @@
   .cgrid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; padding: 0 8px 4px; }
   .cgrid .cell { aspect-ratio: 1; border: 1px solid var(--line-2); border-radius: 4px; padding: 0; cursor: pointer; }
   .cgrid .cell.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .cbtn .thumb { width: 20px; height: 20px; border-radius: 3px; border: 1px solid var(--line-2); flex: none; object-fit: cover; background: var(--panel-2, var(--line)); }
+  .cbtn .thumb.none { background: repeating-linear-gradient(45deg, var(--line) 0 3px, transparent 3px 6px); }
+  .menu.images { min-width: 260px; max-width: 280px; padding-bottom: 8px; }
+  .menu.images .ibig { margin: 8px; height: 120px; border: 1px solid var(--line-2); border-radius: var(--r); display: flex; align-items: center; justify-content: center; overflow: hidden; background: repeating-conic-gradient(var(--line) 0 25%, transparent 0 50%) 0 0 / 12px 12px; }
+  .menu.images .ibig img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .menu.images .iacts { display: flex; gap: 6px; padding: 0 8px 4px; }
+  .menu.images > input[type=text] { margin: 0 8px 4px; width: calc(100% - 16px); }
+  .igrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; padding: 0 8px; max-height: 160px; overflow: auto; }
+  .igrid .cell { aspect-ratio: 1; border: 1px solid var(--line-2); border-radius: 4px; padding: 0; cursor: pointer; overflow: hidden; background: var(--panel); }
+  .igrid .cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .igrid .cell.on { outline: 2px solid var(--accent); outline-offset: 1px; }
   .tree .row { gap: 6px; }
   .tree .into { opacity: 0; color: var(--muted); padding: 0 4px; border-radius: 3px; flex: none; cursor: pointer; font-size: 12px; }
   .tree .row:hover .into { opacity: 1; } .tree .into:hover { background: var(--line); color: var(--ink); }
@@ -1464,7 +1475,9 @@ function editablePorts(node, { wireOnly = false } = {}) {
     out.push(onlyWire ? { ...p, wireOnly: true } : p);
   };
   const spec = specPortsFor(node.type, params, node.id);
-  if (spec) for (const p of spec.inputs) push({ name: p.name, displayName: p.label, plug: 'input', group: p.group || 'General', type: p.enums ? { name: 'enum', enums: p.enums.map((v) => ({ value: v, label: p.labels?.[v] ?? String(v).replace(/^\/Pages\//, '') })) } : (p.codeEditor ? { name: p.type, codeeditor: p.codeEditor } : p.connectionsOnly ? { name: p.type, allowConnectionsOnly: true } : p.type), default: p.default, description: p.description });
+  // a spec port wins over the library's of the same name, but only the library says whether a state may change it
+  const libStates = new Set([...(t?.ports || []), ...(t?.dynamicports || []).flatMap((d) => d.ports || [])].filter((p) => p.allowVisualStates).map((p) => p.name));
+  if (spec) for (const p of spec.inputs) push({ name: p.name, displayName: p.label, plug: 'input', group: p.group || 'General', type: p.enums ? { name: 'enum', enums: p.enums.map((v) => ({ value: v, label: p.labels?.[v] ?? String(v).replace(/^\/Pages\//, '') })) } : (p.codeEditor ? { name: p.type, codeeditor: p.codeEditor } : p.connectionsOnly ? { name: p.type, allowConnectionsOnly: true } : p.type), default: p.default, description: p.description, ...(libStates.has(p.name) ? { allowVisualStates: true } : {}) });
   for (const p of node.dynamicports || []) push({ ...p, group: p.group || 'General' });
   for (const p of synthPorts(node)) push(p);
   if (t) {
@@ -1496,8 +1509,10 @@ const fourWay = new Set(); // `${id}:${what}` — a pair opened into four sides
 const SIZE_MODES = { explicit: [false, false], contentWidth: [true, false], contentHeight: [false, true], contentSize: [true, true] };
 const sizeModeOf = (w, hh) => (w ? (hh ? 'contentSize' : 'contentWidth') : hh ? 'contentHeight' : 'explicit');
 const WEIGHTS = [[100, 'Thin'], [200, 'Extra Light'], [300, 'Light'], [400, 'Regular'], [500, 'Medium'], [600, 'Semi Bold'], [700, 'Bold'], [800, 'Extra Bold'], [900, 'Black']];
-const CONTENT_PORTS = ['text', 'label', 'src', 'alt', 'placeholder', 'iconIconSource', 'iconSourceType', 'iconImageSource'];
-const CONFIGURE_PORTS = ['textOverflow', 'wordBreak', 'useLabel', 'srcSet', 'useIcon', 'iconSpacing', 'iconPlacement', 'iconSize', 'iconColor'];
+const CONTENT_PORTS = ['text', 'label', 'src', 'alt', 'placeholder', 'startValue', 'iconIconSource', 'iconSourceType', 'iconImageSource'];
+const CONFIGURE_PORTS = ['type', 'maxLength', 'inputMode', 'enterKeyHint', 'textToInsert', 'placeHolderOpacity', 'textOverflow', 'wordBreak', 'useLabel', 'labelSpacing', 'srcSet', 'useIcon', 'iconSpacing', 'iconPlacement', 'iconSize', 'iconColor'];
+/** A Configure setting's own words and control, where the port's name says little ("Type", "Value"). */
+const CONFIGURE_AS = { type: 'Content format', maxLength: 'Max length', inputMode: 'Keyboard', enterKeyHint: 'Enter key says', textToInsert: 'Text to insert', placeHolderOpacity: 'Placeholder opacity', labelSpacing: 'Label spacing', startValue: 'Initial content' };
 const INTERACTION_PORTS = ['mounted', 'visible', 'enabled', 'keepsFocus'];
 const INTERACTION_GROUPS = new Set(['Drop Zone', 'File Drop', 'Drag Source', 'Scroll To Index', 'Scroll Into View', 'Scroll To Element']);
 /** A colour as Bubble writes it: a token's name, or #RRGGBB and its opacity. */
@@ -1547,7 +1562,7 @@ function renderBubblePanel(right, node) {
     const v = own(name), inh = inherit[name] ?? P[name]?.default;
     return h('span', { class: 'len', title: title || P[name]?.displayName || name }, glyph ? h('span', { class: 'g' }, glyph) : null,
       h('input', { type: 'text', value: showLen(v), placeholder: place ?? (inh !== undefined && typeof inh !== 'string' ? showLen(inh) : String(inh ?? '')), list: 'tokens-space',
-        onchange: (e) => { const r = readLen(e.target.value); if (r === null) { e.target.value = showLen(v); return toast('A length: 16, 16px, 10% or a spacing token'); } set(name, r); } }),
+        onchange: (e) => { const r = readLen(e.target.value, unit); if (r === null) { e.target.value = showLen(v); return toast('A length: 16, 16px, 10% or a spacing token'); } set(name, r); } }),
       h('span', { class: 'u' }, (typeof v === 'object' && v?.unit && v.unit !== 'px') || (typeof v === 'string' && /var\(/.test(v)) ? '' : unit));
   };
   const num = (name, { glyph, scale = 1, unit = '', place } = {}) => {
@@ -1581,6 +1596,15 @@ function renderBubblePanel(right, node) {
     return h('div', { class: 'cchip' }, h('button', { class: 'cbtn', title: P[name]?.displayName || name, onclick: (e) => colourPicker(e, v, (nv) => set(name, nv)) },
       h('span', { class: 'swatch', style: `background:${resolveColor(v ?? '')}` }), h('span', { class: 'cname' }, cn.name || 'None'), cn.alpha ? h('span', { class: 'u' }, cn.alpha) : null), bolt(name));
   };
+  // an image: its thumbnail and name; the popover uploads one into the project, picks one it has, or takes an address
+  const img = (name) => {
+    claimed.add(name);
+    if (wired(name)) return fieldFor(node, P[name], params[name], wiredIn[name]);
+    const v = eff(name);
+    return h('div', { class: 'cchip' }, h('button', { class: 'cbtn ibtn', 'data-image': name, title: P[name]?.displayName || name, onclick: (e) => imagePicker(e, v, (nv) => set(name, nv)) },
+      v ? h('img', { class: 'thumb', src: mediaUrl(v), alt: '' }) : h('span', { class: 'thumb none' }), h('span', { class: 'cname' }, v ? String(v).split('/').pop() : 'No image')), bolt(name));
+  };
+  const isImg = (name) => tname(P[name]?.type) === 'image';
   // a pair (↕ top+bottom, ↔ left+right) that opens into four sides
   const pair = (what, label, names, glyphs) => {
     const got = names.filter(has); if (!got.length) return null;
@@ -1625,7 +1649,7 @@ function renderBubblePanel(right, node) {
       ...mine.map((ev) => h('div', { class: 'row wf', onclick: () => { selEvent = ev; switchTab('workflow'); } }, icon('workflow'), eventTitle(ev).replace(/^When [^:]+: /, 'When '), h('span', { class: 't' }, `${countSteps(chain(ev.node, ev.port))} steps`))),
       h('div', { class: 'hint' }, mine.length ? 'Open one to change its steps.' : 'No workflow starts at this element. Add one in Workflow.')]));
     add(section('Visibility', [has('visible') ? plain('visible') : null, has('mounted') ? plain('mounted') : null]));
-    add(section('Options', ['enabled', 'keepsFocus'].filter(has).map(plain)));
+    add(section('Options', [...['enabled', 'keepsFocus'].filter(has).map(plain), ...ports.filter((p) => p.name.startsWith('runOnChange-')).map((p) => (claimed.add(p.name), fieldFor(node, { ...p, displayName: `A change to ${(CONFIGURE_AS[p.name.slice('runOnChange-'.length)] || P[p.name.slice('runOnChange-'.length)]?.displayName || p.displayName).toLowerCase()} runs what it feeds` }, params[p.name], wiredIn[p.name])))]));
     const more = new Map();
     for (const p of ports) if (INTERACTION_GROUPS.has(p.group)) { if (!more.has(p.group)) more.set(p.group, []); more.get(p.group).push(p); }
     for (const [g, ps] of more) { if (secOpen[g] === undefined) secOpen[g] = ps.some((p) => params[p.name] !== undefined); add(section(g, ps.map((p) => plain(p.name)))); }
@@ -1638,10 +1662,21 @@ function renderBubblePanel(right, node) {
   // an icon is the Icon element's content; on a button or an input it is a setting, shown once the icon is on
   const isIcon = node.type === 'net.noodl.visual.icon', iconPorts = ['iconSourceType', 'iconIconSource', 'iconImageSource', 'iconSpacing', 'iconPlacement', 'iconSize', 'iconColor'];
   const content = CONTENT_PORTS.filter((n) => has(n) && (isIcon || !n.startsWith('icon')));
-  add(section('Content', content.map(plain)));
+  add(section('Content', content.map((n) => isImg(n) ? row(P[n].displayName || n, img(n)) : n === 'startValue' && !wired(n) ? (claimed.add(n), fieldFor(node, { ...P[n], displayName: CONFIGURE_AS[n] }, params[n], wiredIn[n])) : plain(n))));
   const configure = [...CONFIGURE_PORTS, ...(isIcon ? [] : ['iconSourceType', 'iconIconSource', 'iconImageSource'])].filter((n) => has(n) && !claimed.has(n))
     .filter((n) => isIcon || !has('useIcon') || eff('useIcon') || !iconPorts.includes(n));
-  add(section('Configure', configure.map((n) => P[n]?.type === 'color' || tname(P[n]?.type) === 'color' ? row(P[n].displayName || n, chip(n)) : plain(n))));
+  // a label's spacing only matters once the label is on
+  if (has('labelSpacing') && !eff('useLabel')) { claimed.add('labelSpacing'); configure.splice(configure.indexOf('labelSpacing'), 1); }
+  add(section('Configure', configure.map((n) => {
+    const label = CONFIGURE_AS[n] || P[n]?.displayName || n;
+    if (wired(n)) return plain(n);
+    if (tname(P[n]?.type) === 'color') return row(label, chip(n));
+    if (n === 'placeHolderOpacity') return row(label, num(n, { scale: 100, unit: '%', glyph: '◐' }));
+    if (n === 'labelSpacing') return row(label, num(n, { unit: 'px' }));
+    if (n === 'maxLength') return row(label, num(n, { place: 'No limit' }));
+    if (tname(P[n]?.type) === 'enum') return row(label, choice(n, (P[n].type.enums || []).map((o) => [o.value ?? o, String(o.label ?? o)]), { blank: '(default)' }));
+    return plain(n);
+  })));
   if (!isIcon) iconPorts.forEach((n) => has(n) && claimed.add(n));
 
   // Size: each axis Fixed / Fill / Fit and its value, then the min and max
@@ -1675,7 +1710,7 @@ function renderBubblePanel(right, node) {
   // Layout: where it sits in its parent, how it lays out its children, its spacing
   const dir = eff('flexDirection') ?? 'column';
   const layout = [];
-  if (has('position') && eff('position') !== 'relative') layout.push(row('Position', choice('position', [['relative', 'In the flow'], ['absolute', 'Absolute'], ['sticky', 'Sticky'], ['fixed', 'Fixed to the screen']])));
+  if (has('position')) layout.push(row('Position', choice('position', [['relative', 'In the flow'], ['absolute', 'Absolute'], ['sticky', 'Sticky'], ['fixed', 'Fixed to the screen']])));
   if (has('alignX') || has('alignY')) layout.push(row('Alignment', h('div', { class: 'two' }, has('alignX') ? seg('alignX', [['left', 'Left'], ['center', 'Centre'], ['right', 'Right']], 'self') : h('span'), has('alignY') ? seg('alignY', [['top', 'Top'], ['center', 'Middle'], ['bottom', 'Bottom']], 'self', 'y') : h('span'))));
   if (has('flexDirection')) {
     layout.push(h('div', { class: 'sub' }, 'Container layout'));
@@ -1685,6 +1720,8 @@ function renderBubblePanel(right, node) {
       if (has('justifyContent')) layout.push(row(dir === 'row' ? 'Along' : 'Down', seg('justifyContent', [['flex-start', 'Start'], ['center', 'Centre'], ['flex-end', 'End'], ['space-between', 'Spread']], 'justify', dir)));
       if (has('alignItems')) layout.push(row('Across', seg('alignItems', [['flex-start', 'Start'], ['center', 'Centre'], ['flex-end', 'End'], ['stretch', 'Stretch']], 'align', dir)));
       if (has('flexWrap')) layout.push(row('Wrap', choice('flexWrap', [['nowrap', 'One line'], ['wrap', 'Wrap'], ['wrap-reverse', 'Wrap, reversed']])));
+      // how the wrapped lines sit across: only there once it wraps
+      if (has('alignContent')) { if (eff('flexWrap') && eff('flexWrap') !== 'nowrap') layout.push(row('Lines', choice('alignContent', [['flex-start', 'Start'], ['center', 'Centre'], ['flex-end', 'End'], ['space-between', 'Spread'], ['space-around', 'Spread, with ends'], ['stretch', 'Stretch']]))); else claimed.add('alignContent'); }
       if (has('rowGap') || has('columnGap')) layout.push(row('Gap', h('div', { class: 'two' }, has('rowGap') ? len('rowGap', { glyph: '↕', title: 'Gap between rows' }) : h('span'), has('columnGap') ? len('columnGap', { glyph: '↔', title: 'Gap between columns' }) : h('span'))));
     }
     if (has('clip')) layout.push(plain('clip'));
@@ -1693,6 +1730,7 @@ function renderBubblePanel(right, node) {
   const pad = pair('padding', 'Padding', ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'], ['⤒', '⇥', '⤓', '⇤']);
   const mar = pair('margin', 'Margin', ['marginTop', 'marginRight', 'marginBottom', 'marginLeft'], ['⤒', '⇥', '⤓', '⇤']);
   if (!pad && !mar) layout.pop(); else layout.push(pad, mar);
+  if (has('boxSizing')) layout.push(row('Box sizing', choice('boxSizing', [['border-box', 'Padding inside the size'], ['content-box', 'Padding added to the size']])));
   add(section('Layout', layout));
 
   // Style: the style it wears (a variant of its type), as Bubble's style chip
@@ -1707,39 +1745,50 @@ function renderBubblePanel(right, node) {
   }
 
   // Text: the font, its weight and size, the alignment, bold / italic, the colour; the rest behind ⋯
-  if (has('fontFamily') || has('fontSize') || has('color')) {
+  // the same controls draw a Text Input's label (its ports are the text's with `label` in front: labelfontSize …)
+  const textSection = (title, k) => {
+    if (!has(k('fontFamily')) && !has(k('fontSize')) && !has(k('color'))) return;
     const fonts = new Set(['Inter', 'system-ui', 'Georgia', 'Menlo']);
     for (const n of nodes) if (typeof n.parameters?.fontFamily === 'string') fonts.add(n.parameters.fontFamily);
     for (const t of tokensOf('typography')) fonts.add(`var(${t})`);
-    const textMore = fourWay.has(`${node.id}:text`);
-    const w = eff('fontWeight');
+    const moreKey = `${node.id}:${k('text')}`, textMore = fourWay.has(moreKey);
+    const w = eff(k('fontWeight'));
     const txt = [
-      has('fontFamily') ? (claimed.add('fontFamily'), h('select', { class: 'wide', onchange: (e) => set('fontFamily', e.target.value || undefined) }, h('option', { value: '' }, `App font${eff('fontFamily') === undefined ? '' : ''}`), ...[...fonts].map((f) => h('option', { value: f, selected: own('fontFamily') === f || (own('fontFamily') === undefined && inherit.fontFamily === f) }, f.replace(/^var\(--font_?/, 'Token ').replace(/\)$/, ''))))) : null,
+      has(k('fontFamily')) ? (claimed.add(k('fontFamily')), h('select', { class: 'wide', title: 'Font', onchange: (e) => set(k('fontFamily'), e.target.value || undefined) }, h('option', { value: '' }, 'App font'), ...[...fonts].map((f) => h('option', { value: f, selected: own(k('fontFamily')) === f || (own(k('fontFamily')) === undefined && inherit[k('fontFamily')] === f) }, f.replace(/^var\(--font_?/, 'Token ').replace(/\)$/, ''))))) : null,
       h('div', { class: 'two' },
-        has('fontWeight') ? (claimed.add('fontWeight'), h('select', { title: 'Weight', onchange: (e) => set('fontWeight', e.target.value === '' ? undefined : e.target.value) }, h('option', { value: '' }, '(default)'), ...(typeof w === 'string' && /^var\(/.test(w) ? [h('option', { value: w, selected: true }, showLen(w))] : []), ...WEIGHTS.map(([k, l]) => h('option', { value: k, selected: String(w) === String(k) }, `${k} (${l})`)))) : h('span'),
-        has('fontSize') ? len('fontSize', { title: 'Font size' }) : h('span')),
+        has(k('fontWeight')) ? (claimed.add(k('fontWeight')), h('select', { title: 'Weight', onchange: (e) => set(k('fontWeight'), e.target.value === '' ? undefined : e.target.value) }, h('option', { value: '' }, '(default)'), ...(typeof w === 'string' && /^var\(/.test(w) ? [h('option', { value: w, selected: true }, showLen(w))] : []), ...WEIGHTS.map(([n, l]) => h('option', { value: n, selected: String(w) === String(n) }, `${n} (${l})`)))) : h('span'),
+        has(k('fontSize')) ? len(k('fontSize'), { title: 'Font size' }) : h('span')),
       h('div', { class: 'two' },
-        has('textAlignX') ? seg('textAlignX', [['left', 'Left'], ['center', 'Centre'], ['right', 'Right']], 'self') : h('span'),
+        has(k('textAlignX')) ? seg(k('textAlignX'), [['left', 'Left'], ['center', 'Centre'], ['right', 'Right']], 'self') : h('span'),
         h('div', { class: 'segctl' },
-          has('fontWeight') ? h('button', { class: 'quiet', title: 'Bold', 'aria-pressed': Number(w) >= 700, onclick: () => set('fontWeight', Number(w) >= 700 ? undefined : 700) }, h('b', {}, 'B')) : null,
-          has('fontStyle') ? (claimed.add('fontStyle'), h('button', { class: 'quiet', title: 'Italic', 'aria-pressed': eff('fontStyle') === 'italic', onclick: () => set('fontStyle', eff('fontStyle') === 'italic' ? undefined : 'italic') }, h('i', {}, 'I'))) : null,
-          h('button', { class: 'quiet', title: textMore ? 'Fewer text settings' : 'Line height, letter spacing, case', 'aria-pressed': textMore, onclick: () => { textMore ? fourWay.delete(`${node.id}:text`) : fourWay.add(`${node.id}:text`); renderProps(); } }, '⋯'))),
-      has('color') ? chip('color') : null];
+          has(k('fontWeight')) ? h('button', { class: 'quiet', title: 'Bold', 'aria-pressed': Number(w) >= 700, onclick: () => set(k('fontWeight'), Number(w) >= 700 ? undefined : 700) }, h('b', {}, 'B')) : null,
+          has(k('fontStyle')) ? (claimed.add(k('fontStyle')), h('button', { class: 'quiet', title: 'Italic', 'aria-pressed': eff(k('fontStyle')) === 'italic', onclick: () => set(k('fontStyle'), eff(k('fontStyle')) === 'italic' ? undefined : 'italic') }, h('i', {}, 'I'))) : null,
+          h('button', { class: 'quiet', title: textMore ? 'Fewer text settings' : 'Line height, letter spacing, case, text style', 'aria-pressed': textMore, onclick: () => { textMore ? fourWay.delete(moreKey) : fourWay.add(moreKey); renderProps(); } }, '⋯'))),
+      has(k('color')) ? chip(k('color')) : null];
+    const rest = ['textAlignY', 'lineHeight', 'letterSpacing', 'textTransform', 'fontVariantNumeric', 'textStyle'].map(k);
     if (textMore) {
-      if (has('textAlignY')) txt.push(row('Up / down', seg('textAlignY', [['top', 'Top'], ['center', 'Middle'], ['bottom', 'Bottom']], 'self', 'y')));
-      if (has('lineHeight')) txt.push(row('Line height', num('lineHeight', { place: 'Auto' })));
-      if (has('letterSpacing')) txt.push(row('Letter spacing', len('letterSpacing', { place: 'Auto' })));
-      if (has('textTransform')) txt.push(row('Case', choice('textTransform', [['none', 'As typed'], ['uppercase', 'UPPERCASE'], ['lowercase', 'lowercase'], ['capitalize', 'Capitalised']])));
-      if (has('fontVariantNumeric')) txt.push(row('Numerals', choice('fontVariantNumeric', [['normal', 'Proportional'], ['tabular-nums', 'Even width']])));
-      if (has('textStyle')) txt.push(plain('textStyle'));
-    } else ['textAlignY', 'lineHeight', 'letterSpacing', 'textTransform', 'fontVariantNumeric', 'textStyle'].forEach((n) => has(n) && claimed.add(n));
-    add(section('Text', txt));
-  }
+      if (has(k('textAlignY'))) txt.push(row('Up / down', seg(k('textAlignY'), [['top', 'Top'], ['center', 'Middle'], ['bottom', 'Bottom']], 'self', 'y')));
+      if (has(k('lineHeight'))) txt.push(row('Line height', num(k('lineHeight'), { place: 'Auto' })));
+      if (has(k('letterSpacing'))) txt.push(row('Letter spacing', len(k('letterSpacing'), { place: 'Auto' })));
+      if (has(k('textTransform'))) txt.push(row('Case', choice(k('textTransform'), [['none', 'As typed'], ['uppercase', 'UPPERCASE'], ['lowercase', 'lowercase'], ['capitalize', 'Capitalised']])));
+      if (has(k('fontVariantNumeric'))) txt.push(row('Numerals', choice(k('fontVariantNumeric'), [['normal', 'Proportional'], ['tabular-nums', 'Even width']])));
+      // the project's text styles (nodegx.styles.json textStyles); one the file no longer has stays listed, as it is
+      if (has(k('textStyle'))) { const names = Object.keys(stylesFile().textStyles || {}), cur = own(k('textStyle')); if (cur && !names.includes(cur)) names.push(cur); txt.push(row('Text style', choice(k('textStyle'), names.map((n) => [n, n]), { blank: names.length ? 'None' : 'None (the app has no text styles)' }))); }
+    } else rest.forEach((n) => has(n) && claimed.add(n));
+    add(section(title, txt));
+  };
+  textSection('Text', (n) => n);
+  // a Text Input's label: the same text controls, once the label is on
+  const LABEL_TEXT = ['fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'color', 'letterSpacing', 'lineHeight', 'textTransform', 'fontVariantNumeric', 'textStyle'].map((n) => 'label' + n);
+  if (LABEL_TEXT.some(has)) { if (eff('useLabel')) textSection('Label text', (n) => 'label' + n); else LABEL_TEXT.forEach((n) => has(n) && claimed.add(n)); }
 
   // Appearance (closed, as Bubble has it): opacity, rotation, the corners
   const look = [];
   if (has('opacity')) look.push(row('Opacity', num('opacity', { scale: 100, unit: '%', glyph: '◐' })));
   if (has('transformRotation')) look.push(row('Rotation', num('transformRotation', { unit: '°', glyph: '↻' })));
+  // NodeGX's Pos X / Y move the element from where the layout put it (a transform), so they are an offset, not a place
+  if (has('transformX') || has('transformY')) look.push(row('Offset', h('div', { class: 'two' }, has('transformX') ? len('transformX', { glyph: 'X', title: 'Moved right by' }) : h('span'), has('transformY') ? len('transformY', { glyph: 'Y', title: 'Moved down by' }) : h('span'))));
+  if (has('transformOriginX') || has('transformOriginY')) look.push(row('Origin', h('div', { class: 'two' }, has('transformOriginX') ? len('transformOriginX', { glyph: 'X', unit: '%', place: '50', title: 'Turns and scales about: across' }) : h('span'), has('transformOriginY') ? len('transformOriginY', { glyph: 'Y', unit: '%', place: '50', title: 'Turns and scales about: down' }) : h('span'))));
   if (has('borderRadius')) {
     const key = `${node.id}:radius`, corners = ['borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius'];
     const open = fourWay.has(key) || corners.some((c) => own(c) !== undefined);
@@ -1749,7 +1798,7 @@ function renderBubblePanel(right, node) {
   }
   if (has('mixBlendMode')) look.push(row('Blend', choice('mixBlendMode', (P.mixBlendMode.type.enums || []).map((o) => [o.value ?? o, String(o.label ?? o)]))));
   for (const n of ['backdropBlur', 'transformScale', 'zIndex']) if (has(n)) look.push(row(P[n].displayName || n, num(n)));
-  if (secOpen.Appearance === false && ['opacity', 'transformRotation', 'borderRadius'].some((n) => own(n) !== undefined && own(n) !== 0 && own(n) !== 1)) secOpen.Appearance = true;
+  if (secOpen.Appearance === false && ['opacity', 'transformRotation', 'transformX', 'transformY', 'borderRadius'].some((n) => own(n) !== undefined && own(n) !== 0 && own(n) !== 1)) secOpen.Appearance = true;
   add(section('Appearance', look));
 
   // Border, Background, Shadow: added and removed whole
@@ -1775,7 +1824,7 @@ function renderBubblePanel(right, node) {
     const present = (bg && bg !== 'transparent') || !!eff('backgroundGradient') || !!eff('backgroundImage') || wired('backgroundColor');
     const body = [chip('backgroundColor')];
     if (eff('backgroundGradient') || wired('backgroundGradient')) body.push(plain('backgroundGradient'));
-    if (eff('backgroundImage') || wired('backgroundImage')) body.push(plain('backgroundImage'), plain('backgroundSize'), plain('backgroundPosition'));
+    if (eff('backgroundImage') || wired('backgroundImage')) body.push(isImg('backgroundImage') ? row(P.backgroundImage.displayName || 'Image', img('backgroundImage')) : plain('backgroundImage'), plain('backgroundSize'), plain('backgroundPosition'));
     add(section('Background', body, { present, empty: 'No background. + adds one.',
       add: () => set('backgroundColor', '#FFFFFF'),
       remove: () => setMany(Object.fromEntries(bgs.map((n) => [n, n === 'backgroundColor' && inherit.backgroundColor && inherit.backgroundColor !== 'transparent' ? 'transparent' : undefined]))) }));
@@ -1797,8 +1846,35 @@ function renderBubblePanel(right, node) {
   // everything no section claimed, with the plain field — nothing a node has is out of reach
   for (const n of INTERACTION_PORTS) claimed.add(n);
   const rest = new Map();
-  for (const p of ports) if (!claimed.has(p.name) && !INTERACTION_GROUPS.has(p.group)) { if (!rest.has(p.group || 'General')) rest.set(p.group || 'General', []); rest.get(p.group || 'General').push(p); }
+  for (const p of ports) if (!claimed.has(p.name) && !INTERACTION_GROUPS.has(p.group) && !p.name.startsWith('runOnChange-')) { if (!rest.has(p.group || 'General')) rest.set(p.group || 'General', []); rest.get(p.group || 'General').push(p); }
   if (rest.size) add(section('More', [...rest].flatMap(([g, ps]) => [h('div', { class: 'sub' }, g), ...ps.map((p) => fieldFor(node, p, params[p.name], wiredIn[p.name]))])));
+}
+/** A project path as the page reaches it (the server serves the project's files at its root); an address as it is. */
+const mediaUrl = (v) => { const s = String(v); return !s || s[0] === '/' || s.includes('://') || s.startsWith('data:') ? s : '/' + s; };
+/** The image popover: the image as it is, Upload (into the project's assets/, as the NodeGX editor puts one), the
+    project's own images, a web address, and No image. */
+function imagePicker(e, current, pick) {
+  closeMenu('.menu');
+  const menu = popover(e, 'images');
+  const done = (v) => { closeMenu('.menu'); pick(v); };
+  menu.append(h('div', { class: 'ibig' }, current ? h('img', { src: mediaUrl(current), alt: '' }) : h('span', { class: 'hint' }, 'No image yet')));
+  const file = h('input', { type: 'file', accept: 'image/*', style: 'display:none', onchange: async (ev) => {
+    const f = ev.target.files?.[0]; if (!f) return;
+    const r = await fetch(`/api/asset?name=${encodeURIComponent(f.name)}`, { method: 'POST', body: f }).then((x) => x.json()).catch((err) => ({ error: err.message }));
+    if (r.error) return toast(`Not uploaded: ${r.error}`);
+    toast(`${r.path} is in the project`); done(r.path);
+  } });
+  menu.append(h('div', { class: 'iacts' }, file, h('button', { class: 'tiny', id: 'imgupload', onclick: () => file.click() }, icon('plus'), 'Upload an image…'),
+    current ? h('button', { class: 'tiny quiet', onclick: () => done(undefined) }, 'No image') : null));
+  const addr = h('input', { type: 'text', placeholder: 'https://… or a path in the project', 'aria-label': 'Image address', value: current && typeof current === 'string' ? current : '', onchange: (ev) => done(ev.target.value.trim() || undefined) });
+  menu.append(h('div', { class: 'hint' }, 'Address'), addr);
+  const grid = h('div', { class: 'igrid' });
+  menu.append(h('div', { class: 'hint' }, 'In this project'), grid);
+  fetch('/api/images').then((x) => x.json()).then((list) => {
+    if (!list.length) grid.append(h('div', { class: 'hint' }, 'None yet. Upload one.'));
+    for (const p of list) grid.append(h('button', { class: `cell${p === current ? ' on' : ''}`, title: p, 'data-path': p, onclick: () => done(p) }, h('img', { src: mediaUrl(p), alt: '' })));
+  }).catch(() => grid.append(h('div', { class: 'hint' }, 'Could not list the project\'s images.')));
+  document.body.append(menu); dismissOnOutside(menu);
 }
 /** Bubble's colour popover: a picker, the hex and its opacity, the app's tokens, the colours the app already uses. */
 function colourPicker(e, current, pick) {
@@ -1945,13 +2021,13 @@ function wireInputs(exprId, text, chips = new Map()) {
   return list;
 }
 /** A property to put a rule on: the element's settable ones, those a value already comes from (not a rule) left out. */
-function rulePropertyMenu(e, node, pick) {
+function rulePropertyMenu(e, node, pick, only) {
   closeMenu('.menu');
   const menu = popover(e, 'ruleprops');
   const search = h('input', { type: 'text', placeholder: 'Which property changes…', 'aria-label': 'Property' });
   const list = h('div');
   const fedElsewhere = (port) => conns.some((c) => c.toId === node.id && c.toProperty === port && !(byId[c.fromId]?.type === 'Expression' && readRule(byId[c.fromId].parameters?.expression, port)));
-  const ports = editablePorts(node).filter((p) => !fedElsewhere(p.name));
+  const ports = only ?? editablePorts(node).filter((p) => !fedElsewhere(p.name));
   const fill = () => {
     list.innerHTML = '';
     const q = search.value.trim().toLowerCase();
@@ -1968,7 +2044,13 @@ function rulePropertyMenu(e, node, pick) {
   menu.append(h('div', { class: 'search' }, icon('search'), search), list); document.body.append(menu); search.focus();
   dismissOnOutside(menu);
 }
-const STATE_WORDS = { hover: 'hovered', pressed: 'pressed', focus: 'focused', 'focus-visible': 'focused by keyboard', disabled: 'disabled' };
+const STATE_WORDS = { hover: 'hovered', pressed: 'pressed', focus: 'focused', focused: 'focused', 'focus-visible': 'focused by keyboard', disabled: 'disabled', checked: 'checked' };
+/** A look's first value: what the element shows now, so adding one changes nothing until it is set (a colour with none, grey). */
+function lookStart(p, now) {
+  if (now !== undefined && now !== null && now !== '') return now;
+  const ty = tname(p.type);
+  return ty === 'color' ? '#6B6B6B' : ty === 'boolean' ? true : p.type?.units ? { value: 0, unit: p.type.defaultUnit || p.type.units[0] || 'px' } : ty === 'number' ? 0 : '';
+}
 function conditionalTab(node, { add, section, row, variant }) {
   const P = Object.fromEntries(editablePorts(node, { wireOnly: true }).map((p) => [p.name, p]));
   const pname = (port) => P[port]?.displayName || port;
@@ -2033,15 +2115,32 @@ function conditionalTab(node, { add, section, row, variant }) {
     add(det);
   });
   add(h('div', { class: 'ruleacts', style: 'padding:8px 14px' }, h('button', { class: 'tiny', id: 'newrule', onclick: newRule }, icon('plus'), 'New rule')));
-  // the element's looks while hovered, pressed or focused: its own, editable, and its style's, as they come
+  // the element's looks while hovered, pressed or focused: its own, editable, and its style's, as they come.
+  // Only the states its type has and the properties its type lets a state change (the node library's visualStates
+  // and allowVisualStates) are offered: a look on anything else is written and never drawn
   const own = node.stateParameters || {}, styled = variant?.stateParameters || {};
+  const states = (typeDef(node.type)?.visualStates || []).filter((s) => s.name !== 'neutral');
+  const statePorts = editablePorts(node).filter((p) => p.allowVisualStates);
+  const addLook = (e, st) => rulePropertyMenu(e, node, (p) => {
+    write([{ edit: 'set_state_parameter', component: pageKey, id: node.id, state: st, name: p.name, value: lookStart(p, own[st]?.[p.name] ?? styled[st]?.[p.name] ?? current(p.name)) }],
+      `${pname(p.name)} while ${STATE_WORDS[st] || st}: set what it becomes`);
+  }, statePorts.filter((p) => !(p.name in (own[st] || {}))));
   for (const st of new Set([...Object.keys(own), ...Object.keys(styled)])) {
     const rows = [];
     for (const [k, v] of Object.entries(own[st] || {})) rows.push(row(pname(k), ruleValueField(node, P[k] || { name: k }, literal(v), (js) => { const nv = valueOf(js); if (nv.code === undefined) write([{ edit: 'set_state_parameter', component: pageKey, id: node.id, state: st, name: k, value: nv.value }]); }),
       h('button', { class: 'quiet tiny', title: `Stop changing ${pname(k)} while ${STATE_WORDS[st] || st}`, onclick: () => write([{ edit: 'set_state_parameter', component: pageKey, id: node.id, state: st, name: k, value: undefined }]) }, icon('x'))));
     for (const [k, v] of Object.entries(styled[st] || {})) if (!(k in (own[st] || {}))) rows.push(h('div', { class: 'field inherited', title: `From the style ${node.variant}` }, h('label', {}, pname(k)), h('div', { class: 'ctl' }, h('span', { class: 'rulecode' }, typeof v === 'object' ? showLen(v) : String(v)), h('span', { class: 'u' }, ` from ${node.variant}`)), h('span')));
+    if (states.some((s) => s.name === st) && statePorts.length) rows.push(h('div', { class: 'ruleacts' }, h('button', { class: 'tiny', 'data-look': st, onclick: (e) => addLook(e, st) }, icon('plus'), 'Another property')));
     add(section(`When ${STATE_WORDS[st] || st}`, rows));
   }
+  // a new look: the state, then the property
+  const fresh = states.filter((s) => !own[s.name] && !styled[s.name]);
+  if (fresh.length && statePorts.length) add(h('div', { class: 'ruleacts', style: 'padding:8px 14px' }, h('button', { class: 'tiny', id: 'newlook', onclick: (e) => {
+    closeMenu('.menu');
+    const menu = popover(e, 'lookstates');
+    menu.append(h('div', { class: 'h' }, 'A look while it is…'), ...fresh.map((s) => h('div', { class: 'item', 'data-state': s.name, onclick: () => { closeMenu('.menu'); addLook(e, s.name); } }, STATE_WORDS[s.name] || s.label || s.name)));
+    document.body.append(menu); dismissOnOutside(menu);
+  } }, icon('plus'), 'A look when hovered, pressed…')));
 }
 /** Bubble's Custom States on an element: type, name, default, list — each a Variable node on the page that remembers the element. */
 function customStatesSection(node) {
@@ -2142,7 +2241,7 @@ function colourMenu(e, current, pick) {
 /** STU-051 (spike): margin and padding as one box — margin around, padding inside — each side a length or a token's name. */
 const MP_SIDES = ['Top', 'Right', 'Bottom', 'Left'];
 const showLen = (v) => v == null ? '' : typeof v === 'object' ? (v.unit && v.unit !== 'px' ? `${v.value}${v.unit}` : String(v.value)) : typeof v === 'string' && /var\(--([\w-]+)/.test(v) ? v.match(/var\(--([\w-]+)/)[1] : String(v);
-const readLen = (t) => { t = t.trim(); if (!t) return undefined; if (/^var\(/.test(t)) return t; if (/^--/.test(t)) return `var(${t})`; const m = t.match(/^(-?[\d.]+)\s*(px|%)?$/); if (m) return { value: Number(m[1]), unit: m[2] || 'px' }; return tokensOf('').includes(`--${t}`) || appVars()[`--${t}`] !== undefined ? `var(--${t})` : null; };
+const readLen = (t, def = 'px') => { t = t.trim(); if (!t) return undefined; if (/^var\(/.test(t)) return t; if (/^--/.test(t)) return `var(${t})`; const m = t.match(/^(-?[\d.]+)\s*(px|%)?$/); if (m) return { value: Number(m[1]), unit: m[2] || def }; return tokensOf('').includes(`--${t}`) || appVars()[`--${t}`] !== undefined ? `var(--${t})` : null; };
 function marginPaddingBox(node, ports) {
   const params = node.parameters || {};
   const has = (name) => ports.some((p) => p.name === name);

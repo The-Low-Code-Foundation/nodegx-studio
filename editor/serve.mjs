@@ -24,6 +24,9 @@
  *   POST /api/backend-provision a backend for a project bound to none: NodeGX's provision, then the binding
  *   GET  /api/agent        STU-005: Claude Code and this folder (`lib/agent.mjs` stateOf): `{ state, serverName, command, … }`
  *   POST /api/agent-connect     "Connect Claude Code": the NodeGX editor's writer of `.mcp.json`, `CLAUDE.md`, `AGENTS.md`
+ *   GET  /api/images       STU-051: every image file in the project folder, `[path]`, for the image popover
+ *   POST /api/asset?name=x the request's bytes as an image under `assets/` (the NodeGX editor's projectAssets.ts:
+ *                          made unique before the extension, `logo-1.png`), answering `{ path }`
  *
  * STU-004: a project bound to a local backend (`lib/backend.mjs`) has it started when this server starts — or adopted
  * when the NodeGX editor or Claude Code already runs it — and stopped when this server stops (SIGTERM / SIGINT; the
@@ -69,7 +72,7 @@ for (const [what, at] of [
   }
 }
 
-const types = { '.js': 'application/javascript', '.mjs': 'application/javascript', '.html': 'text/html; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.css': 'text/css', '.svg': 'image/svg+xml' };
+const types = { '.js': 'application/javascript', '.mjs': 'application/javascript', '.html': 'text/html; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.css': 'text/css', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.avif': 'image/avif' };
 const TEXT = ['.json', '.js', '.css', '.md', '.html', '.txt'];
 const SKIP = new Set(['node_modules', '.git', '.nodegx', 'noodl_modules']);
 
@@ -141,6 +144,30 @@ const under = (root, rel) => {
   const file = resolve(root, rel);
   return file.startsWith(root + sep) || file === root ? file : undefined;
 };
+
+const IMAGES = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.avif'];
+function projectImages(dir) {
+  const out = [];
+  const walk = (folder) => {
+    for (const name of readdirSync(folder)) {
+      if (SKIP.has(name) || name.startsWith('.')) continue;
+      const full = join(folder, name);
+      if (statSync(full).isDirectory()) walk(full);
+      else if (IMAGES.includes(extname(name).toLowerCase())) out.push(relative(dir, full).split(sep).join('/'));
+    }
+  };
+  walk(dir);
+  return out.sort();
+}
+/** Where an uploaded image lands: `assets/<name>`, or `assets/<stem>-n<ext>` when that is taken. */
+function assetPath(name) {
+  const base = String(name).split(/[\\/]/).pop().replace(/[^\w.\- ]+/g, '').trim() || 'image.png';
+  const ext = extname(base), stem = base.slice(0, base.length - ext.length) || 'image';
+  for (let i = 0; ; i++) {
+    const rel = `assets/${i ? `${stem}-${i}` : stem}${ext}`;
+    if (!existsSync(join(projectDir, rel))) return rel;
+  }
+}
 
 function readBody(req) {
   return new Promise((ok, no) => {
@@ -266,6 +293,16 @@ const server = http.createServer(async (req, res) => {
         return json(409, { error: err.message });
       }
     }
+    if (url.pathname === '/api/images') return json(200, projectImages(projectDir));
+    if (url.pathname === '/api/asset' && req.method === 'POST') {
+      const name = url.searchParams.get('name') || '';
+      if (!IMAGES.includes(extname(name).toLowerCase())) return json(400, { error: `not an image: ${name}` });
+      const rel = assetPath(name), file = under(projectDir, rel);
+      if (!file) return json(400, { error: `refused: ${rel}` });
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(file, await readBody(req));
+      return json(200, { path: rel });
+    }
     if (url.pathname === '/api/agent') return json(200, await agent.stateOf(projectDir));
     if (url.pathname === '/api/agent-connect' && req.method === 'POST') {
       // Studio's own writes, known before they land, so the watcher does not hand them back to the page as an outside edit
@@ -294,8 +331,9 @@ const server = http.createServer(async (req, res) => {
     const [root, rel] = url.pathname.startsWith('/runtime/') ? [runtimeDir, url.pathname.slice('/runtime/'.length)] : [here, url.pathname.slice(1)];
     const file = under(root, decodeURIComponent(rel));
     if (file && existsSync(file) && statSync(file).isFile()) return send(200, readFileSync(file), types[extname(file)] ?? 'application/octet-stream');
-    // an asset of the project (images the app shows)
-    const asset = under(projectDir, decodeURIComponent(url.pathname.slice(1)));
+    // an asset of the project (images the app shows). The app's frame has `Noodl.baseUrl` "/runtime/", so the runtime
+    // asks for a project image `assets/x.png` as /runtime/assets/x.png: what the runtime folder does not have is the project's
+    const asset = under(projectDir, decodeURIComponent(url.pathname.startsWith('/runtime/') ? rel : url.pathname.slice(1)));
     if (asset && existsSync(asset) && statSync(asset).isFile()) return send(200, readFileSync(asset), types[extname(asset)] ?? 'application/octet-stream');
     res.writeHead(404);
     res.end();

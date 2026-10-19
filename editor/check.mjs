@@ -410,13 +410,14 @@ try {
     const sec = (title) => `[...document.querySelectorAll('#right .sec2')].find(d => d.querySelector('summary').textContent.startsWith(${JSON.stringify(title)}))`;
     const rowIn = (label) => `[...document.querySelectorAll('#right .sec2 .field')].find(f => f.querySelector('label')?.textContent === ${JSON.stringify(label)})`;
     // the shape: Bubble's sections in Bubble's order, and outside Content, Configure and More not one bare text field
-    const shape = async () => JSON.parse(await b.evaluate(`JSON.stringify({ secs: [...document.querySelectorAll('#right .sec2 > summary')].map(s => s.firstChild.textContent), bare: [...document.querySelectorAll('#right .sec2 input[type=text], #right .sec2 textarea')].filter(i => !i.closest('.len') && !['Content', 'Configure', 'More'].includes(i.closest('.sec2').querySelector('summary').firstChild.textContent)).map(i => i.closest('.field')?.querySelector('label')?.textContent || i.placeholder) })`));
-    const order = ['Content', 'Configure', 'Size', 'Layout', 'Style', 'Text', 'Appearance', 'Border', 'Background', 'Shadow', 'More'];
+    const shape = async () => JSON.parse(await b.evaluate(`JSON.stringify({ more: [...([...document.querySelectorAll('#right .sec2')].find(d => d.querySelector('summary').firstChild.textContent === 'More')?.querySelectorAll('.field > label') ?? [])].map(l => l.textContent), secs: [...document.querySelectorAll('#right .sec2 > summary')].map(s => s.firstChild.textContent), bare: [...document.querySelectorAll('#right .sec2 input[type=text], #right .sec2 textarea')].filter(i => !i.closest('.len') && !['Content', 'Configure', 'More'].includes(i.closest('.sec2').querySelector('summary').firstChild.textContent)).map(i => i.closest('.field')?.querySelector('label')?.textContent || i.placeholder) })`));
+    const order = ['Content', 'Configure', 'Size', 'Layout', 'Style', 'Text', 'Label text', 'Appearance', 'Border', 'Background', 'Shadow', 'More'];
     for (const [id, what] of [[card, 'a Group'], [title1, 'a Text'], [signInBtn, 'a Button'], [email, 'a Text Input']]) {
       if (id === card) await clickText('#tree .row', 'Sign-in card'); else await select(id);
       await wait(400);
       const sh = await shape();
       ok(sh.secs.length >= 5 && sh.secs.every((t, i, a) => i === 0 || order.indexOf(a[i - 1]) < order.indexOf(t)) && sh.bare.length === 0, `${what}: Bubble's sections in Bubble's order, every value outside Content and More edited through a typed control`, sh);
+      ok(!sh.secs.includes('More'), `${what}: nothing is left in More`, sh.more);
     }
     // a token-valued colour reads as the token's name, and its swatch is the colour the app draws
     await clickText('#tree .row', 'Sign-in card'); await wait(400);
@@ -472,6 +473,48 @@ try {
     ok(tokenCells.includes('Primary') && tokenCells.includes('Surface') && tColour === 'var(--primary)' && (await b.evaluate(`${sec('Text')}.querySelector('.cname').textContent`)) === 'Primary', 'the picker lists the app\'s tokens by name (its own and NodeGX\'s); picking Primary writes var(--primary) and the chip reads Primary', { cells: tokenCells.length, written: tColour, primary, drawn: drawnTitle });
     n0 = await shows(); await b.evaluate(`(() => { const s = ${sec('Text')}.querySelector('.cbtn'); s.click(); })()`); await wait(250);
     await b.evaluate(`[...document.querySelectorAll('.menu.colours .cgrid .cell')].find(c => c.title === 'Foreground').click()`); await rebuilt(n0);
+    // an Image: the panel's shape, and its picture through the image popover — uploaded into assets/, picked, cleared
+    {
+      n0 = await shows();
+      await clickText('#palette button', 'Image');
+      const at = await centreOf(title1); await b.click(at.x, at.y); await rebuilt(n0);
+      const imgNode = () => onDisk(SIGN + 'nodes.json').nodes.find((n) => n.type === 'Image' && n.parent === card);
+      const imgId = imgNode()?.id;
+      await select(imgId); await wait(300);
+      const sh = await shape();
+      ok(imgId && sh.secs.every((t, i, a) => i === 0 || order.indexOf(a[i - 1]) < order.indexOf(t)) && sh.bare.length === 0 && (await b.evaluate(`!!document.querySelector('#right [data-image=src]')`)), 'an Image: Bubble\'s sections in order, every value a typed control, its source an image chip', sh);
+      ok(!sh.secs.includes('More'), 'an Image: nothing is left in More', sh.more);
+      const upload = (name) => b.evaluate(`(() => { const bin = atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='); const bytes = Uint8Array.from(bin, c => c.charCodeAt(0)); const dt = new DataTransfer(); dt.items.add(new File([bytes], ${JSON.stringify(name)}, { type: 'image/png' })); const i = document.querySelector('.menu.images input[type=file]'); i.files = dt.files; i.dispatchEvent(new Event('change')); })()`);
+      const openPicker = async () => { await b.evaluate(`document.querySelector('#right [data-image=src]').click()`); await b.until('document.querySelector(".menu.images")', 4000); };
+      await openPicker();
+      n0 = await shows(); await upload('dot.png'); await rebuilt(n0); await wait(300);
+      const drawn = () => b.evaluate(`(() => { const el = __ob.preview.elementsOf(${JSON.stringify(imgId)})[0]; const im = el?.tagName === 'IMG' ? el : el?.querySelector('img'); return im ? { src: im.getAttribute('src'), w: im.naturalWidth, done: im.complete } : null; })()`);
+      let d = await drawn();
+      for (const t0 = Date.now(); Date.now() - t0 < 3000 && !(d?.w > 0); await wait(150)) d = await drawn();
+      ok(imgNode()?.parameters.src === 'assets/dot.png' && existsSync(join(project, 'assets/dot.png')) && d?.w === 1, 'Upload an image… copies it into the project\'s assets/, the Image\'s source says so, and the app loads it', { src: imgNode()?.parameters.src, drawn: d });
+      await openPicker();
+      await b.until(`document.querySelector('.menu.images .igrid .cell[data-path="assets/dot.png"]')`, 4000);
+      n0 = await shows(); await upload('dot.png'); await rebuilt(n0);
+      ok(imgNode()?.parameters.src === 'assets/dot-1.png' && existsSync(join(project, 'assets/dot.png')), 'the same name again is made unique before the extension (dot-1.png), the first kept', imgNode()?.parameters.src);
+      await openPicker();
+      await b.until(`document.querySelector('.menu.images .igrid .cell[data-path="assets/dot.png"]')`, 4000);
+      n0 = await shows(); await b.evaluate(`document.querySelector('.menu.images .igrid .cell[data-path="assets/dot.png"]').click()`); await rebuilt(n0);
+      ok(imgNode()?.parameters.src === 'assets/dot.png' && (await b.evaluate(`document.querySelector('#right [data-image=src] .cname').textContent`)) === 'dot.png', 'the project\'s images are listed; picking one writes it, and the chip names it', imgNode()?.parameters.src);
+      await openPicker();
+      n0 = await shows(); await clickText('.menu.images .iacts button', 'No image'); await rebuilt(n0);
+      ok(imgNode() && imgNode().parameters.src === undefined && (await b.evaluate(`document.querySelector('#right [data-image=src] .cname').textContent`)) === 'No image', 'No image clears the source', imgNode()?.parameters);
+      n0 = await shows(); await b.evaluate('document.activeElement && document.activeElement.blur()'); await b.key('Delete', 'Delete', 46); await rebuilt(n0);
+      ok(!imgNode(), 'and the Image is deleted again');
+    }
+    // Offset (NodeGX's Pos X), from More into Appearance: written as a length, drawn as the element moved
+    await select(title1);
+    await b.evaluate(`(() => { const d = ${sec('Appearance')}; d.open = true; })()`); await wait(200);
+    n0 = await shows();
+    await b.evaluate(`(() => { const i = ${rowIn('Offset')}.querySelectorAll('input')[0]; i.value = '12'; i.dispatchEvent(new Event('change')); })()`); await rebuilt(n0);
+    const tx = onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === title1).parameters.transformX, drawnTx = await inFrame(title1, 'transform');
+    ok(tx?.value === 12 && tx?.unit === 'px' && /matrix\(1, 0, 0, 1, 12, 0\)/.test(drawnTx), 'Offset X 12 on the title: the file says 12 px, the app draws it moved 12 px', { tx, drawnTx });
+    n0 = await shows();
+    await b.evaluate(`(() => { const i = ${rowIn('Offset')}.querySelectorAll('input')[0]; i.value = ''; i.dispatchEvent(new Event('change')); })()`); await rebuilt(n0);
     // the Interaction tab: the Sign in button's workflow is listed there, and opens in Workflow
     await select(signInBtn);
     await clickText('#right .ptabs button', 'Interaction'); await wait(250);
@@ -799,6 +842,42 @@ try {
     await b.evaluate(`[...document.querySelectorAll('#right details')].find(d => /When hovered/.test(d.querySelector('summary').textContent)).querySelector('.field > button').click()`);
     await rebuilt(n0); await wait(400);
     ok(!onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === 'siCreate').stateParameters, 'taking its one hover value out removes the hover look from the file', onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === 'siCreate').stateParameters);
+    // a new look, from the tab: the states its type has, then the properties its type lets a state change
+    const look = () => onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === 'siCreate').stateParameters;
+    const drawnBg = () => b.evaluate(`getComputedStyle(__ob.preview.elementsOf('siCreate')[0]).backgroundColor`);
+    const inState = (states) => b.evaluate(`(() => { const r = __ob.preview.frame.contentWindow.Noodl.Navigation._noodlRuntime.context.rootComponent.nodeScope.getNodesWithIdRecursive('siCreate'); r.forEach(n => n.setVisualStates(${JSON.stringify(states)})); return r.length; })()`);
+    await b.clickSel('#newlook'); await b.until('document.querySelector(".menu.lookstates")', 4000);
+    const offered = JSON.parse(await b.evaluate(`JSON.stringify({ menu: [...document.querySelectorAll('.menu.lookstates .item')].map(i => i.dataset.state) })`));
+    const typeStates = JSON.parse(await b.evaluate(`JSON.stringify((__ob.preview.nodeLibrary.nodetypes.find(t => t.name === ${JSON.stringify(sign.nodes.nodes.find((n) => n.id === 'siCreate').type)})?.visualStates || []).map(s => s.name).filter(s => s !== 'neutral'))`));
+    ok(offered?.menu?.join() === typeStates.join() && typeStates.includes('hover') && typeStates.includes('pressed'), 'A look when hovered, pressed…: the menu offers exactly the states the node library gives a Button', { menu: offered?.menu, typeStates });
+    await b.clickSel('.menu.lookstates .item[data-state=hover]'); await b.until('document.querySelector(".menu.ruleprops")', 4000);
+    // graded against the node library, not Studio's own port list: the kit's spec ports carry no allowVisualStates, and
+    // taking theirs first once hid Background Color from this menu
+    const props = JSON.parse(await b.evaluate(`JSON.stringify((() => { const lib = __ob.preview.nodeLibrary.nodetypes.find(t => t.name === 'net.noodl.controls.button'); const may = new Set(lib.ports.filter(p => p.allowVisualStates).map(p => p.name)); const mine = __ob.ports('siCreate').map(p => p.name); return { menu: [...document.querySelectorAll('.menu.ruleprops .item')].map(i => i.dataset.port).sort(), allowed: mine.filter(n => may.has(n)).sort(), all: mine.length }; })())`));
+    ok(props.menu.join() === props.allowed.join() && props.allowed.includes('backgroundColor') && props.all > props.allowed.length, 'then exactly the properties the node library lets a state change (allowVisualStates), not all of them', { menu: props.menu.length, allowed: props.allowed.length, all: props.all, missing: props.allowed.filter((n) => !props.menu.includes(n)).slice(0, 8) });
+    const bg0 = await drawnBg();
+    n0 = await shows();
+    await b.evaluate(`document.querySelector('.menu.ruleprops .item[data-port=backgroundColor]')?.scrollIntoView({ block: 'nearest' })`);
+    await b.clickSel('.menu.ruleprops .item[data-port=backgroundColor]');
+    await rebuilt(n0); await wait(400);
+    ok(look()?.hover?.backgroundColor !== undefined && (await drawnBg()) === bg0, 'the new hover look starts as what it shows now: written to the file, and the button looks the same', { look: look(), bg0, now: await drawnBg() });
+    await b.evaluate(`[...document.querySelectorAll('#right details')].find(d => /When hovered/.test(d.querySelector('summary').textContent)).querySelector('.field .cbtn').click()`);
+    await b.until('document.querySelector(".menu.colours")', 4000);
+    n0 = await shows();
+    await b.evaluate(`(() => { const i = document.querySelector('.menu.colours .cpick input[type=text]'); i.value = '#00FF00'; i.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await rebuilt(n0); await wait(400);
+    const found = await inState(['neutral', 'hover']); await wait(300);
+    const hovered = await drawnBg();
+    await inState(['neutral']); await wait(300);
+    const after = await drawnBg();
+    ok(look()?.hover?.backgroundColor === '#00FF00' && found > 0 && hovered === 'rgb(0, 255, 0)' && after === bg0, 'set in the tab: the file says #00FF00, the button draws it while hovered and its own colour after', { look: look(), found, hovered, after, bg0 });
+    await b.evaluate(`document.querySelectorAll('.menu').forEach(m => m.remove())`);
+    const another = await b.evaluate(`!!document.querySelector('#right button[data-look=hover]')`);
+    ok(another, 'the hover look has "Another property" for the next one');
+    n0 = await shows();
+    await b.evaluate(`[...document.querySelectorAll('#right details')].find(d => /When hovered/.test(d.querySelector('summary').textContent)).querySelector('.field > button').click()`);
+    await rebuilt(n0); await wait(400);
+    ok(!look(), 'and taken out again: the file is as it was', look());
     await tab('Visual');
   }
   console.log('check: a group made reusable (STU-050)');
