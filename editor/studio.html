@@ -813,6 +813,19 @@ function portsOf(node, plug) {
   if (node.type === 'Expression' && plug === 'input') for (const name of exprNames(node.parameters?.expression)) if (!seen.has(name)) seen.set(name, { name, label: name, type: '*', signal: false, group: 'Inputs' });
   return [...seen.values()];
 }
+/**
+ * A workflow step runs when its chain reaches it, never because a value wired into it changed. NodeGX re-runs a Condition
+ * or a Function when a value changes even with its trigger wired (NDA-017), so wiring a value into a step would fire it on
+ * its own (STU-013-NAVLOOP): this unticks that input's run-on-change box. A Function's boxes are made at run time from its
+ * script (`runOnChange-in-<name>`), so the node library never lists them.
+ */
+function stepOnly(node, port) {
+  const trig = triggerOf(node);
+  if (!trig || !conns.some((c) => c.toId === node.id && c.toProperty === trig)) return [];
+  const box = 'runOnChange-' + port;
+  const has = portsOf(node, 'input').some((q) => q.name === box) || (node.type === 'JavaScriptFunction' && /^in-/.test(port));
+  return has && node.parameters?.[box] !== false ? [{ edit: 'set_parameter', component: pageKey, id: node.id, name: box, value: false }] : [];
+}
 const exprNames = (text) => { try { return text ? expressionPorts(String(text)) : []; } catch { return []; } };
 const portLabel = (node, plug, name) => portsOf(node, plug).find((p) => p.name === name)?.label || name;
 const isSignalPort = (node, plug, name) => { const p = portsOf(node, plug).find((p) => p.name === name); return p ? p.signal : /^(on[A-Z]|did|do$|navigate$|store$|fetch$|login$|logout$|send$|eval$)/.test(name) && !/changed$/i.test(name); };
@@ -1337,11 +1350,11 @@ function sourceMenu(e, node, p, onPick, initial = '') {
       // a first item's field must be listed on its record node first: in the same gesture as the wire when there is one
       const r = readFrom(itemById(src.item), src.what, { component: pageKey, nodes });
       if (onPick) { if (r.edits.length) edits(pageKey, r.edits, { redraw: false }); return onPick({ node: r.node, port: r.port, text: r.text }); }
-      edits(pageKey, [...r.edits, { edit: 'connect', component: pageKey, from: { node: r.node, port: r.port }, to: { node: node.id, port: p.name } }]);
+      edits(pageKey, [...r.edits, { edit: 'connect', component: pageKey, from: { node: r.node, port: r.port }, to: { node: node.id, port: p.name } }, ...stepOnly(node, p.name)]);
       return toast(`${p.displayName || p.name} now comes from ${r.text}`);
     }
     if (onPick) return onPick(src);
-    edits(pageKey, [{ edit: 'connect', component: pageKey, from: { node: src.node, port: src.port }, to: { node: node.id, port: p.name } }]);
+    edits(pageKey, [{ edit: 'connect', component: pageKey, from: { node: src.node, port: src.port }, to: { node: node.id, port: p.name } }, ...stepOnly(node, p.name)]);
     toast(`${p.displayName || p.name} now comes from ${src.text}`);
   };
   const fill = (q) => {
@@ -1724,7 +1737,7 @@ function openComposer(e, node, p, existing, onPick) {
     for (const n of names) { const src = chips.get(n); if (src && !wiredNow.some((c) => c.toProperty === n && c.fromId === src.node && c.fromProperty === src.port && names.includes(n) && chips.has(n))) list.push({ edit: 'connect', component: pageKey, from: { node: src.node, port: src.port }, to: { node: exprId, port: n } }); }
     if (!onPick && !conns.some((c) => c.fromId === exprId && c.fromProperty === 'result' && c.toId === node.id && c.toProperty === p.name)) {
       for (const c of conns.filter((c) => c.toId === node.id && c.toProperty === p.name)) list.push({ edit: 'disconnect', component: pageKey, from: { node: c.fromId, port: c.fromProperty }, to: { node: node.id, port: p.name } });
-      list.push({ edit: 'connect', component: pageKey, from: { node: exprId, port: 'result' }, to: { node: node.id, port: p.name } });
+      list.push({ edit: 'connect', component: pageKey, from: { node: exprId, port: 'result' }, to: { node: node.id, port: p.name } }, ...stepOnly(node, p.name));
     }
     closeMenu();
     edits(pageKey, list);
@@ -1941,6 +1954,7 @@ function setStateMenu(e, from) {
 }
 function addAction(type, from, params = {}, label) {
   const trig = triggerOf({ type, parameters: {} });
+  if (type === 'Condition') params = { ...params, 'runOnChange-condition': false }; // a branch tests when its chain reaches it (stepOnly)
   const n = nodes.filter((n) => !isVisualType(n.type) && !isHelperNode(n)).length;
   const [id] = edits(pageKey, [{ edit: 'add_node', component: pageKey, type, label, x: 700 + (n % 3) * 220, y: 200 + Math.floor(n / 3) * 90, parameters: Object.keys(params).length ? params : undefined }], { redraw: false });
   edits(pageKey, [{ edit: 'connect', component: pageKey, from: { node: from.node, port: from.port }, to: { node: id, port: trig } }]);

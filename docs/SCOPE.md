@@ -35,7 +35,7 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 | Data tab — types and fields, rows on the bound backend, option sets | works | `check:editor` |
 | Live with outside edits — a file changed by Claude Code (MCP), VS Code or `git pull` is drawn without a reload; a clash with Studio's own edit asks | works (2026-10-19) | `check:editor` 46/46 |
 | Styles — global styles as NodeGX variants | works | `check:editor` |
-| Bubble importer — pages, elements, styles, workflows, expressions, option sets, reusables, custom states, data types, privacy rules → `nodegx.security.json`, backend workflows → cloud functions, Data-tab rows | spike, measured on a real 17-page app (0 validation errors); its searches arrive as page data (STU-013) | `check:import` 38/38 |
+| Bubble importer — pages, elements, styles, workflows, expressions, option sets, reusables, custom states, data types, privacy rules → `nodegx.security.json`, backend workflows → cloud functions, Data-tab rows | spike, measured on a real 17-page app (0 validation errors); its searches arrive as page data (STU-013); its workflow conditions test only when the workflow runs (STU-013-NAVLOOP) | `check:import` 41/41 |
 | Desktop app — Electron window, a welcome screen (recent projects, NodeGX's templates, Import an app), File → Open Recent, a smoke mode | first cut (2026-10-19) | `check:app` 34/34, `smoke` |
 | The project's backend — started (or adopted) on open, stopped on close, shown in the status bar; a template that needs one gets one; Data's "Start a backend" for an app with none | works (2026-10-19) | `check:app` 34/34 |
 | Claude Code — "Connect Claude Code" in the header (and File) registers the NodeGX MCP server for the folder with the NodeGX editor's own writer and shows the command that starts a session there | works (2026-10-19) | `check:editor` 56/56 |
@@ -301,6 +301,24 @@ where creator is Current User" before anyone signs in asks for every Org the bac
 that depends on a value may need to wait for it. Two smaller things the gate found and fixed on the way: the Workflow
 section read a branch's file 300 ms after drawing it and sometimes before the save landed (it now waits for the
 file); the right panel's header CSS never matched the header (`.props .head`, but the header sits beside `.props`).
+
+**Fixed (STU-013-NAVLOOP, 2026-10-19).** Neither "Go to page user_dashboard" step was the loop. Reading the runtime's
+own trace at each `pushState` named the node: a **click** workflow on each page, "Only when Current User is logged
+out → Go to page index", fired with no click as the page opened, on index and on user_dashboard alike. NodeGX re-tests
+a Condition whenever its value changes, Evaluate wired or not (NDA-017 made that the default: wiring Evaluate *adds* a
+trigger and never stops the old one), so `!(userId)` arriving as `true` ran the step. The importer wrote 392 such
+Conditions on the real app; it now writes `runOnChange-condition: false` on every one (a workflow's Only when, a
+step's Only when, a Do when). Studio's own Workflow tab had the same trap: **Add a branch** now writes the switch off,
+and wiring a value into a step (the composer, "⤷ from…", a page data field) unticks that input's switch whenever the
+node has one and its trigger is wired — a Run JavaScript step's inputs too, whose switches the runtime makes from the
+script. Measured on the real app, same probe both times: before, 12 pushes in the first 2.2 s; after, **0 in 15 s**,
+and Blog, FAQs and Terms each open and stay where they land. user_dashboard opens and goes back to index once, as in
+the original: its Page is loaded sends a signed-out visitor home. The pre-fix app cannot even be driven to try (the
+probe's time limit expires; the page is saturated). `check:editor` 74/74: the gate's branch now hangs off the card's
+*Click*, the app's trace shows its value arriving at open with neither Yes nor No running, then a click in the app
+runs No; with the branch's switch and `stepOnly` both removed, No runs at open and 2 checks fail. `check:import`
+41/41: three gated workflows convert to four Conditions (a Do when also gets an Only when from the same condition,
+redundant and harmless), each run by Evaluate and none on a change; without the switch, 1 fails.
 
 ---
 

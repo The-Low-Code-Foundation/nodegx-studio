@@ -167,6 +167,35 @@ const countBy = (text, re) => (text.match(re) || []).length;
   }
 }
 
+// ---------------------------------------------------------------- 1d. STU-013-NAVLOOP: a workflow's conditions test when it runs, never on a change
+// NodeGX re-tests a Condition whenever its value changes, Evaluate wired or not (NDA-017): a click's "Only when Current
+// User is logged out → Go to page" fired as the page opened, and the real app bounced between two pages ~8 times a second.
+{
+  const base = path.join(tmp, 'editor requests', 'app.export.json');
+  if (exists(base)) {
+    const synth = readJson(base);
+    const user = (name) => ({ type: 'CurrentUser', next: { type: 'Message', name } });
+    synth.pages = { npage: { type: 'Page', id: 'npage', name: 'index', properties: { new_responsive: true, container_layout: 'column' }, elements: {
+      b1: { id: 'b1', type: 'Button', name: 'Button go', properties: {} } },
+      workflows: {
+        w1: { id: 'w1', type: 'ButtonClicked', properties: { element_id: 'b1', condition: user('not_logged_in') }, actions: {
+          0: { id: 'a1', type: 'ChangePage', properties: { element_id: 'opage', condition: user('logged_in') } } } },
+        w2: { id: 'w2', type: 'ConditionTrue', properties: { condition: user('logged_in'), run_when: 'every_time' }, actions: {
+          0: { id: 'a2', type: 'ChangePage', properties: { element_id: 'opage' } } } } } },
+      opage: { type: 'Page', id: 'opage', name: 'other', properties: { new_responsive: true, container_layout: 'column' }, elements: {} } };
+    const out = path.join(tmp, 'navloop'); fs.mkdirSync(out); const exp = path.join(out, 'app.export.json'); fs.writeFileSync(exp, JSON.stringify(synth));
+    const c = run([path.join(here, 'app-to-nodegx.mjs'), exp, path.join(out, 'project')]);
+    if (check('STU-013-NAVLOOP: the page with gated workflows converts', c.status === 0, (c.stderr || c.stdout).slice(-600))) {
+      const dir = path.join(out, 'project', 'components', 'Pages', 'index');
+      const nodes = readJson(path.join(dir, 'nodes.json')).nodes, conns = readJson(path.join(dir, 'connections.json')).connections;
+      const conds = nodes.filter((n) => n.type === 'Condition');
+      // four: a Do when workflow also gets an Only when from the same condition (the importer reads `properties.condition` for both)
+      check('STU-013-NAVLOOP: the workflow\'s Only when, the step\'s Only when and the Do when (with its own Only when) are four Conditions, each run by a wire into Evaluate', conds.length === 4 && conds.every((n) => conns.some((w) => w.toId === n.id && w.toProperty === 'eval')), JSON.stringify(conds.map((n) => n.label)));
+      check('STU-013-NAVLOOP: none of them re-tests when its value changes (runOnChange-condition false)', conds.length === 4 && conds.every((n) => n.parameters?.['runOnChange-condition'] === false), JSON.stringify(conds.map((n) => [n.label, n.parameters])));
+    }
+  }
+}
+
 // ---------------------------------------------------------------- 2. the template's run-mode bundle (gitignored; optional)
 {
   const tplDir = path.join(here, 'exports', 'template');

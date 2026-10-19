@@ -200,9 +200,10 @@ try {
   ok(fields.length > 0, 'a step opens its settings as fields', fields.slice(0, 6));
   await b.clickSel('#steps .step .acts button'); await wait(100);
   {
-    // a new workflow on the card's own event, with a branch: Yes gets "Set state", No gets "Go to page", the condition is composed
+    // a new workflow on the card's click, with a branch: Yes gets "Set state", No gets "Go to page", the condition is composed
+    // (a click, not Did Mount: the app opening must not run it — STU-013-NAVLOOP below)
     await b.clickSel('#newevent'); await wait(250);
-    await b.type('Sign-in card'); await wait(200);
+    await b.type('Sign-in card click'); await wait(200);
     const first = await b.evaluate(`document.querySelector('.menu .item')?.textContent`);
     await b.clickSel('.menu .item'); await wait(300);
     const evPort = (first.match(/: (.+?)[A-Z][a-z]+ *$/) || [])[1];
@@ -238,12 +239,23 @@ try {
     await b.evaluate(`[...document.querySelectorAll('.composer .seg button')].find(b => b.dataset.m === 'js').click()`); await wait(100);
     await b.evaluate(`document.querySelector('.composer textarea').focus()`); await b.type('1 > 2');
     await shot('workflow-branch');
+    const n1 = await shows();
     await clickText('.composer .foot button', 'Save'); await wait(800);
     wires = onDisk(SIGN + 'connections.json').connections; nodes = onDisk(SIGN + 'nodes.json').nodes;
     const condExpr = nodes.find((n) => n.type === 'Expression' && n.metadata?.composedFor?.node === cond.id && n.metadata.composedFor.port === 'condition');
     ok(condExpr && condExpr.parameters.expression === '1 > 2' && wires.some((w) => w.fromId === condExpr.id && w.fromProperty === 'result' && w.toId === cond.id && w.toProperty === 'condition'), 'the branch\'s condition is an Expression (1 > 2) wired into the Condition\'s input', { expression: condExpr?.parameters?.expression });
     const shown = await b.evaluate(`document.querySelector('#steps .step.cond .cond-line')?.textContent`);
     ok(/1 > 2/.test(shown || ''), 'the branch card reads the condition back', shown);
+    // STU-013-NAVLOOP: NodeGX re-tests a Condition when its value changes, Evaluate wired or not. A branch tests when its
+    // event reaches it: its value arriving as the app opens must not send No's "Go to page" (the runtime's own trace says)
+    ok(nodes.find((n) => n.id === cond.id)?.parameters?.['runOnChange-condition'] === false, 'the branch is written to test only when its event reaches it (run on change off)', nodes.find((n) => n.id === cond.id)?.parameters);
+    await rebuilt(n1); await wait(500);
+    const branchTrace = async () => JSON.parse(await b.evaluate(`JSON.stringify(__ob.preview.frame.contentWindow.Noodl.Navigation._noodlRuntime.context.getTraceEvents(0).filter(e => e.toNode === ${JSON.stringify(cond.id)} || e.fromNode === ${JSON.stringify(cond.id)}).map(e => e.fromPort + ' > ' + e.toPort))`));
+    const atOpen = await branchTrace();
+    ok(first.includes('Click') && atOpen.includes('result > condition') && !atOpen.some((t) => /^on(true|false) > /.test(t)), 'in the app, the branch\'s value arrives as it opens and neither Yes nor No runs: nothing clicked the card', { event: first, atOpen });
+    await b.evaluate(`__ob.preview.elementsOf(${JSON.stringify(card)})[0].click()`); await wait(500);
+    const clicked = await branchTrace();
+    ok(clicked.includes('onClick > eval') && clicked.includes('onfalse > navigate') && !clicked.includes('ontrue > do'), 'a click on the card in the app runs the branch: 1 > 2 is false, so No\'s Go to page runs', clicked);
   }
   console.log('check: Data');
   await b.clickSel('[data-tab=data]'); await wait(300);
