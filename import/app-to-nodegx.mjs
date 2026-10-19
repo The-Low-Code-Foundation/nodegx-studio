@@ -288,6 +288,24 @@ function convertElement(g, el, parentNode, parentLayout, bubblePage, depth, y) {
   if (!ntype && el.type === 'materialicons-Materialicon') { ntype = 'net.noodl.visual.icon'; node.type = ntype; node.label = label; stats.placeholders--; stats.mapped++; findings.pop(); usedMaterialIcons = true; p.icon = p.icon || 'circle'; node.parameters = { ...layoutParams({ ...p, single_width: true, single_height: true, width: p.width || 24, height: p.height || 24 }, parentLayout, el.type), ...styleParams(p, el.type) }; node._materialIcon = true; }
   if (ntype === 'net.noodl.visual.icon') { ntype = 'Group'; node.type = 'Group'; node.children = []; const ic = { id: `icon_${el.id}`, type: 'net.noodl.visual.icon', label: `${label} glyph`, parent: node.id, parameters: { iconIconSource: node._materialIcon ? { class: 'material-icons', code: String(p.icon), codeAsClass: false } : { class: String(p.icon || ''), code: '', codeAsClass: true }, iconSize: px(Math.min(p.height || 24, p.width || 24)), ...(p.icon_color ? { iconColor: p.icon_color } : {}) }, x: node.x + 60, y: y + 110 }; node._iconChild = ic; }
   if (el.type === 'Popup' || el.type === 'GroupFocus') { delete node.parameters.visible; node.parameters.mounted = false; }
+  // STU-053: the containers Bubble draws over the page. A floating group is fixed to the window on its own layer, at the
+  // top (Bubble's default), the bottom, or both edges; a popup sits in the middle of the window over everything
+  if (el.type === 'FloatingGroup') {
+    const fv = p.float_vertical ?? 'top';
+    delete node.parameters.marginTop; delete node.parameters.marginLeft;
+    Object.assign(node.parameters, { position: 'fixed', zIndex: Number(p.zindex ?? 1), alignX: node.parameters.alignX || 'left', alignY: fv === 'bottom' ? 'bottom' : 'top' });
+    if (fv === 'both') { node.parameters.height = pct(100); node.parameters.sizeMode = { contentHeight: 'explicit', contentSize: 'contentWidth' }[node.parameters.sizeMode] || node.parameters.sizeMode; }
+    if (!['top', 'bottom', 'both'].includes(fv)) todo(`${bubblePage.name} / ${label}`, `a floating group that floats relative to "${fv}" is placed fixed at the top of the window`);
+    stats.floating = (stats.floating || 0) + 1;
+  }
+  if (el.type === 'Popup') {
+    delete node.parameters.marginTop; delete node.parameters.marginLeft;
+    Object.assign(node.parameters, { position: 'fixed', alignX: 'center', alignY: 'center', zIndex: 1000 });
+    if (p.width > 0 && !node.parameters.maxWidth && node.parameters.width?.unit === '%') node.parameters.maxWidth = px(p.width);
+    todo(`${bubblePage.name} / ${label}`, "a popup is drawn in the middle of the window over the page; Bubble's grey backdrop behind it is not drawn");
+    stats.floating = (stats.floating || 0) + 1;
+  }
+  if (el.type === 'GroupFocus') todo(`${bubblePage.name} / ${label}`, 'a group focus is shown where it sits on the page, not beside its reference element (Bubble places it at an offset from that element)');
   if (el.type === 'Link') { if (p.link_type === 'pagelink' && pageById[p.page]) { const nav = g.add({ id: `nav_${el.id}`, type: 'RouterNavigate', label: `Go to page ${pageById[p.page].name}`, parameters: { target: pageComponentPath(pageById[p.page]) } }); g.wire(node.id, 'onClick', nav.id, 'navigate'); } else todo(`${bubblePage.name} / ${label}`, `a Link to a URL became a Text; its destination (${JSON.stringify(p.link_url || p.url || '').slice(0, 80)}) is not wired`); }
   if (ntype === 'net.noodl.controls.textinput' && p.initial_content) dynamic.push(['startValue', p.initial_content]);
   if (reusable) { node.parameters = Object.fromEntries(Object.entries(node.parameters).filter(([k]) => ['position', 'marginLeft', 'marginTop', 'width', 'height', 'minWidth', 'maxWidth', 'minHeight', 'sizeMode', 'alignX'].includes(k))); }
@@ -299,7 +317,14 @@ function convertElement(g, el, parentNode, parentLayout, bubblePage, depth, y) {
   elementIndex[el.id] = { ...(elementIndex[el.id] || {}), nodeId: node.id, type: ntype || 'Group', bubbleType: el.type, componentPath: g.path, label };
   // a Group's data source: an Expression holding it, which the children's "Parent group's thing" reads
   if (p.data_source && el.type !== 'RepeatingGroup' && !['net.noodl.controls.options'].includes(ntype)) { const ds = compileExpr(g, p.data_source, { page: bubblePage, element: node }); const ex = exprNode(g, `${label}: data = ${ds.text}`, ds.js, ds, { x: node.x + 500, y: node.y }); groupDataNode[node.id] = ex.id; }
-  else if (p.data_source && ntype === 'net.noodl.controls.options') { const ds = compileExpr(g, p.data_source, { page: bubblePage, element: node }); const ex = exprNode(g, `${label}: items = ${ds.text}`, ds.js, ds, { x: node.x + 500, y: node.y }); g.wire(ex.id, 'result', node.id, 'items'); }
+  else if (p.data_source && ntype === 'net.noodl.controls.options') {
+    // STU-053: a Dropdown draws each item's Label and gives its Value (text: a native select hands back a string), so the
+    // things a search or an option set gives are made into choices; a record handed over as it is drew an empty choice
+    const ds = compileExpr(g, p.data_source, { page: bubblePage, element: node });
+    const js = `(${ds.js} || []).map((x) => x !== null && typeof x === 'object' ? { Label: String(x.Label ?? x.display ?? x.name ?? x.title ?? x.id ?? ''), Value: String(x.Value ?? x.id ?? x.display ?? x.name ?? '') } : x)`;
+    const ex = exprNode(g, `${label}: choices = ${ds.text}`, js, ds, { x: node.x + 500, y: node.y }); g.wire(ex.id, 'result', node.id, 'items');
+    todo(`${bubblePage.name} / ${label}`, `its choices are ${ds.text}, each shown by its display / name and valued by its id: "${label}'s value" is that id, not the thing${p.option_caption ? ', and its own caption expression is not read' : ''}`);
+  }
   y += 110;
   for (const [sk, sv] of Object.entries(el.custom_states || {})) { const name = `${label}.${sv.display || sk}`.replace(/\W+/g, '_'); g.add({ id: `state_${el.id}_${sk.replace(/\W+/g, '_')}`, type: 'Variable2', label: `State ${sv.display || sk} of ${label}`, parameters: { name, ...(sv.default_val !== undefined ? { value: sv.default_val } : {}) }, metadata: { customState: { of: node.id, name: sv.display || sk, type: sv.value, list: String(sv.value || '').startsWith('list.') } } }); stats.customStates = (stats.customStates || 0) + 1; }
   // element conditions (states)
@@ -335,6 +360,9 @@ function convertElement(g, el, parentNode, parentLayout, bubblePage, depth, y) {
     const inputs = rg.add({ id: `in_${el.id}`, type: 'Component Inputs', label: 'This row', ports: [], x: 700, y: 40 });
     rg.rowInputs = inputs; rg.itemType = p.group_type;
     const cellLayout = p.container_layout ? (p.container_layout === 'fixed' ? 'fixed' : 'flex') : 'old';
+    // STU-053: a grid of cells (Bubble's columns) wraps in rows, each cell its share of the width
+    const cols = Number(p.columns) || 1;
+    if (cols > 1) { Object.assign(node.parameters, { flexDirection: 'row', flexWrap: 'wrap' }); cell.parameters.width = pct(Math.round(10000 / cols) / 100); stats.cellGrids = (stats.cellGrids || 0) + 1; }
     if (cellLayout === 'old') { cell.parameters.minHeight = px(p.cell_height || Math.max(40, Math.round((p.height || 200) / (p.rows || 4)))); }
     convertChildren(rg, el.elements, cell, cellLayout, bubblePage, 1, 160);
     const each = g.add({ id: `each_${el.id}`, type: 'For Each', label: `One row per item of ${label}`, parent: node.id, parameters: { template: rowPath, templateType: 'explicit' }, x: node.x + 60, y });

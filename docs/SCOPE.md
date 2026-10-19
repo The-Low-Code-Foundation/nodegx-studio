@@ -273,6 +273,32 @@ Date Range 11/0, List 21/3, Any 4/1.
   value), the slot for a Function or node row (they say what to use instead), and inserting a phrase at the caret
   rather than on the marked chip.
 
+**STU-051's rest, built (s6).** STU-051's done-when line holds on the todo app: **nothing is left in More** for a Group,
+a Text, a Button, a Text Input or an Image (the gate asserts it for each). Placed: Position always in Layout (it was
+shown only when not "in the flow", so the default sat in More), Lines (`alignContent`) once the container wraps, Box
+sizing under Spacing; Offset X / Y (NodeGX's "Pos X / Y" are a transform: they move the element from where the layout
+put it) and Origin in Appearance; a Text Input's content format, max length, keyboard, enter key, text to insert,
+placeholder opacity and label spacing in Configure, its initial content in Content, its label's font, size, weight,
+colour and the rest as a **Label text** section with the Text section's own controls (once the label is on), and
+run-on-change in Interaction › Options. Text style is a choice of the project's `textStyles`. The **image popover**:
+the image as it is, *Upload an image…* (into `assets/`, made unique before the extension, `dot-1.png`, as the NodeGX
+editor's `projectAssets.ts` does), the project's own images, an address, *No image*; on an Image's source and a
+background image. **A look when hovered, pressed…**: the states the node library gives the element's type
+(`visualStates`), then the properties it lets a state change (`allowVisualStates`), the look starting as what the
+element shows now; *Another property* on each look.
+- Defects found on the way: **a project image never drew in Studio's app** (the frame's `Noodl.baseUrl` is `/runtime/`,
+  so `assets/x.png` was asked for as `/runtime/assets/x.png`, which only the runtime folder was searched for; the
+  starter imagery under `noodl_modules/` too); and **Studio's port list dropped `allowVisualStates`** (the kit's spec
+  ports are taken first and carry none), so a Button's look menu had 26 properties and not Background Color; it has 73.
+  Both by a gate run before the fix.
+- Gates: `check:editor` 146/146 (18 new): the five elements' More empty; Offset X 12 written as 12 px and drawn as
+  `matrix(1, 0, 0, 1, 12, 0)`; an Image placed from the palette, a picture uploaded (in `assets/`, in the file, loaded
+  by the app at 1×1), the same name again `dot-1.png`, one picked from the project's, cleared, the Image deleted; the
+  look menu's states and properties against the node library, a hover look added, set to #00FF00 and drawn so by the
+  runtime in its hover state (driven by `setVisualStates`, not a pointer) and its own colour after, then removed.
+- **Not built:** Bubble's "1 inherited from Style" count on the badge; a look on a reusable's copy; a property the
+  person might want in a state that the node library does not allow (it is not offered: the runtime would not draw it).
+
 ---
 
 ## M1 — The desktop app
@@ -687,6 +713,7 @@ query start/end and element draws, to measure).
 | STU-041 | **One home for the converter.** It currently also lives in `digital-bricks/bubbleExporter` and in the NodeGX repo's phase 123 folder; this repo becomes the source and the other two point here. | both other copies carry a pointer, and nothing is edited there any more |
 | STU-042 | **A fidelity gate** from Rico Trevisan's frozen cases (bubble_ex `test/support/fidelity`, fetched at a pinned commit, not vendored) — read his reply on ricotrevisan/bubble_ex#238 first. | the converter is graded against Bubble's own screenshots at 390 and 1440 px |
 | STU-044 | **The importer's expressions graded against the dictionary.** Its compiler has 125 operators of its own, written without the community dictionary; by name only 37 of the dictionary's 94 match (an undercount: the dictionary uses Bubble's display names, ":count", "<", the importer the internal ones, `count`, `less_than`), weakest on Date 2/15, Date Range 0/11 and Integer range 3/11. Compile each phrasebook row's Bubble example through the importer and compare with the phrasebook's executed answer. | a gate prints covered / wrong / missing per data type, and every wrong one is fixed or filed |
+| STU-053 | **The Bubble elements NodeGX has no node of its own for.** A floating group, a popup, a group focus, a repeating group's cell grid, a dropdown's dynamic choices, an input's formats: each converted to what Bubble draws, or said in the report. | each converts to what Bubble draws or has a line in the report, graded on a fixture and on the template |
 | STU-043 | **Plugins.** A shim for Bubble's client-side plugin API (`instance.publishState`, `triggerEvent`, `data`) so a plugin's own code can run; licence ruling first. | one real plugin element runs in an imported app |
 
 **STU-044, built (s5): `npm run check:dictionary` (`import/dictionary-check.mjs`, cases in `import/dictionary.mjs`).**
@@ -730,6 +757,28 @@ handed to a person; they compile now (bubble_ex's constraint table; an empty con
   the right thing, and nothing says a real app reaches them under that name.
 - Not measured: whether Bubble's ":plus item" leaves out an item the list already holds (the probe was dropped, not
   guessed), and Bubble's "+(days)" over a summer-time change (NodeGX's own Date Add counts a day as 24 hours).
+
+**STU-053, built (s6).** What the importer did with each, read in `app-to-nodegx.mjs` and measured on the template (it has
+one of them: the FloatingGroup "Floating Mobile Nav Menu", zindex 2, no `float_vertical`, hidden on load):
+
+| element | before | now |
+|---|---|---|
+| FloatingGroup | a Group in the page's flow, no layer: shown, it pushed the page down | `position: fixed` on its `zindex`, at the top (Bubble's default), the bottom or both edges (`float_vertical`); another value is placed at the top and said |
+| Popup | a Group in the flow, hidden on load | fixed in the middle of the window on layer 1000, no wider than its Bubble width, hidden on load; the report says the grey backdrop is not drawn |
+| GroupFocus | a Group where it sits, hidden on load | the same, and the report says Bubble places it beside its reference element |
+| RepeatingGroup, columns > 1 | one column of cells | the cells wrap in rows (`flexDirection: row`, `flexWrap: wrap`), each `100 / columns` % wide |
+| Dropdown fed by a search or option set | the records as the Options node's items: it draws each item's `Label`, so every choice was empty | an Expression makes each one `{ Label: display / name / title / id, Value: id }`; the report says the dropdown's value is the id |
+| Input formats | `content_format` → password, email, number, tel, url; MultiLineInput a text area | unchanged: no payload here shows another format |
+
+`check:import` 73/73 (9 new: the five on a fixture page, run where it computes; the template's menu fixed on layer 2;
+validate_project 0 errors on the fixture). Mutant (the floating group unfixed, the dropdown's records handed over as
+they are): 69/73, the four that grade them.
+- **Not done, filed as STU-053-DROPDOWNVALUE:** Bubble's "Dropdown's value" is the thing, and "Dropdown's value's
+  name" reads its field; here the value is its id (a native select hands back text), so a reader of a field off it gets
+  nothing. Wants the importer to read a field through a look-up of the chosen item.
+- **Not read, for want of a payload:** a dropdown's own caption expression (its key is not in the bundle's table), the
+  popup's backdrop and its "close when pressing Esc", a group focus's reference element and offsets. Richard's real app
+  export is the place to look, with STU-044's missing names.
 
 ---
 

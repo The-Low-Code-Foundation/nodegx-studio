@@ -283,6 +283,47 @@ const countBy = (text, re) => (text.match(re) || []).length;
   }
 }
 
+// ---------------------------------------------------------------- 1f. STU-053: the Bubble elements NodeGX has no node of its own for
+// Two floating groups (one at the bottom, one at Bubble's default), a popup, a repeating group of three columns and a
+// dropdown whose choices come from a search.
+{
+  const base = path.join(tmp, 'editor requests', 'app.export.json');
+  if (exists(base)) {
+    const synth = readJson(base);
+    const search = { type: 'Search', properties: { thing_type: 'custom.somedatatype', constraints: {} } };
+    synth.pages = { fpage: { type: 'Page', id: 'fpage', name: 'index', properties: { new_responsive: true, container_layout: 'column' }, elements: {
+      fg: { id: 'fg', type: 'FloatingGroup', name: 'Bottom bar', properties: { container_layout: 'row', float_vertical: 'bottom', zindex: 3, height: 60, top: 0, left: 0 }, elements: {} },
+      fg2: { id: 'fg2', type: 'FloatingGroup', name: 'Top menu', properties: { container_layout: 'column', zindex: 2, is_visible: false, top: 0, left: 0 }, elements: {} },
+      pop: { id: 'pop', type: 'Popup', name: 'Popup confirm', properties: { container_layout: 'column', width: 400 }, elements: {} },
+      rg: { id: 'rg', type: 'RepeatingGroup', name: 'RG cards', properties: { group_type: 'custom.somedatatype', container_layout: 'column', columns: 3, data_source: search }, elements: {
+        ct: { id: 'ct', type: 'Text', name: 'Text card', properties: { text: 'Card' } } } },
+      dd: { id: 'dd', type: 'Dropdown', name: 'Dropdown pick', properties: { data_source: search } } } } };
+    const out = path.join(tmp, 'stu053'); fs.mkdirSync(out); const exp = path.join(out, 'app.export.json'); fs.writeFileSync(exp, JSON.stringify(synth));
+    const c = run([path.join(here, 'app-to-nodegx.mjs'), exp, path.join(out, 'project')]);
+    if (check('STU-053: the page of floating, popup, grid and dropdown converts', c.status === 0, (c.stderr || c.stdout).slice(-600))) {
+      const dir = path.join(out, 'project', 'components', 'Pages', 'index');
+      const nodes = readJson(path.join(dir, 'nodes.json')).nodes, conns = readJson(path.join(dir, 'connections.json')).connections;
+      const P = (id) => nodes.find((n) => n.id === id)?.parameters || {};
+      const fg = P('el_fg'), fg2 = P('el_fg2'), pop = P('el_pop'), rg = P('el_rg');
+      check('STU-053: a floating group is fixed to the window on its layer, at the bottom when it floats there', fg.position === 'fixed' && fg.zIndex === 3 && fg.alignY === 'bottom' && fg.marginTop === undefined, JSON.stringify(fg));
+      check('STU-053: one with no float setting floats at the top (Bubble\'s default), hidden as it starts', fg2.position === 'fixed' && fg2.zIndex === 2 && fg2.alignY === 'top' && fg2.mounted === false, JSON.stringify(fg2));
+      check('STU-053: a popup is fixed in the middle of the window above the rest, no wider than Bubble\'s 400 px, hidden as it starts', pop.position === 'fixed' && pop.alignX === 'center' && pop.alignY === 'center' && pop.zIndex > fg.zIndex && pop.maxWidth?.value === 400 && pop.mounted === false, JSON.stringify(pop));
+      const rowDir = fs.readdirSync(path.join(out, 'project', 'components'), { recursive: true }).find((f) => f.endsWith('nodes.json') && /RG cards/.test(f));
+      const cell = rowDir && readJson(path.join(out, 'project', 'components', rowDir)).nodes.find((n) => n.label === 'Cell');
+      check('STU-053: a repeating group of 3 columns wraps its cells in rows, each a third of the width', rg.flexDirection === 'row' && rg.flexWrap === 'wrap' && cell?.parameters.width?.value === 33.33 && cell.parameters.width.unit === '%', JSON.stringify({ rg: [rg.flexDirection, rg.flexWrap], cell: cell?.parameters.width, rowDir }));
+      // the dropdown's choices, run: a record becomes { Label, Value } (it drew an empty choice handed over as it was)
+      const feed = conns.find((w) => w.toId === 'el_dd' && w.toProperty === 'items'), ex = feed && nodes.find((n) => n.id === feed.fromId);
+      const ins = conns.filter((w) => w.toId === ex?.id).map((w) => w.toProperty);
+      let got;
+      try { got = new Function(...ins, `return (${ex.parameters.expression});`)(...ins.map(() => [{ id: 'a1', name: 'Alpha' }, { id: 'b2', display: 'Beta' }, null])); } catch (err) { got = String(err); }
+      check('STU-053: a dropdown fed by a search shows each record by its name or display, valued by its id', ins.length === 1 && JSON.stringify(got) === JSON.stringify([{ Label: 'Alpha', Value: 'a1' }, { Label: 'Beta', Value: 'b2' }, null]), JSON.stringify({ ins, expr: ex?.parameters.expression, got }));
+      const report = fs.readFileSync(path.join(out, 'project', 'docs', 'IMPORT-REPORT.md'), 'utf8');
+      check('STU-053: the report says what is not carried over (the popup\'s backdrop; the dropdown\'s value is the id)', report.includes("Bubble's grey backdrop behind it is not drawn") && report.includes("\"Dropdown pick's value\" is that id"), '');
+      validateProject('STU-053 fixture', path.join(out, 'project'));
+    }
+  }
+}
+
 // ---------------------------------------------------------------- 2. the template's run-mode bundle (gitignored; optional)
 {
   const tplDir = path.join(here, 'exports', 'template');
@@ -302,6 +343,8 @@ const countBy = (text, re) => (text.match(re) || []).length;
       // STU-050: the same structure ≥3 times, ≥5 elements → one reusable, a copy in each place (the look, element by element,
       // was measured the same as an ungrouped conversion: 227 elements, same text, place, size, colour; SCOPE.md)
       const idx = readJson(path.join(project, 'components', 'Pages', 'index', 'nodes.json')).nodes;
+      const menu = idx.find((n) => n.label === 'Floating Mobile Nav Menu')?.parameters;
+      check('STU-053: the template\'s Floating Mobile Nav Menu is fixed to the window on its layer 2, hidden as it starts (it sat in the page\'s flow)', menu?.position === 'fixed' && menu.zIndex === 2 && menu.alignY === 'top' && menu.mounted === false, JSON.stringify(menu));
       const copies = idx.filter((n) => n.type === '/Reusable/Horizontal Buttons');
       const rc = exists(path.join(project, 'components', 'Reusable', 'Horizontal Buttons', 'nodes.json')) ? readJson(path.join(project, 'components', 'Reusable', 'Horizontal Buttons', 'nodes.json')).nodes : [];
       check('STU-050: the six feature rows are one reusable with six copies on the page, each setting its own icon', copies.length === 6 && rc.length >= 7 && new Set(copies.map((c) => JSON.stringify(Object.entries(c.parameters || {}).find(([k]) => /glyph/.test(k))?.[1]))).size > 1, `${copies.length} copies, ${rc.length} nodes`);
