@@ -323,7 +323,7 @@ function convertElement(g, el, parentNode, parentLayout, bubblePage, depth, y) {
     const ds = compileExpr(g, p.data_source, { page: bubblePage, element: node });
     const js = `(${ds.js} || []).map((x) => x !== null && typeof x === 'object' ? { Label: String(x.Label ?? x.display ?? x.name ?? x.title ?? x.id ?? ''), Value: String(x.Value ?? x.id ?? x.display ?? x.name ?? '') } : x)`;
     const ex = exprNode(g, `${label}: choices = ${ds.text}`, js, ds, { x: node.x + 500, y: node.y }); g.wire(ex.id, 'result', node.id, 'items');
-    todo(`${bubblePage.name} / ${label}`, `its choices are ${ds.text}, each shown by its display / name and valued by its id: "${label}'s value" is that id, not the thing${p.option_caption ? ', and its own caption expression is not read' : ''}`);
+    todo(`${bubblePage.name} / ${label}`, `its choices are ${ds.text}, each shown by its display / name and valued by its id: "${label}'s value" is that id, and a field read off it looks the chosen thing up among the choices${p.option_caption ? ', and its own caption expression is not read' : ''}`);
   }
   y += 110;
   for (const [sk, sv] of Object.entries(el.custom_states || {})) { const name = `${label}.${sv.display || sk}`.replace(/\W+/g, '_'); g.add({ id: `state_${el.id}_${sk.replace(/\W+/g, '_')}`, type: 'Variable2', label: `State ${sv.display || sk} of ${label}`, parameters: { name, ...(sv.default_val !== undefined ? { value: sv.default_val } : {}) }, metadata: { customState: { of: node.id, name: sv.display || sk, type: sv.value, list: String(sv.value || '').startsWith('list.') } } }); stats.customStates = (stats.customStates || 0) + 1; }
@@ -471,7 +471,7 @@ function compileExpr(g, node, ctx) {
   const walkArgs = (a) => a && typeof a === 'object' && a.type ? walk(a) : lit(a);
   function root(n) {
     switch (n.type) {
-      case 'GetElement': { const ref = elementIndex[n.properties?.element_id]; if (!ref) { todo(`${ctx.page.name}`, `expression refers to element ${n.properties?.element_id} which is not in the export`); return 'undefined'; } if (ref.componentPath !== g.path) { ai(`${ctx.page.name}`, `"${ref.label}" is read from ${ref.componentPath} (another component): a Component Output is the NodeGX way`); return 'undefined'; } if (ref.type === 'Page') return chip('thisPage', ref.nodeId, 'this'); const port = elementValuePort[ref.type] || 'this'; return chip(`el_${ref.label.replace(/\W+/g, '_')}`, ref.nodeId, port); }
+      case 'GetElement': { const ref = elementIndex[n.properties?.element_id]; if (!ref) { todo(`${ctx.page.name}`, `expression refers to element ${n.properties?.element_id} which is not in the export`); return 'undefined'; } if (ref.componentPath !== g.path) { ai(`${ctx.page.name}`, `"${ref.label}" is read from ${ref.componentPath} (another component): a Component Output is the NodeGX way`); return 'undefined'; } if (ref.type === 'Page') return chip('thisPage', ref.nodeId, 'this'); if (ref.type === 'net.noodl.controls.options' && ref.dataSource && n.next?.name === 'get_data' && n.next.next) { const ch = chosenItem(ref); return { done: chain(chip(`chosen_${ref.label.replace(/\W+/g, '_')}`, ch.id, 'result'), n.next.next) }; } const port = elementValuePort[ref.type] || 'this'; return chip(`el_${ref.label.replace(/\W+/g, '_')}`, ref.nodeId, port); }
       case 'ThisElement': { if (n.properties?.element_id && elementIndex[n.properties.element_id]) return root({ ...n, type: 'GetElement' }); if (!ctx.element) { todo(ctx.page.name, '"This element" outside an element or a workflow with one'); return 'undefined'; } const port = elementValuePort[ctx.element.type] || 'this'; return chip('thisElement', ctx.element.id, port); }
       case 'CurrentUser': { if (g.kind === 'cloud') { if (!cloud?.req || cloud.kind === 'custom') { todo(ctx.page.name, 'Current User inside a backend custom event: pass the user in as a parameter'); return 'undefined'; } const first = n.next?.name; const c = chip('userId', cloud.req.id, 'userId'); if (!first) return c; if (first === '_id' && !n.next.next) return { done: c }; if (/^(logged_in|logged_out|not_logged_in)$/.test(first) && !n.next.next) return { done: first === 'logged_in' ? `!!${c}` : `!${c}` }; ai(ctx.page.name, `Current User's ${first} in a backend workflow: the function knows the caller's id only; a Query Records on User by that id reads the field`); return { done: 'undefined' }; } const u = g.singleton('user', () => ({ id: fresh('user'), type: 'net.noodl.user.User', label: 'Current user', parameters: {} })); const first = n.next?.name; if (first === 'logged_in' || first === 'logged_out') return chip('userAuthenticated', u.id, 'authenticated'); if (first && /^email/.test(first)) return chip('userEmail', u.id, 'email'); return chip('userId', u.id, 'id'); }
       case 'GetParamFromUrl': { const name = textLiteral(n.properties?.parameter_name) || 'param'; const pi = g.singleton('pageInputs', () => ({ id: fresh('pin'), type: 'PageInputs', label: 'URL parameters', parameters: { queryParams: '' } })); const list = pi.parameters.queryParams ? pi.parameters.queryParams.split(',') : []; if (!list.includes(name)) list.push(name); pi.parameters.queryParams = list.join(','); return chip(`url_${name.replace(/\W+/g, '_')}`, pi.id, `pm-${name}`); }
@@ -494,6 +494,16 @@ function compileExpr(g, node, ctx) {
       case 'GetOption': case 'GetOptionSet': case 'AllOptions': { todo(ctx.page.name, `option set reads are not compiled in this spike (they become a Static Data component)`); return 'undefined'; }
       default: { stats.exprOpsUnknown++; ai(ctx.page.name, `expression root of type ${n.type} not understood: ${JSON.stringify(n).slice(0, 140)}`); return `__bubble(${JSON.stringify(n.type)})`; }
     }
+  }
+  // STU-053-DROPDOWNVALUE: a Dropdown's value is the chosen item's id (a native select hands back text), so "Dropdown's
+  // value's field" looks that thing up among the dropdown's own choices, once per dropdown, and reads the field off it
+  function chosenItem(ref) {
+    const key = `chosen_${ref.nodeId}`; if (g.singletons[key]) return g.singletons[key];
+    const dd = g.nodes.find((x) => x.id === ref.nodeId) || { id: ref.nodeId, type: ref.type };
+    const ds = compileExpr(g, ref.dataSource, { page: ctx.page, element: dd });
+    const js = `((list, v) => v == null || v === "" ? null : (Array.isArray(list) ? list : []).find((x) => x != null && String(typeof x === 'object' ? x.Value ?? x.id ?? x.display ?? x.name ?? '' : x) === String(v)) ?? null)(${ds.js}, chosenValue)`;
+    const ex = exprNode(g, `${ref.label}: the chosen ${ds.text}`, js, ds, { x: (dd.x ?? 0) + 500, y: (dd.y ?? 0) + 60 }); g.wire(ref.nodeId, 'value', ex.id, 'chosenValue');
+    return (g.singletons[key] = ex);
   }
   function search(n) { // STU-013: "Do a search for" → a page data item (editor/pagedata.mjs, R7); the same search again in this component reads that item
     if (g.kind === 'cloud') return cloudSearch(n);

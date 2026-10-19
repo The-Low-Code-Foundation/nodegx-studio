@@ -787,9 +787,13 @@ one of them: the FloatingGroup "Floating Mobile Nav Menu", zindex 2, no `float_v
 `check:import` 73/73 (9 new: the five on a fixture page, run where it computes; the template's menu fixed on layer 2;
 validate_project 0 errors on the fixture). Mutant (the floating group unfixed, the dropdown's records handed over as
 they are): 69/73, the four that grade them.
-- **Not done, filed as STU-053-DROPDOWNVALUE:** Bubble's "Dropdown's value" is the thing, and "Dropdown's value's
-  name" reads its field; here the value is its id (a native select hands back text), so a reader of a field off it gets
-  nothing. Wants the importer to read a field through a look-up of the chosen item.
+- **STU-053-DROPDOWNVALUE, fixed (s7).** Bubble's "Dropdown's value" is the thing, and "Dropdown's value's name" reads
+  its field; here the value is its id (a native select hands back text), so `el_Dropdown?.name` read nothing. Now a
+  field read off a dropdown fed by a search or option set goes through one Expression per dropdown, "the chosen …":
+  the dropdown's own choices, the item whose Value / id equals the value (none when nothing is chosen), and the field
+  off that. "Dropdown's value" alone still wires the id straight through (what a Make changes or a search constraint
+  wants). `check:import` 74/74 (1 new, run: value "b2" → Beta's name; "" and an unknown id → nothing); mutant (the
+  look-up off): 73/74, the text read `el_Dropdown_pick?.name`.
 - **Not read, for want of a payload:** a dropdown's own caption expression (its key is not in the bundle's table), the
   popup's backdrop and its "close when pressing Esc", a group focus's reference element and offsets. Richard's real app
   export is the place to look, with STU-044's missing names.

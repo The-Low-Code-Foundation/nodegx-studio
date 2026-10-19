@@ -297,7 +297,8 @@ const countBy = (text, re) => (text.match(re) || []).length;
       pop: { id: 'pop', type: 'Popup', name: 'Popup confirm', properties: { container_layout: 'column', width: 400 }, elements: {} },
       rg: { id: 'rg', type: 'RepeatingGroup', name: 'RG cards', properties: { group_type: 'custom.somedatatype', container_layout: 'column', columns: 3, data_source: search }, elements: {
         ct: { id: 'ct', type: 'Text', name: 'Text card', properties: { text: 'Card' } } } },
-      dd: { id: 'dd', type: 'Dropdown', name: 'Dropdown pick', properties: { data_source: search } } } } };
+      dd: { id: 'dd', type: 'Dropdown', name: 'Dropdown pick', properties: { data_source: search } },
+      pt: { id: 'pt', type: 'Text', name: 'Picked name', properties: { text: { type: 'TextExpression', entries: { 0: { type: 'GetElement', properties: { element_id: 'dd' }, next: { type: 'Message', name: 'get_data', next: { type: 'Message', name: 'name' } } } } } } } } } };
     const out = path.join(tmp, 'stu053'); fs.mkdirSync(out); const exp = path.join(out, 'app.export.json'); fs.writeFileSync(exp, JSON.stringify(synth));
     const c = run([path.join(here, 'app-to-nodegx.mjs'), exp, path.join(out, 'project')]);
     if (check('STU-053: the page of floating, popup, grid and dropdown converts', c.status === 0, (c.stderr || c.stdout).slice(-600))) {
@@ -317,6 +318,14 @@ const countBy = (text, re) => (text.match(re) || []).length;
       let got;
       try { got = new Function(...ins, `return (${ex.parameters.expression});`)(...ins.map(() => [{ id: 'a1', name: 'Alpha' }, { id: 'b2', display: 'Beta' }, null])); } catch (err) { got = String(err); }
       check('STU-053: a dropdown fed by a search shows each record by its name or display, valued by its id', ins.length === 1 && JSON.stringify(got) === JSON.stringify([{ Label: 'Alpha', Value: 'a1' }, { Label: 'Beta', Value: 'b2' }, null]), JSON.stringify({ ins, expr: ex?.parameters.expression, got }));
+      // STU-053-DROPDOWNVALUE, run: "Dropdown pick's value's name" looks the chosen record up by the id the dropdown gives
+      const textFeed = conns.find((w) => w.toId === 'el_pt' && w.toProperty === 'text'), tex = textFeed && nodes.find((n) => n.id === textFeed.fromId);
+      const chosenFeed = conns.find((w) => w.toId === tex?.id && /^chosen_/.test(w.toProperty)), cex = chosenFeed && nodes.find((n) => n.id === chosenFeed.fromId);
+      const cins = conns.filter((w) => w.toId === cex?.id), records = [{ id: 'a1', name: 'Alpha' }, { id: 'b2', name: 'Beta' }, null];
+      const runEx = (e, ins, vals) => { try { return new Function(...ins, `return (${e.parameters.expression});`)(...vals); } catch (err) { return String(err); } };
+      const pick = (v) => cex && runEx(cex, cins.map((w) => w.toProperty), cins.map((w) => w.toProperty === 'chosenValue' ? v : records));
+      const shown = tex && chosenFeed && runEx(tex, [chosenFeed.toProperty], [pick('b2')]);
+      check('STU-053-DROPDOWNVALUE: a field read off a dropdown\'s value reads the chosen record\'s field (it read nothing off the id)', cins.some((w) => w.fromId === 'el_dd' && w.fromProperty === 'value' && w.toProperty === 'chosenValue') && pick('b2')?.name === 'Beta' && pick('') === null && pick('zz') === null && shown === 'Beta', JSON.stringify({ chosen: cex?.parameters.expression, text: tex?.parameters.expression, ins: cins.map((w) => w.toProperty), b2: pick('b2'), shown }));
       const report = fs.readFileSync(path.join(out, 'project', 'docs', 'IMPORT-REPORT.md'), 'utf8');
       check('STU-053: the report says what is not carried over (the popup\'s backdrop; the dropdown\'s value is the id)', report.includes("Bubble's grey backdrop behind it is not drawn") && report.includes("\"Dropdown pick's value\" is that id"), '');
       validateProject('STU-053 fixture', path.join(out, 'project'));
