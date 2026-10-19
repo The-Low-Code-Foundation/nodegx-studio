@@ -167,6 +167,50 @@ const countBy = (text, re) => (text.match(re) || []).length;
   }
 }
 
+// ---------------------------------------------------------------- 1c2. STU-051-RULECHAIN: one rule Expression per property
+// Two conditionals setting one margin were two Expressions wired into one port, and whichever changed last showed;
+// Bubble's later conditional wins when both hold. A conditional whose value is the element's own changes nothing.
+{
+  const base = path.join(tmp, 'editor requests', 'app.export.json');
+  if (exists(base)) {
+    const synth = readJson(base);
+    const user = (name) => ({ type: 'CurrentUser', next: { type: 'Message', name } });
+    synth.pages = { cpage: { type: 'Page', id: 'cpage', name: 'index', properties: { new_responsive: true, container_layout: 'column' }, elements: {
+      r1: { id: 'r1', type: 'Text', name: 'Text r1', properties: { text: 'Hi', margin_left: 5 }, states: {
+        0: { condition: user('logged_in'), properties: { margin_left: 30 } },
+        1: { condition: { type: 'PageData', properties: { name: 'Current Page Width' }, next: { type: 'Message', name: 'less_than', args: 768 } }, properties: { margin_left: 10 } },
+        2: { condition: user('logged_out'), properties: { margin_left: 5 } } } },
+      r2: { id: 'r2', type: 'Group', name: 'Group r2', properties: { container_layout: 'column' }, elements: {}, states: {
+        0: { condition: user('logged_in'), properties: { is_visible: false } },
+        1: { condition: user('logged_out'), properties: { is_visible: false } } } } } } };
+    const out = path.join(tmp, 'rulechain'); fs.mkdirSync(out); const exp = path.join(out, 'app.export.json'); fs.writeFileSync(exp, JSON.stringify(synth));
+    const c = run([path.join(here, 'app-to-nodegx.mjs'), exp, path.join(out, 'project')]);
+    if (check('STU-051-RULECHAIN: the page with two rules on one property converts', c.status === 0, (c.stderr || c.stdout).slice(-600))) {
+      const { readRule } = await import('../editor/rules.mjs');
+      const dir = path.join(out, 'project', 'components', 'Pages', 'index');
+      const nodes = readJson(path.join(dir, 'nodes.json')).nodes, conns = readJson(path.join(dir, 'connections.json')).connections;
+      const into = (id, port) => conns.filter((w) => w.toId === id && w.toProperty === port).map((w) => nodes.find((n) => n.id === w.fromId));
+      const [m, ...moreM] = into('el_r1', 'marginLeft');
+      const rm = m && readRule(m.parameters.expression, 'marginLeft');
+      check('STU-051-RULECHAIN: two rules on one margin are one Expression, the later first (10 under 768, else 30 when signed in, else 5)', m && !moreM.length && rm?.arms.map((a) => a.then).join() === '10,30' && rm.otherwise === '5', JSON.stringify(m?.parameters.expression));
+      // evaluated with its inputs: the later rule wins when both hold
+      const names = conns.filter((w) => w.toId === m?.id).map((w) => [w.toProperty, nodes.find((n) => n.id === w.fromId)?.type]);
+      const narrow = names.find(([, t]) => t === 'Screen Resolution')?.[0], vals = (w, inn) => names.map(([n]) => (n === narrow ? w : inn));
+      let both, wide;
+      try { const f = new Function(...names.map(([n]) => n), `return (${m.parameters.expression});`); both = f(...vals(500, true)); wide = f(...vals(1600, true)); } catch (err) { both = String(err); }
+      check('STU-051-RULECHAIN: run, narrow and signed in gives the later rule\'s 10; wide and signed in gives 30', both === 10 && wide === 30, JSON.stringify({ names, both, wide }));
+      const vis = into('el_r2', 'mounted');
+      const rv = vis[0] && readRule(vis[0].parameters.expression, 'mounted');
+      check('STU-051-RULECHAIN: two hiding rules on one group are one Expression into Mounted, hidden when either holds', vis.length === 1 && rv?.arms.length === 2 && rv.arms.every((a) => a.then === 'false') && rv.otherwise === 'true', JSON.stringify(vis.map((n) => n?.parameters.expression)));
+      const report = fs.readFileSync(path.join(out, 'project', 'docs', 'IMPORT-REPORT.md'), 'utf8');
+      // the base export's own reusables bring rules too: the chained count is this page's, the skipped at least its margin rule
+      const row = /\| element conditions \| \d+ \| see findings; (\d+) chained onto the rule already on that property, (\d+) that change nothing not written \|/.exec(report);
+      check('STU-051-RULECHAIN: the report counts them (2 chained; the margin rule equal to the element\'s own among those not written)', row && row[1] === '2' && Number(row[2]) >= 1, (/\| element conditions [^\n]*/.exec(report) || ['no row'])[0]);
+      validateProject('STU-051-RULECHAIN fixture', path.join(out, 'project'));
+    }
+  }
+}
+
 // ---------------------------------------------------------------- 1d. STU-013-NAVLOOP: a workflow's conditions test when it runs, never on a change
 // NodeGX re-tests a Condition whenever its value changes, Evaluate wired or not (NDA-017): a click's "Only when Current
 // User is logged out → Go to page" fired as the page opened, and the real app bounced between two pages ~8 times a second.

@@ -1,6 +1,6 @@
 /**
  * The edits Studio makes to a component's files: the eight of the NodeGX editor suite (`editor-suite/edits.ts`), with its
- * semantics, plus the two fields of a node record those eight do not touch (`set_variant`, `set_metadata`). Pure: files
+ * semantics, plus the three fields of a node record those eight do not touch (`set_variant`, `set_metadata`, `set_state_parameter`). Pure: files
  * in, files out — the page applies them through the kit's store, and a gate can apply them in Node.
  */
 export function applyEdit(filesIn, edit) {
@@ -72,6 +72,15 @@ export function applyEdit(filesIn, edit) {
     }
     // two fields of the node record the eight do not touch: the variant it wears, and what the editor remembers about it
     case 'set_variant': { const node = must(edit.id, 'set_variant'); if (edit.variant) node.variant = edit.variant; else delete node.variant; return { files: out }; }
+    // an element's look while hovered, pressed or focused: stateParameters[state][name] (the Conditional tab)
+    case 'set_state_parameter': {
+      const node = must(edit.id, 'set_state_parameter');
+      const sp = { ...(node.stateParameters ?? {}) }, st = { ...(sp[edit.state] ?? {}) };
+      if (edit.value === undefined) delete st[edit.name]; else st[edit.name] = edit.value;
+      if (Object.keys(st).length) sp[edit.state] = st; else delete sp[edit.state];
+      if (Object.keys(sp).length) node.stateParameters = sp; else delete node.stateParameters;
+      return { files: out };
+    }
     case 'set_metadata': { const node = must(edit.id, 'set_metadata'); node.metadata = { ...(node.metadata ?? {}), ...edit.metadata }; for (const k of Object.keys(edit.metadata)) if (edit.metadata[k] === undefined) delete node.metadata[k]; if (!Object.keys(node.metadata).length) delete node.metadata; return { files: out }; }
   }
   throw new Error('unknown edit');

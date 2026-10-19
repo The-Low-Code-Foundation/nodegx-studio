@@ -57,6 +57,17 @@ cpSync(join(repo, 'templates/todo-list'), project, { recursive: true });
   reg.components[rel] = { path: rel, type: 'visual', nodeCount: files.nodes.nodes.length, connectionCount: files.connections.connections.length, modified: '2026-10-19T00:00:00.000Z', created: '2026-10-19T00:00:00.000Z' };
   writeFileSync(regPath, JSON.stringify(reg, null, 2));
 }
+{
+  // STU-051's Conditional tab: a rule written as the importer writes one (Top right's top margin, 24 on a screen narrower
+  // than 100000 px — every screen here — else 8), and a hover look on Create account
+  const dir = join(project, 'components/Pages/Sign in'), nf = join(dir, 'nodes.json'), cf = join(dir, 'connections.json');
+  const nj = JSON.parse(readFileSync(nf, 'utf8')), cj = JSON.parse(readFileSync(cf, 'utf8'));
+  nj.nodes.push({ id: 'ruleScreen', type: 'Screen Resolution', label: 'Screen', x: 1000, y: 40 },
+    { id: 'ruleTop', type: 'Expression', label: 'Top right: marginTop when the screen is narrow', parameters: { expression: '((w < 100000)) ? 24 : 8', evaluateAtLoad: true }, metadata: { bubble: "Current Page Width's less_than 100000" }, x: 1000, y: 120 });
+  nj.nodes.find((n) => n.id === 'siCreate').stateParameters = { hover: { backgroundColor: '#ff0000' } };
+  cj.connections.push({ fromId: 'ruleScreen', fromProperty: 'width', toId: 'ruleTop', toProperty: 'w' }, { fromId: 'ruleTop', fromProperty: 'result', toId: 'siTop', toProperty: 'marginTop' });
+  writeFileSync(nf, JSON.stringify(nj, null, 2)); writeFileSync(cf, JSON.stringify(cj, null, 2));
+}
 const children = [];
 const results = [];
 const ok = (cond, what, detail) => { results.push({ cond: !!cond, what, detail }); console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${what}${detail !== undefined ? ' — ' + JSON.stringify(detail).slice(0, 260) : ''}`); };
@@ -698,6 +709,47 @@ try {
     const frame = await b.evaluate(`__ob.preview.frame.contentWindow.Noodl.Navigation._noodlRuntime.context.rootComponent.nodeScope.getNodesWithTypeRecursive('Router')[0]._internal.currentPage?.component`);
     const panelAsks = await b.evaluate(noteAsks); // a fresh frame: going back is a rebuild that starts on Sign in
     ok(onCanvas === 1 && frame === '/Pages/Sign in' && panelAsks === 2, 'the canvas\'s copy asks it once; on the page, the two shown copies ask it once each and the hidden two not at all', { onCanvas, frame, panelAsks });
+  }
+  console.log('check: the Conditional tab (STU-051)');
+  {
+    const ruleText = () => onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === 'ruleTop')?.parameters.expression;
+    const topMargin = () => b.evaluate(`getComputedStyle(__ob.preview.elementsOf('siTop')[0]).marginTop`);
+    const tab = (name) => clickText('.ptabs button', name).then(() => wait(300));
+    await clickText('#tree .row', 'Top right'); await wait(300);
+    ok(await b.evaluate(`!!document.querySelector('#right .rulechip')`), 'in Visual, the margin a rule sets reads as a rule and not as the Expression\'s name');
+    await tab('Conditional');
+    const card = JSON.parse(await b.evaluate(`JSON.stringify({ count: document.querySelector('.ptabs button[aria-pressed=true] .count')?.textContent, head: document.querySelector('#right details.rule summary')?.textContent, rows: [...document.querySelectorAll('#right details.rule .field')].map(f => [f.querySelector('label').textContent, f.querySelector('input, select')?.value]) })`));
+    ok(card.count === '1' && /When.*Screen's Width.*<.*100000/.test(card.head) && JSON.stringify(card.rows) === JSON.stringify([['Margin Top', '24'], ['otherwise', '8']]), 'the tab lists the rule by its condition, the property, its value and the otherwise', card);
+    ok((await topMargin()) === '24px', 'the app draws the rule\'s value (24 px: the screen is narrower than 100000)', await topMargin());
+    let n0 = await shows();
+    await b.evaluate(`(() => { const i = document.querySelector('#right details.rule .field input'); i.value = '40'; i.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await rebuilt(n0); await wait(600);
+    ok(ruleText() === '(w < 100000) ? 40 : 8' && (await topMargin()) === '40px', 'the value changed in the tab: the Expression says 40, and the app draws 40 px', { text: ruleText(), drawn: await topMargin() });
+    // a new rule on the same property: its condition composed, the property picked; it chains, the newest first
+    await b.clickSel('#newrule'); await b.until('document.querySelector(".menu.composer")', 4000);
+    await b.clickSel('.menu.composer [data-m=js]'); await wait(200);
+    await b.evaluate(`(() => { const t = document.querySelector('.menu.composer textarea'); t.value = '1 > 2'; t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+    await clickText('.menu.composer .foot button', 'Save'); await b.until('document.querySelector(".menu.ruleprops")', 4000);
+    n0 = await shows();
+    await b.clickSel('.menu.ruleprops .item[data-port=marginTop]');
+    await rebuilt(n0); await wait(600);
+    const wires = onDisk(SIGN + 'connections.json').connections.filter((c) => c.toId === 'siTop' && c.toProperty === 'marginTop').length;
+    const cards = await b.evaluate(`document.querySelectorAll('#right details.rule').length`);
+    ok(/^\(1 > 2\) \? [^:]+ : \(w < 100000\) \? 40 : 8$/.test(ruleText()) && wires === 1 && cards === 2 && (await topMargin()) === '40px', 'a second rule on the margin is the first arm of the same Expression (one wire), a second card; it does not hold, so 40 px still', { text: ruleText(), wires, cards, drawn: await topMargin() });
+    n0 = await shows();
+    await b.clickSel('#right button[aria-label="Remove rule 1"]');
+    await rebuilt(n0); await wait(600);
+    ok(ruleText() === '(w < 100000) ? 40 : 8' && (await b.evaluate(`document.querySelectorAll('#right details.rule').length`)) === 1, 'the new rule removed: the Expression is the first rule again', ruleText());
+    // the hover look on Create account: listed, and removed from the tab
+    await select('siCreate');
+    if (!(await b.evaluate(`document.querySelector('.ptabs button[aria-pressed=true]')?.textContent.startsWith('Conditional')`))) await tab('Conditional');
+    const hover = await b.evaluate(`[...document.querySelectorAll('#right details')].map(d => d.querySelector('summary').textContent).join(' | ')`);
+    ok(/When hovered/.test(hover), 'its hover look is listed as "When hovered"', hover);
+    n0 = await shows();
+    await b.evaluate(`[...document.querySelectorAll('#right details')].find(d => /When hovered/.test(d.querySelector('summary').textContent)).querySelector('.field > button').click()`);
+    await rebuilt(n0); await wait(400);
+    ok(!onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === 'siCreate').stateParameters, 'taking its one hover value out removes the hover look from the file', onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === 'siCreate').stateParameters);
+    await tab('Visual');
   }
   console.log('check: a group made reusable (STU-050)');
   {

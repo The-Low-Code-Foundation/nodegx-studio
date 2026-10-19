@@ -151,6 +151,13 @@
   .ptabs { display: flex; gap: 2px; padding: 8px 12px 0; border-bottom: 1px solid var(--line); }
   .ptabs button { padding: 6px 10px; border-radius: var(--r) var(--r) 0 0; color: var(--muted); border-bottom: 2px solid transparent; }
   .ptabs button[aria-pressed=true] { color: var(--accent-ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .rulewhen { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; font-weight: 400; cursor: pointer; min-width: 0; }
+  .rulewhen:hover .when { text-decoration: underline dotted; }
+  .rulewhen .w { font-weight: 600; } .when { display: inline-flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+  .when .op, .when .lit { font-family: var(--mono); font-size: 12px; } .when .op { color: #9333ea; } .when .name { font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+  .when .chip { max-width: 150px; } .rulecode { font-family: var(--mono); font-size: 12px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .field.otherwise label, .field.inherited label { color: var(--muted); } .rulenote { padding: 2px 0 6px; } .rulenote.bad { color: #b42318; } .ruleacts { padding: 4px 0 2px; }
+  .chip.rulechip { cursor: pointer; }
   .ptabs .count { margin-left: 5px; background: var(--accent-soft); color: var(--accent-ink); border-radius: 8px; padding: 0 6px; font-size: 11px; }
   .sec2 summary { justify-content: flex-start; gap: 6px; }
   .sec2 summary .acts { margin-left: auto; display: flex; gap: 4px; }
@@ -517,6 +524,7 @@
 import { hasSpec, specs, drawnPorts, portProjectFromStore, portContextFor, expressionPorts } from './specs.js';
 import { applyEdit } from './edits.mjs';
 import { extractReusable } from './reusable.mjs';
+import { readRule, rulesOf, withoutArm, withValue, withCondition, addArm, valueOf, literal, SHOWING } from './rules.mjs';
 import { OPERATORS, createEdits, updateEdits, removeEdits, readItems, readFrom, readersOf, itemOfSource, sameAs, signature, describe, lastRun, queriesOnOpen } from './pagedata.mjs';
 
 const $ = (id) => document.getElementById(id);
@@ -1552,7 +1560,7 @@ function renderBubblePanel(right, node) {
     return h('div', { class: 'segctl' }, ...options.map(([v, l]) => h('button', { class: 'quiet', title: l, 'aria-pressed': String(cur) === String(v), onclick: () => set(name, String(cur) === String(v) && own(name) !== undefined ? undefined : v) }, kind ? alignGlyph(kind, v, dir) : null, kind ? null : l)));
   };
   // a side fed from somewhere: its source as a chip, × to stop taking it
-  const wiredMini = (name, glyph) => { claimed.add(name); const w = wiredIn[name]; return h('span', { class: 'len wiredlen', title: `${P[name]?.displayName || name} comes from elsewhere` }, h('span', { class: 'g' }, glyph), sourceChip(w.fromId, w.fromProperty), h('button', { class: 'quiet tiny', title: 'Stop taking the value from there', onclick: () => edits(pageKey, [{ edit: 'disconnect', component: pageKey, from: { node: w.fromId, port: w.fromProperty }, to: { node: node.id, port: name } }]) }, icon('x'))); };
+  const wiredMini = (name, glyph) => { claimed.add(name); const w = wiredIn[name]; return h('span', { class: 'len wiredlen', title: `${P[name]?.displayName || name} comes from elsewhere` }, h('span', { class: 'g' }, glyph), ruleChip(w, name) || sourceChip(w.fromId, w.fromProperty), h('button', { class: 'quiet tiny', title: 'Stop taking the value from there', onclick: () => edits(pageKey, [{ edit: 'disconnect', component: pageKey, from: { node: w.fromId, port: w.fromProperty }, to: { node: node.id, port: name } }]) }, icon('x'))); };
   const bolt = (name) => P[name] ? h('button', { class: 'quiet bolt', title: 'Take this value from somewhere — an element, a state, an option set, or an expression you write', onclick: (e) => sourceMenu(e, node, P[name]) }, icon('bolt')) : null;
   const chip = (name) => {
     claimed.add(name);
@@ -1590,8 +1598,8 @@ function renderBubblePanel(right, node) {
     return det;
   };
 
-  const tabs = h('div', { class: 'ptabs' }, ...[['visual', 'Visual'], ['interaction', 'Interaction']].map(([k, l]) => {
-    const n = k === 'interaction' ? events().filter((ev) => ev.node === node.id).length + statesOf(node.id).length : 0;
+  const tabs = h('div', { class: 'ptabs' }, ...[['visual', 'Visual'], ['interaction', 'Interaction'], ['conditional', 'Conditional']].map(([k, l]) => {
+    const n = k === 'interaction' ? events().filter((ev) => ev.node === node.id).length + statesOf(node.id).length : k === 'conditional' ? rulesFor(node).length + Object.keys(node.stateParameters || {}).length : 0;
     return h('button', { class: 'quiet', 'aria-pressed': propTab === k, onclick: () => { propTab = k; renderProps(); } }, l, n ? h('span', { class: 'count' }, n) : null);
   }));
   right.append(tabs);
@@ -1612,6 +1620,7 @@ function renderBubblePanel(right, node) {
     add(customStatesSection(node));
     return;
   }
+  if (propTab === 'conditional') { conditionalTab(node, { add, section, row, variant }); return; }
 
   // Content and Configure: the element's own subject, with the plain fields (the text box, the composer, the ⚡)
   // an icon is the Icon element's content; on a button or an input it is a setting, shown once the icon is on
@@ -1848,6 +1857,180 @@ function renderPropsInto(right) {
   wrap.append(customStatesSection(node));
   right.append(wrap);
 }
+/* ================= STU-051: the Conditional tab — "when this holds, this property is …" (rules.mjs) =================
+   A rule is an Expression wired into a property, `(when) ? value : otherwise` (a chain of them when several rules set
+   one property, the newest first), or a condition wired into Visible / Mounted. The importer writes Bubble's
+   conditionals so; Studio writes its own the same way. The tab lists them per condition, as Bubble's does, then the
+   element's looks while hovered, pressed or focused (its own, and those its style gives it). */
+/** The Expressions wired into an element's properties, as rules.mjs reads them. */
+function ruleExprs(node) {
+  return conns.filter((c) => c.toId === node.id && c.fromProperty === 'result' && byId[c.fromId]?.type === 'Expression')
+    .map((c) => ({ id: c.fromId, port: c.toProperty, text: byId[c.fromId].parameters?.expression || '', names: new Map([...chipsOf(byId[c.fromId])].map(([k, v]) => [k, `${v.node}.${v.port}`])) }));
+}
+const rulesFor = (node) => rulesOf(ruleExprs(node));
+/** In Visual, a property a rule sets reads as that, and opens the rule (it used to show the Expression's name, cut off). */
+function ruleChip(wire, port) {
+  const n = byId[wire.fromId];
+  const r = n?.type === 'Expression' && !isComposed(n) && wire.fromProperty === 'result' ? readRule(n.parameters?.expression, port) : null;
+  if (!r) return null;
+  return h('button', { class: 'chip expr rulechip', title: 'Changed by a rule: open the Conditional tab', onclick: () => { propTab = 'conditional'; renderProps(); } }, icon('fx'), r.arms.length > 1 ? `${r.arms.length} rules` : 'A rule', ' · Conditional');
+}
+/** A condition as it reads: its values as chips, its operators in words. */
+function whenView(exprId, when) {
+  const chips = chipsOf(byId[exprId]);
+  const WORDS = { '===': 'is', '==': 'is', '!==': 'is not', '!=': 'is not', '&&': 'and', '||': 'or', '!': 'not', '<=': '≤', '>=': '≥' };
+  const out = h('span', { class: 'when' });
+  const re = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[A-Za-z_$][\w$.]*|\d+(?:\.\d+)?|===|!==|==|!=|<=|>=|&&|\|\||\s+|./g;
+  for (const [t] of String(when).matchAll(re)) {
+    if (/^\s+$/.test(t)) continue;
+    if (chips.has(t)) out.append(h('span', { class: 'chip' }, chips.get(t).text));
+    else out.append(h('span', { class: /^["'\d]/.test(t) ? 'lit' : /^[A-Za-z_$]/.test(t) ? 'name' : 'op' }, WORDS[t] ?? t));
+  }
+  return out;
+}
+/** A rule's value: the control its property has (a length, a colour, yes/no, text), or its code when it computes one. */
+function ruleValueField(node, p, js, onSet) {
+  const ty = tname(p?.type), v = valueOf(js);
+  if (v.code !== undefined) return h('code', { class: 'rulecode', title: 'A computed value: change it in the Expression' }, v.code);
+  if (ty === 'boolean' || typeof v.value === 'boolean') return h('select', { onchange: (e) => onSet(e.target.value) }, h('option', { value: 'true', selected: v.value === true }, 'yes'), h('option', { value: 'false', selected: v.value !== true }, 'no'));
+  if (ty === 'color' || (typeof v.value === 'string' && /^(#|rgba?\(|var\(--)/.test(v.value))) {
+    const cn = colourName(v.value);
+    return h('button', { class: 'cbtn', title: p?.displayName || p?.name, onclick: (e) => colourPicker(e, v.value, (nv) => onSet(literal(nv))) }, h('span', { class: 'swatch', style: `background:${resolveColor(v.value ?? '')}` }), h('span', { class: 'cname' }, cn.name || 'None'), cn.alpha ? h('span', { class: 'u' }, cn.alpha) : null);
+  }
+  if (typeof v.value === 'number' || (v.value && typeof v.value === 'object' && 'unit' in v.value)) {
+    return h('input', { type: 'text', value: showLen(v.value), list: 'tokens-space', onchange: (e) => {
+      const t = e.target.value.trim();
+      if (typeof v.value === 'number' && /^-?\d+(\.\d+)?$/.test(t)) return onSet(t);
+      const r = readLen(t);
+      if (r === null || r === undefined) { e.target.value = showLen(v.value); return toast('A length: 16, 16px, 10% or a spacing token'); }
+      onSet(literal(r));
+    } });
+  }
+  return h('input', { type: 'text', value: v.value ?? '', placeholder: '(empty)', onchange: (e) => onSet(literal(e.target.value === '' ? undefined : e.target.value)) });
+}
+/** A condition's chips renamed where they would clash with the Expression's other inputs: [when, chips]. */
+function ruleChips(exprId, when, chips) {
+  const have = exprId && byId[exprId] ? chipsOf(byId[exprId]) : new Map();
+  let w = when; const out = new Map();
+  for (const [n, src] of chips) {
+    let m = n, i = 2;
+    while (have.has(m) && (have.get(m).node !== src.node || have.get(m).port !== src.port)) m = `${n}${i++}`;
+    if (m !== n) w = w.replace(new RegExp(`\\b${n.replace(/\$/g, '\\$')}\\b`, 'g'), m);
+    out.set(m, src);
+  }
+  return [w, out];
+}
+/** The edits that make an Expression's inputs exactly the names its text uses, each from its chip (or the wire it has). */
+function wireInputs(exprId, text, chips = new Map()) {
+  const exists = !!byId[exprId];
+  const have = exists ? conns.filter((c) => c.toId === exprId) : [];
+  const old = exists ? chipsOf(byId[exprId]) : new Map();
+  const want = new Map();
+  for (const n of exprNames(text)) { const src = chips.get(n) ?? old.get(n); if (src) want.set(n, src); }
+  const list = [];
+  for (const c of have) { const w = want.get(c.toProperty); if (!w || w.node !== c.fromId || w.port !== c.fromProperty) list.push({ edit: 'disconnect', component: pageKey, from: { node: c.fromId, port: c.fromProperty }, to: { node: exprId, port: c.toProperty } }); }
+  for (const [n, src] of want) if (!have.some((c) => c.toProperty === n && c.fromId === src.node && c.fromProperty === src.port)) list.push({ edit: 'connect', component: pageKey, from: { node: src.node, port: src.port }, to: { node: exprId, port: n } });
+  return list;
+}
+/** A property to put a rule on: the element's settable ones, those a value already comes from (not a rule) left out. */
+function rulePropertyMenu(e, node, pick) {
+  closeMenu('.menu');
+  const menu = popover(e, 'ruleprops');
+  const search = h('input', { type: 'text', placeholder: 'Which property changes…', 'aria-label': 'Property' });
+  const list = h('div');
+  const fedElsewhere = (port) => conns.some((c) => c.toId === node.id && c.toProperty === port && !(byId[c.fromId]?.type === 'Expression' && readRule(byId[c.fromId].parameters?.expression, port)));
+  const ports = editablePorts(node).filter((p) => !fedElsewhere(p.name));
+  const fill = () => {
+    list.innerHTML = '';
+    const q = search.value.trim().toLowerCase();
+    let group = null;
+    for (const p of ports) {
+      const label = p.displayName || p.name;
+      if (q && !label.toLowerCase().includes(q) && !p.name.toLowerCase().includes(q)) continue;
+      if ((p.group || 'General') !== group) { group = p.group || 'General'; list.append(h('div', { class: 'h' }, group)); }
+      list.append(h('div', { class: 'item', 'data-port': p.name, onclick: () => { closeMenu('.menu'); pick(p); } }, label));
+    }
+    if (!list.children.length) list.append(h('div', { class: 'hint' }, 'No property of this element matches.'));
+  };
+  search.oninput = fill; fill();
+  menu.append(h('div', { class: 'search' }, icon('search'), search), list); document.body.append(menu); search.focus();
+  dismissOnOutside(menu);
+}
+const STATE_WORDS = { hover: 'hovered', pressed: 'pressed', focus: 'focused', 'focus-visible': 'focused by keyboard', disabled: 'disabled' };
+function conditionalTab(node, { add, section, row, variant }) {
+  const P = Object.fromEntries(editablePorts(node, { wireOnly: true }).map((p) => [p.name, p]));
+  const pname = (port) => P[port]?.displayName || port;
+  const textOf = (id) => byId[id]?.parameters?.expression || '';
+  const setText = (id, text) => (text === null ? [{ edit: 'remove_node', component: pageKey, id }] : [{ edit: 'set_parameter', component: pageKey, id, name: 'expression', value: text }, ...wireInputs(id, text)]);
+  const write = (list, msg) => { edits(pageKey, list, { redraw: true }); if (msg) toast(msg); };
+  const current = (port) => node.parameters?.[port] ?? variant?.parameters?.[port] ?? P[port]?.default;
+  // a rule on a property: a new Expression, or a new first arm of the rule already there (it wins, as Bubble's newest does)
+  const addRuleOn = (p, when, chips) => {
+    const feed = conns.find((c) => c.toId === node.id && c.toProperty === p.name && byId[c.fromId]?.type === 'Expression' && readRule(byId[c.fromId].parameters?.expression, p.name));
+    const thenJs = SHOWING.has(p.name) ? 'false' : literal(current(p.name));
+    if (feed) {
+      const [w, ch] = ruleChips(feed.fromId, when, chips);
+      const text = addArm(textOf(feed.fromId), p.name, w, thenJs, current(p.name));
+      write([{ edit: 'set_parameter', component: pageKey, id: feed.fromId, name: 'expression', value: text }, ...wireInputs(feed.fromId, text, ch)], `${pname(p.name)}: a second rule, which wins when both hold`);
+      return;
+    }
+    const id = uuid(), text = addArm(undefined, p.name, when, thenJs, current(p.name));
+    const logicN = nodes.filter((n) => !isVisualType(n.type)).length;
+    write([{ edit: 'add_node', component: pageKey, id, type: 'Expression', label: `${labelOf(node.id)}: ${pname(p.name)} by a rule`, x: 1000, y: 100 + logicN * 70, parameters: { expression: text, evaluateAtLoad: true }, metadata: { rule: { node: node.id, port: p.name } } },
+      ...wireInputs(id, text, chips), { edit: 'connect', component: pageKey, from: { node: id, port: 'result' }, to: { node: node.id, port: p.name } }, ...stepOnly(node, p.name)],
+      SHOWING.has(p.name) ? `${labelOf(node.id)} is hidden while this holds` : `${pname(p.name)} changes while this holds: set what it becomes`);
+  };
+  const newRule = (e) => openComposer(e, node, { name: '__when', displayName: 'When' }, null, null, { text: '', chips: new Map(), onCompose: (when, chips) => rulePropertyMenu(e, node, (p) => addRuleOn(p, when, chips)) });
+  const cards = rulesFor(node);
+  if (!cards.length) add(h('div', { class: 'hint', style: 'padding:12px 14px' }, 'No rules yet. A rule changes a property while something holds: a narrow screen, a value, a state.'));
+  cards.forEach((card, i) => {
+    const firstChips = chipsOf(byId[card.expr]);
+    const chipsIn = new Map([...firstChips].filter(([n]) => exprNames(card.when).includes(n)));
+    const editWhen = (e) => openComposer(e, node, { name: '__when', displayName: 'When' }, null, null, { text: card.when, chips: chipsIn, onCompose: (when, chips) => {
+      const list = [];
+      for (const part of card.parts) { const [w, ch] = ruleChips(part.expr, when, chips); const text = withCondition(textOf(part.expr), part.port, part.arm, w); list.push({ edit: 'set_parameter', component: pageKey, id: part.expr, name: 'expression', value: text }, ...wireInputs(part.expr, text, ch), { edit: 'set_metadata', component: pageKey, id: part.expr, metadata: { bubble: undefined } }); }
+      write(list, 'The rule now holds on the new condition');
+    } });
+    // taking a whole card out: each Expression loses its arms of it, the highest first so the others keep their place
+    const removeCard = () => {
+      const list = [], byExpr = new Map();
+      for (const part of card.parts) { if (!byExpr.has(part.expr)) byExpr.set(part.expr, []); byExpr.get(part.expr).push(part); }
+      for (const [id, parts] of byExpr) { let text = textOf(id); for (const part of parts.sort((a, b) => b.arm - a.arm)) text = text === null ? null : withoutArm(text, part.port, part.arm); list.push(...setText(id, text)); }
+      write(list, 'Rule removed: the properties keep their own values');
+    };
+    const body = [];
+    for (const part of card.parts) {
+      const p = P[part.port] || { name: part.port };
+      const set = (js) => write(setText(part.expr, withValue(textOf(part.expr), part.port, part.arm, js)));
+      const drop = h('button', { class: 'quiet tiny', title: `Stop this rule changing ${pname(part.port)}`, onclick: () => write(setText(part.expr, withoutArm(textOf(part.expr), part.port, part.arm)), `${pname(part.port)} no longer changes on this rule`) }, icon('x'));
+      if (part.shows) body.push(row(pname(part.port), h('select', { 'aria-label': `${pname(part.port)} while it holds`, onchange: (e) => set(e.target.value) }, h('option', { value: 'true', selected: part.then === 'true' }, 'shown'), h('option', { value: 'false', selected: part.then === 'false' }, 'hidden')), drop));
+      else {
+        body.push(row(pname(part.port), ruleValueField(node, p, part.then, set), drop));
+        body.push(h('div', { class: 'field otherwise' }, h('label', {}, 'otherwise'), h('div', { class: 'ctl' }, ruleValueField(node, p, part.otherwise, (js) => write(setText(part.expr, withValue(textOf(part.expr), part.port, -1, js))))), h('span')));
+      }
+      if (part.of > 1) body.push(h('div', { class: 'hint rulenote' }, `${pname(part.port)} has ${part.of} rules: the first that holds, from the top, wins.`));
+      const feeds = conns.filter((c) => c.toId === node.id && c.toProperty === part.port).length;
+      if (feeds > 1) body.push(h('div', { class: 'hint rulenote bad' }, `${pname(part.port)} takes ${feeds} values at once; whichever changed last shows. Take one rule out, or put them in one.`));
+    }
+    body.push(h('div', { class: 'ruleacts' }, h('button', { class: 'tiny', onclick: (e) => rulePropertyMenu(e, node, (p) => addRuleOn(p, card.when, chipsIn)) }, icon('plus'), 'Another property')));
+    // a card: its condition is its heading (clicked, the composer opens on it), its properties under it
+    const key = `rule:${card.key}`;
+    const det = h('details', { class: 'group sec2 rule', open: secOpen[key] ?? true, ontoggle: (e) => { secOpen[key] = e.target.open; } },
+      h('summary', {}, h('span', { class: 'rulewhen', title: `Change the condition (${card.when})`, onclick: (e) => { e.preventDefault(); editWhen(e); } }, h('span', { class: 'w' }, 'When'), whenView(card.expr, card.when)),
+        h('span', { class: 'acts' }, h('button', { class: 'quiet tiny', title: 'Remove this rule', 'aria-label': `Remove rule ${i + 1}`, onclick: (e) => { e.preventDefault(); removeCard(); } }, '−'))), ...body);
+    add(det);
+  });
+  add(h('div', { class: 'ruleacts', style: 'padding:8px 14px' }, h('button', { class: 'tiny', id: 'newrule', onclick: newRule }, icon('plus'), 'New rule')));
+  // the element's looks while hovered, pressed or focused: its own, editable, and its style's, as they come
+  const own = node.stateParameters || {}, styled = variant?.stateParameters || {};
+  for (const st of new Set([...Object.keys(own), ...Object.keys(styled)])) {
+    const rows = [];
+    for (const [k, v] of Object.entries(own[st] || {})) rows.push(row(pname(k), ruleValueField(node, P[k] || { name: k }, literal(v), (js) => { const nv = valueOf(js); if (nv.code === undefined) write([{ edit: 'set_state_parameter', component: pageKey, id: node.id, state: st, name: k, value: nv.value }]); }),
+      h('button', { class: 'quiet tiny', title: `Stop changing ${pname(k)} while ${STATE_WORDS[st] || st}`, onclick: () => write([{ edit: 'set_state_parameter', component: pageKey, id: node.id, state: st, name: k, value: undefined }]) }, icon('x'))));
+    for (const [k, v] of Object.entries(styled[st] || {})) if (!(k in (own[st] || {}))) rows.push(h('div', { class: 'field inherited', title: `From the style ${node.variant}` }, h('label', {}, pname(k)), h('div', { class: 'ctl' }, h('span', { class: 'rulecode' }, typeof v === 'object' ? showLen(v) : String(v)), h('span', { class: 'u' }, ` from ${node.variant}`)), h('span')));
+    add(section(`When ${STATE_WORDS[st] || st}`, rows));
+  }
+}
 /** Bubble's Custom States on an element: type, name, default, list — each a Variable node on the page that remembers the element. */
 function customStatesSection(node) {
   const mine = statesOf(node.id);
@@ -1924,7 +2107,8 @@ function fieldFor(node, p, value, wire, setter) {
   else f.append(h('input', { type: 'text', value: value ?? '', placeholder: String(p.default ?? ''), list: ty === 'string' && /font|Font/.test(p.name) ? 'tokens-font' : undefined, oninput: (e) => set(e.target.value === '' ? undefined : e.target.value, false) }));
   // a value taken from somewhere: a value from an element, a custom state, an option set, or a composed expression — as a wire
   if (setter) return f;
-  if (wire && !composed) f.append(h('div', { class: 'from' }, sourceChip(wire.fromId, wire.fromProperty), h('button', { class: 'quiet tiny', title: 'Stop taking the value from there', onclick: () => edits(pageKey, [{ edit: 'disconnect', component: pageKey, from: { node: wire.fromId, port: wire.fromProperty }, to: { node: node.id, port: p.name } }]) }, icon('x'))));
+  if (wire && !composed && ruleChip(wire, p.name)) f.append(h('div', { class: 'from' }, ruleChip(wire, p.name)));
+  else if (wire && !composed) f.append(h('div', { class: 'from' }, sourceChip(wire.fromId, wire.fromProperty), h('button', { class: 'quiet tiny', title: 'Stop taking the value from there', onclick: () => edits(pageKey, [{ edit: 'disconnect', component: pageKey, from: { node: wire.fromId, port: wire.fromProperty }, to: { node: node.id, port: p.name } }]) }, icon('x'))));
   // STU-051 (spike): "take this value from" is the ⚡ at the end of the row, not a second line under every field
   else if (!composed) f.append(h('button', { class: 'quiet bolt', title: 'Take this value from somewhere — an element, a state, an option set, or an expression you write', onclick: (e) => sourceMenu(e, node, p) }, icon('bolt')));
   return f;
@@ -2327,10 +2511,11 @@ function composedPreview(expr) {
   return text.replace(/[A-Za-z_$][\w$]*/g, (m) => (chips.has(m) ? `[${chips.get(m).text}]` : m)) || '(empty expression)';
 }
 const OPS = [['is', ' === '], ['is not', ' !== '], ['and', ' && '], ['or', ' || '], ['+', ' + '], ['−', ' - '], ['×', ' * '], ['÷', ' / '], ['>', ' > '], ['<', ' < '], ['not', '!'], ['( )', '()'], ['contains', '.includes()'], ['? :', ' ? : ']];
-function openComposer(e, node, p, existing, onPick) {
+function openComposer(e, node, p, existing, onPick, { text: given, chips: givenChips, onCompose } = {}) {
   closeMenu();
-  let text = existing?.parameters?.expression || '';
-  const chips = existing ? chipsOf(existing) : new Map();
+  // onCompose: a rule's condition — the text and its chips are handed back, nothing is written here
+  let text = given ?? existing?.parameters?.expression ?? '';
+  const chips = givenChips ? new Map(givenChips) : existing ? chipsOf(existing) : new Map();
   let mode = localStorage.getItem('ob.composer.mode') || 'mixed';
   const menu = popover(e, 'composer');
   menu.style.left = `${Math.max(8, Math.min(e.clientX - 200, innerWidth - 580))}px`;
@@ -2395,6 +2580,7 @@ function openComposer(e, node, p, existing, onPick) {
     check();
   }
   const save = () => {
+    if (onCompose) { if (!text.trim()) return toast('Compose the condition first'); closeMenu(); return onCompose(text.trim(), new Map([...chips].filter(([n]) => exprNames(text).includes(n)))); }
     const names = exprNames(text);
     const list = [];
     let exprId = existing?.id;
@@ -2416,7 +2602,7 @@ function openComposer(e, node, p, existing, onPick) {
     toast(`${fieldName} is now the expression ${text.slice(0, 60)}`);
   };
   menu.append(
-    h('div', { class: 'bar' }, icon('fx'), h('strong', {}, fieldName), h('span', { style: 'color:var(--muted)' }, `of ${labelOf(node.id)}`), seg),
+    h('div', { class: 'bar' }, icon('fx'), h('strong', {}, fieldName), h('span', { style: 'color:var(--muted)' }, onCompose ? `— a rule on ${labelOf(node.id)}` : `of ${labelOf(node.id)}`), seg),
     body,
     h('div', { class: 'foot' }, note, existing ? h('button', { class: 'danger', onclick: () => { closeMenu(); edits(pageKey, [{ edit: 'remove_node', component: pageKey, id: existing.id }]); toast('Expression removed'); } }, 'Remove') : null, h('button', { onclick: closeMenu }, 'Cancel'), h('button', { class: 'primary', onclick: save }, 'Save')));
   document.body.append(menu);

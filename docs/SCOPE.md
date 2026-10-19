@@ -86,6 +86,7 @@ These two come before M2's remaining work and M3: he will play-test data in a se
 | id | task | done when |
 |---|---|---|
 | STU-050 | **A condensed element list, grouped into components.** The page's list shows the page as a few named parts (its components and top-level groups), each opening into its own elements, the way the NodeGX editor's component tree does, instead of every element of the page in one tree. A group of elements can be made into a component from the list. | on the converted template app the page list fits without scrolling at 1000 px tall, every element is still reachable in two clicks, and "make a component from this group" writes a component the app draws the same |
+| STU-052 | **Typed follow-ups in the composer, from the community's Bubble→Noodl dictionary** (`dev-docs/tasks/phase-86-the-community-already-built-it/corpus/bubble-dictionary/`, 94 operators by data type; executed in `scripts/bubble-phrasebook/rows.js`, which found 18 wrong rows). After a chip, the composer offers the phrases for that value's type, as Bubble's menu does: a list of texts `:count`, `:first item`, `contains`; a date `+(days)`, `:formatted as`; a number `:rounded to`. Each writes the phrasebook's executed JavaScript. | a chip of each of the dictionary's seven types offers exactly that type's rows, and each inserted phrase runs to the phrasebook's answer |
 | STU-051 | **A properties panel with real controls.** Typed controls in place of free text: sizes with units, colours and spacing from the project's tokens, alignment and layout pickers, fonts, images, enums as choices, grouped and ordered the way Bubble's panel is (Appearance / Layout / Conditional) and the NodeGX editor's is. Reuse the NodeGX editor's property editor types where they can run in Studio's page; Bubble's own panel (Richard offered screenshots of every element's) is the guide for grouping. | every property of a Group, Text, Button, Input and Image on the template app is edited through a typed control, and a token-valued colour reads as the token's name |
 
 **Looked (2026-10-19, s2), on a copy of the template app; pictures in `docs/look/playtest-1/`.** The page is one
@@ -207,6 +208,45 @@ drawn by `preview-solo` at 1280 px — the same 227 elements with the same text,
 same page height; the screenshots differ only in the two phone-mockup images, and the control (the same project drawn
 twice) differs there too (907 rows). `check:import` 58/58 with the template bundle (two new checks, validate_project 0
 errors). Not measured: the real app (its export is not in this repo).
+
+**STU-051's Conditional tab, built (s4).** A third tab beside Visual and Interaction, its badge the element's rules
+and looks. A rule is read off the graph (`editor/rules.mjs`, pure): an Expression wired into a property whose text is
+`(when) ? value : otherwise`, a chain of them when several rules set one property (the first that holds wins, the
+newest first, as Bubble's last rule in the list wins), or a condition wired into Visible / Mounted (`(when)` shows,
+`!(when)` hides). The tab draws one card per condition, the condition its heading in words and chips ("When
+[Screen's Width] < 768"), then each property it changes with the property's own control (a length, a colour chip,
+yes/no, shown/hidden) and the otherwise; a computed value shows as its code. Clicking the condition opens the composer
+on it (only the condition: the composer hands back its text and chips and writes nothing itself); − takes a rule out,
+× one property, "Another property" puts one more under the same condition, "New rule" composes a condition and then
+picks a property — onto a property that has a rule already, it becomes that Expression's new first arm, never a
+second wire. A property two values feed at once says so in red. Under the rules, "When hovered / pressed / focused":
+the element's own looks, editable and removable (`set_state_parameter`, a ninth edit), and its style's, marked as
+coming from it. In Visual, a property a rule sets shows "A rule · Conditional" (it opens the tab) instead of the
+Expression's name cut off.
+- On the template (looked, not graded; `docs/look/s4/cond-panels.png`): Text C reads "When Screen's Width < 768 ·
+  Margin Top 16 otherwise 64"; Text Z its font size and side margins under "< 504"; Button F its hover background and
+  pressed shadow; Group B "Mounted hidden". (Before the importer fix below, Text C also had a Width rule 100% → 100%.)
+- Gates: `check:rules` 20/20 (new, Node): the importer's shapes read and written back, a size object's colon and a
+  string's `?` skipped, one card for one condition on two Expressions, and every edit the tab makes *run*. `check:editor`
+  114/114: a rule written the importer's way on Sign in's Top right is listed, drawn (24 px), changed in the tab (the file
+  says 40, the app draws 40 px), a second rule chains into the same Expression (one wire, two cards), removed again; a
+  hover look on Create account is listed and removed from the file. Mutant (a new rule always a new Expression): 112/114.
+- **STU-051-RULECHAIN (found by the tab, fixed in the importer):** Text Z on the template showed "Width takes 3 values at
+  once". The importer wrote one Expression per conditional and property, so two conditionals on one property were two
+  wires into one port, and whichever changed last showed; Bubble's later conditional wins. It now chains them into the
+  one Expression (`ruleInto`, through `rules.mjs`'s `addArm`, the tab's own shape), and does not write a conditional whose
+  value is the element's own (Text Z's three were 100% → 100%). Template: 30 → 21 Expressions, ports fed twice 2 → 0
+  (all nine were no-ops; nothing to chain there). `check:import` 64/64 with a fixture where it is not: margin 30 when
+  signed in and 10 narrower than 768 is one Expression, run, narrow and signed in gives 10, wide 30; two hiding rules on
+  a group are one Expression hidden when either holds; the report counts both.
+- Also this session: a copy's panel named its inputs by port name, cut off ("Why it did not ..." twice, "MaterialIcon A
+  ..."); an input with no name of its own now reads as what it feeds inside the reusable, grouped under that element
+  with that property's name and control. The reusable canvas's copy now takes the first placed copy's settings (the
+  feature row's icon was blank; gate: its query asks with n = 1, mutant 105/106). STU-015-IMPORTED run green on a quiet
+  machine (105/105): the three timing checks needed nothing.
+- **Not built:** adding a hover / pressed look from the tab (only the ones there are edited), Bubble's "1 inherited from
+  Style" count on the badge, a rule on a reusable's copy (its inputs are wires already), and conditions the composer
+  should offer by type (STU-052).
 
 ---
 
@@ -621,6 +661,7 @@ query start/end and element draws, to measure).
 | STU-040 | **File → Import an App…** with the guided path from [IMPORT.md](IMPORT.md) (run-mode bundles, the editor requests, the Data tab), the report shown in the app. | an import from the welcome screen ends with the project open and the report beside it |
 | STU-041 | **One home for the converter.** It currently also lives in `digital-bricks/bubbleExporter` and in the NodeGX repo's phase 123 folder; this repo becomes the source and the other two point here. | both other copies carry a pointer, and nothing is edited there any more |
 | STU-042 | **A fidelity gate** from Rico Trevisan's frozen cases (bubble_ex `test/support/fidelity`, fetched at a pinned commit, not vendored) — read his reply on ricotrevisan/bubble_ex#238 first. | the converter is graded against Bubble's own screenshots at 390 and 1440 px |
+| STU-044 | **The importer's expressions graded against the dictionary.** Its compiler has 125 operators of its own, written without the community dictionary; by name only 37 of the dictionary's 94 match (an undercount: the dictionary uses Bubble's display names, ":count", "<", the importer the internal ones, `count`, `less_than`), weakest on Date 2/15, Date Range 0/11 and Integer range 3/11. Compile each phrasebook row's Bubble example through the importer and compare with the phrasebook's executed answer. | a gate prints covered / wrong / missing per data type, and every wrong one is fixed or filed |
 | STU-043 | **Plugins.** A shim for Bubble's client-side plugin API (`instance.publishState`, `triggerEvent`, `data`) so a plugin's own code can run; licence ruling first. | one real plugin element runs in an imported app |
 
 ---

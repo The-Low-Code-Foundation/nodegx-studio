@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { askWhileShown, queryParameters } from '../editor/pagedata.mjs';
 import { groupRepeats } from './group.mjs';
+import { addArm, readRule } from '../editor/rules.mjs';
 
 const [,, srcPath, outDir] = process.argv;
 if (!srcPath || !outDir) { console.error('usage: app-to-nodegx.mjs <export.json> <outdir>'); process.exit(2); }
@@ -311,19 +312,19 @@ function convertElement(g, el, parentNode, parentLayout, bubblePage, depth, y) {
     const cond = compileExpr(g, s.condition, { page: bubblePage, element: node });
     for (const [bk, bv] of Object.entries(s.properties || {})) {
       if (bk === 'is_visible' && (bv !== false) === (p.is_visible !== false)) continue; // STU-014-VISDEFAULT: "hidden when X" on an element already hidden on load changes nothing (Bubble: the condition's value when it holds, else the element's own); it was written "shown when not X"
-      if (bk === 'is_visible') { const visKey = p.collapse_when_hidden === false ? 'visible' : 'mounted'; const ex = exprNode(g, `${label}: ${visKey} when not (${cond.text})`, `!(${cond.js})`, cond, { x: node.x + 500, y: node.y }); g.wire(ex.id, 'result', node.id, visKey); if (bv !== false) ex.parameters.expression = `(${cond.js})`; continue; }
+      if (bk === 'is_visible') { const visKey = p.collapse_when_hidden === false ? 'visible' : 'mounted'; ruleInto(g, { label, port: visKey, tgt: node, valJs: String(bv !== false), cond, pos: { x: node.x + 500, y: node.y }, text: bv !== false ? `(${cond.js})` : `!(${cond.js})` }); continue; }
       const glyph = g.nodes.find((x) => x.id === `icon_${el.id}`); const CONTENT = { text: ntype === 'Text' ? 'text' : ntype === 'net.noodl.controls.button' ? 'label' : null, src: 'src', icon: glyph ? 'iconIconSource' : null, icon_color: glyph ? 'iconColor' : null, border_color: 'borderColor', initial_content: 'startValue', placeholder: 'placeholder', boxshadow_blur: 'boxShadowBlurRadius', column_gap: 'columnGap', row_gap: 'rowGap', button_disabled: 'enabled', disabled: 'enabled' };
       const PORT_OK = { enabled: ['net.noodl.controls.button', 'net.noodl.controls.textinput', 'net.noodl.controls.checkbox', 'net.noodl.controls.options'], src: ['Image'], text: ['Text'], label: ['net.noodl.controls.button', 'net.noodl.controls.checkbox'], placeholder: ['net.noodl.controls.textinput', 'net.noodl.controls.options'], startValue: ['net.noodl.controls.textinput'], borderColor: ['Group', 'Image', 'net.noodl.controls.button', 'net.noodl.controls.textinput', 'net.noodl.controls.checkbox', 'net.noodl.controls.options'], boxShadowBlurRadius: ['Group', 'Image', 'net.noodl.controls.button'], columnGap: ['Group'], rowGap: ['Group'] };
       const portOk = (key) => key === 'iconIconSource' || key === 'iconColor' ? !!glyph : !PORT_OK[key] || PORT_OK[key].includes(ntype);
-      if (bk in CONTENT && CONTENT[bk] && portOk(CONTENT[bk]) && !((ntype === 'Text' || ntype === 'net.noodl.visual.icon') && TEXT_ONLY(CONTENT[bk]))) { const key = CONTENT[bk]; const inv = bk === 'button_disabled' || bk === 'disabled'; let valJs; if (bv && typeof bv === 'object' && bv.type) { const sub = compileExpr(g, bv, { page: bubblePage, element: node }); for (const c of sub.chips) cond.chips.push(c); valJs = sub.js; } else valJs = inv ? String(!bv) : typeof bv === 'number' ? String(bv) : JSON.stringify(bv); const target = (key === 'iconIconSource' || key === 'iconColor') && glyph ? glyph : node; const base = target.parameters[key]; const ex = exprNode(g, `${label}: ${key} when ${cond.text}`, `(${cond.js}) ? ${valJs} : ${JSON.stringify(base ?? (inv ? true : null))}`, cond, { x: node.x + 500, y: node.y }); g.wire(ex.id, 'result', target.id, key); continue; }
+      if (bk in CONTENT && CONTENT[bk] && portOk(CONTENT[bk]) && !((ntype === 'Text' || ntype === 'net.noodl.visual.icon') && TEXT_ONLY(CONTENT[bk]))) { const key = CONTENT[bk]; const inv = bk === 'button_disabled' || bk === 'disabled'; let valJs; if (bv && typeof bv === 'object' && bv.type) { const sub = compileExpr(g, bv, { page: bubblePage, element: node }); for (const c of sub.chips) cond.chips.push(c); valJs = sub.js; } else valJs = inv ? String(!bv) : typeof bv === 'number' ? String(bv) : JSON.stringify(bv); const target = (key === 'iconIconSource' || key === 'iconColor') && glyph ? glyph : node; const base = target.parameters[key]; ruleInto(g, { label, port: key, tgt: target, valJs, baseJs: JSON.stringify(base ?? (inv ? true : null)), cond, pos: { x: node.x + 500, y: node.y } }); continue; }
       if (bk in CONTENT && CONTENT[bk] && !portOk(CONTENT[bk])) { todo(`${bubblePage.name} / ${label}`, `conditional ${bk} on a ${el.type} placed as ${ntype}: no such input here`); continue; }
       if (bk === 'data_source') { todo(`${bubblePage.name} / ${label}`, 'a conditional data source (two sources by condition): one Expression choosing between two queries is the NodeGX way'); continue; }
-      if (bk === 'background_style') { if (bv === 'none' && ntype !== 'Text' && ntype !== 'net.noodl.visual.icon') { const ex = exprNode(g, `${label}: background when ${cond.text}`, `(${cond.js}) ? "transparent" : ${JSON.stringify(node.parameters.backgroundColor ?? null)}`, cond, { x: node.x + 500, y: node.y }); g.wire(ex.id, 'result', node.id, 'backgroundColor'); } continue; }
+      if (bk === 'background_style') { if (bv === 'none' && ntype !== 'Text' && ntype !== 'net.noodl.visual.icon') ruleInto(g, { label, port: 'backgroundColor', tgt: node, valJs: '"transparent"', baseJs: JSON.stringify(node.parameters.backgroundColor ?? null), cond, pos: { x: node.x + 500, y: node.y } }); continue; }
       const mapped = { ...styleParams({ [bk]: bv }, el.type), ...layoutParams({ [bk]: bv }, 'flex', el.type) }; delete mapped.sizeMode;
       const keys = Object.keys(mapped).filter((k) => sp[k] !== undefined || k in mapped);
       if (!keys.length) { todo(`${bubblePage.name} / ${label}`, `conditional property ${bk} has no NodeGX parameter`); continue; }
       const boxText = g.nodes.find((x) => x.id === `text_${el.id}`); // a Text with a box is a Group holding a Text: its text keys are the inner Text's (STU-013-GROUPCOLOR)
-      for (const k of keys) { if ((ntype === 'Text' || ntype === 'net.noodl.visual.icon') && TEXT_ONLY(k)) continue; const tgt = boxText && /^(color$|font|letterSpacing|lineHeight|textAlign|textTransform|textDecoration)/.test(k) ? boxText : node; const base = tgt.parameters[k] ?? variants.find((v) => v.name === tgt.variant)?.parameters?.[k]; const val = mapped[k]; const lit = (x) => x && typeof x === 'object' && 'unit' in x ? (x.unit === 'px' ? String(x.value) : JSON.stringify(x)) : JSON.stringify(x ?? null); /* s4: a % size is a {value, unit} object; the runtime refuses the string "100%" */ const ex = exprNode(g, `${label}: ${k} when ${cond.text}`, `(${cond.js}) ? ${lit(val)} : ${lit(base)}`, cond, { x: node.x + 500, y: node.y }); g.wire(ex.id, 'result', tgt.id, k); }
+      for (const k of keys) { if ((ntype === 'Text' || ntype === 'net.noodl.visual.icon') && TEXT_ONLY(k)) continue; const tgt = boxText && /^(color$|font|letterSpacing|lineHeight|textAlign|textTransform|textDecoration)/.test(k) ? boxText : node; const base = tgt.parameters[k] ?? variants.find((v) => v.name === tgt.variant)?.parameters?.[k]; const val = mapped[k]; const lit = (x) => x && typeof x === 'object' && 'unit' in x ? (x.unit === 'px' ? String(x.value) : JSON.stringify(x)) : JSON.stringify(x ?? null); /* s4: a % size is a {value, unit} object; the runtime refuses the string "100%" */ ruleInto(g, { label, port: k, tgt, valJs: lit(val), baseJs: lit(base), cond, pos: { x: node.x + 500, y: node.y } }); }
     }
   }
   // children
@@ -351,6 +352,33 @@ function convertChildrenInto(g, elements, node, layout, bubblePage, depth, y) { 
 
 // ---------------------------------------------------------------- expressions: Bubble's Message chain → JavaScript + chips
 // returns { js, text, chips: [{ name, fromId, fromPort }] }
+/**
+ * STU-051-RULECHAIN: a conditional of an element, as the one rule Expression on the property it sets. Bubble's later
+ * conditional wins over an earlier one when both hold, so a second rule on a property is the new first arm of the chain
+ * already wired there (`rules.mjs`'s addArm: the shape Studio's Conditional tab reads and writes) — it used to be a
+ * second Expression wired into the same port, and whichever changed last showed. A rule whose value is the element's
+ * own changes nothing and is not written (a Text's three width conditions on the template, each 100% → 100%).
+ */
+function ruleInto(g, { label, port, tgt, valJs, baseJs, cond, pos, text }) {
+  if (baseJs !== undefined && valJs === baseJs) { stats.rulesNoop = (stats.rulesNoop || 0) + 1; return; }
+  const w = g.connections.find((c) => c.toId === tgt.id && c.toProperty === port && c.fromProperty === 'result');
+  const ex = w && g.nodes.find((n) => n.id === w.fromId && n.type === 'Expression');
+  if (!ex) { const made = exprNode(g, `${label}: ${port} when ${cond.text}`, text ?? `(${cond.js}) ? ${valJs} : ${baseJs}`, cond, pos); g.wire(made.id, 'result', tgt.id, port); return; }
+  // the new condition's names beside the Expression's own: one name per source
+  const have = new Map(g.connections.filter((c) => c.toId === ex.id).map((c) => [c.toProperty, `${c.fromId}.${c.fromPort ?? c.fromProperty}`]));
+  let js = cond.js;
+  for (const c of cond.chips) {
+    let name = c.name, i = 2;
+    while (have.has(name) && have.get(name) !== `${c.fromId}.${c.fromPort}`) name = `${c.name}${i++}`;
+    if (name !== c.name) js = js.replace(new RegExp(`\\b${c.name.replace(/\$/g, '\\$')}\\b`, 'g'), name);
+    if (!have.has(name)) { g.wire(c.fromId, c.fromPort, ex.id, name); have.set(name, `${c.fromId}.${c.fromPort}`); }
+  }
+  const old = ex.parameters.expression;
+  ex.parameters.expression = readRule(old, port) ? addArm(old, port, js, valJs) : `(${js}) ? ${valJs} : (${old})`;
+  ex.label = `${label}: ${port} by its rules`.slice(0, 80);
+  ex.metadata = { ...(ex.metadata || {}), bubble: `${cond.text}; else ${ex.metadata?.bubble ?? ''}` };
+  stats.rulesChained = (stats.rulesChained || 0) + 1;
+}
 function exprNode(g, label, js, compiled, pos) {
   stats.expressions++;
   const ex = g.add({ id: fresh('ex'), type: 'Expression', label: label.slice(0, 80), parameters: { expression: js, evaluateAtLoad: true }, metadata: { bubble: compiled.text }, x: pos?.x, y: pos?.y }); // evaluateAtLoad: an input that never arrives must still yield a value
@@ -948,7 +976,7 @@ fs.writeFileSync(path.join(outDir, 'nodegx.styles.json'), JSON.stringify({ $sche
 const pctOf = (a, b) => b ? Math.round((100 * a) / b) : 100;
 const report = [`# Bubble → NodeGX import report`, '', `Source: ${path.basename(srcPath)} (app ${app._id}, Bubble version ${cs.bubble_version}). Converted ${now}.`, '',
   '| what | count | mapped |', '|---|---|---|',
-  `| pages | ${pages.length} | ${pages.length} |`, `| elements | ${stats.elements} | ${stats.mapped} (${pctOf(stats.mapped, stats.elements)}%) |`, `| element conditions | ${stats.states} | see findings |`, `| styles → variants | ${Object.keys(app.styles || {}).length} | ${stats.styles} |`,
+  `| pages | ${pages.length} | ${pages.length} |`, `| elements | ${stats.elements} | ${stats.mapped} (${pctOf(stats.mapped, stats.elements)}%) |`, `| element conditions | ${stats.states} | see findings; ${stats.rulesChained || 0} chained onto the rule already on that property, ${stats.rulesNoop || 0} that change nothing not written |`, `| styles → variants | ${Object.keys(app.styles || {}).length} | ${stats.styles} |`,
   `| workflows | ${stats.workflows} | ${stats.workflows} |`, `| actions | ${stats.actions} | ${stats.actionsMapped} (${pctOf(stats.actionsMapped, stats.actions)}%) |`, `| expressions compiled | ${stats.expressions} | unknown operators: ${stats.exprOpsUnknown}; field reads guessed by name: ${stats.fieldReadsGuessed} |`, `| data types → collections | ${Object.keys(userTypes).length} | ${dbCollections.length}${Object.values(userTypes).some((t) => t?.deleted) ? ` (${Object.values(userTypes).filter((t) => t?.deleted).length} deleted in Bubble, skipped)` : ''} |`, `| reusable elements → components | ${Object.keys(customElements).length} | ${stats.reusables} |`, `| option sets → components | ${Object.keys(optionSets).length} | ${stats.optionSets}${Object.values(optionSets).some((o) => o?.deleted) ? ` (${Object.values(optionSets).filter((o) => o?.deleted).length} deleted in Bubble, skipped)` : ''} |`, `| custom states → variables | — | ${stats.customStates} |`, `| searches → page data | ${stats.searches || 0} | ${(stats.searches || 0) - (stats.searchesMerged || 0)} queries (${stats.searchesMerged || 0} repeated searches read the query already there) |`, `| backend workflows → cloud functions | ${apiWorkflows.length} | ${stats.backendWorkflows || 0} (triggers proposed: ${triggersOut.length}) |`, `| disabled steps skipped | — | ${stats.actionsDisabled || 0} |`, `| converter crashes (caught) | — | ${stats.crashes || 0} |`, '',
   ...security.report,
   '## Repeated structures → reusables', '', 'The same structure at least 3 times on a page, at least 5 elements: one reusable, a copy in each place. Settings that differed between them are set on each copy; the page\'s workflows stay on the page, reached through the copy.', '',
