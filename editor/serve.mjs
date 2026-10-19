@@ -7,6 +7,8 @@
  *   /runtime/*             the deploy runtime (`packages/noodl-editor/src/external/deploy/`, `npm run build:editor:_viewer`)
  *   /preview.js            `@nodegx/preview`'s in-page build (`npm --prefix packages/noodl-preview run build`)
  *   /look.js, /specs.js    `@nodegx/canvas-look` and `@nodegx/node-spec` as ES modules (Orbit's `real/build.sh` builds them)
+ *   GET  /phrasebook.json  STU-052: the composer's follow-ups by type (phrases.mjs over the NodeGX checkout's
+ *                          scripts/bubble-phrasebook/rows.js, the community's Bubble→Noodl dictionary as executed)
  *   GET  /api/project      every text file of the project folder as one path → text map, plus the folder's name
  *   POST /api/save         { files: { path: text }, removed: [path], bases: { path: text | null }, force? } — written under
  *                          the project folder, nothing else. `bases` is each file as the page last had it: when the disk
@@ -38,6 +40,8 @@ import { fileURLToPath } from 'node:url';
 import { nodegxRepo } from '../lib/nodegx.mjs';
 import * as backends from '../lib/backend.mjs';
 import * as agent from '../lib/agent.mjs';
+import { createRequire } from 'node:module';
+import { TYPES, phrasesFor } from './phrases.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = nodegxRepo;
@@ -193,6 +197,10 @@ const server = http.createServer(async (req, res) => {
   try {
     if (url.pathname === '/') return send(200, readFileSync(join(here, 'studio.html')), types['.html']);
     if (url.pathname === '/preview.js') return send(200, readFileSync(bundle), types['.js']);
+    if (url.pathname === '/phrasebook.json') { // read on the first ask (require caches it): a phrasebook edit shows after a restart
+      try { const { rows } = createRequire(import.meta.url)(join(nodegxRepo, 'scripts/bubble-phrasebook/rows.js')); return json(200, Object.fromEntries(TYPES.map((t) => [t, phrasesFor(rows, t)]))); }
+      catch (err) { return json(404, { error: `no phrasebook in the NodeGX checkout: ${err.message}` }); }
+    }
     if (url.pathname === '/look.js' || url.pathname === '/specs.js') return send(200, readFileSync(join(orbit, url.pathname.slice(1))), types['.js']);
     // the app's frame gets Studio's probe first in its head (what it asks the backend, which page it is on): STU-011
     if (url.pathname === '/runtime/index.html') {

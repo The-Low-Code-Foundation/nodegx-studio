@@ -11,7 +11,7 @@
   "scripts": {
     "start": "node app/launch.mjs",
     "serve": "node editor/serve.mjs",
-    "check": "node editor/rules-check.mjs && node editor/pagedata-check.mjs && node editor/reusable-check.mjs && node editor/check.mjs && node import/check.mjs && node import/dictionary-check.mjs && node app/check.mjs",
+    "check": "node editor/rules-check.mjs && node editor/phrases-check.mjs && node editor/pagedata-check.mjs && node editor/reusable-check.mjs && node editor/check.mjs && node import/check.mjs && node import/dictionary-check.mjs && node app/check.mjs",
     "check:editor": "node editor/check.mjs",
     "check:pagedata": "node editor/pagedata-check.mjs",
     "check:reusable": "node editor/reusable-check.mjs",
@@ -19,7 +19,8 @@
     "check:import": "node import/check.mjs",
     "check:app": "node app/check.mjs",
     "smoke": "node app/launch.mjs --smoke",
-    "check:dictionary": "node import/dictionary-check.mjs"
+    "check:dictionary": "node import/dictionary-check.mjs",
+    "check:phrases": "node editor/phrases-check.mjs"
   },
   "devDependencies": {
     "electron": "43.2.0"

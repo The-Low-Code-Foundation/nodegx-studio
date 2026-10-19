@@ -363,6 +363,17 @@
   .composer textarea { min-height: 72px; }
   .composer .tools { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
   .composer .tools button { padding: 3px 8px; font-size: 12px; }
+  /* STU-052: what can follow a chip, by its type (the dictionary's phrases), and the slots a phrase leaves */
+  .composer .chip.on { box-shadow: 0 0 0 2px var(--accent); }
+  .composer .chip.slot { background: transparent; border: 1px dashed var(--line-2); color: var(--muted); cursor: pointer; }
+  .composer .then { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .composer .then b { color: var(--ink-2); font-weight: 500; }
+  .composer .then select { width: auto; padding: 2px 6px; font-size: 12px; }
+  .menu.phrases { width: 380px; max-height: 420px; overflow: auto; }
+  .menu.phrases .item { justify-content: space-between; }
+  .menu.phrases .item small { font-family: var(--mono); font-size: 11px; color: var(--muted); max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .menu.phrases .item.off { color: var(--muted); }
+  .menu.phrases .item.off small { font-family: inherit; }
   .composer .foot { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); align-items: center; }
   .composer .foot .note { color: var(--muted); font-size: 12px; flex: 1; }
   .composer .foot .note.bad { color: var(--danger); }
@@ -525,6 +536,7 @@ import { hasSpec, specs, drawnPorts, portProjectFromStore, portContextFor, expre
 import { applyEdit } from './edits.mjs';
 import { extractReusable } from './reusable.mjs';
 import { readRule, rulesOf, withoutArm, withValue, withCondition, addArm, valueOf, literal, SHOWING } from './rules.mjs';
+import { TYPES, TYPE_WORDS, dictionaryType, applyPhrase } from './phrases.mjs';
 import { OPERATORS, createEdits, updateEdits, removeEdits, readItems, readFrom, readersOf, itemOfSource, sameAs, signature, describe, lastRun, queriesOnOpen } from './pagedata.mjs';
 
 const $ = (id) => document.getElementById(id);
@@ -2510,12 +2522,18 @@ function composedPreview(expr) {
   const chips = chipsOf(expr);
   return text.replace(/[A-Za-z_$][\w$]*/g, (m) => (chips.has(m) ? `[${chips.get(m).text}]` : m)) || '(empty expression)';
 }
+/** STU-052: the dictionary's phrases by type (serve.mjs /phrasebook.json); empty when the NodeGX checkout has none. */
+let PHRASES = {};
+fetch('/phrasebook.json').then((r) => (r.ok ? r.json() : {})).then((j) => { PHRASES = j; }).catch(() => {});
 const OPS = [['is', ' === '], ['is not', ' !== '], ['and', ' && '], ['or', ' || '], ['+', ' + '], ['−', ' - '], ['×', ' * '], ['÷', ' / '], ['>', ' > '], ['<', ' < '], ['not', '!'], ['( )', '()'], ['contains', '.includes()'], ['? :', ' ? : ']];
 function openComposer(e, node, p, existing, onPick, { text: given, chips: givenChips, onCompose } = {}) {
   closeMenu();
   // onCompose: a rule's condition — the text and its chips are handed back, nothing is written here
   let text = given ?? existing?.parameters?.expression ?? '';
   const chips = givenChips ? new Map(givenChips) : existing ? chipsOf(existing) : new Map();
+  // STU-052: the chip a follow-up applies to (the last inserted, or the one clicked), the type each chip is read as (its
+  // port's, until the person says), and the slots a phrase left: a name with no value yet, drawn as an empty box to fill
+  let focus = null; const chipTypes = new Map(); const slots = new Map();
   let mode = localStorage.getItem('ob.composer.mode') || 'mixed';
   const menu = popover(e, 'composer');
   menu.style.left = `${Math.max(8, Math.min(e.clientX - 200, innerWidth - 580))}px`;
@@ -2527,19 +2545,46 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
   for (const [m, label] of [['chips', 'Composer'], ['mixed', 'Both'], ['js', 'JavaScript']]) seg.append(h('button', { 'data-m': m, 'aria-pressed': m === mode, onclick: () => setMode(m) }, label));
   const check = () => {
     const names = exprNames(text);
-    const unknown = names.filter((n) => !chips.has(n));
-    try { new Function(...names, 'Noodl', 'return (' + (text || 'undefined') + ');'); note.className = 'note'; note.textContent = text ? (unknown.length ? `${unknown.join(', ')} ${unknown.length > 1 ? 'are names' : 'is a name'} with no value yet — insert a value for ${unknown.length > 1 ? 'them' : 'it'}, or it is a JavaScript global` : `Reads ${names.length} value${names.length === 1 ? '' : 's'} · JavaScript, run by the app's Expression node`) : 'Type JavaScript, or insert values as chips.'; }
+    const unknown = names.filter((n) => !chips.has(n) && !slots.has(n)), empty = names.filter((n) => slots.has(n));
+    try { new Function(...names, 'Noodl', 'return (' + (text || 'undefined') + ');'); note.className = 'note'; note.textContent = text ? (empty.length ? `Fill the empty slot${empty.length > 1 ? 's' : ''} (${empty.map((n) => slots.get(n)).join(', ')}): click ${empty.length > 1 ? 'one' : 'it'} and pick a value` : unknown.length ? `${unknown.join(', ')} ${unknown.length > 1 ? 'are names' : 'is a name'} with no value yet — insert a value for ${unknown.length > 1 ? 'them' : 'it'}, or it is a JavaScript global` : `Reads ${names.length} value${names.length === 1 ? '' : 's'} · JavaScript, run by the app's Expression node`) : 'Type JavaScript, or insert values as chips.'; }
     catch (err) { note.className = 'note bad'; note.textContent = `Will not compile: ${err.message}`; }
   };
   /** A chip for a name in the text; in the mixed view it is a non-editable island with its own delete. */
-  const chip = (name, editable) => h('span', { class: `chip ${chipKind(name)}`, contenteditable: editable ? 'false' : undefined, 'data-name': name, title: name }, chips.get(name).text, h('button', { title: 'Remove', onclick: (ev) => { ev.preventDefault(); removeName(name); } }, icon('x')));
+  const chip = (name, editable) => h('span', { class: `chip ${chipKind(name)}${focus === name ? ' on' : ''}`, contenteditable: editable ? 'false' : undefined, 'data-name': name, title: `${name} · click it for what can follow it`, onclick: (ev) => { if (ev.target.closest('button')) return; focus = name; renderBody(); } }, chips.get(name).text, h('button', { title: 'Remove', onclick: (ev) => { ev.preventDefault(); removeName(name); } }, icon('x')));
   const chipKind = (name) => { const c = chips.get(name); const n = byId[c.node]; return n?.metadata?.customState ? 'state' : n?.type.startsWith('/Option sets/') ? 'opt' : n && isPageDataNode(n) ? 'data' : ''; };
-  const removeName = (name) => { text = text.replace(new RegExp(`\\b${name.replace(/[$]/g, '\\$')}\\b`, 'g'), '').replace(/\s{2,}/g, ' ').trim(); chips.delete(name); renderBody(); };
-  const insertName = (src) => {
+  const removeName = (name) => { text = text.replace(new RegExp(`\\b${name.replace(/[$]/g, '\\$')}\\b`, 'g'), '').replace(/\s{2,}/g, ' ').trim(); chips.delete(name); slots.delete(name); renderBody(); };
+  const nameFor = (src) => {
     let base = slug(src.text.replace(/'s/g, ' ').replace(/·/g, ' ')); let name = base, i = 2;
-    while (chips.has(name) || /^(min|max|cos|sin|tan|sqrt|pi|round|floor|ceil|abs|random|run|expression|evaluateAtLoad|Noodl|Variables|Objects|Arrays)$/.test(name)) name = `${base}${i++}`;
-    chips.set(name, src);
-    insertAtCaret(name);
+    while (chips.has(name) || slots.has(name) || /^(min|max|cos|sin|tan|sqrt|pi|round|floor|ceil|abs|random|run|expression|evaluateAtLoad|Noodl|Variables|Objects|Arrays)$/.test(name)) name = `${base}${i++}`;
+    return name;
+  };
+  const insertName = (src) => { const name = nameFor(src); chips.set(name, src); focus = name; insertAtCaret(name); };
+  /** A slot filled: the value picked becomes a chip where the slot was. */
+  const fillSlot = (slot, src) => { const name = nameFor(src); chips.set(name, src); slots.delete(slot); text = text.replace(new RegExp(`\\b${slot}\\b`), name); focus = name; renderBody(); };
+  const slotEl = (name, editable) => h('span', { class: 'chip slot', contenteditable: editable ? 'false' : undefined, 'data-name': name, title: `An empty slot: click it to put a ${slots.get(name)} in it`, onclick: (ev) => sourceMenu(ev, node, p, (src) => fillSlot(name, src)) }, `▢ ${slots.get(name)}`);
+  /** The dictionary's type of a chip: what the person said it is, else its port's type. */
+  const typeOfChip = (name) => { if (chipTypes.has(name)) return chipTypes.get(name); const src = chips.get(name); const n = byId[src?.node]; return dictionaryType(n && portsOf(n, 'output').find((q) => q.name === src.port)?.type); };
+  /** A phrase as it will read on this chip: the chip is "…", each other value its slot (`!list.includes(…)`, not the phrasebook's `!List1.includes(String1)`). */
+  const phraseShape = (ph) => (applyPhrase('it__', 'it__', ph)?.text.replace(/^\((.*)\)$/, '$1').replace(/\bit__\b/g, '\u2026')) ?? ph.insert.code;
+  /** What can follow a value of this type, as Bubble's menu offers it: a phrase inserts; a row NodeGX answers otherwise says how. */
+  const phraseMenu = (ev, type) => {
+    closeMenu('.menu:not(.composer)');
+    const m = popover(ev, 'phrases');
+    m.append(h('div', { class: 'h' }, `What can follow ${/^[aeiou]/.test(TYPE_WORDS[type]) ? 'an' : 'a'} ${TYPE_WORDS[type]}`));
+    for (const ph of PHRASES[type] || []) {
+      if (ph.insert) m.append(h('div', { class: 'item', title: ph.note || ph.insert.code, onclick: () => {
+        m.remove();
+        const r = applyPhrase(text, focus, ph, new Set([...chips.keys(), ...slots.keys()])); if (!r) return;
+        text = r.text; for (const [slot, v] of Object.entries(r.slots)) slots.set(slot, ph.insert.others[v]);
+        renderBody();
+      } }, h('span', {}, ph.bubble), h('small', {}, phraseShape(ph))));
+      else {
+        const instead = ph.kind === 'node' ? `the ${ph.node} node` : ph.kind === 'function' ? 'a Function node' : 'no NodeGX answer';
+        m.append(h('div', { class: 'item off', title: (ph.prose || ph.code || '').replace(/\*\*|`/g, ''), onclick: () => { m.remove(); toast(`${ph.bubble}: ${ph.kind === 'node' ? `the ${ph.node} node does this, not an expression` : ph.kind === 'function' ? 'a Function node does this (its code is in the phrasebook)' : 'NodeGX has no equivalent'}`); } }, h('span', {}, ph.bubble), h('small', {}, instead)));
+      }
+    }
+    document.body.append(m);
+    setTimeout(() => document.addEventListener('mousedown', function outside(e2) { if (!m.isConnected) return; if (!m.contains(e2.target)) m.remove(); else document.addEventListener('mousedown', outside, { once: true }); }, { once: true }), 0);
   };
   let mixedEl = null, caretAt = null;
   const insertAtCaret = (s) => {
@@ -2547,13 +2592,15 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
     else text = (text && !/\s$/.test(text) ? text + ' ' : text) + s + ' ';
     renderBody();
   };
-  const tokens = () => { const out = []; const re = /[A-Za-z_$][\w$]*|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\d+(?:\.\d+)?|\s+|./g; let m; while ((m = re.exec(text))) out.push(m[0]); return out; };
+  // a token per word, text, number, operator (`===` is one, not `= = =`) or single character
+  const tokens = () => { const out = []; const re = /[A-Za-z_$][\w$]*|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\d+(?:\.\d+)?|\s+|===|!==|==|!=|<=|>=|&&|\|\||\?\?|\?\.|=>|\.\.\.|./g; let m; while ((m = re.exec(text))) out.push(m[0]); return out; };
   function renderBody() {
     body.innerHTML = '';
     if (mode === 'chips') {
       const row = h('div', { class: 'chips' });
       for (const t of tokens()) {
         if (chips.has(t)) row.append(chip(t, false));
+        else if (slots.has(t)) row.append(slotEl(t, false));
         else if (/^\s+$/.test(t)) continue;
         else row.append(h('span', { class: /^["'\d]/.test(t) ? 'lit' : /^[A-Za-z_$]/.test(t) ? '' : 'op', style: 'cursor:text', title: 'Edit it in the Both or JavaScript view' }, t));
       }
@@ -2565,10 +2612,10 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
       body.append(h('div', { class: 'hint', style: 'padding:6px 0 0' }, chips.size ? ['Chips in the text: ', ...[...chips.keys()].flatMap((n, i) => [i ? ', ' : '', h('code', {}, n), ` = ${chips.get(n).text}`])] : 'A chip you insert becomes a name in the text.'));
     } else {
       mixedEl = h('div', { class: 'mixed', contenteditable: 'true', spellcheck: 'false' });
-      for (const t of tokens()) mixedEl.append(chips.has(t) ? chip(t, true) : document.createTextNode(t));
+      for (const t of tokens()) mixedEl.append(chips.has(t) ? chip(t, true) : slots.has(t) ? slotEl(t, true) : document.createTextNode(t));
       const read = () => { let s = ''; for (const n of mixedEl.childNodes) s += n.nodeType === 3 ? n.textContent : n.dataset?.name ? n.dataset.name : n.textContent; return s; };
       const caret = () => { const selx = getSelection(); if (!selx.rangeCount || !mixedEl.contains(selx.anchorNode)) return null; const r = selx.getRangeAt(0).cloneRange(); r.setStart(mixedEl, 0); let s = ''; for (const n of r.cloneContents().childNodes) s += n.nodeType === 3 ? n.textContent : n.dataset?.name ? n.dataset.name : n.textContent; return s.length; };
-      mixedEl.oninput = () => { text = read(); for (const n of [...chips.keys()]) if (!new RegExp(`\\b${n}\\b`).test(text)) chips.delete(n); check(); };
+      mixedEl.oninput = () => { text = read(); for (const m of [chips, slots]) for (const n of [...m.keys()]) if (!new RegExp(`\\b${n}\\b`).test(text)) m.delete(n); check(); };
       mixedEl.onkeyup = mixedEl.onmouseup = () => { caretAt = caret(); };
       mixedEl.onpaste = (ev) => { ev.preventDefault(); document.execCommand('insertText', false, ev.clipboardData.getData('text/plain')); };
       body.append(mixedEl);
@@ -2577,6 +2624,13 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
     for (const [label, js] of OPS) tools.append(h('button', { title: js.trim(), onclick: () => insertAtCaret(js.trim()) }, label));
     tools.append(h('button', { onclick: () => insertAtCaret('""') }, '"text"'), h('button', { onclick: () => insertAtCaret('0') }, '123'));
     body.append(tools);
+    if (focus && !chips.has(focus)) focus = null;
+    if (focus && Object.keys(PHRASES).length) {
+      const type = typeOfChip(focus);
+      body.append(h('div', { class: 'then' }, 'After', h('b', {}, chips.get(focus).text), 'as',
+        h('select', { title: 'What this value is: what can follow it depends on it', onchange: (ev) => { chipTypes.set(focus, ev.target.value); renderBody(); } }, ...TYPES.map((t) => h('option', { value: t, selected: t === type }, TYPE_WORDS[t]))),
+        h('button', { onclick: (ev) => phraseMenu(ev, type) }, 'Then…')));
+    }
     check();
   }
   const save = () => {

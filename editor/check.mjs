@@ -22,6 +22,8 @@ import { browser } from './cdp.mjs';
 import { applyEdit } from './edits.mjs';
 import { createEdits, readItems } from './pagedata.mjs';
 import { nodegxRepo } from '../lib/nodegx.mjs';
+import { createRequire } from 'node:module';
+import { TYPES, phrasesFor } from './phrases.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = nodegxRepo;
@@ -223,6 +225,54 @@ try {
     ok(expr && chipWire && resultWire, 'Save writes one Expression node for the field: the chip is a name wired from the state\'s value, the result is wired into the title\'s Text', { text: expr?.parameters?.expression, chipWire: !!chipWire, resultWire: !!resultWire });
     await wait(600);
     ok((await appText()).includes('Hello world'), 'the app shows "Hello world": the state\'s default through the composed expression into the title', { text: (await appText()).slice(0, 80) });
+  }
+  console.log("check: the composer's follow-ups (STU-052)");
+  {
+    // the title's Text is now [the card's state] + " world": open it again, click the chip, and ask what can follow it
+    const { rows } = createRequire(import.meta.url)(join(repo, 'scripts/bubble-phrasebook/rows.js'));
+    const openOnTitle = async () => {
+      await select(title1);
+      const fields = await b.evaluate(`[...document.querySelectorAll('#right .field')].map(f => f.querySelector('label')?.textContent)`);
+      await b.evaluate(`[...document.querySelectorAll('#right .field')][${fields.indexOf('Text')}].querySelector('.chip.expr').click()`); await wait(300);
+      await b.evaluate(`[...document.querySelectorAll('.composer .seg button')].find(b => b.dataset.m === 'chips').click()`); await wait(100);
+      await b.evaluate(`document.querySelector('.composer .chips .chip').click()`); await wait(150);
+    };
+    const asType = async (t) => { await b.evaluate(`(() => { const s = document.querySelector('.composer .then select'); s.value = ${JSON.stringify(t)}; s.dispatchEvent(new Event('change')); })()`); await wait(100); };
+    const offered = async () => { await clickText('.composer .then button', 'Then'); await wait(200); const l = await b.evaluate(`[...document.querySelectorAll('.menu.phrases .item')].map(e => e.firstChild.textContent)`); return l; };
+    await openOnTitle();
+    ok(await b.evaluate(`!!document.querySelector('.composer .then') && document.querySelector('.composer .chips .chip').classList.contains('on')`), 'clicking the chip marks it and offers what can follow it');
+    ok(await b.evaluate(`document.querySelector('.composer .then select').value`) === 'Any', 'a custom state (a value of any type) is read as Any until the person says');
+    const per = {};
+    for (const t of TYPES) {
+      await asType(t); const got = await offered();
+      per[t] = got.length;
+      const want = phrasesFor(rows, t).map((p) => p.bubble);
+      ok(JSON.stringify(got) === JSON.stringify(want), `as ${t}: exactly that type's ${want.length} rows (with the Any ones)`, { got: got.slice(0, 6), want: want.slice(0, 6) });
+      await b.evaluate(`document.querySelector('.menu.phrases')?.remove()`);
+    }
+    await asType('String'); await offered();
+    await shot('composer-then-menu');
+    await clickText('.menu.phrases .item', ':uppercase'); await wait(150);
+    await b.evaluate(`[...document.querySelectorAll('.composer .seg button')].find(b => b.dataset.m === 'js').click()`); await wait(100);
+    const upper = await b.evaluate(`document.querySelector('.composer textarea').value`);
+    ok(/^(\w+)\.toUpperCase\(\) \+ " world"\s*$/.test(upper), 'a text\'s :uppercase wraps the chip where it stands: [state].toUpperCase() + " world"', upper);
+    let n0 = await shows();
+    await clickText('.composer .foot button', 'Save'); await rebuilt(n0); await wait(600);
+    ok((await appText()).includes('HELLO world'), 'saved, the app shows "HELLO world"', { text: (await appText()).slice(0, 80) });
+    // a phrase with a second value leaves a slot; filled from the ⚡ list, it is a chip like any other
+    await openOnTitle(); await asType('String'); await offered();
+    await clickText('.menu.phrases .item', '... is ...'); await wait(150);
+    const slot = await b.evaluate(`(() => { const s = document.querySelector('.composer .chips .chip.slot'); return s && { text: s.textContent, note: document.querySelector('.composer .foot .note').textContent }; })()`);
+    ok(slot?.text === '▢ text' && /^Fill the empty slot \(text\)/.test(slot.note), ':is leaves an empty text slot, and the note asks for it', slot);
+    await shot('composer-slot');
+    await b.evaluate(`document.querySelector('.composer .chips .chip.slot').click()`); await wait(250);
+    await menuItem("Sign-in card's state");
+    await b.evaluate(`[...document.querySelectorAll('.composer .seg button')].find(b => b.dataset.m === 'js').click()`); await wait(100);
+    const filled = await b.evaluate(`document.querySelector('.composer textarea').value`);
+    ok(/^\((\w+)\.toUpperCase\(\) === (\w+)\) \+ " world"\s*$/.test(filled) && !/\btext\b/.test(filled), 'the slot is filled with the state, a second chip: ([state].toUpperCase() === [state]) + " world"', filled);
+    n0 = await shows();
+    await clickText('.composer .foot button', 'Save'); await rebuilt(n0); await wait(600);
+    ok((await appText()).includes('false world'), 'saved, the app shows "false world" ("HELLO" is not "Hello")', { text: (await appText()).slice(0, 80) });
   }
   console.log('check: Workflow');
   await b.clickSel('[data-tab=workflow]'); await wait(300);

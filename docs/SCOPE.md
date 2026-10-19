@@ -250,6 +250,29 @@ Expression's name cut off.
 - **Richard looked (2026-10-19, s5)** at `docs/look/s4/` (the tab on four template elements, the six feature rows as one
   reusable, the todo Sign-in card made reusable): *"Looks right, carry on."*
 
+**STU-052's typed follow-ups, built (s5).** In the composer, clicking a chip (or inserting one) marks it and shows
+"After [the value] as [its type] · Then…". The type is the chip's port's, read as the dictionary's (text, number, list,
+date; anything else is "any value") and the person can change it, since NodeGX does not always know (a custom state is
+any value; the dictionary's number range and date range are no port type of NodeGX's). "Then…" lists exactly that type's
+rows of the phrasebook and the Any ones, in its order, by Bubble's name, each with the code it writes. A row the
+phrasebook answers with an expression, or with a Function whose whole work is one `Outputs.x = …`, inserts its executed
+JavaScript (`editor/phrases.mjs`, pure; served as `/phrasebook.json` from the NodeGX checkout's `rows.js`): the chip, with
+the chain it already ends with (Bubble's "state :uppercase is …"), becomes the row's subject, and each other value the row
+needs is a **slot**, an empty dashed box named for what it holds ("▢ text"), which the note asks for and which a click
+fills from the ⚡ list. A row NodeGX answers with a node (Date Add, Date To String, Date Parts…) or not at all is listed
+greyed, and says so when clicked. Per type, insert / instead: String 11/9, Integer 7/1, Integer range 11/0, Date 4/11,
+Date Range 11/0, List 21/3, Any 4/1.
+- Gates: `check:phrases` 85/85 (new, Node): every type offers exactly its rows; every one of the 69 phrases that insert is
+  inserted on a chip, its slots given the phrasebook's values, and run to the phrasebook's executed answer (with the
+  Expression node's Math names); a phrase goes where the chip is, takes its chain, balances brackets, never takes a name
+  already used. Mutant (the wrong variable as the subject): 80/83. `check:editor` 128/128: on the todo app's title, a
+  custom state's chip reads as any value; as each of the seven types the menu lists exactly the phrasebook's rows;
+  ":uppercase" writes `state.toUpperCase() + " world"` and the app shows "HELLO world"; ":is" leaves "▢ text", filled
+  with the state, and the app shows "false world". Pictures: `docs/look/s5/`.
+- **Not built:** a chip's type from a record's field (page data's `prop-*` ports carry no type yet, so they read as any
+  value), the slot for a Function or node row (they say what to use instead), and inserting a phrase at the caret
+  rather than on the marked chip.
+
 ---
 
 ## M1 — The desktop app
