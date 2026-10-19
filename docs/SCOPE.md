@@ -39,7 +39,7 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 | Desktop app — Electron window, a welcome screen (recent projects, NodeGX's templates, Import an app), File → Open Recent, a smoke mode | first cut (2026-10-19) | `check:app` 34/34, `smoke` |
 | The project's backend — started (or adopted) on open, stopped on close, shown in the status bar; a template that needs one gets one; Data's "Start a backend" for an app with none | works (2026-10-19) | `check:app` 34/34 |
 | Claude Code — "Connect Claude Code" in the header (and File) registers the NodeGX MCP server for the folder with the NodeGX editor's own writer and shows the command that starts a session there | works (2026-10-19) | `check:editor` 56/56 |
-| Page data — a search is a named item on the page (Design → Page data), read by any element as dynamic data; made or reused through one form, never twice; readers, last run and "N queries on open" counted off the app's own requests; a workflow refreshes an item | works (2026-10-19), format awaits ruling R7 | `check:pagedata` 26/26, `check:editor` 71/71 |
+| Page data — a search is a named item on the page (Design → Page data), read by any element as dynamic data; made or reused through one form, never twice; readers, last run and "N queries on open" counted off the app's own requests; a workflow refreshes an item | works (2026-10-19), R7 ruled | `check:pagedata` 26/26, `check:editor` 71/71 |
 
 [history/](history/) is how it started (NodeGX phase 123, working title "Open Bubble"): the brief, the look, the
 first play test and every ruling taken.
@@ -212,7 +212,7 @@ create/save/delete notifications, so "re-runs when its inputs change" needs no r
 | STU-013 | **The importer merges repeated searches** into page data items: identical searches on a page become one item; elements and steps read it. | the real app's pages convert with 70 queries instead of 153 and still render the same |
 | STU-014 | **Scopes beyond the page.** A reusable's own data; a repeating group's row (Bubble's "Current cell's thing" is already a row value, not a search); an item that depends on another. | ruling R8 taken; a reusable with its own item renders in two places, querying once per instance |
 
-**Done (STU-010, 2026-10-19, on the proposed R7).** `editor/pagedata.mjs` is the format, pure, nodes and wires in and
+**Done (STU-010, 2026-10-19; R7 ruled the same day).** `editor/pagedata.mjs` is the format, pure, nodes and wires in and
 items or edits out. An item is one Query Records node (`DbCollection2`) in the page's own component, inside no element,
 with `metadata.pageData = { name, first }`; the NodeGX editor, the MCP server and the runtime read it as the ordinary
 node it is. What it asks is `collectionName`, `visualFilter` in the shape the NodeGX editor writes (`{type, conditions}`,
@@ -352,8 +352,11 @@ query start/end and element draws, to measure).
 | R4 | After a branch, can both sides rejoin into one next step? | phase 123 |
 | R5 | Can a custom state live inside a reusable? | phase 123 |
 | R6 | Where do option sets live — one component each, or one file? | phase 123 |
-| R7 | Page data's home in the format: page-root Query Records named by metadata (proposed, and built on: STU-010–012), or a new file per page? | M2 |
 | R8 | Which scopes get their own data: page, reusable, repeating group row, popup? | M2 |
+
+**Taken.** R7 (Richard, 2026-10-19): page data is an ordinary Query Records node at the page root, named by
+`metadata.pageData`. No new file, nothing new in the format: the NodeGX editor, the MCP server and the runtime read
+it as the node it is. As built in STU-010–012.
 
 ## Writing about Bubble
 
