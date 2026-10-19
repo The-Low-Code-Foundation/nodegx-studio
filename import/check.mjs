@@ -255,6 +255,13 @@ const countBy = (text, re) => (text.match(re) || []).length;
       const sec = readJson(path.join(project, 'nodegx.security.json'));
       if (validateSecurity) check("s6: the template's nodegx.security.json validates", validateSecurity(sec).length === 0, validateSecurity(sec).join('; '));
       validateProject('template', project);
+      // STU-050: the same structure ≥3 times, ≥5 elements → one reusable, a copy in each place (the look, element by element,
+      // was measured the same as an ungrouped conversion: 227 elements, same text, place, size, colour; SCOPE.md)
+      const idx = readJson(path.join(project, 'components', 'Pages', 'index', 'nodes.json')).nodes;
+      const copies = idx.filter((n) => n.type === '/Reusable/Horizontal Buttons');
+      const rc = exists(path.join(project, 'components', 'Reusable', 'Horizontal Buttons', 'nodes.json')) ? readJson(path.join(project, 'components', 'Reusable', 'Horizontal Buttons', 'nodes.json')).nodes : [];
+      check('STU-050: the six feature rows are one reusable with six copies on the page, each setting its own icon', copies.length === 6 && rc.length >= 7 && new Set(copies.map((c) => JSON.stringify(Object.entries(c.parameters || {}).find(([k]) => /glyph/.test(k))?.[1]))).size > 1, `${copies.length} copies, ${rc.length} nodes`);
+      check('STU-050: the import report lists it, and the repeats it left alone with why', /\| index \| Reusable\/Horizontal Buttons \| 6 \|/.test(report) && /left as it was: .*hover \/ pressed look/.test(report));
     }
   }
 }

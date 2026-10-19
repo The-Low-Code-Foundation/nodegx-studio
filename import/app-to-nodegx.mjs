@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { askWhileShown, queryParameters } from '../editor/pagedata.mjs';
+import { groupRepeats } from './group.mjs';
 
 const [,, srcPath, outDir] = process.argv;
 if (!srcPath || !outDir) { console.error('usage: app-to-nodegx.mjs <export.json> <outdir>'); process.exit(2); }
@@ -900,6 +901,28 @@ function buildSecurity() {
   return { config, report };
 }
 
+// the same structure repeated on a page → one reusable, a copy in each place (STU-050: "not too aggressively")
+const groupedRows = [];
+{
+  const taken = new Set(components.map((g) => g.path));
+  const keyFor = (label) => { const base = safeName(String(label).replace(/^Group\s+/, '')) || 'Repeated'; let k = `Reusable/${base}`; for (let i = 2; taken.has('/' + k); i++) k = `Reusable/${base} ${i}`; taken.add('/' + k); return k; };
+  const signals = new Set(Object.values(EVENT_PORTS).flat().filter((p) => p !== 'onTextChanged'));
+  // NODEGX_STUDIO_NO_GROUPING=1 converts without it: the control a look at the grouped page is measured against
+  for (const g of process.env.NODEGX_STUDIO_NO_GROUPING ? [] : components.filter((c) => c.kind === 'page')) {
+    const byId = new Map(g.nodes.map((n) => [n.id, n]));
+    const portType = (id, plug, port) => (plug === 'output' && signals.has(port) && !(byId.get(id)?.type || '').startsWith('/') ? 'signal' : undefined);
+    const r = groupRepeats({ nodes: { nodes: g.nodes }, connections: { connections: g.connections } }, { keyFor, portType });
+    for (const m of r.made) {
+      const rg = new Graph('/' + m.key, 'visual', `The same ${m.component.nodes.nodes.filter((n) => n.parent !== undefined || n.children?.length).length} elements, ${m.copies.length} times on page ${path.basename(g.path)}: one reusable, a copy in each place; what differed between them (${m.varying.join(', ') || 'nothing'}) is set on each copy`);
+      rg.nodes = m.component.nodes.nodes; rg.connections = m.component.connections.connections;
+      components.push(rg);
+      groupedRows.push(`| ${path.basename(g.path)} | ${m.key} | ${m.copies.length} | ${m.varying.join(', ') || '—'} | ${m.outputs.join(', ') || '—'} |`);
+    }
+    for (const sk of r.skipped) groupedRows.push(`| ${path.basename(g.path)} | — (left as it was: ${sk.why}) | ${sk.roots.length} | | |`);
+    g.nodes = r.files.nodes.nodes; g.connections = r.files.connections.connections;
+  }
+}
+
 // write
 const now = new Date().toISOString();
 fs.rmSync(outDir, { recursive: true, force: true }); fs.mkdirSync(path.join(outDir, 'components'), { recursive: true }); fs.mkdirSync(path.join(outDir, 'docs'), { recursive: true });
@@ -927,6 +950,9 @@ const report = [`# Bubble → NodeGX import report`, '', `Source: ${path.basenam
   '| what | count | mapped |', '|---|---|---|',
   `| pages | ${pages.length} | ${pages.length} |`, `| elements | ${stats.elements} | ${stats.mapped} (${pctOf(stats.mapped, stats.elements)}%) |`, `| element conditions | ${stats.states} | see findings |`, `| styles → variants | ${Object.keys(app.styles || {}).length} | ${stats.styles} |`,
   `| workflows | ${stats.workflows} | ${stats.workflows} |`, `| actions | ${stats.actions} | ${stats.actionsMapped} (${pctOf(stats.actionsMapped, stats.actions)}%) |`, `| expressions compiled | ${stats.expressions} | unknown operators: ${stats.exprOpsUnknown}; field reads guessed by name: ${stats.fieldReadsGuessed} |`, `| data types → collections | ${Object.keys(userTypes).length} | ${dbCollections.length}${Object.values(userTypes).some((t) => t?.deleted) ? ` (${Object.values(userTypes).filter((t) => t?.deleted).length} deleted in Bubble, skipped)` : ''} |`, `| reusable elements → components | ${Object.keys(customElements).length} | ${stats.reusables} |`, `| option sets → components | ${Object.keys(optionSets).length} | ${stats.optionSets}${Object.values(optionSets).some((o) => o?.deleted) ? ` (${Object.values(optionSets).filter((o) => o?.deleted).length} deleted in Bubble, skipped)` : ''} |`, `| custom states → variables | — | ${stats.customStates} |`, `| searches → page data | ${stats.searches || 0} | ${(stats.searches || 0) - (stats.searchesMerged || 0)} queries (${stats.searchesMerged || 0} repeated searches read the query already there) |`, `| backend workflows → cloud functions | ${apiWorkflows.length} | ${stats.backendWorkflows || 0} (triggers proposed: ${triggersOut.length}) |`, `| disabled steps skipped | — | ${stats.actionsDisabled || 0} |`, `| converter crashes (caught) | — | ${stats.crashes || 0} |`, '',
-  ...security.report, `## Findings (${findings.length})`, '', '| needs | where | what |', '|---|---|---|', ...findings.map((f) => `| ${f.level === 'ai' ? 'a person or an AI' : 'the dictionary'} | ${f.where} | ${f.what.replace(/\|/g, '\\|')} |`), ''].join('\n');
+  ...security.report,
+  '## Repeated structures → reusables', '', 'The same structure at least 3 times on a page, at least 5 elements: one reusable, a copy in each place. Settings that differed between them are set on each copy; the page\'s workflows stay on the page, reached through the copy.', '',
+  '| page | reusable | copies | set on each copy | sends to the page |', '|---|---|---|---|---|', ...(groupedRows.length ? groupedRows : ['| — | none found | | | |']), '',
+  `## Findings (${findings.length})`, '', '| needs | where | what |', '|---|---|---|', ...findings.map((f) => `| ${f.level === 'ai' ? 'a person or an AI' : 'the dictionary'} | ${f.where} | ${f.what.replace(/\|/g, '\\|')} |`), ''].join('\n');
 fs.writeFileSync(path.join(outDir, 'docs', 'IMPORT-REPORT.md'), report);
 console.log(report);
