@@ -520,6 +520,52 @@ try {
     await clickText('#right .ptabs button', 'Interaction'); await wait(250);
     const wfs = await b.evaluate(`[...document.querySelectorAll('#right .row.wf')].map(r => r.textContent)`);
     ok(wfs.length >= 1 && wfs.every((t) => /^When /.test(t)), 'the Interaction tab lists the workflows that start at the element', wfs);
+    {
+      // STU-020: the elements that should wear a ⚡, read off the file and the runtime's own node library (not Studio's
+      // reading of events): a drawn element with a wire into another node's signal input. Email's Text Changed goes only
+      // into values (Log In's username), so Email wears none.
+      const expected = JSON.parse(await b.evaluate(`JSON.stringify((() => {
+        const lib = new Map(__ob.preview.nodeLibrary.nodetypes.map(t => [t.name, t]));
+        const nodes = new Map(${JSON.stringify(onDisk(SIGN + 'nodes.json').nodes)}.map(n => [n.id, n]));
+        const signalIn = (type, port) => { const t = lib.get(type); return !!t && [...(t.ports || []), ...(t.dynamicports || []).flatMap(d => d.ports || [])].some(p => p.name === port && p.plug !== 'output' && (p.type === 'signal' || p.type?.name === 'signal')); };
+        const out = new Set();
+        for (const w of ${JSON.stringify(onDisk(SIGN + 'connections.json').connections)}) {
+          const el = __ob.preview.elementsOf(w.fromId)[0]; const to = nodes.get(w.toId);
+          if (el && el.getBoundingClientRect().width && to && signalIn(to.type, w.toProperty)) out.add(w.fromId);
+        }
+        return [...out].sort();
+      })())`));
+      const onCanvas = JSON.parse(await b.evaluate(`JSON.stringify([...document.querySelectorAll('#overlay .bolt.oncanvas')].map(e => e.dataset.node).sort())`));
+      const email = sign.nodes.nodes.find((n) => n.label === 'Email')?.id;
+      ok(expected.includes(signInBtn) && expected.includes(createBtn) && expected.includes(card) && JSON.stringify(onCanvas) === JSON.stringify(expected) && !onCanvas.includes(email) && !onCanvas.includes(title1),
+        'STU-020: every drawn element with a workflow wears a ⚡ on the canvas, and no other does (Email\'s value-only wire, the title: none)', { expected: expected.length, onCanvas: onCanvas.length, missing: expected.filter((x) => !onCanvas.includes(x)), extra: onCanvas.filter((x) => !expected.includes(x)) });
+      // by the element the badge belongs to: the page itself is also called "Sign in", and wears one for its Did Mount
+      const rowBolt = (id) => `document.querySelector('#tree .row .bolt[data-node=${JSON.stringify(id)}]')`;
+      const inList = JSON.parse(await b.evaluate(`JSON.stringify([...document.querySelectorAll('#tree .row .bolt')].map(e => e.dataset.node))`));
+      ok(inList.includes(signInBtn) && inList.includes(createBtn) && !inList.includes(title1) && !inList.includes(email) && inList.every((x) => expected.includes(x)), 'STU-020: the element list wears the same ⚡ on the Sign in and Create account rows, none on App name or Email', inList);
+      // the hover: the Sign in click's steps in order (the card below reads the same order)
+      await b.evaluate(`document.querySelector('#overlay .bolt.oncanvas[data-node=${JSON.stringify(signInBtn)}]').dispatchEvent(new MouseEvent('mouseenter'))`);
+      const tip = await b.evaluate(`document.getElementById('bolttip')?.textContent || ''`);
+      // STU-021: a click on the badge opens the card alone, full screen; Back returns to the element, selected
+      const at = await b.evaluate(`(() => { const r = document.querySelector('#overlay .bolt.oncanvas[data-node=${JSON.stringify(signInBtn)}]').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+      await b.click(at.x, at.y); await wait(400);
+      const card1 = JSON.parse(await b.evaluate(`JSON.stringify({ shown: !document.getElementById('workflow').hidden, full: document.getElementById('workflow').classList.contains('card'), list: document.querySelector('#workflow > aside').offsetWidth, title: document.querySelector('#steps .event-card h2')?.textContent, steps: [...document.querySelectorAll('#steps .step h3 span')].map(s => s.textContent), back: document.querySelector('#steps .cardnav .back')?.textContent })`));
+      ok(card1.steps.length >= 2 && tip.includes(`Click${card1.steps.slice(0, 1)} (+1 more) → ${card1.steps.slice(1).join(' → ')}`), 'STU-020: hovering the Sign in ⚡ names its steps in the order its card draws them', { tip, steps: card1.steps });
+      ok(card1.shown && card1.full && card1.list === 0 && card1.title === 'When Sign in: Click' && /Sign in/.test(card1.back || ''), 'STU-021: clicking the ⚡ on the canvas opens that event\'s card full screen (no list beside it), with the way back', card1);
+      await shot('workflow-card');
+      await b.clickSel('#steps .cardnav .back'); await wait(400);
+      const back1 = JSON.parse(await b.evaluate(`JSON.stringify({ design: !document.getElementById('design').hidden, name: document.querySelector('#right .head input')?.value, box: !!document.querySelector('#overlay .box.sel') })`));
+      ok(back1.design && back1.name === 'Sign in' && back1.box, 'STU-021: Back returns to Design with the Sign in button selected', back1);
+      // from the list: the Create account row's ⚡, and Esc as the way back
+      await b.evaluate(`${rowBolt(createBtn)}.scrollIntoView({ block: 'nearest' })`);
+      const at2 = await b.evaluate(`(() => { const r = ${rowBolt(createBtn)}.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+      await b.click(at2.x, at2.y); await wait(400);
+      const title2 = await b.evaluate(`!document.getElementById('workflow').hidden && document.getElementById('workflow').classList.contains('card') ? document.querySelector('#steps .event-card h2')?.textContent : null`);
+      await b.key('Escape', 'Escape', 27); await wait(400);
+      const back2 = JSON.parse(await b.evaluate(`JSON.stringify({ design: !document.getElementById('design').hidden, name: document.querySelector('#right .head input')?.value })`));
+      ok(title2 === 'When Create account: Click' && back2.design && back2.name === 'Create account', 'STU-021: the ⚡ on a row of the element list opens its card; Esc returns to the element', { title2, back2 });
+      await select(signInBtn);
+    }
     await clickText('#right .ptabs button', 'Visual'); await wait(250);
     // STU-050: the page as its parts; a part opened lists only what it holds
     const rest = await b.evaluate(`document.querySelectorAll('#tree .row').length`);

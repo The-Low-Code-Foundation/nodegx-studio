@@ -278,6 +278,17 @@
   .chip { display: inline-flex; align-items: center; gap: 4px; background: var(--accent-soft); color: var(--accent-ink); border: 1px solid var(--accent-line); border-radius: 4px; padding: 1px 6px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .chip.expr { background: #fdf4ff; color: #86198f; border-color: #e9d5ff; }
   .chip.state { background: #ecfeff; color: #155e75; border-color: #a5f3fc; }
+  /* STU-020: an element's workflows — a ⚡ in the list and on the canvas, its steps on hover */
+  .bolt { display: inline-flex; align-items: center; gap: 1px; flex: none; height: 18px; min-width: 18px; padding: 0 3px; justify-content: center; border-radius: 9px; background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; font-size: 10px; font-weight: 600; cursor: pointer; }
+  .bolt svg.i { width: 11px !important; height: 11px !important; color: inherit !important; }
+  .bolt:hover { background: #ffedd5; border-color: #fb923c; }
+  .bolt.oncanvas { position: absolute; pointer-events: auto; z-index: 2; box-shadow: 0 1px 2px rgba(0,0,0,.18); }
+  .bolttip { position: fixed; z-index: 1000; max-width: 420px; background: var(--ink); color: var(--panel); font-size: 12px; line-height: 1.45; padding: 6px 9px; border-radius: var(--r); box-shadow: 0 4px 14px rgba(0,0,0,.2); pointer-events: none; }
+  .bolttip b { font-weight: 600; margin-right: 6px; }
+  #workflow.card { grid-template-columns: 1fr; }
+  #workflow.card > aside { display: none; }
+  .cardnav { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .cardnav .back { font-weight: 500; }
   .chip.opt { background: #fefce8; color: #854d0e; border-color: #fde68a; }
   .chip button { border: 0; background: transparent; padding: 0; color: inherit; opacity: .6; }
   .chip button:hover { opacity: 1; background: transparent; }
@@ -1237,6 +1248,7 @@ function drawSpacing(id, withGuides) {
 }
 function draw() {
   overlay.innerHTML = '';
+  if (!document.querySelector('.bolt:hover')) hideBoltTip();
   if (rebuilding) return;
   const editing = !$('previewmode').checked;
   if (hover && hover !== sel && byId[hover]) { const r = rectOf(hover); if (r) { if (editing) drawSpacing(hover, false); overlay.append(box(r, 'hov', labelOf(hover))); } }
@@ -1249,6 +1261,13 @@ function draw() {
       overlay.append(b);
     }
   }
+  // STU-020: every element with a workflow wears a ⚡ in its top right corner (on top of the boxes, so it stays clickable)
+  if (editing && !gesture) for (const [id, evs] of workflowsByElement()) {
+    const r = rectOf(id); if (!r || !r.width || !r.height) continue;
+    const badge = boltBadge(evs, id, 'oncanvas');
+    badge.style.left = `${Math.max(0, r.right - 20)}px`; badge.style.top = `${Math.max(0, r.top + 2)}px`;
+    overlay.append(badge);
+  }
   if (gesture?.kind === 'drag' && gesture.drop) {
     const d = gesture.drop;
     if (d.line) overlay.append(h('div', { class: 'drop', style: `left:${d.line.x}px;top:${d.line.y}px;width:${d.line.w}px;height:${d.line.h}px` }));
@@ -1260,6 +1279,7 @@ function select(id) { sel = id; hover = null; if (id) selItem = null; renderTree
 
 overlay.addEventListener('mousemove', (e) => {
   if (gesture) return onGestureMove(e);
+  if (e.target.closest?.('.bolt')) return; // offsetX is the badge's own, not the overlay's; the element under it stays hovered
   const hit = hitAt(e.offsetX, e.offsetY);
   const id = hit?.id ?? null;
   if (id !== hover) { hover = id; draw(); }
@@ -1278,6 +1298,7 @@ window.addEventListener('mouseup', (e) => { if (gesture) endGesture(e); });
 window.addEventListener('keydown', (e) => {
   const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
   if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !inField) { e.preventDefault(); undo(); return; }
+  if (e.key === 'Escape' && tab === 'workflow' && cardBack && !inField && !document.querySelector('.menu')) { backFromCard(); return; }
   if (e.key === 'Escape') { closeMenu(); if (!inField) { pending = null; overlay.classList.remove('adding'); for (const b of $('palette').querySelectorAll('button')) b.setAttribute('aria-pressed', 'false'); select(null); } }
   if (inField) return;
   if ((e.key === 'Delete' || e.key === 'Backspace') && sel && sel !== pageRootId() && $('design').hidden === false) { e.preventDefault(); removeNode(sel); }
@@ -1455,6 +1476,7 @@ function renderOutline(tree) {
   if (sel && sel !== treeRevealed) { for (let p = byId[sel]?.parent; p !== undefined && byId[p]; p = byId[p].parent) treeOpen.add(p); treeRevealed = sel; if (treeRoot && !within(sel, treeRoot)) treeRoot = null; }
   if (treeRoot && !byId[treeRoot]) treeRoot = null;
   const rootId = treeRoot || visualIds[0];
+  const wfs = workflowsByElement();
   if (treeRoot) {
     const up = []; for (let p = byId[treeRoot].parent; p !== undefined && byId[p]; p = byId[p].parent) up.unshift(p);
     const crumbs = h('div', { class: 'crumbs' }, h('button', { class: 'quiet', title: 'Back to the whole page', onclick: () => { treeRoot = null; renderTree(); } }, '←'));
@@ -1481,6 +1503,8 @@ function renderOutline(tree) {
         : h('span', { class: 'wrap', title: `Inside: ${chain.slice(1).map(labelOf).join(' › ')} — click to select`, onclick: (e) => { e.stopPropagation(); select(tail); } }, `› ${chain.length - 1}`)) : null,
       words ? h('span', { class: 'words' }, words) : null,
       nStates ? h('span', { class: 'chip state', title: `${nStates} custom state(s)` }, nStates) : null,
+      // a row folds its wrappers into it: their workflows are worn by the row, the outermost first
+      (() => { const evs = chain.flatMap((c) => wfs.get(c) || []); return evs.length ? boltBadge(evs, chain.find((c) => wfs.has(c))) : null; })(),
       h('span', { class: 't' }, kids.length && !open ? String(countIn(tail)) : (words ? '' : n.label ? typeName(n.type) : '')),
       // at the row's end, so a click on the row's middle selects and never opens
       d > 0 && kids.length ? h('span', { class: 'into', title: `Open inside ${labelOf(id)}: list only what it holds (or double-click)`, onclick: goIn }, '⤢')
@@ -1496,9 +1520,9 @@ function renderTree() {
   for (const id of visualIds) {
     const n = byId[id];
     if (q && !labelOf(id).toLowerCase().includes(q) && !typeName(n.type).toLowerCase().includes(q)) continue;
-    const nStates = statesOf(id).length;
+    const nStates = statesOf(id).length, evs = workflowsByElement().get(id);
     tree.append(h('div', { class: 'row', 'aria-selected': sel === id, style: `padding-left:${8 + (q ? 0 : depthOf[id]) * 14}px`, onclick: () => { select(id); elOf(id)?.scrollIntoView({ block: 'nearest' }); }, onmouseenter: () => { hover = id; draw(); }, onmouseleave: () => { hover = null; draw(); } },
-      icon(glyphOf(n.type)), h('span', { style: 'overflow:hidden;text-overflow:ellipsis' }, labelOf(id)), nStates ? h('span', { class: 'chip state', title: `${nStates} custom state(s)` }, nStates) : null, h('span', { class: 't' }, n.label ? typeName(n.type) : '')));
+      icon(glyphOf(n.type)), h('span', { style: 'overflow:hidden;text-overflow:ellipsis' }, labelOf(id)), nStates ? h('span', { class: 'chip state', title: `${nStates} custom state(s)` }, nStates) : null, evs ? boltBadge(evs, id) : null, h('span', { class: 't' }, n.label ? typeName(n.type) : '')));
   }
 }
 
@@ -1718,7 +1742,7 @@ function renderBubblePanel(right, node) {
   if (propTab === 'interaction') {
     const mine = events().filter((ev) => ev.node === node.id);
     add(section('Workflows', [
-      ...mine.map((ev) => h('div', { class: 'row wf', onclick: () => { selEvent = ev; switchTab('workflow'); } }, icon('workflow'), eventTitle(ev).replace(/^When [^:]+: /, 'When '), h('span', { class: 't' }, `${countSteps(chain(ev.node, ev.port))} steps`))),
+      ...mine.map((ev) => h('div', { class: 'row wf', onclick: () => openCard(ev) }, icon('workflow'), eventTitle(ev).replace(/^When [^:]+: /, 'When '), h('span', { class: 't' }, `${countSteps(chain(ev.node, ev.port))} steps`))),
       h('div', { class: 'hint' }, mine.length ? 'Open one to change its steps.' : 'No workflow starts at this element. Add one in Workflow.')]));
     add(section('Visibility', [has('visible') ? plain('visible') : null, has('mounted') ? plain('mounted') : null]));
     add(section('Options', [...['enabled', 'keepsFocus'].filter(has).map(plain), ...ports.filter((p) => p.name.startsWith('runOnChange-')).map((p) => (claimed.add(p.name), fieldFor(node, { ...p, displayName: `A change to ${(CONFIGURE_AS[p.name.slice('runOnChange-'.length)] || P[p.name.slice('runOnChange-'.length)]?.displayName || p.displayName).toLowerCase()} runs what it feeds` }, params[p.name], wiredIn[p.name])))]));
@@ -2853,11 +2877,74 @@ function events() {
     if (seen.has(key)) continue; seen.add(key);
     list.push({ node: c.fromId, port: c.fromProperty });
   }
-  for (const d of draftEvents) if (!seen.has(`${d.node}.${d.port}`)) list.push(d);
+  for (const d of draftEvents) if (byId[d.node] && !seen.has(`${d.node}.${d.port}`)) list.push(d); // a draft made on another page or reusable is not this one's
   return list;
 }
 const eventTitle = (ev) => `When ${labelOf(ev.node)}: ${portLabel(byId[ev.node], 'output', ev.port)}`;
 const countSteps = (steps) => steps.reduce((n, s) => n + 1 + (s.branches ? countSteps(s.branches.yes) + countSteps(s.branches.no) : 0), 0);
+
+/* ---- STU-020 / STU-021: an element's workflows, seen from Design — a ⚡ badge, its steps on hover, its card full screen ---- */
+// only an event that reaches a step is a workflow: Email's Text Changed wired into Log In's username is a value, not one
+let wfCache = { nodes: null, conns: null, lib: null, map: new Map() };
+function workflowsByElement() {
+  if (wfCache.nodes === nodes && wfCache.conns === conns && wfCache.lib === libIndex) return wfCache.map;
+  const map = new Map();
+  for (const ev of events()) {
+    if (!isVisualType(byId[ev.node].type) || !chain(ev.node, ev.port).length) continue;
+    if (!map.has(ev.node)) map.set(ev.node, []);
+    map.get(ev.node).push(ev);
+  }
+  wfCache = { nodes, conns, lib: libIndex, map };
+  return map;
+}
+/** One step in a few words: its own name when it has one, else what it does ("Go to Home"). */
+function stepWords(s) {
+  const node = byId[s.id], p = node.parameters || {};
+  if (s.refresh) return `Refresh ${itemById(s.id)?.name ?? labelOf(s.id)}`;
+  if (s.branches) {
+    const side = (list) => list.map(stepWords).join(' → ') || 'nothing';
+    return `${node.label ? `If ${node.label.replace(/\?$/, '')}` : 'Branch'}: Yes → ${side(s.branches.yes)}; No → ${side(s.branches.no)}`;
+  }
+  const more = s.siblings.length ? ` (+${s.siblings.length} more)` : '';
+  if (node.label) return node.label + more;
+  const words = ACTIONS.find(([t]) => t === node.type)?.[1];
+  if (node.type === 'RouterNavigate' && p.target) return `Go to ${String(p.target).split('/').pop()}${more}`;
+  if (node.type === 'Set Variable' && p.name) return `Set ${p.name}${more}`;
+  if (words && p.collectionName) return `${words} (${p.collectionName})${more}`;
+  return (words || typeName(node.type)) + more;
+}
+const eventSummary = (ev) => chain(ev.node, ev.port).map(stepWords).join(' → ');
+function hideBoltTip() { document.getElementById('bolttip')?.remove(); }
+function showBoltTip(anchor, evs) {
+  hideBoltTip();
+  const tip = h('div', { class: 'bolttip', id: 'bolttip', role: 'tooltip' }, ...evs.map((ev) => h('div', {}, h('b', {}, portLabel(byId[ev.node], 'output', ev.port)), eventSummary(ev))));
+  document.body.append(tip);
+  const r = anchor.getBoundingClientRect();
+  tip.style.left = `${Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8))}px`;
+  tip.style.top = `${r.bottom + 6 + tip.offsetHeight > innerHeight ? r.top - tip.offsetHeight - 6 : r.bottom + 6}px`;
+}
+/** The badge: one per element with a workflow; its number is how many events, when more than one. */
+function boltBadge(evs, id, cls = '') {
+  return h('span', { class: `bolt${cls ? ' ' + cls : ''}`, 'data-node': id, 'aria-label': `Workflows on ${labelOf(id)}`,
+    onmouseenter: (e) => showBoltTip(e.currentTarget, evs), onmouseleave: hideBoltTip, onmousedown: (e) => e.stopPropagation(), ondblclick: (e) => e.stopPropagation(),
+    onclick: (e) => { e.stopPropagation(); hideBoltTip(); if (evs.length === 1) return openCard(evs[0]); cardMenu(e, evs); } },
+  icon('bolt'), evs.length > 1 ? String(evs.length) : null);
+}
+function cardMenu(e, evs) {
+  closeMenu();
+  const menu = popover(e);
+  menu.append(h('div', { class: 'h' }, `Workflows on ${labelOf(evs[0].node)}`));
+  for (const ev of evs) menu.append(h('div', { class: 'item', onclick: () => { closeMenu(); openCard(ev); } }, icon('bolt'), `When ${portLabel(byId[ev.node], 'output', ev.port)}`, h('small', {}, eventSummary(ev))));
+  document.body.append(menu); dismissOnOutside(menu);
+}
+// the card opened from Design fills the tab, with no list beside it; Back returns to the element it was opened from
+let cardBack = null; // { node, page }
+function openCard(ev) { hideBoltTip(); selEvent = ev; cardBack = { node: ev.node, page: pageKey }; switchTab('workflow'); }
+function backFromCard() {
+  const back = cardBack; cardBack = null;
+  switchTab('design');
+  if (back && back.page === pageKey && byId[back.node]) { select(back.node); elOf(back.node)?.scrollIntoView({ block: 'nearest' }); }
+}
 function renderEvents() {
   const box = $('events'); box.innerHTML = '';
   const list = events();
@@ -2898,9 +2985,13 @@ function triggerOf(node) {
 function renderWorkflow() {
   renderEvents();
   const main = $('steps'); main.innerHTML = '';
+  if (!selEvent || !byId[selEvent.node]) cardBack = null;
+  $('workflow').classList.toggle('card', !!cardBack);
   if (!selEvent || !byId[selEvent.node]) { main.append(h('div', { class: 'empty' }, 'Pick a workflow on the left, or make a new one.')); return; }
   const ev = selEvent;
   const wf = h('div', { class: 'wf' });
+  if (cardBack) wf.append(h('div', { class: 'cardnav' }, h('button', { class: 'quiet back', title: 'Back to the element in Design (Esc)', onclick: backFromCard }, '← ', labelOf(cardBack.node)),
+    h('button', { class: 'quiet tiny', title: 'Every workflow on this page, listed', onclick: () => { cardBack = null; renderWorkflow(); } }, 'All workflows on this page')));
   wf.append(h('div', { class: 'event-card' }, h('div', { class: 'ic' }, icon('bolt')), h('div', {}, h('h2', {}, eventTitle(ev)), h('small', {}, `${typeName(byId[ev.node].type)} · the "${portLabel(byId[ev.node], 'output', ev.port)}" signal`)),
     h('div', { style: 'margin-left:auto' }, countSteps(chain(ev.node, ev.port)) ? null : h('button', { class: 'quiet', onclick: () => { const i = draftEvents.findIndex((d) => d.node === ev.node && d.port === ev.port); if (i >= 0) draftEvents.splice(i, 1); selEvent = null; renderWorkflow(); } }, 'Discard'))));
   renderChain(wf, chain(ev.node, ev.port), { node: ev.node, port: ev.port }, 1);
@@ -3338,7 +3429,7 @@ function switchTab(name) {
   $('previewmode-l').style.display = name === 'design' ? '' : 'none';
   renderAll();
 }
-for (const b of document.querySelectorAll('#rail [role=tab]')) b.onclick = () => switchTab(b.dataset.tab);
+for (const b of document.querySelectorAll('#rail [role=tab]')) b.onclick = () => { cardBack = null; hideBoltTip(); switchTab(b.dataset.tab); };
 function renderAll() {
   renderPagePick(); renderDatalists();
   if (tab === 'design') { renderPalette(); renderPageData(); renderTree(); renderProps(); draw(); }

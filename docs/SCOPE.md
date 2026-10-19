@@ -40,6 +40,7 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 | The project's backend — started (or adopted) on open, stopped on close, shown in the status bar; a template that needs one gets one; Data's "Start a backend" for an app with none | works (2026-10-19) | `check:app` 34/34 |
 | Claude Code — "Connect Claude Code" in the header (and File) registers the NodeGX MCP server for the folder with the NodeGX editor's own writer and shows the command that starts a session there | works (2026-10-19) | `check:editor` 56/56 |
 | Page data — a search is a named item on the page (Design → Page data), read by any element as dynamic data; made or reused through one form, never twice; readers, last run and "N queries on open" counted off the app's own requests; a workflow refreshes an item | works (2026-10-19), R7 ruled | `check:pagedata` 26/26, `check:editor` 71/71 |
+| Workflows on their element (M3) — a ⚡ on every element with a workflow, on the canvas and in the element list; its steps in order on hover; its card full screen from the badge, Back (or Esc) to the element | STU-020, STU-021 work (2026-10-19, s8) | `check:editor` 159/159 |
 
 [history/](history/) is how it started (NodeGX phase 123, working title "Open Bubble"): the brief, the look, the
 first play test and every ruling taken.
@@ -706,6 +707,34 @@ tab already reads it that way). A badge is "this visual node has a wired signal 
 | STU-023 | **Names from steps.** | a card with no name reads its steps; a renamed card keeps its name |
 | STU-024 | **The importer merges split workflows** into one card per event. Where the conditions are exact opposites (A / not A) they become one Yes/No branch. Where they overlap and both can run, they stay as **two lanes that run side by side**, because folding them into either/or would change what the app does. | the real app's 16 split elements become 16 cards; a fixture with overlapping conditions keeps both lanes and both still run |
 | STU-025 | **Rejoin** (open ruling R4): after a branch, may both sides continue into one shared next step? | ruling R4 taken and built or closed |
+
+**Done (STU-020 and STU-021, 2026-10-19, s8).** An element with a workflow wears a **⚡** in Design: on the canvas, in
+its top right corner (Design mode only, not while using the app), and on its row of the element list (a row that folds
+wrappers into it wears theirs too). A number beside the ⚡ is how many events, when more than one. Hovering it names
+each event's steps in order, one line per event: *"Click: Sign in (+1 more) → Go to the list"* (a step's own name when
+it has one, else what it does: "Go to Home", "Set signInCard.state", "Refresh tasks"; a branch reads
+"If … : Yes → …; No → …"; "+1 more" is a second step wired from the same signal, as the card says). Clicking it opens
+that event's card **alone, full screen**, with no list beside it (an element with several events asks which first); the
+Interaction tab's workflow rows open the same way. **← <element>** (or Esc) returns to Design with the element selected
+and scrolled into view; "All workflows on this page" and the Workflow rail button show the list as before.
+
+- **What counts as a workflow:** an event that reaches a step. On the todo template's Sign in page five elements wear
+  one: the page (Did Mount), the card (the gate's own branch), Password (its Enter signs in), Sign in, Create account.
+  Email wears none, but not because of that rule: its Text Changed is a value output (type `*`), never an event. The
+  rule only bites on a signal wired solely into values, which this page has none of, so it is **not mutant-tested**
+  (with it removed the gate still passes).
+- **Found and fixed here:** a draft event (New in the Workflow list, before its first step) outlived its page: it is
+  only cleared when the event is *not* wired yet, so once wired it stayed in the list for good, and on another page
+  or a reusable its element is not there. Reading it there threw (the reusable canvas drew an empty list, 4 gate
+  checks); the Workflow list on another page would have thrown the same way. A draft now only counts on the
+  component that holds its element.
+
+Gate (`check:editor`): the elements that should wear one are read off the files and the runtime's own node library
+(a drawn element with a wire into another node's signal input), not off Studio's reading of events, and the canvas's
+badges are exactly that set; the list wears it on Sign in and Create account and not on App name or Email; the hover
+names the Sign in click's steps in the order its card draws them; a real click on the canvas ⚡ opens the card full
+screen (the list 0 px wide) and Back selects the button again; the ⚡ on the Create account row opens its card and Esc
+returns. `check:editor` 159/159 (153 + 6). Mutant (the summary's steps reversed): 158/159, the hover check fails.
 
 ---
 
