@@ -127,10 +127,41 @@ try {
   got = items();
   ok(got.find((i) => i.id === b.id)?.recordId && got.find((i) => i.id === b.id).where[0].from?.node === openProject.id, 'and back to first, with its page value wired again', got.find((i) => i.id === b.id));
 
+  console.log('check: a reusable\'s item asks while that copy is shown (R8, STU-014)');
+  const rc = 'Projects/Money bar', rdir = join(project, 'components', rc);
+  const rRead = () => ({ nodes: JSON.parse(readFileSync(join(rdir, 'nodes.json'), 'utf8')), connections: JSON.parse(readFileSync(join(rdir, 'connections.json'), 'utf8')) });
+  const rGesture = (list) => { let files = rRead(); for (const e of list) files = applyEdit(files, e).files; writeFileSync(join(rdir, 'nodes.json'), JSON.stringify(files.nodes, null, 2)); writeFileSync(join(rdir, 'connections.json'), JSON.stringify(files.connections, null, 2)); };
+  const rGraph = () => { const f = rRead(); return { nodes: f.nodes.nodes, conns: f.connections.connections }; };
+  const r0 = rGraph();
+  if (!r0.nodes.some((n) => n.id === 'mbBar') || !r0.nodes.some((n) => n.id === 'mbIn')) throw new Error('the todo template\'s Money bar no longer has mbBar / mbIn');
+  const dayTasks = { name: 'day tasks', collection: 'Task', where: [{ field: 'day', op: 'equalTo', from: { node: 'mbIn', port: 'id' } }], sort: [], first: false };
+  const c = createEdits(dayTasks, { component: rc, root: 'mbBar' });
+  rGesture(c.edits);
+  let rg = rGraph(), ri = readItems(rg.nodes, rg.conns);
+  const rItem = ri.find((i) => i.id === c.id);
+  ok(rItem && rItem.whenShown && isDeepStrictEqual(comparable(rItem), normalise({ ...dayTasks, whenShown: true })), 'read back from the reusable\'s files, it is the item that was written, marked as asking while shown', rItem);
+  const rq = rg.nodes.find((n) => n.id === c.id);
+  const boxes = Object.entries(rq.parameters).filter(([k]) => k.startsWith('runOnChange-'));
+  ok(boxes.length === 3 && boxes.every(([, v]) => v === false), 'its query never runs by itself: every run-on-change box is off (collection, question, its page value)', Object.fromEntries(boxes));
+  const has = (from, fp, to, tp) => rg.conns.some((w) => w.fromId === from && w.fromProperty === fp && w.toId === to && w.toProperty === tp);
+  const sw = rg.nodes.find((n) => n.id === rItem?.shownId), ask = rg.nodes.find((n) => n.id === rItem?.askId);
+  ok(sw?.type === 'Switch' && has('mbBar', 'didMount', sw.id, 'on') && has('mbBar', 'willUnmount', sw.id, 'off'), 'a Switch is on while the reusable\'s top element is mounted (Did Mount on, Will Unmount off)', sw);
+  ok(ask?.type === 'Expression' && ask.parameters.expression === 'shown === true && [v_day].length > 0' && has(sw?.id, 'state', ask.id, 'shown') && has('mbIn', 'id', ask.id, 'v_day') && has(ask.id, 'isTrueEv', c.id, 'storageFetch') && has('mbIn', 'id', c.id, 'qp-day'), 'the ask reads the switch and the item\'s page value, and its On True Event is the query\'s Do', ask?.parameters);
+  rGesture(updateEdits(rItem, { ...rItem, where: [...rItem.where, { field: 'mark', op: 'equalTo', from: { node: 'mbIn', port: 'mark' } }] }, { component: rc, ...rGraph() }));
+  rg = rGraph();
+  const askU = rg.nodes.find((n) => n.id === rItem.askId);
+  ok(askU.parameters.expression === 'shown === true && [v_day, v_mark].length > 0' && rg.conns.some((w) => w.fromId === 'mbIn' && w.fromProperty === 'mark' && w.toId === askU.id && w.toProperty === 'v_mark') && rg.nodes.find((n) => n.id === c.id).parameters['runOnChange-qp-mark'] === false, 'a condition added with a page value: the ask reads it too, and the query still never runs by itself', askU.parameters);
+  ok(readItems(rg.nodes, rg.conns).find((i) => i.id === c.id)?.whenShown, 'an update keeps it asking while shown');
+  rGesture(removeEdits(readItems(rg.nodes, rg.conns).find((i) => i.id === c.id), { component: rc }));
+  rg = rGraph();
+  ok(rg.nodes.length === r0.nodes.length && rg.conns.length === r0.conns.length, 'removed, the reusable has the nodes and wires it started with (the switch and the ask went with the item)', { nodes: [r0.nodes.length, rg.nodes.length], wires: [r0.conns.length, rg.conns.length] });
+  rGesture(createEdits(dayTasks, { component: rc, root: 'mbBar' }).edits); // kept for the validator below
+  const rKept = readItems(rGraph().nodes, rGraph().conns)[0];
+
   if (mcpBuilt) {
     console.log('check: NodeGX\'s validator');
     const after = await validate();
-    const mine = new Set([a.id, b.id, got.find((i) => i.id === b.id).recordId, exprId]);
+    const mine = new Set([a.id, b.id, got.find((i) => i.id === b.id).recordId, exprId, rKept.id, rKept.shownId, rKept.askId]);
     const onMine = after.filter((d) => mine.has(d.location?.nodeId) && d.severity !== 'info');
     ok(onMine.length === 0, 'validate_project says nothing about the items\' nodes', onMine.map((d) => `${d.severity} ${d.code}: ${d.message}`));
     const was = new Set(before.map(key));

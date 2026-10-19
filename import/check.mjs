@@ -196,6 +196,49 @@ const countBy = (text, re) => (text.match(re) || []).length;
   }
 }
 
+// ---------------------------------------------------------------- 1e. STU-014 (R8): a reusable's search asks while that copy is shown; a copy's
+// shown / hidden reaches its reusable; a visibility condition that restates the default changes nothing
+{
+  const base = path.join(tmp, 'editor requests', 'app.export.json');
+  if (exists(base)) {
+    const synth = readJson(base);
+    const user = (name) => ({ type: 'CurrentUser', next: { type: 'Message', name } });
+    const search = { type: 'Search', properties: { thing_type: 'custom.somedatatype', constraints: {} }, next: { type: 'Message', name: 'count' } };
+    synth.custom_elements = { ...(synth.custom_elements || {}), ce1: { id: 'ce1', type: 'CustomDefinition', name: 'Panel', properties: { element_type: 'Group', container_layout: 'column' }, elements: {
+      pt: { id: 'pt', type: 'Text', name: 'Text count', properties: { text: { type: 'TextExpression', entries: { 0: search } } } } } } };
+    const copy = (id, extra = {}) => ({ id, type: 'CustomElement', name: `Panel ${id}`, properties: { custom_id: 'ce1', ...extra.properties }, ...(extra.states ? { states: extra.states } : {}) });
+    const grp = (id, props, states) => ({ id, type: 'Group', name: `Group ${id}`, properties: { container_layout: 'column', ...props }, states, elements: {} });
+    synth.pages = { rpage: { type: 'Page', id: 'rpage', name: 'index', properties: { new_responsive: true, container_layout: 'column' }, elements: {
+      c1: copy('c1'),
+      c2: copy('c2', { properties: { is_visible: false }, states: { 0: { condition: user('logged_in'), properties: { is_visible: true } } } }),
+      c3: copy('c3', { states: { 0: { condition: user('logged_in'), properties: { margin_left: 30 } } } }),
+      g1: grp('g1', { is_visible: false }, { 0: { condition: user('logged_in'), properties: { is_visible: false } } }),
+      g2: grp('g2', {}, { 0: { condition: user('logged_in'), properties: { is_visible: true } } }),
+      g3: grp('g3', { is_visible: false }, { 0: { condition: user('logged_in'), properties: { is_visible: true } } }),
+      pt2: { id: 'pt2', type: 'Text', name: 'Text page count', properties: { text: { type: 'TextExpression', entries: { 0: search } } } } } } };
+    const out = path.join(tmp, 'stu014'); fs.mkdirSync(out); const exp = path.join(out, 'app.export.json'); fs.writeFileSync(exp, JSON.stringify(synth));
+    const c = run([path.join(here, 'app-to-nodegx.mjs'), exp, path.join(out, 'project')]);
+    if (check('STU-014: the page with three copies of a reusable converts', c.status === 0, (c.stderr || c.stdout).slice(-600))) {
+      const { readItems } = await import('../editor/pagedata.mjs');
+      const load = (rel) => { const d = path.join(out, 'project', 'components', rel); return { nodes: readJson(path.join(d, 'nodes.json')).nodes, conns: readJson(path.join(d, 'connections.json')).connections }; };
+      const r = load('Reusable/Panel'), pg = load('Pages/index');
+      const has = (g, from, fp, to, tp) => g.conns.some((w) => w.fromId === from && w.fromProperty === fp && w.toId === to && w.toProperty === tp);
+      const [ri] = readItems(r.nodes, r.conns), [pi] = readItems(pg.nodes, pg.conns);
+      const rq = r.nodes.find((n) => n.id === ri?.id);
+      check('STU-014: the reusable\'s search is an item that asks while shown, its query never running by itself', ri?.whenShown && Object.entries(rq.parameters).filter(([k]) => k.startsWith('runOnChange-')).every(([, v]) => v === false), JSON.stringify(rq?.parameters));
+      check('STU-014: its Switch follows the reusable\'s top element, and the ask fires the query', has(r, 'root_ce1', 'didMount', ri?.shownId, 'on') && has(r, 'root_ce1', 'willUnmount', ri?.shownId, 'off') && has(r, ri?.askId, 'isTrueEv', ri?.id, 'storageFetch'), JSON.stringify(ri));
+      check('STU-014: the same search on the page is an ordinary page data item (loads with the page)', pi && !pi.whenShown, JSON.stringify(pi));
+      const ins = r.nodes.find((n) => n.type === 'Component Inputs' && n.id === 'copy_ce1');
+      check('STU-014-INSTANCEHIDE: the reusable takes mounted and visible from its copy and passes them to its top element', ins && has(r, ins.id, 'mounted', 'root_ce1', 'mounted') && has(r, ins.id, 'visible', 'root_ce1', 'visible'), JSON.stringify(ins?.ports));
+      check('STU-014-INSTANCEHIDE: the hidden copy\'s condition reaches it (a wire into its mounted, which the reusable declares)', pg.conns.some((w) => w.toId === 'el_c2' && w.toProperty === 'mounted'));
+      check('STU-014-INSTANCEHIDE: a copy\'s conditional margin is declared on the reusable and passed to its top element', ins?.ports.some((q) => q.name === 'marginLeft') && has(r, ins.id, 'marginLeft', 'root_ce1', 'marginLeft') && pg.conns.some((w) => w.toId === 'el_c3' && w.toProperty === 'marginLeft'), JSON.stringify(ins?.ports));
+      const visWired = (id) => pg.conns.some((w) => w.toId === id && (w.toProperty === 'mounted' || w.toProperty === 'visible'));
+      check('STU-014-VISDEFAULT: "hidden when X" on a group hidden on load, and "shown when X" on one shown, change nothing (no wire); "shown when X" on a hidden one is wired', !visWired('el_g1') && !visWired('el_g2') && visWired('el_g3') && pg.nodes.find((n) => n.id === 'el_g1')?.parameters.mounted === false, JSON.stringify(['el_g1', 'el_g2', 'el_g3'].map((id) => [id, visWired(id)])));
+      validateProject('STU-014 fixture', path.join(out, 'project'));
+    }
+  }
+}
+
 // ---------------------------------------------------------------- 2. the template's run-mode bundle (gitignored; optional)
 {
   const tplDir = path.join(here, 'exports', 'template');

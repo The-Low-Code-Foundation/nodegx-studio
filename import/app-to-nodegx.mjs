@@ -7,7 +7,7 @@
 // (https://github.com/ricotrevisan/bubble_ex, commit 5f1c480), MIT License, Copyright (c) 2026 Rico Trevisan.
 import fs from 'node:fs';
 import path from 'node:path';
-import { queryParameters } from '../editor/pagedata.mjs';
+import { askWhileShown, queryParameters } from '../editor/pagedata.mjs';
 
 const [,, srcPath, outDir] = process.argv;
 if (!srcPath || !outDir) { console.error('usage: app-to-nodegx.mjs <export.json> <outdir>'); process.exit(2); }
@@ -309,6 +309,7 @@ function convertElement(g, el, parentNode, parentLayout, bubblePage, depth, y) {
     if (s.condition?.type === 'ThisElement' && /valid/.test(s.condition.next?.name || '')) { todo(`${bubblePage.name} / ${label}`, `conditional "this input is${s.condition.next.name === 'isnt_valid' ? "n't" : ''} valid" has no NodeGX state; skipped`); continue; }
     const cond = compileExpr(g, s.condition, { page: bubblePage, element: node });
     for (const [bk, bv] of Object.entries(s.properties || {})) {
+      if (bk === 'is_visible' && (bv !== false) === (p.is_visible !== false)) continue; // STU-014-VISDEFAULT: "hidden when X" on an element already hidden on load changes nothing (Bubble: the condition's value when it holds, else the element's own); it was written "shown when not X"
       if (bk === 'is_visible') { const visKey = p.collapse_when_hidden === false ? 'visible' : 'mounted'; const ex = exprNode(g, `${label}: ${visKey} when not (${cond.text})`, `!(${cond.js})`, cond, { x: node.x + 500, y: node.y }); g.wire(ex.id, 'result', node.id, visKey); if (bv !== false) ex.parameters.expression = `(${cond.js})`; continue; }
       const glyph = g.nodes.find((x) => x.id === `icon_${el.id}`); const CONTENT = { text: ntype === 'Text' ? 'text' : ntype === 'net.noodl.controls.button' ? 'label' : null, src: 'src', icon: glyph ? 'iconIconSource' : null, icon_color: glyph ? 'iconColor' : null, border_color: 'borderColor', initial_content: 'startValue', placeholder: 'placeholder', boxshadow_blur: 'boxShadowBlurRadius', column_gap: 'columnGap', row_gap: 'rowGap', button_disabled: 'enabled', disabled: 'enabled' };
       const PORT_OK = { enabled: ['net.noodl.controls.button', 'net.noodl.controls.textinput', 'net.noodl.controls.checkbox', 'net.noodl.controls.options'], src: ['Image'], text: ['Text'], label: ['net.noodl.controls.button', 'net.noodl.controls.checkbox'], placeholder: ['net.noodl.controls.textinput', 'net.noodl.controls.options'], startValue: ['net.noodl.controls.textinput'], borderColor: ['Group', 'Image', 'net.noodl.controls.button', 'net.noodl.controls.textinput', 'net.noodl.controls.checkbox', 'net.noodl.controls.options'], boxShadowBlurRadius: ['Group', 'Image', 'net.noodl.controls.button'], columnGap: ['Group'], rowGap: ['Group'] };
@@ -444,9 +445,11 @@ function compileExpr(g, node, ctx) {
     }
     const plural = `${coll}s`.toLowerCase(); const base = where.length ? `${plural} by ${[...new Set(where.map((w) => w.field))].join(' and ')}` : plural;
     const taken = new Set([...g.searches.values()].map((q) => q.metadata.pageData.name)); let name = base; for (let k = 2; taken.has(name); k++) name = `${base} ${k}`;
-    const { params, wires } = queryParameters({ name, collection: collName(coll), where, sort: n.properties?.sort_field ? [{ field: fieldDisplay(typeKey, n.properties.sort_field), order: n.properties.descending ? 'descending' : 'ascending' }] : [] });
-    const q = g.add({ id, type: 'DbCollection2', label: name, parameters: Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined)), metadata: { pageData: { name, first: false }, bubble: { search: raw.slice(0, 400) } } }); // it runs when the page opens and again when a value it reads changes (NDA-017), so nothing wires its Do
+    const whenShown = !!g.reusableRoot; // R8: a reusable's search asks while that copy is shown, not when the page opens
+    const { params, wires } = queryParameters({ name, collection: collName(coll), where, sort: n.properties?.sort_field ? [{ field: fieldDisplay(typeKey, n.properties.sort_field), order: n.properties.descending ? 'descending' : 'ascending' }] : [], whenShown });
+    const q = g.add({ id, type: 'DbCollection2', label: name, parameters: Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined)), metadata: { pageData: { name, first: false, ...(whenShown ? { whenShown: true } : {}) }, bubble: { search: raw.slice(0, 400) } } }); // it runs when the page opens and again when a value it reads changes (NDA-017), so nothing wires its Do
     for (const w of wires) g.wire(w.from.node, w.from.port, q.id, w.port);
+    if (whenShown) { const helper = askWhileShown({ id: q.id, root: g.reusableRoot, wires, shownId: fresh('shown'), askId: fresh('ask') }); for (const h of helper.nodes) g.add(h); for (const c of helper.conns) g.wire(c.fromId, c.fromProperty, c.toId, c.toProperty); }
     g.searches.set(key, q);
     return chip(`search_${id}`, q.id, 'items');
   }
@@ -785,6 +788,11 @@ function convertReusable(id, def) {
   const pp = def.properties || {}; const fake = { id, name: `reusable ${name}`, properties: pp, elements: def.elements, workflows: def.workflows, custom_states: def.custom_states };
   const root = g.add({ id: `root_${id}`, type: 'Group', label: name, parameters: { ...layoutParams({ ...pp, horiz_alignment: 'stretch', single_width: false, single_height: false, width: undefined, height: undefined }, 'flex', 'Group'), ...styleParams(pp, 'Group'), width: pct(100), sizeMode: 'contentHeight', flexDirection: pp.container_layout === 'row' ? 'row' : 'column' }, children: [], x: 40, y: 40 });
   if (pp.element_type === 'Popup' || pp.element_type === 'GroupFocus') root.parameters.mounted = false;
+  g.reusableRoot = root.id;
+  // STU-014-INSTANCEHIDE: a copy's own mounted / visible never reached the inside (a component instance has only the ports its
+  // Component Inputs declare), so a hidden copy showed and Show / Hide steps did nothing. Its top element takes them from the copy.
+  const vis = g.add({ id: `copy_${id}`, type: 'Component Inputs', label: 'From the copy', ports: [{ name: 'mounted', plug: 'output', type: 'boolean' }, { name: 'visible', plug: 'output', type: 'boolean' }], x: 700, y: 40 });
+  g.wire(vis.id, 'mounted', root.id, 'mounted'); g.wire(vis.id, 'visible', root.id, 'visible'); g.copyInputs = vis.id; // and whatever a page wires into a copy (below)
   for (const k of [id, def.id]) if (k) elementIndex[k] = { nodeId: root.id, type: 'Group', componentPath: g.path, label: name };
   const layout = pp.container_layout ? (pp.container_layout === 'fixed' ? 'fixed' : 'flex') : 'fixed';
   if (layout === 'fixed') { root.parameters.position = 'relative'; if (pp.height) root.parameters.minHeight = px(pp.height); }
@@ -812,6 +820,18 @@ const startPage = pages.find(([, p]) => p.name === 'index')?.[1] || pages[0]?.[1
 appG.add({ id: 'app_root', type: 'Group', label: 'App', parameters: { sizeMode: 'explicit', width: pct(100), height: pct(100), flexDirection: 'column', backgroundColor: 'var(--color_background_default)' }, children: ['app_router'], x: 40, y: 40 });
 appG.add({ id: 'app_router', type: 'Router', label: 'Main router', parent: 'app_root', parameters: { name: 'Main', pages: { startPage: startPage ? pageComponentPath(startPage) : undefined, routes: pages.map(([, p]) => pageComponentPath(p)) } }, x: 100, y: 160 });
 const defaultFont = cs.font_tokens?.default; if (defaultFont) appG.add({ id: 'app_css', type: 'CSS Definition', label: 'Bubble defaults', parameters: { style: `html, body { font-family: "${defaultFont}", sans-serif; }` }, x: 400, y: 40 });
+
+// STU-014-INSTANCEHIDE: a copy takes only the inputs its reusable declares. Whatever a page wires into a copy (a conditional
+// width or margin, a "scroll to") is declared on the reusable and passed to its top element, which is what the copy stood for.
+// What a copy SETS without a wire (its own size and margins) still reaches nothing: STU-014-INSTANCELAYOUT.
+for (const g of components) {
+  const byId = new Map(g.nodes.map((n) => [n.id, n]));
+  for (const c of g.connections) {
+    const r = graphByPath[byId.get(c.toId)?.type]; if (!r?.copyInputs) continue;
+    const ins = r.nodes.find((n) => n.id === r.copyInputs); if (ins.ports.some((q) => q.name === c.toProperty)) continue;
+    ins.ports.push({ name: c.toProperty, plug: 'output', type: /^(scrollIntoView|focus|blur)$/.test(c.toProperty) ? 'signal' : '*' }); r.wire(ins.id, c.toProperty, r.reusableRoot, c.toProperty);
+  }
+}
 
 // ---------------------------------------------------------------- s6: nodegx.security.json, from the privacy rules and the writes read above
 function buildSecurity() {

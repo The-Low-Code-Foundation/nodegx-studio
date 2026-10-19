@@ -21,6 +21,15 @@
  * Expression), so "how many elements read it" is counted off the wires, and two items asking the same question are
  * found by comparing what they ask (`signature`).
  *
+ * A reusable's items (ruling R8, STU-014) ask while that copy is SHOWN, never because the page opened: "hide queries
+ * behind reusable elements so they don't all load at once on page load". NodeGX runs a hidden component's logic all
+ * the same (measured: four copies, two hidden, four queries), so such an item (`metadata.pageData.whenShown`) has
+ * every run-on-change box OFF, and two helper nodes say when to ask: a Switch (`metadata.pageDataShown`) turned on by
+ * the reusable's top element's Did Mount and off by its Will Unmount, and an Expression (`metadata.pageDataAsk`)
+ * reading that switch and each of the item's page values, whose On True Event fires the query's Do. It asks once each
+ * time the copy is shown, and again when a value changes while it is shown; a value that changes while it is hidden
+ * waits for the next show.
+ *
  * Pure: the page's nodes and wires in, items or edits (the vocabulary of ./edits.mjs) out.
  */
 
@@ -46,7 +55,8 @@ export function normalise(item) {
     where: (item.where || []).map((c) => (c.from ? { field: c.field, op: c.op, from: { node: c.from.node, port: c.from.port } } : { field: c.field, op: c.op, ...(c.value !== undefined ? { value: c.value } : {}) })),
     sort: (item.sort || []).map((s) => ({ field: s.field, order: s.order === 'descending' ? 'descending' : 'ascending' })),
     first: !!item.first,
-    ...(item.first ? {} : item.limit !== undefined ? { limit: item.limit } : {})
+    ...(item.first ? {} : item.limit !== undefined ? { limit: item.limit } : {}),
+    ...(item.whenShown ? { whenShown: true } : {})
   };
 }
 
@@ -89,6 +99,7 @@ export function readItems(nodes, conns) {
     }
     const first = !!q.metadata.pageData.first;
     const record = first ? nodes.find((n) => n.type === RECORD && n.metadata?.pageDataRecord?.item === q.id) : undefined;
+    const shown = nodes.find((n) => n.metadata?.pageDataShown?.item === q.id), ask = nodes.find((n) => n.metadata?.pageDataAsk?.item === q.id);
     items.push({
       id: q.id,
       name: q.metadata.pageData.name,
@@ -99,6 +110,7 @@ export function readItems(nodes, conns) {
       first,
       ...(!first && p.storageEnableLimit ? { limit: p.storageLimit ?? 10 } : {}),
       ...(record ? { recordId: record.id, fields: props(record.parameters?.properties) } : {}),
+      ...(q.metadata.pageData.whenShown ? { whenShown: true, shownId: shown?.id, askId: ask?.id } : {}),
       ...(unsupported ? { unsupported } : {})
     });
   }
@@ -134,19 +146,53 @@ export function queryParameters(item) {
     storageLimit: n.first ? 1 : n.limit
   };
   for (const port of ports) if (port) params['runOnChange-' + port] = true;
+  if (n.whenShown) for (const k of Object.keys(params)) if (k.startsWith('runOnChange-')) params[k] = false; // the ask helper runs it (R8)
   return { params, wires: n.where.map((c, i) => (c.from ? { from: c.from, port: ports[i] } : null)).filter(Boolean) };
 }
 
-const uuid = () => crypto.randomUUID();
+/** The ask helper's input for a value port: `qp-owner` → `v_owner`. */
+const askInput = (port) => 'v_' + port.replace(/^qp-/, '');
+const askText = (wires) => (wires.length ? `shown === true && [${wires.map((w) => askInput(w.port)).join(', ')}].length > 0` : 'shown === true');
 
-/** The edits that put a new item on a page. Returns the ids so a caller can wire a reader in the same gesture. */
-export function createEdits(item, { component, x = 1000, y = 100 } = {}) {
-  const n = normalise(item);
+/**
+ * The two helper nodes and their wires that make a reusable's item ask while its copy is shown (see the top of this
+ * file): plain nodes and wires, for the importer's graph and for `createEdits` alike. `root` is the reusable's top element.
+ */
+export function askWhileShown({ id, root, wires, shownId = uuid(), askId = uuid(), x = 1000, y = 100 }) {
+  return {
+    nodes: [
+      { id: shownId, type: 'Switch', label: 'shown', x, y: y + 90, parameters: {}, metadata: { pageDataShown: { item: id } } },
+      { id: askId, type: 'Expression', label: 'ask while shown', x, y: y + 160, parameters: { expression: askText(wires) }, metadata: { pageDataAsk: { item: id } } }
+    ],
+    conns: [
+      { fromId: root, fromProperty: 'didMount', toId: shownId, toProperty: 'on' },
+      { fromId: root, fromProperty: 'willUnmount', toId: shownId, toProperty: 'off' },
+      { fromId: shownId, fromProperty: 'state', toId: askId, toProperty: 'shown' },
+      ...wires.map((w) => ({ fromId: w.from.node, fromProperty: w.from.port, toId: askId, toProperty: askInput(w.port) })),
+      { fromId: askId, fromProperty: 'isTrueEv', toId: id, toProperty: 'storageFetch' }
+    ]
+  };
+}
+
+const uuid = () => crypto.randomUUID();
+const connectEdit = (component, c) => ({ edit: 'connect', component, from: { node: c.fromId, port: c.fromProperty }, to: { node: c.toId, port: c.toProperty } });
+
+/**
+ * The edits that put a new item on a page. Returns the ids so a caller can wire a reader in the same gesture. In a
+ * reusable, pass `root` (its top element): the item asks while that copy is shown (R8).
+ */
+export function createEdits(item, { component, x = 1000, y = 100, root } = {}) {
+  const n = normalise(root ? { ...item, whenShown: true } : item);
   const id = item.id ?? uuid();
   const { params, wires } = queryParameters(n);
   const parameters = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined));
-  const list = [{ edit: 'add_node', component, id, type: QUERY, label: n.name, x, y, parameters, metadata: { pageData: { name: n.name, first: n.first } } }];
+  const list = [{ edit: 'add_node', component, id, type: QUERY, label: n.name, x, y, parameters, metadata: { pageData: { name: n.name, first: n.first, ...(n.whenShown ? { whenShown: true } : {}) } } }];
   for (const w of wires) list.push({ edit: 'connect', component, from: w.from, to: { node: id, port: w.port } });
+  if (n.whenShown) {
+    const helper = askWhileShown({ id, root, wires, x, y });
+    for (const h of helper.nodes) list.push({ edit: 'add_node', component, ...h });
+    for (const c of helper.conns) list.push(connectEdit(component, c));
+  }
   let recordId;
   if (n.first) {
     recordId = item.recordId ?? uuid();
@@ -159,7 +205,7 @@ export function createEdits(item, { component, x = 1000, y = 100 } = {}) {
 
 /** The edits that change an existing item (`current`, as read) into `next`: its question, its name, list ↔ first. */
 export function updateEdits(current, next, { component, nodes, conns }) {
-  const n = normalise(next);
+  const n = normalise({ ...next, whenShown: current.whenShown });
   const q = nodes.find((x) => x.id === current.id);
   const { params, wires } = queryParameters(n);
   const list = [];
@@ -170,9 +216,17 @@ export function updateEdits(current, next, { component, nodes, conns }) {
   const same = (a, b) => a.fromId === b.fromId && a.fromProperty === b.fromProperty && a.toId === b.toId && a.toProperty === b.toProperty;
   for (const c of conns) if (c.toId === q.id && /^qp-/.test(c.toProperty) && !wanted.some((w) => same(w, c))) list.push({ edit: 'disconnect', component, from: { node: c.fromId, port: c.fromProperty }, to: { node: q.id, port: c.toProperty } });
   for (const w of wanted) if (!conns.some((c) => same(c, w))) list.push({ edit: 'connect', component, from: { node: w.fromId, port: w.fromProperty }, to: { node: q.id, port: w.toProperty } });
+  if (current.askId) {
+    // the ask helper reads the same values the query does, so a value that changes while the copy is shown asks again
+    const ask = nodes.find((x) => x.id === current.askId);
+    const askWanted = askWhileShown({ id: q.id, root: '', wires, askId: ask.id }).conns.filter((c) => c.toId === ask.id && c.toProperty.startsWith('v_'));
+    for (const c of conns) if (c.toId === ask.id && c.toProperty.startsWith('v_') && !askWanted.some((w) => same(w, c))) list.push({ edit: 'disconnect', component, from: { node: c.fromId, port: c.fromProperty }, to: { node: ask.id, port: c.toProperty } });
+    for (const w of askWanted) if (!conns.some((c) => same(c, w))) list.push(connectEdit(component, w));
+    if (ask.parameters?.expression !== askText(wires)) list.push({ edit: 'set_parameter', component, id: ask.id, name: 'expression', value: askText(wires) });
+  }
   if (current.name !== n.name || current.first !== n.first) {
     list.push({ edit: 'rename', component, id: q.id, label: n.name });
-    list.push({ edit: 'set_metadata', component, id: q.id, metadata: { pageData: { name: n.name, first: n.first } } });
+    list.push({ edit: 'set_metadata', component, id: q.id, metadata: { pageData: { name: n.name, first: n.first, ...(n.whenShown ? { whenShown: true } : {}) } } });
   }
   if (n.first && !current.recordId) {
     const recordId = uuid();
@@ -183,8 +237,8 @@ export function updateEdits(current, next, { component, nodes, conns }) {
   return list;
 }
 
-/** The edits that take an item off the page (its record node and every wire to or from either go with it). */
-export const removeEdits = (item, { component }) => [{ edit: 'remove_node', component, id: item.id }, ...(item.recordId ? [{ edit: 'remove_node', component, id: item.recordId }] : [])];
+/** The edits that take an item off the page (its record node, its ask helpers and every wire to or from them go with it). */
+export const removeEdits = (item, { component }) => [item.id, item.recordId, item.shownId, item.askId].filter(Boolean).map((id) => ({ edit: 'remove_node', component, id }));
 
 /**
  * Where a reader takes a value from: a list item's `items` / `count` / `isEmpty`, or a first item's field (which the

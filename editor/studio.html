@@ -1397,7 +1397,7 @@ function renderDatalists() {
 }
 
 /* ================= page data (STU-010 / STU-011): a search lives once on the page, by name, and elements read it ================= */
-const isPageDataNode = (n) => !!(n?.metadata?.pageData || n?.metadata?.pageDataRecord);
+const isPageDataNode = (n) => !!(n?.metadata?.pageData || n?.metadata?.pageDataRecord || n?.metadata?.pageDataShown || n?.metadata?.pageDataAsk); // the last two: a reusable item's "ask while shown" (STU-014)
 const itemById = (id) => pageItems.find((i) => i.id === id);
 /** Every data type the app knows: declared, in backend/schema.json, named by its own nodes, or on the running backend. */
 const typeNames = () => [...new Set([...collections().map((c) => c.name), ...schemaTables().map((t) => t.table), ...appCollections().keys(), ...liveTables.map((t) => t.name)])].filter(Boolean).sort();
@@ -1764,7 +1764,7 @@ function events() {
   const seen = new Set();
   const signalInWired = (id) => conns.some((c) => c.toId === id && isSignalPort(byId[id], 'input', c.toProperty));
   for (const c of conns) {
-    const from = byId[c.fromId]; if (!from || isHelperNode(from)) continue;
+    const from = byId[c.fromId]; if (!from || isHelperNode(from) || byId[c.toId]?.metadata?.pageDataShown) continue;
     if (!isSignalPort(from, 'output', c.fromProperty)) continue;
     if (!isVisualType(from.type) && signalInWired(from.id)) continue; // a step, not an event
     const key = `${c.fromId}.${c.fromProperty}`;
@@ -1787,7 +1787,8 @@ function renderEvents() {
 function chain(node, port, visited = new Set()) {
   const steps = [];
   while (true) {
-    const outs = conns.filter((c) => c.fromId === node && c.fromProperty === port && byId[c.toId] && isSignalPort(byId[c.toId], 'input', c.toProperty));
+    // a reusable item's "shown" switch hangs off its top element's Did Mount / Will Unmount: part of the item, not a step (STU-014)
+    const outs = conns.filter((c) => c.fromId === node && c.fromProperty === port && byId[c.toId] && !byId[c.toId].metadata?.pageDataShown && isSignalPort(byId[c.toId], 'input', c.toProperty));
     if (!outs.length) break;
     const next = outs[0];
     if (visited.has(next.toId)) break;

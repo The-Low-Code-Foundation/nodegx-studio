@@ -35,7 +35,7 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 | Data tab — types and fields, rows on the bound backend, option sets | works | `check:editor` |
 | Live with outside edits — a file changed by Claude Code (MCP), VS Code or `git pull` is drawn without a reload; a clash with Studio's own edit asks | works (2026-10-19) | `check:editor` 46/46 |
 | Styles — global styles as NodeGX variants | works | `check:editor` |
-| Bubble importer — pages, elements, styles, workflows, expressions, option sets, reusables, custom states, data types, privacy rules → `nodegx.security.json`, backend workflows → cloud functions, Data-tab rows | spike, measured on a real 17-page app (0 validation errors); its searches arrive as page data (STU-013); its workflow conditions test only when the workflow runs (STU-013-NAVLOOP) | `check:import` 41/41 |
+| Bubble importer — pages, elements, styles, workflows, expressions, option sets, reusables, custom states, data types, privacy rules → `nodegx.security.json`, backend workflows → cloud functions, Data-tab rows | spike, measured on a real 17-page app (0 validation errors); its searches arrive as page data (STU-013), a reusable's while that copy is shown (STU-014); its workflow conditions test only when the workflow runs (STU-013-NAVLOOP) | `check:import` 50/50 |
 | Desktop app — Electron window, a welcome screen (recent projects, NodeGX's templates, Import an app), File → Open Recent, a smoke mode | first cut (2026-10-19) | `check:app` 34/34, `smoke` |
 | The project's backend — started (or adopted) on open, stopped on close, shown in the status bar; a template that needs one gets one; Data's "Start a backend" for an app with none | works (2026-10-19) | `check:app` 34/34 |
 | Claude Code — "Connect Claude Code" in the header (and File) registers the NodeGX MCP server for the folder with the NodeGX editor's own writer and shows the command that starts a session there | works (2026-10-19) | `check:editor` 56/56 |
@@ -210,7 +210,8 @@ create/save/delete notifications, so "re-runs when its inputs change" needs no r
 | STU-011 | **The Data section** in Design's left column: the page's items, add / edit / delete, reader count and last-run numbers. | an item made there shows on screen through two text elements, and the page header reads "1 query on open" |
 | STU-012 | **The composer** offers page data instead of an inline search, reuses an identical item, and creates one through "+ New page data…". | there is no path in the editor that writes a second identical query on a page |
 | STU-013 | **The importer merges repeated searches** into page data items: identical searches on a page become one item; elements and steps read it. | the real app's pages convert with 70 queries instead of 153 and still render the same |
-| STU-014 | **Scopes beyond the page.** A reusable's own data; a repeating group's row (Bubble's "Current cell's thing" is already a row value, not a search); an item that depends on another. | ruling R8 taken; a reusable with its own item renders in two places, querying once per instance |
+| STU-014 | **A reusable's own data** (R8: pages and reusables, not rows or popups). A reusable's item asks while that copy is shown, never because the page opened; a copy's shown / hidden reaches its reusable. | ruling R8 taken; four copies, two hidden: two queries on open, each hidden copy asks once when shown |
+| STU-015 | **Open a reusable** in Design as Bubble does: its own canvas, its elements, and its Data section, where a new item asks while shown. | an item made on a reusable is written in the STU-014 form, and two copies on a page each ask once |
 
 **Done (STU-010, 2026-10-19; R7 ruled the same day).** `editor/pagedata.mjs` is the format, pure, nodes and wires in and
 items or edits out. An item is one Query Records node (`DbCollection2`) in the page's own component, inside no element,
@@ -320,6 +321,52 @@ runs No; with the branch's switch and `stepOnly` both removed, No runs at open a
 41/41: three gated workflows convert to four Conditions (a Do when also gets an Only when from the same condition,
 redundant and harmless), each run by Evaluate and none on a change; without the switch, 1 fails.
 
+
+**Done (STU-014, 2026-10-19; R8 ruled the same day).** Measured first, on four copies of one reusable holding a query (two
+shown, one hidden itself, one inside a hidden group): **all four asked as the page opened**. NodeGX runs a hidden
+component's logic all the same, so Richard's reason for the ruling needed building, not just allowing. And the copy
+hidden "itself" was drawn anyway: a component instance takes only the inputs its Component Inputs node declares, so
+`mounted: false` on a copy reached nothing (STU-014-INSTANCEHIDE). On the real app that was 27 copies whose visibility
+was wired (popups among them, so a Show popup step did nothing) plus 89 copies the validator already called interfaceless.
+
+- **The format** (`editor/pagedata.mjs`): a reusable's item carries `metadata.pageData.whenShown`. Its query has every
+  run-on-change box off, so it never runs by itself, and two helpers decide when it asks: a Switch
+  (`metadata.pageDataShown`) turned on by the reusable's top element's **Did Mount** and off by its **Will Unmount**,
+  and an Expression (`metadata.pageDataAsk`, `shown === true && [v_<value>…].length > 0`) reading that switch and each
+  of the item's page values, whose On True Event is the query's Do. So it asks once each time the copy is shown, again
+  when a value changes while shown, and a value that changes while hidden waits for the next show. `createEdits(item,
+  { root })` writes it, `readItems` reads it back (`whenShown`, `shownId`, `askId`), `updateEdits` keeps the ask
+  reading the same values as the query, `removeEdits` takes the helpers with the item. Studio hides both helpers (no
+  phantom "When Panel: Did Mount" workflow, no "Refresh" step).
+- **The importer**: a search inside a reusable is written that way; one on a page is an ordinary page data item.
+  Every reusable gets a Component Inputs node (`copy_<id>`, "From the copy") whose `mounted` and `visible` drive its
+  top element, plus every other port some page wires into a copy (a conditional width or margin, a "scroll to"): the
+  validator had never seen those wires, because a component with no declared inputs is not checked, and turned up 7
+  of them once the inputs existed. What a copy *sets* without a wire (its own size and margins) still reaches nothing:
+  **STU-014-INSTANCELAYOUT** (open, 445 `instance-unknown-parameter` warnings on the real app — applying them would
+  change the look of 122 copies, which wants a look first).
+- **STU-014-VISDEFAULT** (found here, fixed): Bubble's conditional is "the condition's value while it holds, else the
+  element's own". The importer wrote every visibility condition as "shown when X" or "shown when not X", so "hidden when
+  X" on an element already hidden on load came out as "shown when not X": the real app's home page drew the booking
+  request and listing details sections (and a hidden copy of the sign-up form inside one, which the reusable's own
+  hidden setting had been masking until copies could be shown). A condition that restates the default is now skipped:
+  44 of the real app's 498.
+
+Measured on the real app's index with a backend, same probe (Studio's `probe.js` injected into every frame): queries on
+open **58 → 37** (Listing 18 → 9, User 13 → 7, Legal 4 → 1), elements drawn 243 → 142, and the visible text is the home
+page alone. `validate_project`: 0 errors before and after; warnings change in two codes only, `interfaceless-instance`
+89 → 0 and `instance-unknown-parameter` 0 → 445. Gates: `check:editor` 77/77 runs the four copies in the app against a
+backend — the shown two ask at open, a value change on a shown copy asks again and on a hidden one waits, each hidden
+copy asks once when shown with its current value; with the query's own run-on-change left on, the hidden copies ask
+at open and the shown ones twice (2 fail). `check:pagedata` 33/33 round-trips a reusable's item on the todo template's
+Money bar (written, read back, a value added, removed back to the nodes it started with, the validator silent).
+`check:import` 50/50: four mutants (searches asking on open, no copy inputs, no default rule, no wired ports) fail
+2, 1, 1 and 2 checks.
+
+Not done here: rows (R8 gives them no data of their own, yet the importer still writes a search inside a row as an
+item in the row's component, 6 on the real app, each row asking); an item that depends on another item; and Studio
+cannot open a reusable yet (STU-015), so a reusable's items come from the importer, MCP or by hand for now. Still
+not settled from STU-013: a condition whose page value is empty is dropped by the runtime.
 ---
 
 ## M3 — Workflows that live on their element
@@ -407,11 +454,16 @@ query start/end and element draws, to measure).
 | R4 | After a branch, can both sides rejoin into one next step? | phase 123 |
 | R5 | Can a custom state live inside a reusable? | phase 123 |
 | R6 | Where do option sets live — one component each, or one file? | phase 123 |
-| R8 | Which scopes get their own data: page, reusable, repeating group row, popup? | M2 |
 
 **Taken.** R7 (Richard, 2026-10-19): page data is an ordinary Query Records node at the page root, named by
 `metadata.pageData`. No new file, nothing new in the format: the NodeGX editor, the MCP server and the runtime read
 it as the node it is. As built in STU-010–012.
+
+**Taken.** R8 (Richard, 2026-10-19): **pages and reusables** have their own data; a repeating group's row and a popup
+do not. His reason is the rule: *"you'll want to hide queries behind reusable elements so they don't all load at once
+on page load. So if your repeater is hidden inside a reusable element, and you don't want to do unnecessary data calls,
+put the query for the repeater's data inside the reusable element rather than the page, at least you have the
+choice."* So a reusable's data loads when that reusable is shown, not when the page opens; each shown copy asks once.
 
 ## Writing about Bubble
 

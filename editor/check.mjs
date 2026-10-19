@@ -13,12 +13,14 @@
  * Needs the deploy runtime, the in-page preview bundle and Orbit's look.js / specs.js (serve.mjs says which is missing).
  */
 import { spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { browser } from './cdp.mjs';
+import { applyEdit } from './edits.mjs';
+import { createEdits } from './pagedata.mjs';
 import { nodegxRepo } from '../lib/nodegx.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -35,6 +37,25 @@ const lineFrom = (proc, pattern, ms = 30000) => new Promise((ok, no) => {
 const tmp = mkdtempSync(join(tmpdir(), 'nodegx-studio-check-'));
 const project = join(tmp, 'todo-list');
 cpSync(join(repo, 'templates/todo-list'), project, { recursive: true });
+{
+  // STU-014 (R8): a reusable with its own item, placed nowhere yet (its copies arrive at the end, as an outside edit). Its
+  // copies say which one asked by the value they pass: "Task where position > n". mounted comes from the copy, as the importer writes it.
+  const rel = 'Reusable/Probe panel', dir = join(project, 'components', rel), cid = '11111111-2222-5333-8444-555555555555';
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'component.json'), JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/component-v2.json', id: cid, name: 'Probe panel', path: '/' + rel, type: 'visual', created: '2026-10-19T00:00:00.000Z', modified: '2026-10-19T00:00:00.000Z', modifiedBy: 'check' }, null, 2));
+  let files = {
+    nodes: { $schema: 'https://opennoodl.dev/schemas/nodes-v2.json', componentId: cid, version: 1, visualRoots: ['ppRoot'], nodes: [
+      { id: 'ppIn', type: 'Component Inputs', label: 'From the copy', ports: [{ name: 'n', plug: 'output', type: 'number' }, { name: 'mounted', plug: 'output', type: 'boolean' }], x: 300, y: 40 },
+      { id: 'ppRoot', type: 'Group', label: 'Panel', parameters: { sizeMode: 'contentHeight' }, children: ['ppText'], x: 40, y: 40 },
+      { id: 'ppText', type: 'Text', label: 'Probe text', parent: 'ppRoot', parameters: { text: 'probe panel' }, x: 40, y: 120 }] },
+    connections: { $schema: 'https://opennoodl.dev/schemas/connections-v2.json', componentId: cid, version: 1, connections: [{ fromId: 'ppIn', fromProperty: 'mounted', toId: 'ppRoot', toProperty: 'mounted' }] }
+  };
+  for (const e of createEdits({ id: 'ppQ', name: 'probe tasks', collection: 'Task', where: [{ field: 'position', op: 'greaterThan', from: { node: 'ppIn', port: 'n' } }] }, { component: rel, root: 'ppRoot' }).edits) files = applyEdit(files, e).files;
+  writeFileSync(join(dir, 'nodes.json'), JSON.stringify(files.nodes, null, 2)); writeFileSync(join(dir, 'connections.json'), JSON.stringify(files.connections, null, 2));
+  const regPath = join(project, 'components/_registry.json'), reg = JSON.parse(readFileSync(regPath, 'utf8'));
+  reg.components[rel] = { path: rel, type: 'visual', nodeCount: files.nodes.nodes.length, connectionCount: files.connections.connections.length, modified: '2026-10-19T00:00:00.000Z', created: '2026-10-19T00:00:00.000Z' };
+  writeFileSync(regPath, JSON.stringify(reg, null, 2));
+}
 const children = [];
 const results = [];
 const ok = (cond, what, detail) => { results.push({ cond: !!cond, what, detail }); console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${what}${detail !== undefined ? ' — ' + JSON.stringify(detail).slice(0, 260) : ''}`); };
@@ -511,6 +532,31 @@ try {
     const stepsText = await b.evaluate(`document.getElementById('steps').innerText`);
     ok(/Refresh page data/.test(stepsText) && /A refresh ends the workflow/.test(stepsText) && (await b.evaluate(`document.querySelectorAll('#steps .addrow').length`)) === addRows - 1, 'the chain shows it as a Refresh step and ends there (no step can hang on the item\'s every run)', stepsText.slice(-200));
     await b.clickSel('[data-tab=design]'); await wait(400);
+  }
+  console.log('check: a reusable\'s data asks while that copy is shown (STU-014, R8)');
+  {
+    // four copies on Sign in, written as another program would: 1 and 2 shown, 3 hidden itself, 4 inside a hidden group
+    const f = join(project, SIGN + 'nodes.json'); const j = JSON.parse(readFileSync(f, 'utf8'));
+    const copy = (id, n, extra = {}, parent = card) => ({ id, type: '/Reusable/Probe panel', label: `Probe ${n}`, parent, parameters: { n, ...extra } });
+    j.nodes.push(copy('pr1', 1), copy('pr2', 2), copy('pr3', 3, { mounted: false }), { id: 'prHide', type: 'Group', label: 'Hidden group', parent: card, parameters: { mounted: false }, children: ['pr4'] }, copy('pr4', 4, {}, 'prHide'));
+    j.nodes.find((n) => n.id === card).children.push('pr1', 'pr2', 'pr3', 'prHide');
+    const n0 = await shows();
+    writeFileSync(f + '.tmp-check', JSON.stringify(j, null, 2)); renameSync(f + '.tmp-check', f);
+    await rebuilt(n0); await wait(1500);
+    // which copies asked: the n in "position > n" of each Task query the app made since this frame opened
+    const asked = async () => JSON.parse(await b.evaluate(`JSON.stringify((__ob.preview.frame.contentWindow.__studioLog || []).filter(e => e.kind === 'request' && /\\/classes\\/Task$/.test(e.path || '') && e.body?._method === 'GET').map(e => e.body.where?.position?.$gt))`));
+    const drawn = async () => ((await appText()).match(/probe panel/g) || []).length;
+    const setIn = (id, port, v) => b.evaluate(`__ob.preview.frame.contentWindow.Noodl.Navigation._noodlRuntime.context.rootComponent.nodeScope.getNodesWithIdRecursive(${JSON.stringify(id)})[0].setInputValue(${JSON.stringify(port)}, ${JSON.stringify(v)})`);
+    const open = await asked();
+    ok(open.slice().sort().join() === '1,2' && (await drawn()) === 2, 'the page opens: the two shown copies ask once each, the hidden copy and the copy in a hidden group do not ask', { asked: open, drawn: await drawn() });
+    await setIn('pr1', 'n', 5); await wait(1200);
+    await setIn('pr4', 'n', 7); await wait(1200);
+    const changed = await asked();
+    ok(changed.slice(open.length).join() === '5', 'a value changes on a shown copy: it asks again; on the copy in the hidden group: it waits', changed);
+    await setIn('pr3', 'mounted', true); await wait(1200);
+    await setIn('prHide', 'mounted', true); await wait(1200);
+    const shown = await asked();
+    ok(shown.slice(changed.length).join() === '3,7' && (await drawn()) === 4, 'shown, each hidden copy asks once, with the value it has now (3, then 7)', { asked: shown, drawn: await drawn() });
   }
   ok((await status()).startsWith('App on screen'), 'after every edit the app still validates and draws', await status());
   const problems = b.problems.filter((p) => !/Invalid connection|doesn't have a port|Failed to load resource|fonts\.g|^\[noodl\]/.test(p)); // `[noodl]` lines are the app's own runtime (a Navigate with no target yet), not the editor
