@@ -13,7 +13,7 @@
  * Needs the deploy runtime, the in-page preview bundle and Orbit's look.js / specs.js (serve.mjs says which is missing).
  */
 import { spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -328,6 +328,63 @@ try {
     await b.clickSel('#clash-mine'); await wait(800);
     const after = onDisk(SIGN + 'nodes.json').nodes;
     ok(!after.some((n) => n.id === outsideId) && after.find((n) => n.id === lead).parameters.text === 'Theirs', '"Keep mine" writes the editor\'s version over theirs');
+  }
+  console.log('check: Claude Code (STU-005)');
+  {
+    const NAME = 'nodegx-todo-list';
+    const MCP = join(project, '.mcp.json');
+    const agentApi = (method = 'GET') => b.evaluate(`fetch('/api/agent${method === 'POST' ? '-connect' : ''}', { method: '${method}' }).then(r => r.json())`);
+    await b.until('__ob.agent', 8000);
+    ok(!existsSync(MCP) && (await b.evaluate('__ob.agent.state')) === 'none' && (await b.evaluate('document.getElementById("agentpill").textContent')) === 'Connect Claude Code', 'a project with no .mcp.json says "Connect Claude Code" in the header');
+    const outside0 = await b.evaluate('__ob.outside || 0');
+    await b.clickSel('#agentpill');
+    await b.until('document.getElementById("agentconnect")', 8000);
+    await b.clickSel('#agentconnect');
+    await b.until('__ob.agent && __ob.agent.state === "connected"', 15000);
+    const mcp = existsSync(MCP) ? JSON.parse(readFileSync(MCP, 'utf8')) : {};
+    const reg = mcp.mcpServers?.[NAME];
+    const bundle = join(repo, 'packages/noodl-mcp/dist/noodl-mcp.cjs');
+    ok(reg?.type === 'stdio' && reg.args?.[0] === bundle && reg.args?.[1] === project && reg.args?.[2] === '--allow-writes' && Object.keys(mcp.mcpServers).length === 1, 'the button writes .mcp.json registering the checkout\'s NodeGX MCP server for this folder as nodegx-<folder>', reg);
+    const claudeMd = existsSync(join(project, 'CLAUDE.md')) ? readFileSync(join(project, 'CLAUDE.md'), 'utf8') : '';
+    ok(claudeMd.startsWith('# todo-list') && claudeMd.includes(`\`${NAME}\` MCP server`) && existsSync(join(project, 'AGENTS.md')) && /^\.mcp\.json$/m.test(readFileSync(join(project, '.gitignore'), 'utf8')), 'and the NodeGX editor\'s CLAUDE.md and AGENTS.md, with .mcp.json in .gitignore');
+    const shown = await b.evaluate('document.getElementById("agentcmd")?.textContent');
+    ok(shown === `cd ${/\s/.test(project) ? JSON.stringify(project) : project} && claude` && (await b.evaluate('document.getElementById("agentpill").textContent')) === 'Claude Code', 'the panel then shows the one command that starts a session in the folder', shown);
+    await wait(700);
+    ok((await b.evaluate('__ob.outside || 0')) === outside0, 'Studio\'s own writes of CLAUDE.md and AGENTS.md do not come back to it as a change made outside');
+    // what `claude` in the folder does with the registration: start it, initialize, list the tools
+    const tools = await new Promise((done) => {
+      const p = spawn(reg.command, reg.args, { cwd: project, env: { ...process.env, ...reg.env }, stdio: ['pipe', 'pipe', 'pipe'] });
+      let out = '';
+      const finish = (v) => { clearTimeout(t); p.kill(); done(v); };
+      const t = setTimeout(() => finish({ error: 'no tools/list answer in 30 s' }), 30000);
+      p.on('error', (err) => finish({ error: err.message }));
+      p.stdout.on('data', (d) => {
+        out += d;
+        for (const line of out.split('\n')) {
+          try { const m = JSON.parse(line); if (m.id === 2) finish(m.result?.tools?.map((x) => x.name) ?? { error: m.error }); } catch { /* partial */ }
+        }
+      });
+      const msg = (m) => p.stdin.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\n');
+      msg({ id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'studio-check', version: '0' } } });
+      msg({ method: 'notifications/initialized' });
+      msg({ id: 2, method: 'tools/list', params: {} });
+    });
+    ok(Array.isArray(tools) && tools.includes('get_project_info') && tools.includes('update_component'), 'the registered command starts the NodeGX MCP server on this project and it lists its tools', Array.isArray(tools) ? tools.length : tools);
+    const mtime = statSync(MCP).mtimeMs;
+    const again = await agentApi('POST');
+    ok(again.state === 'connected' && again.files.length === 0 && statSync(MCP).mtimeMs === mtime, 'connecting again writes nothing');
+    // a copied project: its .mcp.json registers NodeGX for the folder it was copied from
+    const elsewhere = JSON.stringify({ mcpServers: { 'nodegx-original': { ...reg, args: [bundle, '/Users/someone/original', '--allow-writes'] } } }, null, 2);
+    writeFileSync(MCP, elsewhere); rmSync(join(project, 'CLAUDE.md')); rmSync(join(project, 'AGENTS.md'));
+    const moved = await agentApi('POST');
+    ok(moved.state === 'elsewhere' && moved.elsewhere === '/Users/someone/original' && readFileSync(MCP, 'utf8') === elsewhere && !existsSync(join(project, 'CLAUDE.md')), 'a .mcp.json that registers NodeGX for another folder is reported, and neither it nor a CLAUDE.md claiming a server is written', { state: moved.state, elsewhere: moved.elsewhere });
+    await b.evaluate('__ob.openAgent()'); await b.until('document.querySelector("#agentpanel h4")', 8000);
+    ok((await b.evaluate('document.querySelector("#agentpanel").textContent')).includes('/Users/someone/original'), 'the panel names the folder that app is connected to', await b.evaluate('document.querySelector("#agentpanel h4").textContent'));
+    const theirs = JSON.stringify({ mcpServers: { svelte: { type: 'stdio', command: 'npx', args: ['-y', '@sveltejs/mcp'], env: {} } } }, null, 2);
+    writeFileSync(MCP, theirs);
+    const other = await agentApi('POST');
+    ok(other.state === 'other' && other.others?.join() === 'svelte' && readFileSync(MCP, 'utf8') === theirs, 'a .mcp.json of the person\'s own servers is left as it is and the panel offers the entry to add', other.state);
+    await b.evaluate('document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }))'); await wait(100);
   }
   ok((await status()).startsWith('App on screen'), 'after every edit the app still validates and draws', await status());
   const problems = b.problems.filter((p) => !/Invalid connection|doesn't have a port|Failed to load resource|fonts\.g|^\[noodl\]/.test(p)); // `[noodl]` lines are the app's own runtime (a Navigate with no target yet), not the editor

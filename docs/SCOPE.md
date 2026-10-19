@@ -38,6 +38,7 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 | Bubble importer — pages, elements, styles, workflows, expressions, option sets, reusables, custom states, data types, privacy rules → `nodegx.security.json`, backend workflows → cloud functions, Data-tab rows | spike, measured on a real 18-page app (0 validation errors) | `check:import` 26/26 |
 | Desktop app — Electron window, a welcome screen (recent projects, NodeGX's templates, Import an app), File → Open Recent, a smoke mode | first cut (2026-10-19) | `check:app` 34/34, `smoke` |
 | The project's backend — started (or adopted) on open, stopped on close, shown in the status bar; a template that needs one gets one; Data's "Start a backend" for an app with none | works (2026-10-19) | `check:app` 34/34 |
+| Claude Code — "Connect Claude Code" in the header (and File) registers the NodeGX MCP server for the folder with the NodeGX editor's own writer and shows the command that starts a session there | works (2026-10-19) | `check:editor` 56/56 |
 
 [history/](history/) is how it started (NodeGX phase 123, working title "Open Bubble"): the brief, the look, the
 first play test and every ruling taken.
@@ -142,6 +143,29 @@ passes, because the server and the backend stop well before Electron exits on th
 record's `owner.kind` has no value for Studio, so Studio's records say `noodl-mcp`; the bundled kit cannot find the
 backend service from `.kit/`, so Studio sets `NODEGX_BACKEND_ENTRY` to the checkout's `nodegx-backend/dist/cli.js`
 (that build is the checkout's, of 2026-10-12, older than some of its sources).
+
+**Done (STU-005, 2026-10-19).** The header has a **Claude Code** button beside the backend (File → **Connect Claude
+Code…** opens the same panel). On a folder with no `.mcp.json` it reads **Connect Claude Code**; pressing it writes the
+three files the NodeGX editor writes when it opens a project — `.mcp.json` registering the NodeGX MCP server for this
+folder as `nodegx-<folder>`, `CLAUDE.md`, `AGENTS.md`, and the `.mcp.json` line in `.gitignore` — and the panel then
+shows the one command, `cd <folder> && claude`, with Copy. It is NodeGX's writer, not a second one: `lib/agent.mjs`
+bundles the editor's front door (`main/src/mcp/mcpFrontDoor.js` — where the server bundle is, whether `node` runs it
+or Electron as Node), `buildProjectRegistration` (`mcpCommands.ts`) and `backfillAgentConfig` (`agentConfig.ts`) from
+the checkout on every start, as `lib/backend.mjs` does for the backend. Studio's own part is the filesystem under the
+writer and reading a `.mcp.json` that is already there, because the writer keeps one and the panel must say what it
+does: one registering NodeGX **for another folder** (a copied project — NodeGX's own test projects have them) is named
+and left alone, with "delete it, then connect again"; one with only the person's own servers is left alone, with the
+entry to add; in neither case is a `CLAUDE.md` written that claims a server is registered. Measured: from a fresh copy
+of the todo template, the button, then in that folder `claude mcp get nodegx-my-todo` → *Project config (shared via
+.mcp.json) · Pending approval (run `claude` to approve)* — Claude Code finds it and asks once, as `CLAUDE.md` says;
+the gate starts the registered command itself and the server answers `tools/list` with its 21 tools on that project.
+`check:editor` 56/56 (10 new); with the guard on "only a folder with no `.mcp.json`" removed, 2 fail; with Studio's
+own writes not recorded as its own, 2 fail (`CLAUDE.md` comes back as an outside edit and redraws the app). Not in it:
+the user profile (`NODEGX_USER_PREFERENCES`, the NodeGX editor's `PREFERENCES.md`) is not passed — Studio has no
+profile of its own and does not reach into the editor's user data; Studio does not write the files on open as the
+NodeGX editor does (`backfillProjectAgentConfig`), only on the button — the shared `CLAUDE.md` says they are written
+"whenever the project is opened in NodeGX", which is the NodeGX editor's behaviour, not Studio's. One gate run of five
+this session failed in Workflow ("Add a branch" picked the card's *Did Mount* event), not reproduced; noted, not chased.
 
 Order: STU-002 first (it is what makes "local" feel alive, and STU-005 depends on it), then STU-003–005, then
 STU-006–007 when someone outside the team needs to run it.

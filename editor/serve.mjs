@@ -20,6 +20,8 @@
  *   GET  /api/backend-status    the project's backend (STU-004): `{ phase, name, endpoint, error }`, also pushed over
  *                          /api/events as `{ backend }` whenever it changes
  *   POST /api/backend-provision a backend for a project bound to none: NodeGX's provision, then the binding
+ *   GET  /api/agent        STU-005: Claude Code and this folder (`lib/agent.mjs` stateOf): `{ state, serverName, command, … }`
+ *   POST /api/agent-connect     "Connect Claude Code": the NodeGX editor's writer of `.mcp.json`, `CLAUDE.md`, `AGENTS.md`
  *
  * STU-004: a project bound to a local backend (`lib/backend.mjs`) has it started when this server starts — or adopted
  * when the NodeGX editor or Claude Code already runs it — and stopped when this server stops (SIGTERM / SIGINT; the
@@ -35,6 +37,7 @@ import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { nodegxRepo } from '../lib/nodegx.mjs';
 import * as backends from '../lib/backend.mjs';
+import * as agent from '../lib/agent.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = nodegxRepo;
@@ -249,6 +252,12 @@ const server = http.createServer(async (req, res) => {
       } catch (err) {
         return json(409, { error: err.message });
       }
+    }
+    if (url.pathname === '/api/agent') return json(200, await agent.stateOf(projectDir));
+    if (url.pathname === '/api/agent-connect' && req.method === 'POST') {
+      // Studio's own writes, known before they land, so the watcher does not hand them back to the page as an outside edit
+      const result = await agent.connect(projectDir, (rel, text) => known.set(rel, text));
+      return json(200, result);
     }
     if (url.pathname.startsWith('/api/backend/')) {
       const binding = backends.bindingOf(projectDir);

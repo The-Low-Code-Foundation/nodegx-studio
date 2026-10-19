@@ -270,6 +270,7 @@ function menu() {
         },
         { type: 'separator' },
         { label: 'Show Project Folder', enabled: !!server, click: () => server && shell.openPath(server.spawnargs[2]) },
+        { label: 'Connect Claude Code…', enabled: !!server, click: () => win?.webContents.executeJavaScript('window.__ob?.openAgent?.()') },
         { type: 'separator' },
         process.platform === 'darwin' ? { role: 'close' } : { role: 'quit' }
       ]

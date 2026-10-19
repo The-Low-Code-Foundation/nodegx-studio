@@ -93,6 +93,13 @@
   header .status.bad::before { background: var(--danger); }
   header .status.backend { border: 0; background: none; padding: 0 0 0 14px; border-left: 1px solid var(--line); border-radius: 0; cursor: pointer; }
   header .status.backend.off::before { background: var(--line-2); }
+  .menu.agent { width: 420px; padding: 14px; display: grid; gap: 10px; font-size: 13px; line-height: 1.5; }
+  .agent h4 { margin: 0; font-size: 14px; font-weight: 600; }
+  .agent p { margin: 0; color: var(--ink-2); }
+  .agent p.bad { color: var(--danger); }
+  .agent pre { margin: 0; padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r); font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-all; user-select: all; }
+  .agent .acts { display: flex; gap: 8px; align-items: center; }
+  .agent .acts .note { color: var(--muted); font-size: 12px; }
   main { grid-column: 2; min-height: 0; }
   section.tab { height: 100%; display: grid; min-height: 0; }
   section[hidden] { display: none; }
@@ -329,6 +336,7 @@
     <div class="spacer"></div>
     <div class="status" id="status">starting…</div>
     <button class="status backend" id="backendpill" title="The app's backend">…</button>
+    <button class="status backend off" id="agentpill" title="Claude Code and this app">Claude Code</button>
   </header>
 
   <main>
@@ -440,6 +448,66 @@ function takeBackend(next) {
   backendState = next;
   showBackend();
   if (tab === 'data' && was !== next.phase) renderData();
+}
+
+/* STU-005: Claude Code on this app, through the NodeGX MCP server — registered by NodeGX's own writer (lib/agent.mjs). */
+let agentState = null;
+const AGENT_PILL = { connected: ['Claude Code', ''], none: ['Connect Claude Code', 'off'] };
+function showAgent() {
+  const [text, kind] = AGENT_PILL[agentState?.state] ?? ['Claude Code', 'busy'];
+  const pill = $('agentpill');
+  pill.textContent = text; pill.className = `status backend ${agentState ? kind : 'off'}`;
+  window.__ob.agent = agentState;
+}
+async function loadAgent() {
+  try { agentState = await (await fetch('/api/agent')).json(); } catch (err) { agentState = { state: 'unavailable', reason: err.message }; }
+  showAgent();
+  return agentState;
+}
+function copyButton(text) {
+  const b = h('button', { onclick: async () => { try { await navigator.clipboard.writeText(text); b.textContent = 'Copied'; } catch { b.textContent = 'Select it and copy'; } } }, 'Copy');
+  return b;
+}
+async function openAgent() {
+  closeMenu();
+  const pill = $('agentpill').getBoundingClientRect();
+  const panel = h('div', { class: 'menu agent', id: 'agentpanel', style: `top:${pill.bottom + 6}px;right:${Math.max(8, innerWidth - pill.right)}px` }, h('p', {}, 'Looking at this folder…'));
+  document.body.append(panel); dismissOnOutside(panel);
+  const s = await loadAgent();
+  if (!panel.isConnected) return;
+  panel.replaceChildren(...agentPanel(s));
+}
+function agentPanel(s) {
+  const name = h('code', {}, s.name ?? s.serverName);
+  const startHere = [h('p', {}, 'Start a session in the app’s folder:'), h('pre', { id: 'agentcmd' }, s.command), h('div', { class: 'acts' }, copyButton(s.command), h('span', { class: 'note' }, 'Claude Code asks you once to approve the server.'))];
+  switch (s.state) {
+    case 'connected':
+      return [h('h4', {}, 'Claude Code can work on this app'), h('p', {}, 'This folder registers the NodeGX MCP server as ', name, ', so a Claude Code session started here reads and changes the app with NodeGX’s tools. What it changes appears here as it happens.'), ...startHere];
+    case 'none':
+      return [
+        h('h4', {}, 'Let Claude Code work on this app'),
+        h('p', {}, 'Studio registers the NodeGX MCP server for this folder as ', name, ' and writes the same three files the NodeGX editor writes: ', h('code', {}, '.mcp.json'), ', ', h('code', {}, 'CLAUDE.md'), ' and ', h('code', {}, 'AGENTS.md'), '. ', h('code', {}, '.mcp.json'), ' names paths on this computer, so it is added to ', h('code', {}, '.gitignore'), '.'),
+        h('div', { class: 'acts' }, h('button', { class: 'primary', id: 'agentconnect', onclick: connectAgent }, 'Connect Claude Code'))
+      ];
+    case 'elsewhere':
+      return [h('h4', {}, 'This folder is connected to another app'), h('p', { class: 'bad' }, 'Its ', h('code', {}, '.mcp.json'), ' registers the NodeGX MCP server as ', name, ' for ', h('code', {}, s.elsewhere ?? 'another folder'), ', probably because the app was copied from there. Claude Code started here would change that app, not this one.'), h('p', {}, 'Studio does not change a ', h('code', {}, '.mcp.json'), ' it did not write. Delete it, then connect again.'), h('div', { class: 'acts' }, h('button', { onclick: openAgent }, 'Check again'))];
+    case 'other': {
+      const entry = JSON.stringify({ [s.serverName]: s.registration }, null, 2);
+      return [h('h4', {}, 'This folder has its own MCP servers'), h('p', {}, 'Its ', h('code', {}, '.mcp.json'), ' registers ', s.others.join(', ') || 'no servers', ' and not NodeGX. Studio does not change a ', h('code', {}, '.mcp.json'), ' it did not write. To add NodeGX, put this under ', h('code', {}, 'mcpServers'), ':'), h('pre', {}, entry), h('div', { class: 'acts' }, copyButton(entry), h('button', { onclick: openAgent }, 'Check again'))];
+    }
+    default:
+      return [h('h4', {}, 'Claude Code cannot be connected yet'), h('p', { class: 'bad' }, s.reason ?? s.state)];
+  }
+}
+async function connectAgent() {
+  const button = $('agentconnect');
+  button.disabled = true; button.textContent = 'Connecting…';
+  const r = await fetch('/api/agent-connect', { method: 'POST' });
+  agentState = await r.json();
+  showAgent();
+  const panel = $('agentpanel');
+  if (panel) panel.replaceChildren(...agentPanel(agentState));
+  window.__ob.agentFiles = agentState.files;
 }
 let persisted = { ...opened.files };
 const undoStack = [];
@@ -1957,6 +2025,9 @@ renderAll();
 new EventSource(`/api/events?client=${windowId}`).onmessage = (e) => { const m = JSON.parse(e.data); if (m.backend) takeBackend(m.backend); else takeOutside(m); };
 $('backendpill').onclick = () => switchTab('data');
 showBackend();
+$('agentpill').onclick = openAgent;
+window.__ob.openAgent = openAgent;
+loadAgent();
 document.title = `ready ${opened.name} pages=${pageKeys().length} visual=${visualIds.length}`;
 </script>
 </html>
