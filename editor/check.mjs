@@ -179,7 +179,7 @@ try {
     await select(title1);
     const fields = await b.evaluate(`[...document.querySelectorAll('#right .field')].map(f => f.querySelector('label').textContent)`);
     const idx = fields.indexOf('Text');
-    await b.evaluate(`[...document.querySelectorAll('#right .field')][${idx}].querySelector('.from button').click()`); await wait(250);
+    await b.evaluate(`[...document.querySelectorAll('#right .field')][${idx}].querySelector('.bolt').click()`); await wait(250);
     const sources = await b.evaluate(`[...document.querySelectorAll('.menu .item')].map(e => e.textContent)`);
     ok(sources.some((s) => s.includes("Sign-in card's state")) && sources.some((s) => s.startsWith('Compose an expression')), 'Insert dynamic data lists the custom state and the composer', sources.slice(0, 4));
     await menuItem('Compose an expression');
@@ -468,7 +468,7 @@ try {
     if (texts.length < 2) throw new Error(`fewer than two free Texts on the Sign in page: ${JSON.stringify(visible)}`);
     for (const id of texts) {
       await select(id);
-      const at = await b.evaluate(`(() => { const f = [...document.querySelectorAll('#right .field')].find((f) => f.querySelector('label')?.textContent === 'Text'); const btn = f?.querySelector('.from button'); if (!btn) return null; btn.scrollIntoView({ block: 'nearest' }); const r = btn.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+      const at = await b.evaluate(`(() => { const f = [...document.querySelectorAll('#right .field')].find((f) => f.querySelector('label')?.textContent === 'Text'); const btn = f?.querySelector('.bolt'); if (!btn) return null; btn.scrollIntoView({ block: 'nearest' }); const r = btn.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
       if (!at) throw new Error(`no "Insert dynamic data" on the Text field of ${id}`);
       await b.click(at.x, at.y);
       const n0 = await shows(); await menuItem("latest note's title"); await rebuilt(n0);
@@ -505,7 +505,7 @@ try {
     // the same question from a field's "Insert dynamic data → New page data…" (Bubble's "Do a search for")
     const btn = onDisk(SIGN + 'nodes.json').nodes.find((n) => n.type === 'net.noodl.controls.button' && n.parameters?.label === 'Button')?.id;
     await select(btn);
-    const at = await b.evaluate(`(() => { const f = [...document.querySelectorAll('#right .field')].find((f) => f.querySelector('label')?.textContent === 'Label'); const btn = f?.querySelector('.from button'); if (!btn) return null; btn.scrollIntoView({ block: 'nearest' }); const r = btn.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+    const at = await b.evaluate(`(() => { const f = [...document.querySelectorAll('#right .field')].find((f) => f.querySelector('label')?.textContent === 'Label'); const btn = f?.querySelector('.bolt'); if (!btn) return null; btn.scrollIntoView({ block: 'nearest' }); const r = btn.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
     if (!at) throw new Error('no "Insert dynamic data" on the button\'s Label');
     await b.click(at.x, at.y); await menuItem('New page data…');
     const said = await form({ name: 'all the notes', type: 'Note' });

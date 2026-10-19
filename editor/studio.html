@@ -129,6 +129,38 @@
   .tree .row { padding-top: 4px; padding-bottom: 4px; }
   .tree .row svg.i { width: 14px; height: 14px; color: var(--muted); }
   .tree .row[aria-selected=true] svg.i { color: var(--accent-ink); }
+  .props .field { grid-template-columns: 96px 1fr 22px; }
+  .props .field .bolt { padding: 2px; width: 22px; height: 22px; display: grid; place-items: center; opacity: .25; }
+  .props .field:hover .bolt, .props .field .bolt:focus { opacity: 1; }
+  .props .field .bolt svg.i { width: 13px; height: 13px; }
+  .props .field textarea { resize: vertical; font-family: inherit; font-size: 13px; }
+  .tree .wrap { color: var(--muted); font-size: 11px; border: 1px solid var(--line-2); border-radius: 8px; padding: 0 5px; flex: none; cursor: pointer; }
+  .tree .wrap:hover { border-color: var(--accent-line); color: var(--accent-ink); }
+  .field button.swatch { padding: 0; cursor: pointer; }
+  .menu .item .swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--line-2); flex: none; }
+  .mpbox { padding: 4px 0 8px; font-size: 11px; }
+  .mpbox input { text-align: center; padding: 2px; width: 46px; justify-self: center; font-size: 12px; }
+  .mpbox span:not(.mp-name) { width: 46px; }
+  .mp-m, .mp-p { position: relative; display: grid; grid-template-columns: 52px 1fr 52px; grid-template-areas: ". t ." "l c r" ". b ."; align-items: center; gap: 4px; padding: 6px 4px; border-radius: 6px; }
+  .mp-m { background: var(--mar); border: 1px dashed rgba(217, 119, 6, .5); }
+  .mp-p { grid-area: c; background: var(--pad); border: 1px solid rgba(22, 163, 74, .4); }
+  .mp-name { position: absolute; top: 3px; left: 6px; color: var(--ink-2); }
+  .mp-top { grid-area: t; } .mp-right { grid-area: r; } .mp-bottom { grid-area: b; } .mp-left { grid-area: l; }
+  .mp-core { grid-area: c; background: var(--panel); border: 1px solid var(--line-2); border-radius: 4px; padding: 8px 4px; text-align: center; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tree .row { gap: 6px; }
+  .tree .chev { width: 14px; height: 14px; flex: none; display: grid; place-items: center; cursor: pointer; border-radius: 3px; }
+  .tree .chev:hover { background: var(--line); }
+  .tree .chev::before { content: ''; width: 5px; height: 5px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); }
+  .tree .chev.open::before { transform: rotate(45deg); margin-top: -3px; }
+  .tree .chev.none::before { display: none; }
+  .tree .segs { display: flex; gap: 4px; min-width: 0; overflow: hidden; flex: 0 1 auto; }
+  .tree .seg { overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
+  .tree .seg.inner { color: var(--muted); font-size: 12px; flex: 0 3 auto; }
+  .tree .seg:hover { text-decoration: underline; }
+  .tree .seg.on { font-weight: 600; }
+  .tree .sep { color: var(--muted); }
+  .tree .words { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 0; }
+  .tree .words::before { content: '“'; } .tree .words::after { content: '”'; }
   #stage { position: relative; overflow: auto; background: var(--bg); background-image: radial-gradient(var(--line-2) .6px, transparent .6px); background-size: 16px 16px; display: flex; justify-content: center; align-items: flex-start; padding: 20px; flex-wrap: wrap; gap: 14px; }
   #problems { width: 100%; max-width: 960px; background: #fff7ed; border: 1px solid #fdba74; border-left: 4px solid #ea580c; border-radius: var(--r); padding: 10px 14px; }
   #problems h4 { margin: 0 0 6px; font-size: 13px; }
@@ -1118,9 +1150,44 @@ function placePending(hit) {
 
 /* ================= the element tree ================= */
 $('treesearch').oninput = () => renderTree();
+/* STU-050 (spike): the page as its parts. A wrapper holding one container folds into its parent's row ("Group Hero ›
+   Group Margin"), a row opens one level, a row says what it holds (a text's words, how many elements), and selecting
+   an element in the page opens the way to it. A search still lists every match flat. */
+const treeOpen = new Set();
+let treeRevealed = null;
+const kidsOf = (id) => (byId[id]?.children || []).filter((c) => byId[c]);
+const isContainer = (id) => kidsOf(id).length > 0;
+const chainOf = (id) => { const out = [id]; let k; while ((k = kidsOf(out[out.length - 1])).length === 1 && isContainer(k[0])) out.push(k[0]); return out; };
+const countIn = (id) => kidsOf(id).reduce((a, c) => a + 1 + countIn(c), 0);
+const wordsOf = (n) => { const t = n.parameters?.text ?? n.parameters?.label; return typeof t === 'string' ? t.split('\n')[0].slice(0, 40) : ''; };
+function renderOutline(tree) {
+  if (sel && sel !== treeRevealed) { for (let p = byId[sel]?.parent; p !== undefined && byId[p]; p = byId[p].parent) treeOpen.add(p); treeRevealed = sel; }
+  const rootId = visualIds[0];
+  const rowFor = (id, d) => {
+    const chain = chainOf(id), tail = chain[chain.length - 1], n = byId[id], kids = kidsOf(tail);
+    const open = d === 0 || chain.some((c) => treeOpen.has(c));
+    const toggle = (e) => { e.stopPropagation(); if (open) chain.forEach((c) => treeOpen.delete(c)); else treeOpen.add(id); renderTree(); };
+    const seg = (c, i) => h('span', { class: `seg${i ? ' inner' : ''}${sel === c ? ' on' : ''}`, title: i ? `${labelOf(c)} — a wrapper inside ${labelOf(chain[i - 1])}` : undefined, onclick: (e) => { e.stopPropagation(); select(c); elOf(c)?.scrollIntoView({ block: 'nearest' }); } }, labelOf(c));
+    const words = wordsOf(n), nStates = statesOf(id).length;
+    tree.append(h('div', { class: 'row', 'aria-selected': chain.includes(sel), style: `padding-left:${4 + d * 14}px`, onclick: () => { select(id); elOf(id)?.scrollIntoView({ block: 'nearest' }); }, onmouseenter: () => { hover = id; draw(); }, onmouseleave: () => { hover = null; draw(); } },
+      kids.length ? h('span', { class: `chev${open ? ' open' : ''}`, onclick: toggle }) : h('span', { class: 'chev none' }),
+      icon(glyphOf(n.type)),
+      h('span', { class: 'segs' }, seg(id, 0)),
+      // the wrappers folded into this row: one small mark, named on hover, each still selectable (the selected one is spelled out)
+      chain.length > 1 ? (chain.slice(1).includes(sel)
+        ? h('span', { class: 'segs' }, h('span', { class: 'sep' }, '›'), seg(sel, chain.indexOf(sel)))
+        : h('span', { class: 'wrap', title: `Inside: ${chain.slice(1).map(labelOf).join(' › ')} — click to select`, onclick: (e) => { e.stopPropagation(); select(tail); } }, `› ${chain.length - 1}`)) : null,
+      words ? h('span', { class: 'words' }, words) : null,
+      nStates ? h('span', { class: 'chip state', title: `${nStates} custom state(s)` }, nStates) : null,
+      h('span', { class: 't' }, kids.length && !open ? String(countIn(tail)) : (words ? '' : n.label ? typeName(n.type) : ''))));
+    if (open) for (const k of kids) rowFor(k, d + 1);
+  };
+  if (rootId) rowFor(rootId, 0);
+}
 function renderTree() {
   const tree = $('tree'); tree.innerHTML = '';
   const q = $('treesearch').value.trim().toLowerCase();
+  if (!q) return renderOutline(tree);
   for (const id of visualIds) {
     const n = byId[id];
     if (q && !labelOf(id).toLowerCase().includes(q) && !typeName(n.type).toLowerCase().includes(q)) continue;
@@ -1224,7 +1291,9 @@ function renderProps() {
   for (const [g, ports] of groups) {
     const det = h('details', { class: 'group', open: first || ports.some((p) => params[p.name] !== undefined || wiredIn[p.name]) }, h('summary', {}, g));
     first = false;
-    for (const p of ports) det.append(fieldFor(node, p, params[p.name], wiredIn[p.name]));
+    const boxed = g === 'Margin and padding' ? ports.filter((p) => /^(margin|padding)(Top|Right|Bottom|Left)$/.test(p.name) && !wiredIn[p.name]) : [];
+    if (boxed.length) det.append(marginPaddingBox(node, boxed));
+    for (const p of ports) if (!boxed.includes(p)) det.append(fieldFor(node, p, params[p.name], wiredIn[p.name]));
     wrap.append(det);
   }
   wrap.append(customStatesSection(node));
@@ -1267,6 +1336,14 @@ function fieldFor(node, p, value, wire, setter) {
   const composed = srcNode && isComposed(srcNode) && srcNode.metadata.composedFor.node === node.id && srcNode.metadata.composedFor.port === p.name ? srcNode : null;
   if (composed) f.append(h('div', { class: 'chip expr', title: composed.parameters?.expression || '', style: 'cursor:pointer;max-width:100%', onclick: (e) => openComposer(e, node, p, composed) }, icon('fx'), h('span', { style: 'overflow:hidden;text-overflow:ellipsis' }, composedPreview(composed))));
   else if (p.wireOnly) f.append(h('div', { style: 'color:var(--muted);font-size:12px' }, wire ? '' : 'only from a value'));
+  // STU-051 (spike): a text's words in a box that keeps its line breaks (a one-line field drops them on the first keystroke)
+  else if (ty === 'string' && (p.name === 'text' || (typeof value === 'string' && value.includes('\n')))) f.append(h('textarea', { rows: Math.min(6, Math.max(2, String(value ?? '').split('\n').length)), oninput: (e) => set(e.target.value || undefined, false) }, value ?? ''));
+  // STU-051 (spike): an icon's source is { class, code } — its name is edited, the rest kept
+  else if (value && typeof value === 'object' && 'code' in value) f.append(h('input', { type: 'text', value: value.code, placeholder: 'icon name, e.g. menu', oninput: (e) => set({ ...value, code: e.target.value }, false) }));
+  else if (p.name === 'fontWeight') {
+    const W = [[100, 'Thin'], [200, 'Extra light'], [300, 'Light'], [400, 'Regular'], [500, 'Medium'], [600, 'Semibold'], [700, 'Bold'], [800, 'Extra bold'], [900, 'Black']];
+    f.append(h('select', { onchange: (e) => set(e.target.value === '' ? undefined : e.target.value) }, h('option', { value: '' }, '(default)'), ...W.map(([w, name]) => h('option', { value: w, selected: String(value) === String(w) }, `${name} · ${w}`))));
+  }
   else if (ty === 'boolean') f.append(h('input', { type: 'checkbox', style: 'width:auto;justify-self:start', checked: value ?? p.default ?? false, onchange: (e) => set(e.target.checked) }));
   else if (ty === 'component' && Array.isArray(p.type?.components)) {
     const s = h('select', { onchange: (e) => set(e.target.value === '' ? undefined : e.target.value) }, h('option', { value: '' }, '(none)'));
@@ -1278,7 +1355,7 @@ function fieldFor(node, p, value, wire, setter) {
     f.append(s);
   } else if (ty === 'color') {
     const text = h('input', { type: 'text', value: value ?? '', placeholder: String(p.default ?? ''), list: 'tokens-color', oninput: (e) => { sw.style.background = resolveColor(e.target.value); set(e.target.value || undefined, false); } });
-    const sw = h('div', { class: 'swatch', style: `background:${resolveColor(value ?? p.default ?? '')}` });
+    const sw = h('button', { class: 'swatch', title: 'This app\'s colours', style: `background:${resolveColor(value ?? p.default ?? '')}`, onclick: (e) => colourMenu(e, value, (v) => { text.value = v; sw.style.background = resolveColor(v); set(v); }) });
     f.append(h('div', { class: 'color' }, text, sw));
   } else if ((units || (typeof value === 'object' && value && 'unit' in value)) && (ty === 'number' || ty === 'dimension' || ty === '*' || typeof value === 'object')) {
     const unitList = units || ['px', '%'];
@@ -1299,8 +1376,39 @@ function fieldFor(node, p, value, wire, setter) {
   // Bubble's dynamic data: a value from an element, a custom state, an option set, or a composed expression — as a wire
   if (setter) return f;
   if (wire && !composed) f.append(h('div', { class: 'from' }, sourceChip(wire.fromId, wire.fromProperty), h('button', { class: 'quiet tiny', title: 'Stop taking the value from there', onclick: () => edits(pageKey, [{ edit: 'disconnect', component: pageKey, from: { node: wire.fromId, port: wire.fromProperty }, to: { node: node.id, port: p.name } }]) }, icon('x'))));
-  else if (!composed) f.append(h('div', { class: 'from' }, h('button', { class: 'quiet tiny', title: 'Take this value from an element, a state, an option set, or compose it', onclick: (e) => sourceMenu(e, node, p) }, icon('bolt'), 'Insert dynamic data')));
+  // STU-051 (spike): "Insert dynamic data" is the ⚡ at the end of the row, not a second line under every field
+  else if (!composed) f.append(h('button', { class: 'quiet bolt', title: 'Insert dynamic data — take this value from an element, a state, an option set, or compose it', onclick: (e) => sourceMenu(e, node, p) }, icon('bolt')));
   return f;
+}
+/** STU-051 (spike): the colours this app already uses (and its tokens, by name), most used first. */
+function colourMenu(e, current, pick) {
+  closeMenu('.menu');
+  const menu = popover(e);
+  const used = new Map();
+  for (const n of nodes) for (const [k, v] of Object.entries(n.parameters || {})) if (/[cC]olor$/.test(k) && typeof v === 'string' && v !== 'transparent') used.set(v, (used.get(v) || 0) + 1);
+  const tokens = tokensOf('color');
+  const tile = (v, name, sub) => h('div', { class: 'item', 'aria-selected': v === current, onclick: () => { closeMenu('.menu'); pick(v); } }, h('span', { class: 'swatch', style: `background:${resolveColor(v)}` }), name, h('small', {}, sub));
+  if (tokens.length) { menu.append(h('div', { class: 'hint' }, 'Tokens')); for (const t of tokens) menu.append(tile(`var(${t})`, t.replace(/^--/, ''), '')); }
+  menu.append(h('div', { class: 'hint' }, 'Used in this app'));
+  for (const [v, c] of [...used].sort((a, b) => b[1] - a[1])) menu.append(tile(v, v, `${c}×`));
+  menu.append(tile('transparent', 'transparent', ''));
+  document.body.append(menu); dismissOnOutside(menu);
+}
+/** STU-051 (spike): margin and padding as one box — margin around, padding inside — each side a length or a token's name. */
+const MP_SIDES = ['Top', 'Right', 'Bottom', 'Left'];
+const showLen = (v) => v == null ? '' : typeof v === 'object' ? (v.unit && v.unit !== 'px' ? `${v.value}${v.unit}` : String(v.value)) : typeof v === 'string' && /var\(--([\w-]+)/.test(v) ? v.match(/var\(--([\w-]+)/)[1] : String(v);
+const readLen = (t) => { t = t.trim(); if (!t) return undefined; if (/^var\(/.test(t)) return t; if (/^--/.test(t)) return `var(${t})`; const m = t.match(/^(-?[\d.]+)\s*(px|%)?$/); if (m) return { value: Number(m[1]), unit: m[2] || 'px' }; return tokensOf('').includes(`--${t}`) ? `var(--${t})` : null; };
+function marginPaddingBox(node, ports) {
+  const params = node.parameters || {};
+  const has = (name) => ports.some((p) => p.name === name);
+  const side = (kind, s) => {
+    const name = `${kind}${s}`; if (!has(name)) return h('span', { class: `mp-${s.toLowerCase()}` });
+    return h('input', { type: 'text', class: `mp-${s.toLowerCase()}`, value: showLen(params[name]), placeholder: '0', list: 'tokens-space', title: `${kind === 'margin' ? 'Margin' : 'Padding'} ${s.toLowerCase()}`,
+      onchange: (e) => { const v = readLen(e.target.value); if (v === null) { e.target.value = showLen(params[name]); return toast('A length: 16, 16px, 10% or a spacing token'); } edits(pageKey, [{ edit: 'set_parameter', component: pageKey, id: node.id, name, value: v }], { rebuildApp: true }); } });
+  };
+  const core = h('div', { class: 'mp-core' }, labelOf(node.id));
+  const pad = MP_SIDES.some((s) => has(`padding${s}`)) ? h('div', { class: 'mp-p' }, h('span', { class: 'mp-name' }, 'padding'), ...MP_SIDES.map((s) => side('padding', s)), core) : core;
+  return h('div', { class: 'mpbox' }, MP_SIDES.some((s) => has(`margin${s}`)) ? h('div', { class: 'mp-m' }, h('span', { class: 'mp-name' }, 'margin'), ...MP_SIDES.map((s) => side('margin', s)), pad) : pad);
 }
 /** How a source reads: an element's value, "Card's count" for a state, "Colours · all options" for a set, an expression's text. */
 function sourceChip(fromId, port) {
