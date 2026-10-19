@@ -23,14 +23,15 @@ Where the s6 handoff was short: "copies all read Group …" is not a Studio faul
 "Horizontal Buttons" copies carry Bubble's own names ("Group Horizontal Buttons", "… copy", "… copy 2", twice, in two
 sections). Not looked at on screen; if the tree hides the "copy 2" suffix, that is the fault.
 
-Next, in order: (1) Richard's answer on the pictures, s5's (docs/look/s5: the composer's Then… menu and a slot) and
-s6's (docs/look/s6: the Text Input panel and Label text, the image popover, the look menu and a look added, the rename
-field). They were opened for him in Preview in s7 and asked about; he had not answered when s7 ended. (2) His second
-sitting: data (M2's remaining work). (3) When he gives his real app export (not in this repo): STU-044's 22 missing
-operator names and STU-044-FORMATNUMBER's keys, and STU-053's unread keys (a dropdown's caption expression, a popup's
-backdrop and Esc, a group focus's reference element).
+Richard looked at s5's and s6's pictures (s7): good; "Then…" read oddly, so the composer's button now says "more…"
+(his pick, Bubble's word). His worry, recorded in SCOPE.md under STU-052: people mixing up composed phrases with typed
+JavaScript in the same box. Watch for it at a play test; nothing built for it.
 
-Waiting on Richard: the pictures (1); the data sitting (2); his real app export (3); pushing main; rulings R4–R6.
+Next, in order: (1) His second sitting: data (M2's remaining work). (2) When he gives his real app export (not in
+this repo): STU-044's 22 missing operator names and STU-044-FORMATNUMBER's keys, and STU-053's unread keys (a
+dropdown's caption expression, a popup's backdrop and Esc, a group focus's reference element).
+
+Waiting on Richard: the data sitting (1); his real app export (2); pushing main; rulings R4–R6.
 
 Not to forget: a look's property list is long (73 on a Button); the look menu has no "1 inherited from Style" count; a
 chip from a record field (page data `prop-*`) has no type yet, so the composer reads it as any value; a dropdown's value

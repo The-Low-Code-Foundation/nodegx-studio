@@ -238,7 +238,7 @@ try {
       await b.evaluate(`document.querySelector('.composer .chips .chip').click()`); await wait(150);
     };
     const asType = async (t) => { await b.evaluate(`(() => { const s = document.querySelector('.composer .then select'); s.value = ${JSON.stringify(t)}; s.dispatchEvent(new Event('change')); })()`); await wait(100); };
-    const offered = async () => { await clickText('.composer .then button', 'Then'); await wait(200); const l = await b.evaluate(`[...document.querySelectorAll('.menu.phrases .item')].map(e => e.firstChild.textContent)`); return l; };
+    const offered = async () => { await clickText('.composer .then button', 'more…'); await wait(200); const l = await b.evaluate(`[...document.querySelectorAll('.menu.phrases .item')].map(e => e.firstChild.textContent)`); return l; };
     await openOnTitle();
     ok(await b.evaluate(`!!document.querySelector('.composer .then') && document.querySelector('.composer .chips .chip').classList.contains('on')`), 'clicking the chip marks it and offers what can follow it');
     ok(await b.evaluate(`document.querySelector('.composer .then select').value`) === 'Any', 'a custom state (a value of any type) is read as Any until the person says');

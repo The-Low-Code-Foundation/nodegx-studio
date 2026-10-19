@@ -2800,7 +2800,7 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
       const type = typeOfChip(focus);
       body.append(h('div', { class: 'then' }, 'After', h('b', {}, chips.get(focus).text), 'as',
         h('select', { title: 'What this value is: what can follow it depends on it', onchange: (ev) => { chipTypes.set(focus, ev.target.value); renderBody(); } }, ...TYPES.map((t) => h('option', { value: t, selected: t === type }, TYPE_WORDS[t]))),
-        h('button', { onclick: (ev) => phraseMenu(ev, type) }, 'Then…')));
+        h('button', { onclick: (ev) => phraseMenu(ev, type) }, 'more…'))); // Bubble's own word for extending an expression (Richard, s7: "Then…" read oddly)
     }
     check();
   }

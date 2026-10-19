@@ -272,6 +272,12 @@ Date Range 11/0, List 21/3, Any 4/1.
 - **Not built:** a chip's type from a record's field (page data's `prop-*` ports carry no type yet, so they read as any
   value), the slot for a Function or node row (they say what to use instead), and inserting a phrase at the caret
   rather than on the marked chip.
+- **Richard looked (2026-10-19, s7)** at `docs/look/s5/` and `s6/`: *"It's good, but 'then...' is a weird way to
+  introduce it … I hope people won't be confused between the composer with then... then... then... and mixing that up
+  with manually typed JS values, though I think it's a very cool idea and I would have killed to be able to part
+  compose part manually type my Bubble expressions back in the day."* Ruled: the button says **"more…"**, Bubble's own
+  word for extending an expression (chosen from more… / + an operator / Do more with it…). His worry, composed
+  phrases against typed JavaScript in the same box, is a thing to watch for at a play test: nothing built for it yet.
 
 **STU-051's rest, built (s6).** STU-051's done-when line holds on the todo app: **nothing is left in More** for a Group,
 a Text, a Button, a Text Input or an Image (the gate asserts it for each). Placed: Position always in Layout (it was
