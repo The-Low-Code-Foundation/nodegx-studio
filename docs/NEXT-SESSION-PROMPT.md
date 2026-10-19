@@ -27,6 +27,7 @@ FloatingGroup, Popup, RepeatingGroup cells, dynamic Dropdown choices, Input form
 (4) renaming a reusable in Studio (Make it reusable names it after the group; there is no rename yet). Then his second
 sitting: data.
 
-Not to forget: STU-014-INSTANCELAYOUT (445 static settings on copies reach nothing; wants Richard's look before switching
+Not to forget: the canvas copy of a grouped reusable shows its per-copy inputs empty (the benefit row's icon is blank on
+its canvas) — give it the first copy's values; STU-014-INSTANCELAYOUT (445 static settings on copies reach nothing; wants Richard's look before switching
 on), row searches still asked once per row, rulings R4–R6 open, the grouping not yet measured on the real app (its
 export is not in this repo).
