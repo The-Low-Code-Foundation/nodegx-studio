@@ -58,7 +58,7 @@ another platform; this reads only your own app.
 ## Gates
 
 ```bash
-npm run check:editor   # 38 checks: drives the editor headless against a copy of NodeGX's todo template
+npm run check:editor   # 46 checks: drives the editor headless against a copy of NodeGX's todo template
 npm run check:import   # the converter on the example editor requests (26 checks; 32 with a template bundle)
 npm run smoke -- /path/to/project   # the desktop app opens the project and the app draws
 ```

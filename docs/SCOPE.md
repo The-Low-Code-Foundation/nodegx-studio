@@ -32,7 +32,8 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 |---|---|---|
 | Design tab — palette, element tree, click / drag-reorder / resize on the real app, property editor, red spacing guide | works | `check:editor` |
 | Workflow tab — events, steps as the signal chain, add / delete a step, a Yes/No branch, the expression composer (chips, JavaScript, or both) | works | `check:editor` |
-| Data tab — types and fields, rows on the bound backend, option sets | works | `check:editor` 38/38 |
+| Data tab — types and fields, rows on the bound backend, option sets | works | `check:editor` |
+| Live with outside edits — a file changed by Claude Code (MCP), VS Code or `git pull` is drawn without a reload; a clash with Studio's own edit asks | works (2026-10-19) | `check:editor` 46/46 |
 | Styles — global styles as NodeGX variants | works | `check:editor` |
 | Bubble importer — pages, elements, styles, workflows, expressions, option sets, reusables, custom states, data types, privacy rules → `nodegx.security.json`, backend workflows → cloud functions, Data-tab rows | spike, measured on a real 18-page app (0 validation errors) | `check:import` 26/26 |
 | Desktop app — Electron window, File → Open Project…, a smoke mode | first cut (2026-10-19) | `smoke` |
@@ -87,6 +88,17 @@ Electron's own Node; `npm run smoke -- <dir>` opens a project headless and exits
 | STU-005 | **Work with Claude Code.** "Connect Claude Code" writes the project's `.mcp.json` entry for the NodeGX MCP server (the same writer the NodeGX editor uses, never a second one) and shows the one command to start a session in the folder. | from a fresh project, the button then `claude` in the folder lists the NodeGX tools |
 | STU-006 | **Runs without a NodeGX checkout.** A build step copies the kit pieces Studio uses (deploy runtime, in-page preview, look and specs modules, backend, MCP server) into `vendor/` at pinned NodeGX versions; `lib/nodegx.mjs` prefers `vendor/`. | a fresh clone + `npm install` + `npm start` works on a machine with no OpenNoodl folder |
 | STU-007 | **Packaged and signed.** electron-builder for macOS (signed, notarised), Windows and Linux, on NodeGX's release workflow. | a downloadable build opens a project on all three |
+
+**Done (STU-002, 2026-10-19).** `serve.mjs` watches the project folder and keeps every file as Studio last read or
+wrote it, so Studio's own saves are recognised by their content and dropped; anything else goes to the page over
+`/api/events` (server-sent events), which writes it into the kit's store and redraws, keeping the page, the
+selection and the tab (a field being typed in keeps its caret and redraws on blur). Every save carries the text each
+file had when Studio last saw it; if the disk says otherwise the server answers 409 and Studio asks **Keep mine /
+Take theirs**. Saves go one at a time, so a quick second edit never trips over the first. Undo never takes back a
+change made outside. A second Studio window on the same project hears the first one's saves the same way. Measured:
+Claude Code's `update_component` through the NodeGX MCP server added a button to the todo template's Sign in page
+and it was on Studio's screen and in the element tree **713 ms** after the file was written; the gate does the same
+with an atomic rename (`check:editor` 46/46, 8 new checks).
 
 Order: STU-002 first (it is what makes "local" feel alive, and STU-005 depends on it), then STU-003–005, then
 STU-006–007 when someone outside the team needs to run it.

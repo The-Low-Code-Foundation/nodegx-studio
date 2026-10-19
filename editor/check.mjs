@@ -13,7 +13,7 @@
  * Needs the deploy runtime, the in-page preview bundle and Orbit's look.js / specs.js (serve.mjs says which is missing).
  */
 import { spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -292,6 +292,42 @@ try {
     await shot('styles');
     await b.clickSel('[data-tab=design]'); await wait(300); await shot('design');
     await b.clickSel('[data-tab=workflow]'); await wait(300); await shot('workflow');
+  }
+  console.log('check: files changed outside Studio (STU-002)');
+  {
+    ok(!(await b.evaluate('__ob.outside || 0')), 'none of the editor\'s own saves came back to it as a change made outside Studio');
+    await b.clickSel('[data-tab=design]'); await wait(300);
+    await select(title1);
+    // what NodeGX's MCP server does: the whole nodes.json written to a temp file and renamed over the old one
+    const OUTSIDE = 'Written outside Studio';
+    const outsideId = 'outside-text';
+    const write = (mutate) => { const f = join(project, SIGN + 'nodes.json'); const j = JSON.parse(readFileSync(f, 'utf8')); mutate(j.nodes); writeFileSync(f + '.tmp-check', JSON.stringify(j, null, 2)); renameSync(f + '.tmp-check', f); };
+    const t0 = Date.now();
+    write((nodes) => { nodes.push({ id: outsideId, type: 'Text', label: 'Outside', parent: card, parameters: { text: OUTSIDE } }); nodes.find((n) => n.id === card).children.push(outsideId); });
+    await b.until(`__ob.preview.frame.contentDocument.body.innerText.includes(${JSON.stringify(OUTSIDE)})`, 5000).catch(() => {});
+    const ms = Date.now() - t0;
+    const inTree = await b.evaluate(`[...document.querySelectorAll('#tree .row')].some(r => r.textContent.includes('Outside'))`);
+    ok(ms < 2000 && (await appText()).includes(OUTSIDE) && inTree, 'a Text node written into nodes.json by another program is on screen and in the element tree within 2 s, with no reload', { ms, inTree });
+    ok((await b.evaluate('document.querySelector("#right .head input")?.value')) === 'App name' && (await b.evaluate('document.querySelector("[data-tab=design]").getAttribute("aria-selected")')) === 'true', 'the selection and the open tab are kept');
+    ok((await b.evaluate('document.getElementById("toast").textContent')).includes('Pages/Sign in changed outside Studio'), 'the editor says which component changed outside it', await b.evaluate('document.getElementById("toast").textContent'));
+    let n0 = await shows(); await b.clickSel('#undo'); await rebuilt(n0);
+    ok(onDisk(SIGN + 'nodes.json').nodes.some((n) => n.id === outsideId), 'Undo after it takes back the editor\'s own edit, never the change made outside');
+    // a clash: the editor deletes an element while another program's write to the same file is still on its way in
+    await select(outsideId);
+    write((nodes) => { nodes.find((n) => n.id === lead).parameters.text = 'Theirs'; });
+    await b.evaluate('document.activeElement && document.activeElement.blur()'); await b.key('Delete', 'Delete', 46);
+    await b.until('!document.getElementById("clash").hidden', 4000).catch(() => {});
+    const asked = await b.evaluate('document.getElementById("clash").hidden ? null : document.getElementById("clash-msg").textContent');
+    ok(asked?.includes('Pages/Sign in') && onDisk(SIGN + 'nodes.json').nodes.some((n) => n.id === outsideId), 'an edit to a file somebody else wrote meanwhile is not saved over it: the editor asks', asked);
+    n0 = await shows(); await b.clickSel('#clash-theirs'); await rebuilt(n0);
+    ok(onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === lead).parameters.text === 'Theirs' && (await appText()).includes('Theirs') && (await appText()).includes(OUTSIDE), '"Take theirs" keeps the other program\'s file and drops the editor\'s delete, on disk and on screen');
+    await select(outsideId);
+    write((nodes) => { nodes.find((n) => n.id === lead).parameters.text = 'Theirs again'; });
+    await b.evaluate('document.activeElement && document.activeElement.blur()'); await b.key('Delete', 'Delete', 46);
+    await b.until('!document.getElementById("clash").hidden', 4000).catch(() => {});
+    await b.clickSel('#clash-mine'); await wait(800);
+    const after = onDisk(SIGN + 'nodes.json').nodes;
+    ok(!after.some((n) => n.id === outsideId) && after.find((n) => n.id === lead).parameters.text === 'Theirs', '"Keep mine" writes the editor\'s version over theirs');
   }
   ok((await status()).startsWith('App on screen'), 'after every edit the app still validates and draws', await status());
   const problems = b.problems.filter((p) => !/Invalid connection|doesn't have a port|Failed to load resource|fonts\.g|^\[noodl\]/.test(p)); // `[noodl]` lines are the app's own runtime (a Navigate with no target yet), not the editor

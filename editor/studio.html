@@ -268,6 +268,9 @@
   .styles .grp { padding: 10px 8px 4px; font-weight: 600; color: var(--ink); }
   #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%) translateY(8px); background: #14181f; color: #fff; padding: 9px 14px; border-radius: 8px; font-size: 12.5px; opacity: 0; transition: opacity .18s, transform .18s; pointer-events: none; z-index: 100; max-width: 70vw; box-shadow: var(--shadow); }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #clash { position: fixed; left: 50%; top: 56px; transform: translateX(-50%); z-index: 101; max-width: min(640px, 90vw); background: #fff7ed; border: 1px solid #fdba74; border-left: 4px solid #ea580c; border-radius: var(--r); padding: 10px 14px; box-shadow: var(--shadow); font-size: 12.5px; }
+  #clash p { margin: 0 0 8px; }
+  #clash div { display: flex; gap: 8px; justify-content: flex-end; }
 </style>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -307,7 +310,7 @@
 
 <div id="shell">
   <nav id="rail" role="tablist" aria-label="Tabs">
-    <div class="logo">b</div>
+    <div class="logo" title="NodeGX Studio">S</div>
     <button role="tab" data-tab="design" aria-selected="true" title="Design"><svg class="i"><use href="#i-design"/></svg><span class="tip">Design</span></button>
     <button role="tab" data-tab="workflow" title="Workflow"><svg class="i"><use href="#i-workflow"/></svg><span class="tip">Workflow</span></button>
     <button role="tab" data-tab="data" title="Data"><svg class="i"><use href="#i-data"/></svg><span class="tip">Data</span></button>
@@ -380,6 +383,7 @@
   </main>
 </div>
 <div id="toast"></div>
+<div id="clash" role="alertdialog" aria-labelledby="clash-msg" hidden><p id="clash-msg"></p><div><button id="clash-theirs" class="quiet">Take theirs</button><button id="clash-mine">Keep mine</button></div></div>
 
 <script src="/preview.js"></script>
 <script type="module">
@@ -413,16 +417,29 @@ let store = new NodegxPreview.V2ProjectStore(files);
 let persisted = { ...opened.files };
 const undoStack = [];
 
-async function persist() {
+/** One save at a time: a second edit while a save is in flight waits for it, so each save's bases are what the disk holds. */
+const windowId = uuid(); // its own saves do not come back to it; another window's do
+let saving = false, saveAgain = null;
+async function persist({ force = false } = {}) {
+  if (saving) { saveAgain = { force: force || !!saveAgain?.force }; return; }
+  saving = true;
+  try { await saveOnce(force); } finally { saving = false; if (saveAgain) { const next = saveAgain; saveAgain = null; persist(next); } }
+}
+async function saveOnce(force) {
   const now = files.entries();
   const changed = {};
   for (const [p, t] of Object.entries(now)) if (persisted[p] !== t) changed[p] = t;
   const removed = Object.keys(persisted).filter((p) => !(p in now));
   if (!Object.keys(changed).length && !removed.length) return;
-  const r = await fetch('/api/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ files: changed, removed }) });
+  // each file as Studio last saw it on disk: if somebody else has written it since, the server refuses and Studio asks
+  const bases = Object.fromEntries([...Object.keys(changed), ...removed].map((p) => [p, persisted[p] ?? null]));
+  const r = await fetch('/api/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ files: changed, removed, bases, force, client: windowId }) });
   const j = await r.json();
+  if (r.status === 409) return askClash(j.conflicts);
   if (!r.ok) { toast(`Not saved: ${j.error}`); return; }
-  persisted = { ...now };
+  for (const p of Object.keys(changed)) persisted[p] = now[p];
+  for (const p of removed) delete persisted[p];
+  $('clash').hidden = true;
   lastSaved = new Date().toLocaleTimeString();
   if (!rebuilding) status(`Saved · app on screen`);
 }
@@ -439,6 +456,54 @@ async function undo() {
   renderAll();
 }
 $('undo').onclick = undo;
+
+/* ================= STU-002: files changed outside Studio (Claude Code through MCP, VS Code, git pull) ================= */
+const unsaved = (p) => files.read(p) !== (persisted[p] ?? null);
+const fileLabel = (p) => p.match(/^components\/(.+)\/[^/]+$/)?.[1] ?? p;
+/** Takes what changed on disk into the store and redraws. A file Studio has its own unsaved edit to is left for that
+    edit's save, which meets the change on the server and asks (askClash); `all` takes it anyway ("Take theirs"). */
+function takeOutside({ changed = {}, removed = [] }, { all = false } = {}) {
+  const took = [];
+  for (const [p, t] of Object.entries(changed)) {
+    if (files.read(p) === t) { persisted[p] = t; continue; }
+    if (!all && unsaved(p)) continue;
+    files.write(p, t); persisted[p] = t; took.push(p);
+  }
+  for (const p of removed) {
+    if (files.read(p) === null) { delete persisted[p]; continue; }
+    if (!all && unsaved(p)) continue;
+    files.remove(p); delete persisted[p]; took.push(p);
+  }
+  if (!took.length) return took;
+  // undo goes back over Studio's own edits: it must never take back a change somebody else made
+  for (const snap of undoStack) for (const p of took) { const t = files.read(p); if (t === null) delete snap[p]; else snap[p] = t; }
+  store = new NodegxPreview.V2ProjectStore(files);
+  if (!registry()[pageKey]) { pageKey = startPageKey() ?? pageKeys()[0] ?? Object.keys(registry())[0]; sel = null; selEvent = null; }
+  readGraph();
+  if (sel && !byId[sel]) sel = null;
+  if (selEvent && !byId[selEvent.node]) selEvent = null;
+  if (selSet && !registry()[selSet]) selSet = null;
+  rebuild(0);
+  // a field being typed into keeps its caret: the panels redraw once it loses focus
+  const typing = document.activeElement?.matches?.('input, textarea, select, [contenteditable]');
+  if (typing) document.activeElement.addEventListener('blur', renderAll, { once: true }); else renderAll();
+  const names = [...new Set(took.map(fileLabel))];
+  toast(`${names.length === 1 ? names[0] : `${names.length} files`} changed outside Studio — redrawn`);
+  window.__ob.outside = (window.__ob.outside || 0) + 1;
+  return took;
+}
+let clash = [];
+function askClash(conflicts) {
+  clash = conflicts;
+  const names = [...new Set(conflicts.map((c) => fileLabel(c.path)))];
+  $('clash-msg').textContent = `${names.join(', ')} changed outside Studio while you were editing ${names.length === 1 ? 'it' : 'them'}. Keep your version (theirs is overwritten), or take theirs (your last change to ${names.length === 1 ? 'it' : 'them'} is dropped)?`;
+  $('clash').hidden = false;
+}
+$('clash-mine').onclick = () => { $('clash').hidden = true; persist({ force: true }); };
+$('clash-theirs').onclick = () => {
+  $('clash').hidden = true;
+  takeOutside({ changed: Object.fromEntries(clash.filter((c) => c.theirs !== null).map((c) => [c.path, c.theirs])), removed: clash.filter((c) => c.theirs === null).map((c) => c.path) }, { all: true });
+};
 
 /* ================= the eight edits, with the reference's semantics (editor-suite/edits.ts), plus two fields ================= */
 function applyEdit(filesIn, edit) {
@@ -1820,6 +1885,8 @@ if (first.status === 'ok') {
   status(`The app is not shown: ${d ? d.message.slice(0, 160) : first.message || first.status}`, 'bad');
 }
 renderAll();
+// from here on, a file changed outside Studio is taken in and drawn (STU-002)
+new EventSource(`/api/events?client=${windowId}`).onmessage = (e) => takeOutside(JSON.parse(e.data));
 document.title = `ready ${opened.name} pages=${pageKeys().length} visual=${visualIds.length}`;
 </script>
 </html>

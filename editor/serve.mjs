@@ -8,14 +8,19 @@
  *   /preview.js            `@nodegx/preview`'s in-page build (`npm --prefix packages/noodl-preview run build`)
  *   /look.js, /specs.js    `@nodegx/canvas-look` and `@nodegx/node-spec` as ES modules (Orbit's `real/build.sh` builds them)
  *   GET  /api/project      every text file of the project folder as one path → text map, plus the folder's name
- *   POST /api/save         { files: { path: text }, removed: [path] } — written under the project folder, nothing else
+ *   POST /api/save         { files: { path: text }, removed: [path], bases: { path: text | null }, force? } — written under
+ *                          the project folder, nothing else. `bases` is each file as the page last had it: when the disk
+ *                          no longer says that (somebody else wrote it meanwhile) the save is refused with 409 and the
+ *                          files as they are now, so the page can ask; `force` writes anyway
+ *   GET  /api/events?client=id  server-sent events: `{ changed: { path: text }, removed: [path] }` whenever a file of the
+ *                          project changes and Studio did not write it (Claude Code through MCP, VS Code, `git pull`)
  *   ANY  /api/backend/*    forwarded to the project's bound backend (`metadata.cloudservices.endpoint`) with the app id
  *                          header the runtime sends; the Data tab reads rows through it
  *
  * The page holds the project in memory in the kit's own store (`V2ProjectStore` over `memoryFiles`), makes every edit
  * through it, and sends the files it changed here. This file knows nothing about nodes.
  */
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, watch, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -65,6 +70,55 @@ function projectFiles(dir) {
   return files;
 }
 
+/* STU-002: files changed outside Studio. `known` is every file as Studio last read or wrote it, so a change on disk
+   that matches it is Studio's own save coming back and is dropped; anything else goes to every open page. */
+const known = new Map(Object.entries(projectFiles(projectDir)));
+const clients = new Map(); // the response of each open page's event stream → that page's id
+const tell = (change, except) => {
+  const event = `data: ${JSON.stringify(change)}\n\n`;
+  for (const [res, id] of clients) if (id !== except) res.write(event);
+};
+const ignored = (rel) => rel.split('/').some((seg) => SKIP.has(seg) || seg.startsWith('.'));
+const diskText = (rel) => {
+  const file = join(projectDir, rel);
+  return existsSync(file) && statSync(file).isFile() ? readFileSync(file, 'utf8') : null;
+};
+let touched = new Set();
+let settle;
+function flush() {
+  const now = new Map();
+  for (const rel of touched) {
+    const full = join(projectDir, rel);
+    let st = null;
+    try { st = statSync(full); } catch { /* gone */ }
+    if (st?.isDirectory()) for (const [p, t] of Object.entries(projectFiles(full))) now.set(rel ? `${rel}/${p}` : p, t);
+    else if (st?.isFile() && TEXT.includes(extname(rel))) now.set(rel, readFileSync(full, 'utf8'));
+    // a folder that went (a component deleted) reports only itself: everything Studio knew under it went with it
+    for (const p of known.keys()) if ((!rel || p === rel || p.startsWith(rel + '/')) && !now.has(p) && !existsSync(join(projectDir, p))) now.set(p, null);
+  }
+  touched = new Set();
+  const changed = {};
+  const removed = [];
+  for (const [p, t] of now) {
+    if (t === null) {
+      if (known.delete(p)) removed.push(p);
+    } else if (known.get(p) !== t) {
+      known.set(p, t);
+      changed[p] = t;
+    }
+  }
+  if (Object.keys(changed).length || removed.length) tell({ changed, removed });
+}
+watch(projectDir, { recursive: true }, (_kind, name) => {
+  const rel = name ? String(name).split(sep).join('/') : '';
+  if (rel && ignored(rel)) return;
+  // an atomic write (a temp file renamed over the target, as NodeGX's MCP writes) reports both names; the temp one
+  // has no text extension and no longer exists, so it reads as nothing
+  touched.add(rel);
+  clearTimeout(settle);
+  settle = setTimeout(flush, 120); // one MCP edit writes three or four files: they arrive as one change
+});
+
 const under = (root, rel) => {
   const file = resolve(root, rel);
   return file.startsWith(root + sep) || file === root ? file : undefined;
@@ -100,15 +154,31 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/preview.js') return send(200, readFileSync(bundle), types['.js']);
     if (url.pathname === '/look.js' || url.pathname === '/specs.js') return send(200, readFileSync(join(orbit, url.pathname.slice(1))), types['.js']);
     if (url.pathname === '/api/project' && req.method === 'GET') {
-      return json(200, { dir: projectDir, name: projectDir.split(sep).pop(), files: projectFiles(projectDir), backend: backendOf() });
+      const files = projectFiles(projectDir);
+      known.clear();
+      for (const [p, t] of Object.entries(files)) known.set(p, t);
+      return json(200, { dir: projectDir, name: projectDir.split(sep).pop(), files, backend: backendOf() });
+    }
+    if (url.pathname === '/api/events') {
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
+      res.write(': watching the project folder\n\n');
+      clients.set(res, url.searchParams.get('client'));
+      req.on('close', () => clients.delete(res));
+      return;
     }
     if (url.pathname === '/api/save' && req.method === 'POST') {
-      const { files = {}, removed = [] } = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const { files = {}, removed = [], bases, force, client } = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      for (const rel of [...Object.keys(files), ...removed]) if (!under(projectDir, rel)) return json(400, { error: `refused: ${rel}` });
+      if (bases && !force) {
+        const conflicts = [...Object.keys(files), ...removed].filter((rel) => rel in bases).map((rel) => ({ path: rel, theirs: diskText(rel) })).filter((c) => c.theirs !== bases[c.path]);
+        if (conflicts.length) return json(409, { error: `changed outside Studio: ${conflicts.map((c) => c.path).join(', ')}`, conflicts });
+      }
       const written = [];
       for (const [rel, text] of Object.entries(files)) {
         const file = under(projectDir, rel);
         if (!file || typeof text !== 'string') return json(400, { error: `refused: ${rel}` });
         mkdirSync(dirname(file), { recursive: true });
+        known.set(rel, text); // before the write, so the watcher's echo of it matches
         writeFileSync(file, text);
         written.push(rel);
       }
@@ -116,11 +186,14 @@ const server = http.createServer(async (req, res) => {
       for (const rel of removed) {
         const file = under(projectDir, rel);
         if (!file) return json(400, { error: `refused: ${rel}` });
+        known.delete(rel);
         if (existsSync(file)) {
           rmSync(file, { recursive: true });
           gone.push(rel);
         }
       }
+      // a second Studio window on the same project hears this save as a change made outside it
+      if (written.length || gone.length) tell({ changed: Object.fromEntries(written.map((rel) => [rel, files[rel]])), removed: gone }, client);
       return json(200, { written, removed: gone });
     }
     if (url.pathname.startsWith('/api/backend/')) {
