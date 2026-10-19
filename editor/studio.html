@@ -457,9 +457,9 @@
     <section class="tab" id="design">
       <aside>
         <div class="search"><svg class="i"><use href="#i-search"/></svg><input type="text" id="treesearch" placeholder="Search elements"></div>
-        <h3 class="sec">Page data <button class="tiny primary" id="newpagedata" title="A search the page runs once, named, that any element can read"><svg class="i"><use href="#i-plus"/></svg>New</button></h3>
+        <h3 class="sec"><span id="pagedata-title">Page data</span> <button class="tiny primary" id="newpagedata" title="A search the page runs once, named, that any element can read"><svg class="i"><use href="#i-plus"/></svg>New</button></h3>
         <div class="pagedata list" id="pagedata"></div>
-        <h3 class="sec">Elements on this page</h3>
+        <h3 class="sec" id="elements-title">Elements on this page</h3>
         <div class="tree list" id="tree"></div>
         <h3 class="sec">Visual elements</h3>
         <div class="palette" id="palette"></div>
@@ -516,6 +516,7 @@
 <script type="module">
 import { hasSpec, specs, drawnPorts, portProjectFromStore, portContextFor, expressionPorts } from './specs.js';
 import { applyEdit } from './edits.mjs';
+import { extractReusable } from './reusable.mjs';
 import { OPERATORS, createEdits, updateEdits, removeEdits, readItems, readFrom, readersOf, itemOfSource, sameAs, signature, describe, lastRun, queriesOnOpen } from './pagedata.mjs';
 
 const $ = (id) => document.getElementById(id);
@@ -750,6 +751,32 @@ function createComponent(key, type, nodes, connections, metadata) {
   catch (err) { undoStack.pop(); toast(err.message); throw err; }
   persist(); rebuild();
 }
+/**
+ * STU-050's last line: a group made into a reusable (`reusable.mjs`). The group and its insides, and the logic only they
+ * use, move into `Reusable/<its name>`; a copy takes its place; wires across the edge become the copy's inputs and
+ * outputs. One gesture, one undo.
+ */
+function makeReusable(id) {
+  const base = (byId[id]?.label || typeName(byId[id].type)).replace(/\//g, ' ').trim() || 'Reusable';
+  let key = `Reusable/${base}`;
+  for (let i = 2; registry()[key]; i++) key = `Reusable/${base} ${i}`;
+  const c = store.readComponent(pageKey);
+  const portType = (nid, plug, port) => { const n = byId[nid]; const p = n && portsOf(n, plug).find((x) => x.name === port); return !p ? undefined : p.signal ? 'signal' : p.type && p.type !== '*' ? p.type : undefined; };
+  const r = extractReusable(c.files, id, { key, portType, stays: (n) => isPageDataNode(n) });
+  snapshot();
+  try {
+    const at = new Date().toISOString();
+    store.writeComponent(key, { component: { $schema: 'https://opennoodl.dev/schemas/component-v2.json', id: uuid(), name: key.split('/').pop(), path: '/' + key, type: 'visual', created: at, modified: at, modifiedBy: 'nodegx-studio' }, nodes: r.component.nodes, connections: r.component.connections }, { expectNew: true });
+    store.writeComponent(pageKey, { ...c.files, nodes: r.page.nodes, connections: r.page.connections }, { ifRevision: c.revision });
+  } catch (err) { undoStack.pop(); toast(err.message); throw err; }
+  persist();
+  const elements = r.moved.filter((m) => visualIds.includes(m)).length;
+  readGraph(); sel = r.copyId; treeRoot = null;
+  renderAll(); rebuild();
+  const ports = r.inputs.length + r.outputs.length;
+  toast(`${key.split('/').pop()} is reusable: ${elements} element${elements === 1 ? '' : 's'} moved into it${ports ? `, ${ports} wire${ports === 1 ? '' : 's'} to the page through the copy` : ''}`);
+  return { key, ...r };
+}
 /** The project file and the styles file are plain JSON here (the serializer is not in the bundle); the official editor reads either unchanged. */
 function writeJsonFile(path, value) { snapshot(); files.write(path, JSON.stringify(value, null, 2)); persist(); rebuild(); }
 
@@ -765,17 +792,17 @@ function rebuild(delay = 120) {
   rebuildTimer = setTimeout(async () => {
     rebuilding = true;
     status('Rebuilding the app…', 'busy');
-    const s = await preview.update(files.entries());
+    const s = await preview.update(previewFiles());
     lastShow = s;
     rebuilding = false;
     showProblems(s);
     if (s.status === 'ok') {
       lib = preview.nodeLibrary; libIndex = new Map((lib?.nodetypes || []).map((t) => [t.name, t]));
       status(`App on screen · ${Math.round(s.exportMs)} ms export, ${Math.round(s.frameMs)} ms draw${s.warnings?.length ? ` · ${s.warnings.length} warning(s)` : ''}${lastSaved ? ` · saved ${lastSaved}` : ''}`);
-      await showPage(pageKey);
       hookFrame();
       mapElements();
       draw();
+      followSoon();
     } else {
       const first = s.report?.diagnostics?.find((d) => d.severity === 'error');
       status(`The app is not shown: ${first ? first.message.slice(0, 160) : s.message || s.status}`, 'bad');
@@ -805,6 +832,60 @@ function showProblems(s) {
 /* ================= the graph of the current page, read from the files ================= */
 const registry = () => store.readRegistry().components;
 const pageKeys = () => Object.keys(registry()).filter((k) => registry()[k].type === 'page');
+const isPage = (k) => registry()[k]?.type === 'page';
+/**
+ * STU-015: a reusable opened on its own, as Bubble opens one. Design edits the reusable's own graph; the app on screen
+ * is the project plus one page Studio makes in memory and never saves, holding a single copy of the reusable. A
+ * reusable here is a component a page can place that draws something (the list the palette offers, with elements).
+ */
+const CANVAS = '__studio/Reusable canvas', CANVAS_PATH = '__studio-reusable';
+function reusableKeys() {
+  return Object.keys(registry()).filter((k) => {
+    const e = registry()[k];
+    if (e.type === 'page' || e.type === 'root' || e.type === 'logic' || k === 'App' || k.startsWith('__') || k.startsWith('Option sets/')) return false;
+    try { return (store.readComponent(k).files.nodes.visualRoots || []).length > 0; } catch { return false; }
+  });
+}
+/** What the preview is given: the project's files, and while a reusable is open, the canvas page holding one copy of it. */
+function previewFiles() {
+  const all = files.entries();
+  if (!registry()[pageKey]) return all;
+  const out = { ...all };
+  const page = isPage(pageKey);
+  if (!page) {
+    const target = store.readComponent(pageKey).files.nodes.nodes;
+    // a copy takes only what its reusable declares (STU-014-INSTANCEHIDE): an imported reusable's shown/hidden comes from its copy
+    const declared = new Set(target.filter((n) => n.type === 'Component Inputs').flatMap((n) => (n.ports || []).map((p) => p.name)));
+    const parameters = Object.fromEntries(['mounted', 'visible'].filter((p) => declared.has(p)).map((p) => [p, true]));
+    const cid = '00000000-0000-5000-8000-0000000c4a75', at = '2026-10-19T00:00:00.000Z', dir = `components/${CANVAS}/`;
+    out[dir + 'component.json'] = JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/component-v2.json', id: cid, name: 'Reusable canvas', path: '/' + CANVAS, type: 'page', created: at, modified: at, modifiedBy: 'nodegx-studio' });
+    out[dir + 'nodes.json'] = JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/nodes-v2.json', componentId: cid, version: 1, visualRoots: ['studioCanvasPage'], nodes: [
+      { id: 'studioCanvasPage', type: 'Page', label: 'Reusable canvas', parameters: { title: pageKey.split('/').pop(), urlPath: CANVAS_PATH }, children: ['studioCanvasCopy'] },
+      { id: 'studioCanvasCopy', type: '/' + pageKey, label: pageKey.split('/').pop(), parent: 'studioCanvasPage', parameters } ] });
+    out[dir + 'connections.json'] = JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/connections-v2.json', componentId: cid, version: 1, connections: [] });
+    const reg = JSON.parse(out['components/_registry.json']);
+    reg.components[CANVAS] = { path: CANVAS, type: 'page', nodeCount: 2, connectionCount: 0, modified: at, created: at };
+    out['components/_registry.json'] = JSON.stringify(reg);
+  }
+  // Every router that lists what Studio shows starts there (and lists the canvas while a reusable is open), so the app
+  // opens on it: no start page drawn first, none of its queries asked, no navigation after a rebuild. Navigating after
+  // the app started raced its own redirects (STU-015-PAGENAV and the gate runs it cost, SCOPE.md).
+  const target = '/' + (page ? pageKey : CANVAS);
+  for (const [path, text] of Object.entries(all)) {
+    if (!path.endsWith('/nodes.json') || !text.includes('"Router"')) continue;
+    const doc = JSON.parse(text);
+    let hit = false;
+    for (const n of doc.nodes || []) {
+      const pages = n.type === 'Router' ? n.parameters?.pages : undefined;
+      if (!Array.isArray(pages?.routes)) continue;
+      const routes = page ? pages.routes : [...pages.routes, target];
+      if (!routes.includes(target)) continue;
+      n.parameters.pages = { ...pages, startPage: target, routes }; hit = true;
+    }
+    if (hit) out[path] = JSON.stringify(doc);
+  }
+  return out;
+}
 function startPageKey() {
   for (const k of Object.keys(registry())) {
     try { const r = store.readComponent(k).files.nodes.nodes.find((n) => n.type === 'Router'); const s = r?.parameters?.pages?.startPage; if (s) { const key = s.replace(/^\//, ''); if (registry()[key]) return key; } } catch { /* skip */ }
@@ -821,8 +902,10 @@ function pageShownByApp() {
   }
   return undefined;
 }
-function followApp() {
-  const shown = pageShownByApp();
+function followApp(component) {
+  if (!isPage(pageKey)) return;
+  const fromRouter = component?.replace(/^\//, '');
+  const shown = fromRouter !== undefined ? (isPage(fromRouter) ? fromRouter : undefined) : pageShownByApp();
   if (shown && shown !== pageKey) {
     const asked = pageKey; pageKey = shown; sel = null; readGraph(); renderPagePick();
     toast(`The app's own logic went from ${asked.replace(/^Pages\//, '')} to ${shown.replace(/^Pages\//, '')} (a redirect wired on that page), so that is the page shown.`);
@@ -921,17 +1004,39 @@ const isSignalPort = (node, plug, name) => { const p = portsOf(node, plug).find(
 function renderPagePick() {
   const sel = $('pagepick'); sel.innerHTML = '';
   for (const k of pageKeys()) sel.append(h('option', { value: k, selected: k === pageKey }, k.replace(/^Pages\//, '')));
+  const reus = reusableKeys();
+  if (reus.length) sel.append(h('optgroup', { label: 'Reusable elements' }, ...reus.map((k) => h('option', { value: k, selected: k === pageKey }, k))));
+  $('pagedata-title').textContent = isPage(pageKey) ? 'Page data' : 'Data';
+  $('newpagedata').title = isPage(pageKey) ? 'A search the page runs once, named, that any element can read' : 'A search this reusable makes while a copy of it is shown, named, that any of its elements can read';
+  $('elements-title').textContent = isPage(pageKey) ? 'Elements on this page' : 'Elements in this reusable';
 }
-async function showPage(key) {
-  const w = preview.frame?.contentWindow;
-  const page = (() => { try { return store.readComponent(key).files.nodes.nodes.find((n) => n.type === 'Page'); } catch { return undefined; } })();
-  const path = page?.parameters?.urlPath;
-  if (!w?.Noodl?.Navigation || path === undefined) return;
-  try { w.Noodl.Navigation.navigateToPath('/' + path.replace(/^\//, '')); } catch (e) { console.warn('navigate', e); }
-  await new Promise((r) => setTimeout(r, 350));
-  followApp();
+/**
+ * The app starts on what Studio shows (`previewFiles`). Its own logic may then go elsewhere (Todo sends a visitor to
+ * Sign in): once the Router's current page has not changed for 400 ms (at most 3 s), Design follows it. Read off the
+ * Router, not the address bar: the runtime strips its base URL ("/runtime/") off a path it reads and never adds it to
+ * one it writes (P123-STU015-BASEURL), and following the address switched Design to the wrong page mid-gate.
+ */
+async function followSoon() {
+  let router;
+  try { router = preview.frame?.contentWindow?.Noodl?.Navigation?._noodlRuntime?.context?.rootComponent?.nodeScope?.getNodesWithTypeRecursive('Router')?.[0]; } catch { /* not started */ }
+  if (!router) return;
+  const current = () => router._internal?.currentPage?.component;
+  let last = current(), since = Date.now();
+  for (const t0 = Date.now(); Date.now() - t0 < 3000 && Date.now() - since < 400;) {
+    await new Promise((r) => setTimeout(r, 100));
+    if (current() !== last) { last = current(); since = Date.now(); }
+  }
+  const was = pageKey;
+  followApp(current());
+  if (pageKey !== was) { mapElements(); renderAll(); }
 }
-$('pagepick').onchange = async () => { pageKey = $('pagepick').value; sel = null; selEvent = null; readGraph(); await showPage(pageKey); mapElements(); renderAll(); };
+/** Design (and Workflow) on another page or reusable: the app is rebuilt starting there (`previewFiles`). */
+function openComponent(key) {
+  pageKey = key; sel = null; selEvent = null; selItem = null; treeRoot = null; readGraph();
+  renderAll();
+  rebuild(0);
+}
+$('pagepick').onchange = () => openComponent($('pagepick').value);
 for (const b of $('widthseg').querySelectorAll('button')) b.onclick = () => { for (const x of $('widthseg').querySelectorAll('button')) x.setAttribute('aria-pressed', x === b); const v = b.dataset.w; $('appwrap').style.width = v.endsWith('%') ? v : v + 'px'; setTimeout(draw, 300); };
 $('appwrap').style.width = '100%';
 $('previewmode').onchange = () => { $('overlay').classList.toggle('preview', $('previewmode').checked); draw(); };
@@ -1235,7 +1340,9 @@ function renderOutline(tree) {
     const seg = (c, i) => h('span', { class: `seg${i ? ' inner' : ''}${sel === c ? ' on' : ''}`, title: i ? `${labelOf(c)} — a wrapper inside ${labelOf(chain[i - 1])}` : undefined, onclick: (e) => { e.stopPropagation(); select(c); elOf(c)?.scrollIntoView({ block: 'nearest' }); } }, labelOf(c));
     const words = wordsOf(n), nStates = statesOf(id).length;
     const goIn = (e) => { e.stopPropagation(); treeRoot = id; for (const c of chain) treeOpen.add(c); renderTree(); };
-    tree.append(h('div', { class: 'row', 'aria-selected': chain.includes(sel), style: `padding-left:${4 + d * 14}px`, onclick: () => { select(id); elOf(id)?.scrollIntoView({ block: 'nearest' }); }, ondblclick: d > 0 && kids.length ? goIn : undefined, onmouseenter: () => { hover = id; draw(); }, onmouseleave: () => { hover = null; draw(); } },
+    const reusable = !kids.length && n.type.startsWith('/') && reusableKeys().includes(n.type.slice(1)) ? n.type.slice(1) : null;
+    const goReusable = (e) => { e.stopPropagation(); openComponent(reusable); };
+    tree.append(h('div', { class: 'row', 'aria-selected': chain.includes(sel), style: `padding-left:${4 + d * 14}px`, onclick: () => { select(id); elOf(id)?.scrollIntoView({ block: 'nearest' }); }, ondblclick: d > 0 && kids.length ? goIn : reusable ? goReusable : undefined, onmouseenter: () => { hover = id; draw(); }, onmouseleave: () => { hover = null; draw(); } },
       kids.length ? h('span', { class: `chev${open ? ' open' : ''}`, onclick: toggle }) : h('span', { class: 'chev none' }),
       icon(glyphOf(n.type)),
       h('span', { class: 'segs' }, seg(id, 0)),
@@ -1247,7 +1354,8 @@ function renderOutline(tree) {
       nStates ? h('span', { class: 'chip state', title: `${nStates} custom state(s)` }, nStates) : null,
       h('span', { class: 't' }, kids.length && !open ? String(countIn(tail)) : (words ? '' : n.label ? typeName(n.type) : '')),
       // at the row's end, so a click on the row's middle selects and never opens
-      d > 0 && kids.length ? h('span', { class: 'into', title: `Open inside ${labelOf(id)}: list only what it holds (or double-click)`, onclick: goIn }, '⤢') : null));
+      d > 0 && kids.length ? h('span', { class: 'into', title: `Open inside ${labelOf(id)}: list only what it holds (or double-click)`, onclick: goIn }, '⤢')
+        : reusable ? h('span', { class: 'into', title: `Open the reusable ${reusable} on its own (or double-click)`, onclick: goReusable }, '⤢') : null));
     if (open) for (const k of kids) rowFor(k, d + 1);
   };
   if (rootId) rowFor(rootId, 0);
@@ -1333,7 +1441,7 @@ let propTimer;
    Two tabs (Visual, Interaction) and Bubble's sections in Bubble's order — Content, Configure, Size, Layout, Style,
    Text, Appearance, Border, Background, Shadow — each claiming the element's ports by name; a port no section claims
    is drawn in "More" with the plain field, so nothing a node has is out of reach. Border, Background and Shadow are
-   added and removed as a whole ("No border added yet"). Sides and corners are pairs that open into four (⛶). A value
+   added and removed as a whole ("No border." until + adds one). Sides and corners are pairs that open into four (⛶). A value
    that comes from somewhere (a wire, a composed expression) keeps the plain field with its chip. The size axes read
    `sizeMode` as two choices — the NodeGX editor's sizeModeAxes.ts, re-made here. */
 let propTab = 'visual';
@@ -1419,7 +1527,7 @@ function renderBubblePanel(right, node) {
   };
   // a side fed from somewhere: its source as a chip, × to stop taking it
   const wiredMini = (name, glyph) => { claimed.add(name); const w = wiredIn[name]; return h('span', { class: 'len wiredlen', title: `${P[name]?.displayName || name} comes from elsewhere` }, h('span', { class: 'g' }, glyph), sourceChip(w.fromId, w.fromProperty), h('button', { class: 'quiet tiny', title: 'Stop taking the value from there', onclick: () => edits(pageKey, [{ edit: 'disconnect', component: pageKey, from: { node: w.fromId, port: w.fromProperty }, to: { node: node.id, port: name } }]) }, icon('x'))); };
-  const bolt = (name) => P[name] ? h('button', { class: 'quiet bolt', title: 'Insert dynamic data — take this value from an element, a state, an option set, or compose it', onclick: (e) => sourceMenu(e, node, P[name]) }, icon('bolt')) : null;
+  const bolt = (name) => P[name] ? h('button', { class: 'quiet bolt', title: 'Take this value from somewhere — an element, a state, an option set, or an expression you write', onclick: (e) => sourceMenu(e, node, P[name]) }, icon('bolt')) : null;
   const chip = (name) => {
     claimed.add(name);
     if (wired(name)) return fieldFor(node, P[name], params[name], wiredIn[name]);
@@ -1609,7 +1717,7 @@ function renderBubblePanel(right, node) {
     const body = each
       ? sides.map((s) => h('div', { class: 'side' }, h('div', { class: 'sub' }, s), h('div', { class: 'two' }, choice(`border${s}Style`, styles, { blank: '(as all)' }), len(`border${s}Width`)), chip(`border${s}Color`)))
       : [h('div', { class: 'two' }, choice('borderStyle', styles), len('borderWidth')), chip('borderColor')];
-    add(section('Border', [...body, h('div', { class: 'endrow' }, toggle)], { present, empty: 'No border added yet.',
+    add(section('Border', [...body, h('div', { class: 'endrow' }, toggle)], { present, empty: 'No border. + adds one.',
       add: () => setMany({ borderStyle: 'solid', borderWidth: { value: 1, unit: 'px' }, borderColor: '#6B6B6B' }),
       remove: () => setMany(Object.fromEntries(allBorder.map((n) => [n, n === 'borderStyle' && inherit.borderStyle && inherit.borderStyle !== 'none' ? 'none' : undefined]))) }));
   }
@@ -1621,7 +1729,7 @@ function renderBubblePanel(right, node) {
     const body = [chip('backgroundColor')];
     if (eff('backgroundGradient') || wired('backgroundGradient')) body.push(plain('backgroundGradient'));
     if (eff('backgroundImage') || wired('backgroundImage')) body.push(plain('backgroundImage'), plain('backgroundSize'), plain('backgroundPosition'));
-    add(section('Background', body, { present, empty: 'No background added yet.',
+    add(section('Background', body, { present, empty: 'No background. + adds one.',
       add: () => set('backgroundColor', '#FFFFFF'),
       remove: () => setMany(Object.fromEntries(bgs.map((n) => [n, n === 'backgroundColor' && inherit.backgroundColor && inherit.backgroundColor !== 'transparent' ? 'transparent' : undefined]))) }));
   }
@@ -1636,7 +1744,7 @@ function renderBubblePanel(right, node) {
       h('div', { class: 'two' }, len('boxShadowOffsetX', { glyph: 'X' }), len('boxShadowOffsetY', { glyph: 'Y' })),
       h('div', { class: 'two' }, len('boxShadowBlurRadius', { glyph: '◌', title: 'Blur' }), len('boxShadowSpreadRadius', { glyph: '◎', title: 'Spread' })),
       chip('boxShadowColor')];
-    add(section('Shadow', body, { present, empty: 'No shadow added yet.', add: () => set('boxShadowEnabled', true), remove: () => setMany(Object.fromEntries(sh.map((n) => [n, undefined]))) }));
+    add(section('Shadow', body, { present, empty: 'No shadow. + adds one.', add: () => set('boxShadowEnabled', true), remove: () => setMany(Object.fromEntries(sh.map((n) => [n, undefined]))) }));
   }
 
   // everything no section claimed, with the plain field — nothing a node has is out of reach
@@ -1684,6 +1792,8 @@ function renderPropsInto(right) {
     sel !== pageRootId() ? h('button', { class: 'quiet danger', title: 'Delete element', onclick: () => removeNode(sel) }, icon('trash')) : h('span'),
     h('div', { class: 'type' }, `${typeName(node.type)}${node.parent !== undefined ? ` · in ${labelOf(node.parent)}` : ''}`));
   right.append(head);
+  if (kidsOf(node.id).length && node.id !== pageRootId() && !node.type.startsWith('/')) right.append(h('div', { class: 'opencopy' }, h('button', { class: 'tiny', title: 'Move this group and what is inside it into a reusable element of its own, and put one copy of it here', onclick: () => makeReusable(node.id) }, icon('component'), 'Make it reusable'), h('span', { class: 'hint' }, 'Then place it anywhere, and edit every copy at once.')));
+  if (node.type.startsWith('/') && reusableKeys().includes(node.type.slice(1))) right.append(h('div', { class: 'opencopy' }, h('button', { class: 'tiny', onclick: () => openComponent(node.type.slice(1)) }, icon('component'), `Edit ${node.type.slice(1).split('/').pop()}`), h('span', { class: 'hint' }, 'Every copy changes with it.')));
   if (isVisualType(node.type) && !node.type.startsWith('/') && node.type !== 'Page') return renderBubblePanel(right, node);
   const wrap = h('div', { class: 'props' });
   // the style it wears (a variant of its type), as Bubble's style dropdown at the top of the element
@@ -1786,11 +1896,11 @@ function fieldFor(node, p, value, wire, setter) {
   } else if (ty === 'number') f.append(h('input', { type: 'text', value: value ?? '', placeholder: String(p.default ?? ''), oninput: (e) => set(e.target.value === '' ? undefined : (Number.isNaN(Number(e.target.value)) ? e.target.value : Number(e.target.value)), false) }));
   else if (p.type?.codeeditor || p.type?.multiline || (typeof value === 'string' && value.length > 60)) f.append(h('textarea', { rows: 3, oninput: (e) => set(e.target.value || undefined, false) }, value ?? ''));
   else f.append(h('input', { type: 'text', value: value ?? '', placeholder: String(p.default ?? ''), list: ty === 'string' && /font|Font/.test(p.name) ? 'tokens-font' : undefined, oninput: (e) => set(e.target.value === '' ? undefined : e.target.value, false) }));
-  // Bubble's dynamic data: a value from an element, a custom state, an option set, or a composed expression — as a wire
+  // a value taken from somewhere: a value from an element, a custom state, an option set, or a composed expression — as a wire
   if (setter) return f;
   if (wire && !composed) f.append(h('div', { class: 'from' }, sourceChip(wire.fromId, wire.fromProperty), h('button', { class: 'quiet tiny', title: 'Stop taking the value from there', onclick: () => edits(pageKey, [{ edit: 'disconnect', component: pageKey, from: { node: wire.fromId, port: wire.fromProperty }, to: { node: node.id, port: p.name } }]) }, icon('x'))));
-  // STU-051 (spike): "Insert dynamic data" is the ⚡ at the end of the row, not a second line under every field
-  else if (!composed) f.append(h('button', { class: 'quiet bolt', title: 'Insert dynamic data — take this value from an element, a state, an option set, or compose it', onclick: (e) => sourceMenu(e, node, p) }, icon('bolt')));
+  // STU-051 (spike): "take this value from" is the ⚡ at the end of the row, not a second line under every field
+  else if (!composed) f.append(h('button', { class: 'quiet bolt', title: 'Take this value from somewhere — an element, a state, an option set, or an expression you write', onclick: (e) => sourceMenu(e, node, p) }, icon('bolt')));
   return f;
 }
 /** STU-051 (spike): the colours this app already uses (and its tokens, by name), most used first. */
@@ -1990,7 +2100,7 @@ function renderPageData() {
       h('small', {}, sentence(it)),
       h('small', { class: 'run' }, runText(lastRun(it, log)))));
   }
-  if (!pageItems.length) box.append(h('div', { class: 'hint' }, 'No page data yet. A search is made here once, by name, and any element reads it.'));
+  if (!pageItems.length) box.append(h('div', { class: 'hint' }, isPage(pageKey) ? 'No page data yet. A search is made here once, by name, and any element reads it.' : 'No data yet. A search made here is asked by each copy while it is shown, and any element in the reusable reads it.'));
 }
 function openItem(id) { selItem = id; sel = null; hover = null; renderTree(); renderPageData(); renderProps(); draw(); }
 
@@ -2038,9 +2148,9 @@ function newItemForm(e, onMade, { keepComposer = false } = {}) {
     let nm = base, i = 2;
     while (pageItems.some((x) => x.name === nm)) nm = `${base} ${i++}`;
     const logicN = nodes.filter((n) => !isVisualType(n.type)).length;
-    const made = createEdits({ ...d, name: nm }, { component: pageKey, x: 1000, y: 100 + logicN * 70 });
+    const made = createEdits({ ...d, name: nm }, { component: pageKey, x: 1000, y: 100 + logicN * 70, ...(isPage(pageKey) ? {} : { root: pageRootId() }) });
     edits(pageKey, made.edits, { redraw: false });
-    toast(`${nm} is page data: one query, run when the page opens`);
+    toast(isPage(pageKey) ? `${nm} is page data: one query, run when the page opens` : `${nm} is this reusable's data: each copy asks once while it is shown`);
     onMade(itemById(made.id), false);
   };
   for (const el of [name, field, value]) el.oninput = check;
@@ -2061,23 +2171,23 @@ function newItemForm(e, onMade, { keepComposer = false } = {}) {
 }
 
 /** The page's "N queries on open", counted off the requests the app made, never off its nodes. */
-function urlPathOf(key) { try { const p = store.readComponent(key).files.nodes.nodes.find((n) => n.type === 'Page'); return String(p?.parameters?.urlPath ?? '').replace(/^\//, '').replace(/\/$/, ''); } catch { return undefined; } }
+function urlPathOf(key) { if (registry()[key] && !isPage(key)) return CANVAS_PATH; try { const p = store.readComponent(key).files.nodes.nodes.find((n) => n.type === 'Page'); return String(p?.parameters?.urlPath ?? '').replace(/^\//, '').replace(/\/$/, ''); } catch { return undefined; } }
 function renderQueryCount() {
   const el = $('querycount');
   const w = frameWindow();
   if (!w) { el.hidden = true; return; }
-  const mine = urlPathOf(pageKey), start = startPageKey();
-  const isPage = (path) => {
+  const mine = urlPathOf(pageKey);
+  const isMine = (path) => {
     const [p, hash = ''] = String(path).split('#');
     const loc = (hash ? hash.replace(/^\/?/, '') : p.replace(/^\/runtime\/?/, '').replace(/^\//, '')).split('?')[0].replace(/\/$/, '');
-    return loc === mine || (loc === '' && pageKey === start);
+    return loc === mine || loc === ''; // the app starts on what Studio shows (previewFiles), so its first page is this one
   };
-  let r; try { r = queriesOnOpen(frameLog(), isPage, { now: w.performance.now() }); } catch { r = { arrived: false }; }
+  let r; try { r = queriesOnOpen(frameLog(), isMine, { now: w.performance.now() }); } catch { r = { arrived: false }; }
   if (!r.arrived) { el.hidden = false; el.className = 'queries off'; el.textContent = 'not open in the app'; el.title = 'The app is on another page, so this page\'s queries on open cannot be counted.'; return; }
   const n = r.queries.length;
   el.hidden = false; el.className = `queries${n ? '' : ' none'}`;
-  el.textContent = `${n} quer${n === 1 ? 'y' : 'ies'} on open${r.settled ? '' : '…'}`;
-  el.title = n ? `The requests the app made opening this page:\n${r.queries.map((q) => `${decodeURIComponent(q.path.split('/').pop())} · ${q.t1 !== undefined ? Math.round(q.t1 - q.t0) + ' ms' : 'running'}${q.rows !== undefined ? ` · ${q.rows} rows` : ''}`).join('\n')}` : 'The app asked the backend nothing when this page opened.';
+  el.textContent = `${n} quer${n === 1 ? 'y' : 'ies'} ${isPage(pageKey) ? 'on open' : 'when shown'}${r.settled ? '' : '…'}`;
+  el.title = n ? `The requests the app made opening this page:\n${r.queries.map((q) => `${decodeURIComponent(q.path.split('/').pop())} · ${q.t1 !== undefined ? Math.round(q.t1 - q.t0) + ' ms' : 'running'}${q.rows !== undefined ? ` · ${q.rows} rows` : ''}`).join('\n')}` : isPage(pageKey) ? 'The app asked the backend nothing when this page opened.' : 'A copy of this reusable asked the backend nothing when it was shown.';
 }
 let probeSeen = '', probeFrame = null;
 setInterval(() => {
@@ -2116,7 +2226,7 @@ function renderItem(right) {
   right.append(h('div', { class: 'head' },
     h('input', { type: 'text', value: it.name, 'aria-label': 'Name', oninput: (e) => { const v = e.target.value.trim(); if (v) later(() => save(() => ({ name: v }), { redraw: false })); } }),
     h('button', { class: 'quiet danger', title: 'Delete this page data', onclick: () => { const readers = readersOf(it, nodes, conns).length; edits(pageKey, removeEdits(it, { component: pageKey })); selItem = null; renderPageData(); renderProps(); toast(`Removed ${it.name}${readers ? ` — ${readers} element${readers === 1 ? '' : 's'} no longer read it` : ''}`); } }, icon('trash')),
-    h('div', { class: 'type' }, 'Page data · one query, run when the page opens')));
+    h('div', { class: 'type' }, it.whenShown ? 'Data · asked by each copy while it is shown' : 'Page data · one query, run when the page opens')));
   const wrap = h('div', { class: 'props pageitem' });
   if (it.unsupported) wrap.append(h('div', { class: 'hint warn' }, `Its filter has ${it.unsupported}, which Studio cannot show yet. Edit it in the NodeGX editor; Studio leaves it as it is.`));
   const asks = h('details', { class: 'group', open: true }, h('summary', {}, 'Asks for'));
@@ -2162,7 +2272,7 @@ function renderItem(right) {
   const readers = readersOf(it, nodes, conns);
   const rd = h('details', { class: 'group', open: true }, h('summary', {}, `Read by ${readers.length} element${readers.length === 1 ? '' : 's'}`));
   for (const id of readers) rd.append(h('div', { class: 'row', onclick: () => byId[id] && isVisualType(byId[id].type) ? select(id) : null }, icon(byId[id] ? glyphOf(byId[id].type) : 'code'), labelOf(id)));
-  if (!readers.length) rd.append(h('div', { class: 'hint' }, 'Nothing reads it yet. Select an element, and in a field choose ', h('b', {}, 'Insert dynamic data'), ' → ', h('i', {}, it.first ? `${it.name}'s <field>` : `${it.name} · the list`)));
+  if (!readers.length) rd.append(h('div', { class: 'hint' }, 'Nothing reads it yet. Select an element, and in a field choose ', h('b', {}, '⚡ Take this value from'), ' → ', h('i', {}, it.first ? `${it.name}'s <field>` : `${it.name} · the list`)));
   wrap.append(rd);
   // what it did in the app on screen
   const ran = h('details', { class: 'group', open: true }, h('summary', {}, 'In the app'));
@@ -2207,7 +2317,7 @@ function openComposer(e, node, p, existing, onPick) {
   const check = () => {
     const names = exprNames(text);
     const unknown = names.filter((n) => !chips.has(n));
-    try { new Function(...names, 'Noodl', 'return (' + (text || 'undefined') + ');'); note.className = 'note'; note.textContent = text ? (unknown.length ? `${unknown.join(', ')} ${unknown.length > 1 ? 'are names' : 'is a name'} with no value yet — insert dynamic data for ${unknown.length > 1 ? 'them' : 'it'}, or it is a JavaScript global` : `Reads ${names.length} value${names.length === 1 ? '' : 's'} · JavaScript, run by the app's Expression node`) : 'Type JavaScript, or insert dynamic data as chips.'; }
+    try { new Function(...names, 'Noodl', 'return (' + (text || 'undefined') + ');'); note.className = 'note'; note.textContent = text ? (unknown.length ? `${unknown.join(', ')} ${unknown.length > 1 ? 'are names' : 'is a name'} with no value yet — insert a value for ${unknown.length > 1 ? 'them' : 'it'}, or it is a JavaScript global` : `Reads ${names.length} value${names.length === 1 ? '' : 's'} · JavaScript, run by the app's Expression node`) : 'Type JavaScript, or insert values as chips.'; }
     catch (err) { note.className = 'note bad'; note.textContent = `Will not compile: ${err.message}`; }
   };
   /** A chip for a name in the text; in the mixed view it is a non-editable island with its own delete. */
@@ -2236,7 +2346,7 @@ function openComposer(e, node, p, existing, onPick) {
         else if (/^\s+$/.test(t)) continue;
         else row.append(h('span', { class: /^["'\d]/.test(t) ? 'lit' : /^[A-Za-z_$]/.test(t) ? '' : 'op', style: 'cursor:text', title: 'Edit it in the Both or JavaScript view' }, t));
       }
-      if (!text) row.append(h('span', { style: 'color:var(--muted);font-family:Inter' }, 'Nothing composed yet. Insert dynamic data, an operator, a text or a number.'));
+      if (!text) row.append(h('span', { style: 'color:var(--muted);font-family:Inter' }, 'Nothing composed yet. Insert a value, an operator, a text or a number.'));
       body.append(row);
     } else if (mode === 'js') {
       const ta = h('textarea', { spellcheck: 'false', oninput: (ev) => { text = ev.target.value; check(); } }, text);
@@ -2252,7 +2362,7 @@ function openComposer(e, node, p, existing, onPick) {
       mixedEl.onpaste = (ev) => { ev.preventDefault(); document.execCommand('insertText', false, ev.clipboardData.getData('text/plain')); };
       body.append(mixedEl);
     }
-    const tools = h('div', { class: 'tools' }, h('button', { class: 'primary', onclick: (ev) => sourceMenu(ev, node, p, insertName) }, icon('bolt'), 'Insert dynamic data'));
+    const tools = h('div', { class: 'tools' }, h('button', { class: 'primary', onclick: (ev) => sourceMenu(ev, node, p, insertName) }, icon('bolt'), 'Insert a value'));
     for (const [label, js] of OPS) tools.append(h('button', { title: js.trim(), onclick: () => insertAtCaret(js.trim()) }, label));
     tools.append(h('button', { onclick: () => insertAtCaret('""') }, '"text"'), h('button', { onclick: () => insertAtCaret('0') }, '123'));
     body.append(tools);
@@ -2761,7 +2871,7 @@ function renderStyles() {
   main.append(stage);
   const card = h('div', { class: 'card' }, h('h4', {}, `Elements wearing it · ${wearers.length}`));
   if (!wearers.length) card.append(h('div', { class: 'note' }, 'None yet. Select an element in Design and pick this style at the top of its properties.'));
-  for (const w of wearers.slice(0, 40)) card.append(h('div', { class: 'row', onclick: () => { if (registry()[w.key]?.type === 'page') { pageKey = w.key; readGraph(); } sel = w.id; switchTab('design'); showPage(pageKey); } }, icon(glyphOf(v.typename)), w.label, h('span', { class: 't' }, w.key)));
+  for (const w of wearers.slice(0, 40)) card.append(h('div', { class: 'row', onclick: () => { if (registry()[w.key]?.type === 'page') { pageKey = w.key; readGraph(); } sel = w.id; switchTab('design'); rebuild(0); } }, icon(glyphOf(v.typename)), w.label, h('span', { class: 't' }, w.key)));
   main.append(card, h('div', { class: 'bar' }, h('button', { class: 'quiet danger', onclick: () => { if (!confirm(`Delete the style ${v.name}? The ${wearers.length} element(s) wearing it fall back to their own properties.`)) return; const s = stylesFile(); s.variants = s.variants.filter((x) => x !== v); writeStyles(s); selStyle = null; renderStyles(); } }, icon('trash'), 'Delete style')));
   // the style's properties, edited with the same fields as an element's
   props.append(h('div', { class: 'head' }, h('input', { type: 'text', value: v.name, onchange: (e) => { const name = e.target.value.trim(); if (!name) return; const s = stylesFile(); const me = s.variants.find((x) => x.typename === v.typename && x.name === v.name); me.name = name; writeStyles(s); for (const w of wearers) edits(w.key, [{ edit: 'set_variant', component: w.key, id: w.id, variant: name }], { redraw: false }); selStyle.name = name; renderStyles(); } }), h('span'), h('div', { class: 'type' }, `a style of ${typeName(v.typename)}`)));
@@ -2803,14 +2913,14 @@ readGraph();
 renderPagePick();
 renderPalette(); renderTree();
 status('Starting the app…', 'busy');
-const first = await preview.update(files.entries());
+const first = await preview.update(previewFiles());
 lastShow = first;
 lib = preview.nodeLibrary; libIndex = new Map((lib?.nodetypes || []).map((t) => [t.name, t]));
 readGraph();
 showProblems(first);
 if (first.status === 'ok') {
   status(`App on screen · ${Math.round(first.exportMs)} ms export, ${Math.round(first.frameMs)} ms draw${first.warnings?.length ? ` · ${first.warnings.length} warning(s)` : ''}`);
-  await showPage(pageKey); hookFrame(); mapElements();
+  hookFrame(); mapElements(); await followSoon();
 } else {
   const d = first.report?.diagnostics?.find((d) => d.severity === 'error');
   status(`The app is not shown: ${d ? d.message.slice(0, 160) : first.message || first.status}`, 'bad');

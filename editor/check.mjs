@@ -20,7 +20,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { browser } from './cdp.mjs';
 import { applyEdit } from './edits.mjs';
-import { createEdits } from './pagedata.mjs';
+import { createEdits, readItems } from './pagedata.mjs';
 import { nodegxRepo } from '../lib/nodegx.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -184,11 +184,11 @@ try {
     const idx = fields.indexOf('Text');
     await b.evaluate(`[...document.querySelectorAll('#right .field')][${idx}].querySelector('.bolt').click()`); await wait(250);
     const sources = await b.evaluate(`[...document.querySelectorAll('.menu .item')].map(e => e.textContent)`);
-    ok(sources.some((s) => s.includes("Sign-in card's state")) && sources.some((s) => s.startsWith('Compose an expression')), 'Insert dynamic data lists the custom state and the composer', sources.slice(0, 4));
+    ok(sources.some((s) => s.includes("Sign-in card's state")) && sources.some((s) => s.startsWith('Compose an expression')), 'the ⚡ lists the custom state and the composer', sources.slice(0, 4));
     await menuItem('Compose an expression');
     ok(await b.evaluate(`!!document.querySelector('.composer')`), 'the composer opens');
     await b.evaluate(`[...document.querySelectorAll('.composer .seg button')].find(b => b.dataset.m === 'mixed').click()`); await wait(100);
-    await clickText('.composer .tools button', 'Insert dynamic data'); await wait(250);
+    await clickText('.composer .tools button', 'Insert a value'); await wait(250);
     await menuItem("Sign-in card's state");
     const chipNames = await b.evaluate(`[...document.querySelectorAll('.composer .mixed .chip')].map(c => c.dataset.name)`);
     ok(chipNames.length === 1 && /^signInCard/i.test(chipNames[0]), 'the state becomes a chip in the mixed view, a name in the text', chipNames);
@@ -253,9 +253,14 @@ try {
     await clickText('#steps .branch.yes .addrow button', 'Add an action'); await wait(250);
     await b.type('custom state'); await wait(200); await menuItem('Set a custom state');
     await b.until(`[...document.querySelectorAll('.menu .item')].some(e => e.textContent.includes("Sign-in card's state"))`, 4000);
-    await menuItem("Sign-in card's state"); await wait(500);
-    wires = onDisk(SIGN + 'connections.json').connections; nodes = onDisk(SIGN + 'nodes.json').nodes;
-    const setV = nodes.find((n) => n.type === 'Set Variable' && wires.some((w) => w.fromId === cond.id && w.fromProperty === 'ontrue' && w.toId === n.id && w.toProperty === 'do'));
+    await menuItem("Sign-in card's state");
+    // the same wait for the file as the branch above (read 500 ms in, it missed the save 1 run of several)
+    let setV;
+    for (const t0 = Date.now(); Date.now() - t0 < 5000; await wait(150)) {
+      wires = onDisk(SIGN + 'connections.json').connections; nodes = onDisk(SIGN + 'nodes.json').nodes;
+      setV = nodes.find((n) => n.type === 'Set Variable' && wires.some((w) => w.fromId === cond.id && w.fromProperty === 'ontrue' && w.toId === n.id && w.toProperty === 'do'));
+      if (setV) break;
+    }
     ok(setV && setV.parameters?.name === 'signInCard.state', 'Set a custom state in the Yes column is a Set Variable step wired from On True, its name the card\'s state', { name: setV?.parameters?.name });
     // the condition, composed in JavaScript
     await clickText('#steps .step.cond button', 'Set the condition'); await wait(250);
@@ -558,7 +563,7 @@ try {
     for (const id of texts) {
       await select(id);
       const at = await b.evaluate(`(() => { const f = [...document.querySelectorAll('#right .field')].find((f) => f.querySelector('label')?.textContent === 'Text'); const btn = f?.querySelector('.bolt'); if (!btn) return null; btn.scrollIntoView({ block: 'nearest' }); const r = btn.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
-      if (!at) throw new Error(`no "Insert dynamic data" on the Text field of ${id}`);
+      if (!at) throw new Error(`no ⚡ on the Text field of ${id}`);
       await b.click(at.x, at.y);
       const n0 = await shows(); await menuItem("latest note's title"); await rebuilt(n0);
     }
@@ -591,11 +596,13 @@ try {
     await b.clickSel('#newpagedata'); await form({ name: 'notes', type: 'Note' });
     const notes = byName('notes');
     ok(notes && queries().length === 2, 'a second, different question ("every Note") is a second item', queries().map((n) => n.metadata?.pageData?.name));
-    // the same question from a field's "Insert dynamic data → New page data…" (Bubble's "Do a search for")
+    // the same question from a field's "⚡ → New page data…" (Bubble's "Do a search for")
     const btn = onDisk(SIGN + 'nodes.json').nodes.find((n) => n.type === 'net.noodl.controls.button' && n.parameters?.label === 'Button')?.id;
+    // the item just made rebuilds the app: a click before it is back can land on the old frame (no ⚡ found, 1 run)
+    await b.until(`!document.getElementById("status").textContent.startsWith("Rebuilding")`, 30000); await wait(400);
     await select(btn);
     const at = await b.evaluate(`(() => { const f = [...document.querySelectorAll('#right .field')].find((f) => f.querySelector('label')?.textContent === 'Label'); const btn = f?.querySelector('.bolt'); if (!btn) return null; btn.scrollIntoView({ block: 'nearest' }); const r = btn.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
-    if (!at) throw new Error('no "Insert dynamic data" on the button\'s Label');
+    if (!at) throw new Error('no ⚡ on the button\'s Label');
     await b.click(at.x, at.y); await menuItem('New page data…');
     const said = await form({ name: 'all the notes', type: 'Note' });
     ok(/^notes already asks this/.test(said.note) && said.button === 'Use notes', 'asking it again, the form says which item already asks it and offers to use it', said);
@@ -647,12 +654,88 @@ try {
     const shown = await asked();
     ok(shown.slice(changed.length).join() === '3,7' && (await drawn()) === 4, 'shown, each hidden copy asks once, with the value it has now (3, then 7)', { asked: shown, drawn: await drawn() });
   }
+  console.log('check: a reusable opened on its own (STU-015)');
+  {
+    const PANEL = 'components/Reusable/Probe panel/';
+    const offered = await b.evaluate(`[...document.querySelectorAll('#pagepick optgroup option')].map(o => o.value)`);
+    ok(offered.includes('Reusable/Probe panel') && !offered.some((k) => k.startsWith('Pages/')), 'the page picker lists the reusables after the pages', offered);
+    let n0 = await shows();
+    await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Reusable/Probe panel'; s.dispatchEvent(new Event('change')); })()`);
+    await rebuilt(n0); await wait(600);
+    const on = JSON.parse(await b.evaluate(`JSON.stringify({ page: __ob.preview.frame.contentWindow.Noodl.Navigation._noodlRuntime.context.rootComponent.nodeScope.getNodesWithTypeRecursive('Router')[0]._internal.currentPage?.component, queries: document.getElementById('querycount').textContent, title: document.getElementById('elements-title').textContent, rows: [...document.querySelectorAll('#tree .row')].map(r => r.querySelector('.seg')?.textContent), drawn: __ob.preview.elementsOf('ppText').length, copies: (__ob.preview.frame.contentDocument.body.innerText.match(/probe panel/g) || []).length })`));
+    ok(on.page === '/__studio/Reusable canvas' && /when shown/.test(on.queries) && on.title === 'Elements in this reusable' && on.rows.join() === 'Panel,Probe text' && on.drawn === 1 && on.copies === 1, 'opened, Design lists the reusable\'s own elements and the app shows one copy of it alone, on Studio\'s canvas page (its queries counted "when shown")', on);
+    ok(!existsSync(join(project, 'components/__studio')) && !readFileSync(join(project, 'components/App/nodes.json'), 'utf8').includes('__studio'), 'the canvas page is Studio\'s: not in the project folder, not in its router');
+    await select('ppText');
+    ok((await b.evaluate('document.querySelector("#right .head input")?.value')) === 'Probe text', 'clicking its text in the canvas selects it');
+    // data made here is the reusable's, in STU-014's form
+    const formIn = async (sel, value, ev = 'input') => b.evaluate(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event(${JSON.stringify(ev)}, { bubbles: true })); })()`);
+    await b.clickSel('#newpagedata');
+    await b.until('document.querySelector(".menu.newitem")', 4000);
+    await formIn('.menu.newitem input[aria-label=Name]', 'panel notes');
+    await formIn('.menu.newitem select[aria-label=Type]', 'Note', 'change');
+    await formIn('.menu.newitem input[aria-label="Where field"]', 'body');
+    await formIn('.menu.newitem select[aria-label="Where operator"]', 'exists', 'change');
+    await clickText('.menu.newitem .foot button', 'Create'); await wait(800);
+    let item;
+    for (const t0 = Date.now(); Date.now() - t0 < 5000 && !item; await wait(150)) {
+      const pn = onDisk(PANEL + 'nodes.json').nodes, pc = onDisk(PANEL + 'connections.json').connections;
+      item = readItems(pn, pc).find((i) => i.name === 'panel notes');
+    }
+    const signHas = onDisk(SIGN + 'nodes.json').nodes.some((n) => n.metadata?.pageData?.name === 'panel notes');
+    ok(item?.whenShown && item.shownId && item.askId && !signHas, 'New data on the reusable is written into the reusable, asking while a copy is shown (STU-014\'s form), not into a page', { whenShown: item?.whenShown, shownId: item?.shownId, askId: item?.askId, signHas });
+    // back on Sign in: the copies there that are shown each ask it once (1 and 2; 3 is hidden, 4 is in a hidden group).
+    // Counted from here: the canvas's own copy has asked it too, in the same frame
+    await b.until(`document.getElementById("status").textContent.startsWith("App on screen")`, 30000); await wait(1500);
+    const noteAsks = `(__ob.preview.frame.contentWindow.__studioLog || []).filter(e => e.kind === 'request' && /\\/classes\\/Note$/.test(e.path || '') && e.body?._method === 'GET' && e.body.where?.body).length`;
+    const onCanvas = await b.evaluate(noteAsks);
+    const nBack = await shows();
+    await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Pages/Sign in'; s.dispatchEvent(new Event('change')); })()`);
+    await rebuilt(nBack); await wait(1500);
+    const frame = await b.evaluate(`__ob.preview.frame.contentWindow.Noodl.Navigation._noodlRuntime.context.rootComponent.nodeScope.getNodesWithTypeRecursive('Router')[0]._internal.currentPage?.component`);
+    const panelAsks = await b.evaluate(noteAsks); // a fresh frame: going back is a rebuild that starts on Sign in
+    ok(onCanvas === 1 && frame === '/Pages/Sign in' && panelAsks === 2, 'the canvas\'s copy asks it once; on the page, the two shown copies ask it once each and the hidden two not at all', { onCanvas, frame, panelAsks });
+  }
+  console.log('check: a group made reusable (STU-050)');
+  {
+    const emailId = sign.nodes.nodes.find((n) => n.label === 'Email').id, whyId = sign.nodes.nodes.find((n) => n.label === 'Why it did not work').id;
+    await clickText('#tree .row', 'Sign-in card'); await wait(400);
+    let n0 = await shows();
+    await clickText('#right .opencopy button', 'Make it reusable');
+    await rebuilt(n0); await wait(800);
+    const RC = 'components/Reusable/Sign-in card/';
+    const made = existsSync(join(project, RC + 'nodes.json')) ? onDisk(RC + 'nodes.json').nodes : [];
+    const page = onDisk(SIGN + 'nodes.json').nodes, copyNode = page.find((n) => n.type === '/Reusable/Sign-in card');
+    const reg = onDisk('components/_registry.json').components['Reusable/Sign-in card'];
+    ok(made.some((n) => n.id === emailId) && made.some((n) => n.id === card && n.parent === undefined) && !page.some((n) => n.id === emailId || n.id === card) && copyNode && reg,
+      'Make it reusable moves the card and what it holds into Reusable/Sign-in card, and one copy takes its place on Sign in',
+      { moved: made.length, copy: copyNode?.id, registered: !!reg });
+    const inputs = made.find((n) => n.type === 'Component Inputs')?.ports.map((p) => p.name) ?? [];
+    const outputs = made.find((n) => n.type === 'Component Outputs')?.ports.map((p) => `${p.name}:${p.type}`) ?? [];
+    ok(inputs.includes('Why it did not work text') && outputs.includes('Sign in onClick:signal'),
+      'the wires across the card\'s edge are its inputs and outputs, named after the element inside, a click typed as a signal', { inputs, outputs });
+    const shownNow = { head: await b.evaluate('document.querySelector("#right .head input")?.value'), text: (await appText()).includes('Create account'), email: await b.evaluate(`__ob.preview.elementsOf(${JSON.stringify(emailId)}).length`) };
+    ok(shownNow.head === 'Sign-in card' && shownNow.text && shownNow.email === 1, 'the copy is selected, and the app draws the card as before (its buttons, its Email box)', shownNow);
+    // the page's sign-in logic still works through the copy: type into its boxes, press its Sign in, and the error it shows is the page's
+    const errShown = () => b.evaluate(`(() => { const el = __ob.preview.elementsOf(${JSON.stringify(whyId)})[0]; return el ? el.textContent : null; })()`);
+    const before = await errShown();
+    const useApp = (on) => b.evaluate(`(() => { const c = document.getElementById('previewmode'); c.checked = ${on}; c.dispatchEvent(new Event('change')); })()`);
+    await useApp(true); await wait(200);
+    const at = await centreOf(emailId); await b.click(at.x, at.y); await b.type('nobody@example.com');
+    const pw = await centreOf(sign.nodes.nodes.find((n) => n.label === 'Password').id); await b.click(pw.x, pw.y); await b.type('not the password');
+    const go = await centreOf(signInBtn); await b.click(go.x, go.y);
+    let after = null;
+    for (const t0 = Date.now(); Date.now() - t0 < 6000 && !after; await wait(200)) after = await errShown();
+    await useApp(false);
+    ok(!before && after && after.length > 0, 'through the copy, a wrong sign-in still shows why it did not work (typed values out, the error and its showing in)', { before, after });
+  }
   ok((await status()).startsWith('App on screen'), 'after every edit the app still validates and draws', await status());
   const problems = b.problems.filter((p) => !/Invalid connection|doesn't have a port|Failed to load resource|fonts\.g|^\[noodl\]/.test(p)); // `[noodl]` lines are the app's own runtime (a Navigate with no target yet), not the editor
   ok(problems.length === 0, 'no exceptions in the editor page', problems.slice(0, 3));
 } catch (err) {
   ok(false, `the gate itself: ${err.message.split('\n')[0]}`);
   console.log(err.stack?.split('\n').slice(0, 4).join('\n'));
+  // what the editor was showing when the gate stopped
+  try { console.log('state:', await b.evaluate(`JSON.stringify({ page: document.getElementById('pagepick').value, right: document.getElementById('right').innerText.slice(0, 160), toast: document.getElementById('toast').textContent, status: document.getElementById('status').textContent, frame: __ob.preview.frame?.contentWindow?.location.pathname, shows: __ob.shows })`)); } catch { /* the page is gone */ }
 } finally {
   try { await b?.close(); } catch { /* gone */ }
   for (const c of children) c.kill();
