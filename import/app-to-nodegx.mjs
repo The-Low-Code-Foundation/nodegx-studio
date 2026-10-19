@@ -385,6 +385,16 @@ function exprNode(g, label, js, compiled, pos) {
   for (const c of compiled.chips) g.wire(c.fromId, c.fromPort, ex.id, c.name);
   return ex;
 }
+// STU-044: date operators as Bubble computes them. A date floors in the browser's zone (Bubble's default; a static or
+// dynamic zone is reported), a week starts on Monday (the dictionary's "rounded down to week": Thursday 6 July 2023 →
+// Monday 3 July), and months and years clamp to the target month's last day (31 January + 1 month = 28 February).
+const dateFloor = (x, u) => `((d, u) => { d = new Date(d); u = String(u ?? "").toLowerCase().replace(/s$/, ""); if (u === "year") return new Date(d.getFullYear(), 0, 1); if (u === "month") return new Date(d.getFullYear(), d.getMonth(), 1); if (u === "week") return new Date(d.getFullYear(), d.getMonth(), d.getDate() - (d.getDay() + 6) % 7); if (u === "day" || u === "date") return new Date(d.getFullYear(), d.getMonth(), d.getDate()); if (u === "hour") d.setMinutes(0, 0, 0); else if (u === "minute") d.setSeconds(0, 0); else if (u === "second") d.setMilliseconds(0); return d; })(${x}, ${u})`;
+const addMonths = (x, n) => `((d, n) => { const day = d.getDate(); d.setDate(1); d.setMonth(d.getMonth() + n); d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate())); return d; })(new Date(${x}), ${n})`;
+// Bubble's date patterns (a named format is its own pattern, `custom` reads custom_format: bubble_ex) are dateFormat's
+// tokens: d dd ddd dddd, m mm mmm mmmm, yy yyyy, h hh H HH, M MM, s ss, t tt T TT, S (st/nd/rd/th), text in quotes.
+const formatDate = (x, f) => `((d, f) => { if (d == null || d === "") return ""; d = new Date(d); if (isNaN(d)) return ""; const D = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], N = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"], p = (n) => String(n).padStart(2, "0"), H = d.getHours(), h = H % 12 || 12, t = d.getDate(), m = d.getMonth(), v = { d: t, dd: p(t), ddd: D[d.getDay()].slice(0, 3), dddd: D[d.getDay()], m: m + 1, mm: p(m + 1), mmm: N[m].slice(0, 3), mmmm: N[m], yy: String(d.getFullYear()).slice(2), yyyy: d.getFullYear(), h, hh: p(h), H, HH: p(H), M: d.getMinutes(), MM: p(d.getMinutes()), s: d.getSeconds(), ss: p(d.getSeconds()), t: H < 12 ? "a" : "p", tt: H < 12 ? "am" : "pm", T: H < 12 ? "A" : "P", TT: H < 12 ? "AM" : "PM", S: ["th", "st", "nd", "rd"][t % 10 > 3 || Math.floor(t % 100 / 10) === 1 ? 0 : t % 10] }; return String(f).replace(/d{1,4}|m{1,4}|yy(?:yy)?|([HhMsTt])\\1?|S|"[^"]*"|'[^']*'/g, (k) => k in v ? v[k] : k.slice(1, -1)); })(${x}, ${f})`;
+// OPS: name → (x, a, p, props) → js. x is the subject's JavaScript, a the compiled `args`, p(key) a compiled operand from
+// `properties` (where bubble_ex shows find & replace, split by, extract and rounded down keep theirs), props the raw ones.
 const OPS = {
   get_data: (x) => x, is_empty: (x) => `(${x} == null || ${x} === "" || (Array.isArray(${x}) && ${x}.length === 0))`, is_not_empty: (x) => `!(${x} == null || ${x} === "" || (Array.isArray(${x}) && ${x}.length === 0))`,
   contains: (x, a) => `(Array.isArray(${x}) ? ${x} : String(${x} ?? "")).includes(${a})`, doesnt_contain: (x, a) => `!(Array.isArray(${x}) ? ${x} : String(${x} ?? "")).includes(${a})`,
@@ -397,18 +407,19 @@ const OPS = {
   logged_in: (x) => x, logged_out: (x) => `!(${x})`, not_logged_in: (x) => `!(${x})`,
   first_element: (x) => `(${x} ?? [])[0]`, last_element: (x) => `(${x} ?? []).slice(-1)[0]`, get_list_data: (x) => x, get_group_data: (x) => x, imgix_treatment: (x) => x,
   _id: (x) => `${x}?.id`, display: (x) => `(${x}?.display ?? ${x})`, email: (x) => `${x}?.email`, 'Created By': (x) => `${x}?.createdBy`, 'Created Date': (x) => `${x}?.createdAt`, 'Modified Date': (x) => `${x}?.updatedAt`,
-  format_number: (x) => `String(${x} ?? "")`, format_date: (x) => `String(${x} ?? "")`, format_boolean: (x) => `String(${x} ?? "")`, number_from_text: (x) => `Number(${x})`,
+  format_number: (x) => `String(${x} ?? "")`, format_date: (x, a, p, props) => { const f = props?.formatting_type === 'custom' ? p('custom_format') : props?.formatting_type ? JSON.stringify(props.formatting_type) : undefined; return f === undefined ? `String(${x} ?? "")` : formatDate(x, f); }, format_boolean: (x) => `String(${x} ?? "")`, number_from_text: (x) => `Number(${x})`,
   min: (x) => `Math.min(...(${x} ?? []))`, max: (x) => `Math.max(...(${x} ?? []))`, sum: (x) => `(${x} ?? []).reduce((a, b) => a + b, 0)`, average: (x) => `((${x} ?? []).reduce((a, b) => a + b, 0) / ((${x} ?? []).length || 1))`,
   to_days: (x) => `(${x} / 86400000)`, to_hours: (x) => `(${x} / 3600000)`, to_minutes: (x) => `(${x} / 60000)`, days_between: (x, a) => `((new Date(${a}) - new Date(${x})) / 86400000)`,
   is_in: (x, a) => `(${a} ?? []).includes(${x})`, isnt_in: (x, a) => `!(${a} ?? []).includes(${x})`, contains_list: (x, a) => `(${a} ?? []).every((i) => (${x} ?? []).includes(i))`,
   unique_elements: (x) => `[...new Set(${x} ?? [])]`, items_from: (x, a) => `(${x} ?? []).slice((${a}) - 1)`, items_until: (x, a) => `(${x} ?? []).slice(0, ${a})`, random_item: (x) => `(${x} ?? [])[Math.floor(Math.random() * (${x} ?? []).length)]`,
   plus_item: (x, a) => `[...(${x} ?? []), ${a}]`, minus_item: (x, a) => `(${x} ?? []).filter((i) => i !== ${a})`, merged_with: (x, a) => `[...(${x} ?? []), ...(${a} ?? [])]`,
-  truncate: (x, a) => `String(${x} ?? "").slice(0, ${a})`, truncated: (x, a) => `String(${x} ?? "").slice(0, ${a})`, limit_to: (x, a) => `(${x} ?? []).slice(0, ${a})`, length: (x) => `(${x} ?? "").length`, times: (x, a) => `(${x} * ${a})`, divided_by: (x, a) => `(${x} / ${a})`, modulo: (x, a) => `(${x} % ${a})`, equals_rounded_down: (x, a) => `(Math.floor(${x}) == Math.floor(${a}))`,
+  truncate: (x, a) => `String(${x} ?? "").slice(0, ${a})`, truncated: (x, a) => `String(${x} ?? "").slice(0, ${a})`, limit_to: (x, a) => `(${x} ?? []).slice(0, ${a})`, length: (x) => `(${x} ?? "").length`, times: (x, a) => `(${x} * ${a})`, divided_by: (x, a) => `(${x} / ${a})`, modulo: (x, a) => `(${x} % ${a})`,
   to_uppercase: (x) => `String(${x} ?? "").toUpperCase()`, to_lowercase: (x) => `String(${x} ?? "").toLowerCase()`, to_capitalized_words: (x) => `String(${x} ?? "").replace(/\\b\\w/g, (c) => c.toUpperCase())`, get_loading_status: () => 'false', is_first_page: () => 'true', is_last_page: () => 'true', is_visible: () => 'true',
   plus_hours: (x, a) => `new Date(new Date(${x}).getTime() + (${a}) * 3600000)`, plus_minutes: (x, a) => `new Date(new Date(${x}).getTime() + (${a}) * 60000)`, plus_seconds: (x, a) => `new Date(new Date(${x}).getTime() + (${a}) * 1000)`, plus_days: (x, a) => `new Date(new Date(${x}).getTime() + (${a}) * 86400000)`,
-  plus_months: (x, a) => `((d) => (d.setMonth(d.getMonth() + (${a})), d))(new Date(${x}))`, plus_years: (x, a) => `((d) => (d.setFullYear(d.getFullYear() + (${a})), d))(new Date(${x}))`,
+  plus_months: (x, a) => addMonths(x, a), plus_years: (x, a) => addMonths(x, `(${a}) * 12`),
   change_hours: (x, a) => `((d) => (d.setHours(${a}), d))(new Date(${x}))`, change_minutes: (x, a) => `((d) => (d.setMinutes(${a}), d))(new Date(${x}))`, change_seconds: (x, a) => `((d) => (d.setSeconds(${a}), d))(new Date(${x}))`, change_date: (x, a) => `((d) => (d.setDate(${a}), d))(new Date(${x}))`,
-  extract_from_date: (x, a) => `((d, w) => ({ year: d.getFullYear(), month: d.getMonth() + 1, date: d.getDate(), day: d.getDay(), hours: d.getHours(), minutes: d.getMinutes() })[w])(new Date(${x}), ${a})`,
+  extract_from_date: (x, a, p) => `((d, w) => ({ year: d.getFullYear(), month: d.getMonth() + 1, date: d.getDate(), day: d.getDay(), hour: d.getHours(), minute: d.getMinutes(), second: d.getSeconds() })[String(w ?? "").toLowerCase().replace(/s$/, "")])(new Date(${x}), ${p('component_to_extract') ?? a})`,
+  rounded_down: (x, a, p) => dateFloor(x, p('component_to_extract') ?? a), equals_rounded_down: (x, a, p) => p('component_to_extract') === undefined ? `(new Date(${x}).getTime() === new Date(${a}).getTime())` : `(${dateFloor(x, p('component_to_extract'))}.getTime() === ${dateFloor(a, p('component_to_extract'))}.getTime())`,
   to_range: (x, a) => `[${x}, ${a}]`, range_contains_point: (x, a) => `((r, p) => r && new Date(p) >= new Date(r[0]) && new Date(p) <= new Date(r[1]))(${x}, ${a})`, range_less_than_point: (x, a) => `((r, p) => r && new Date(r[1]) < new Date(p))(${x}, ${a})`, range_overlaps: (x, a) => `((a, b) => a && b && new Date(a[0]) <= new Date(b[1]) && new Date(b[0]) <= new Date(a[1]))(${x}, ${a})`,
   // bubble_ex (Expression.Vocabulary / Compiler): the list, arithmetic and text operators it has seen in real payloads
   specific_item: (x, a) => `(${x} ?? [])[(${a}) - 1]`, is_contained_by_list: (x, a) => `(${a} ?? []).includes(${x})`, is_not_contained_by_list: (x, a) => `!(${a} ?? []).includes(${x})`,
@@ -417,10 +428,13 @@ const OPS = {
   plus_element: (x, a) => `[...(${x} ?? []), ${a}]`, minus_element: (x, a) => `(${x} ?? []).filter((i) => i !== ${a})`, divide: (x, a) => `(${x} / ${a})`,
   defaulting_to: (x, a) => `((v) => (v == null || v === "" || (Array.isArray(v) && v.length === 0)) ? ${a} : v)(${x})`,
   trim: (x) => `String(${x} ?? "").trim()`, capitalized_words: (x) => `String(${x} ?? "").replace(/\\b\\w/g, (c) => c.toUpperCase())`, number_of_characters: (x) => `String(${x} ?? "").length`,
-  format_json_encode: (x) => `JSON.stringify(String(${x} ?? ""))`, format_url_encode: (x) => `encodeURIComponent(String(${x} ?? ""))`, is_email: (x) => `/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(String(${x} ?? ""))`,
+  format_json_encode: (x) => `((v) => JSON.stringify(v instanceof Date ? v.toISOString() : String(v ?? "")))(${x})`, format_url_encode: (x) => `encodeURIComponent(String(${x} ?? ""))`, is_email: (x) => `/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(String(${x} ?? ""))`,
   absolute_value: (x) => `Math.abs(${x})`, rounded: (x, a) => a === undefined ? `Math.round(${x})` : `Number(Number(${x}).toFixed(${a}))`, as_text: (x) => `String(${x} ?? "")`, convert_to_number: (x) => `Number(${x})`,
-  file_name: (x) => `String(${x} ?? "").split("/").pop()`, formatted_address: (x) => `(${x}?.formattedAddress ?? ${x}?.address ?? ${x})`, id: (x) => `${x}?.id`, error: (x) => `${x}?.error`, find_replace: (x) => `String(${x} ?? "")`, split_by: (x, a) => `String(${x} ?? "").split(${a})`, join_with: (x, a) => `(${x} ?? []).join(${a})`, extract: (x) => `String(${x} ?? "")`,
+  file_name: (x) => `String(${x} ?? "").split("/").pop()`, formatted_address: (x) => `(${x}?.formattedAddress ?? ${x}?.address ?? ${x})`, id: (x) => `${x}?.id`, error: (x) => `${x}?.error`, find_replace: (x, a, p, props) => p('find') === undefined ? `String(${x} ?? "")` : props?.use_regex === true ? `String(${x} ?? "").replace(new RegExp(${p('find')}, "g"), String(${p('replace') ?? '""'} ?? ""))` : `((s, f, r) => f === "" ? s : s.split(f).join(r))(String(${x} ?? ""), String(${p('find')} ?? ""), String(${p('replace') ?? '""'} ?? ""))`, split_by: (x, a, p) => `String(${x} ?? "").split(${p('separator') ?? a})`, join_with: (x, a) => `(${x} ?? []).join(${a})`, extract: (x) => `String(${x} ?? "")`,
 };
+// what a chain step leaves a list (a field read off it then reads every item's field): these operators, and these roots
+const LIST_OPS = new Set(['unique', 'unique_elements', 'merged_with', 'minus_list', 'intersect_with', 'plus_element', 'minus_element', 'plus_item', 'minus_item', 'items_from', 'items_until', 'limit_to', 'split_by', 'convert_to_list', 'get_list_data']);
+const LIST_ROOTS = new Set(['Search', 'DoASearch', 'SearchFor', 'AllOptionValue', 'AllOptions']);
 function compileExpr(g, node, ctx) {
   if (!ctx.element && wfElement) ctx = { ...ctx, element: wfElement };
   const chips = []; const seen = new Set();
@@ -497,24 +511,61 @@ function compileExpr(g, node, ctx) {
     const page = (g.nodes.find((x) => x.type === 'Page') || g.nodes[0]); if (page) g.wire(page.id, 'didMount', q.id, 'fetch');
     return chip(`search_${id}`, q.id, 'items');
   }
-  function chain(x, m) { // apply a Message chain to js x
+  // STU-044: ":filtered" and ":sorted" as bubble_ex reads them: constraints over the item's fields, sort_field / descending.
+  // null when a part has no JavaScript here (an advanced constraint, a dynamic operator or sort field), and the caller
+  // reports it. An empty constraint value matches nothing, or is dropped when "Ignore empty constraints" is set (bubble_ex,
+  // replayed for a page's :filtered).
+  function filtered(js, props) {
+    const cons = Object.values(props?.constraints || {}).filter((c) => c && c.key);
+    if (!cons.length) return null;
+    const preds = [];
+    for (const c of cons) {
+      if (c.key === '_advanced_search_constraint' || typeof c.constraint_type !== 'string') return null;
+      const f = c.key === '_id' ? 'id' : fieldDisplay('', String(c.key).replace(/^_p_/, '')).replace(/\W+/g, '_');
+      const lhs = `i?.${f}`; const v = c.value !== undefined ? walkArgs(c.value) : 'undefined';
+      const empty = (e) => `((${e}) == null || (${e}) === "" || (Array.isArray(${e}) && (${e}).length === 0))`;
+      const pred = {
+        equals: `${lhs} == ${v}`, email_equals: `String(${lhs} ?? "").toLowerCase() === String(${v} ?? "").toLowerCase()`, 'not equal': `${lhs} != ${v}`,
+        is_empty: empty(lhs), empty: empty(lhs), is_not_empty: `!${empty(lhs)}`, 'not empty': `!${empty(lhs)}`,
+        'greater than': `${lhs} > ${v}`, 'less than': `${lhs} < ${v}`, gte: `${lhs} >= ${v}`, lte: `${lhs} <= ${v}`,
+        in: `(${v} ?? []).includes(${lhs})`, 'not in': `!(${v} ?? []).includes(${lhs})`,
+        contains: `(Array.isArray(${lhs}) ? ${lhs} : String(${lhs} ?? "")).includes(${v})`, 'not contains': `!(Array.isArray(${lhs}) ? ${lhs} : String(${lhs} ?? "")).includes(${v})`,
+        'text contains string': `String(${lhs} ?? "").toLowerCase().includes(String(${v} ?? "").toLowerCase())`,
+      }[c.constraint_type];
+      if (!pred) return null;
+      preds.push(/empty/.test(c.constraint_type) || c.value === undefined || (typeof c.value !== 'object' && c.value !== '') ? pred : `(${empty(v)} ? ${props.ignore_empty_constraints === true} : (${pred}))`);
+    }
+    return `(${js} ?? []).filter((i) => ${preds.join(' && ')})`;
+  }
+  function sorted(js, props) {
+    if (!props || typeof props !== 'object' || props.additional_sort_fields || (props.dynamic_sort_field && typeof props.dynamic_sort_field === 'object' && props.dynamic_sort_field.type !== 'Empty')) return null;
+    const by = props.sort_field ? `?.${fieldDisplay('', String(props.sort_field).replace(/^_p_/, '')).replace(/\W+/g, '_')}` : '';
+    return `[...(${js} ?? [])].sort((a, b) => ((u, v) => u == null ? (v == null ? 0 : 1) : v == null ? -1 : typeof u === "string" ? u.localeCompare(v) : u < v ? -1 : u > v ? 1 : 0)(a${by}, b${by}) * ${props.descending === true ? -1 : 1})`;
+  }
+  function chain(x, m, list = false) { // apply a Message chain to js x; list: x is known to be a list (a search, a list operator's result, a list field)
     let js = x;
+    // a field read off a list is every item's field, and a list field read off a list reads flat (Teams' members: every
+    // member of every team), as Bubble types a field by the list's item type (bubble_ex); off one thing it is that thing's
+    const read = (f, listField) => { const r = !list ? `${js}?.${f}` : listField ? `(${js} ?? []).flatMap((i) => i?.${f} ?? [])` : `(${js} ?? []).map((i) => i?.${f})`; list = list || listField; return r; };
     while (m) {
       if (m.type !== 'Message') { js = `${js}/*?${m.type}*/`; break; }
       if (m.name === 'get_data' && m.next?.type === 'Message' && /^(custom\.|_p_)/.test(m.next.name || '')) { /* "Group X's data's field": the group's data source value then the field */ }
       const name = m.name; const a = m.args !== undefined ? walkArgs(m.args) : undefined;
-      if (OPS[name]) js = OPS[name](js, a);
-      else if (name.startsWith('_api_c2_')) { const pth = apiFieldPath(name); js = `${js}?.${pth.map((s) => /^\w+$/.test(s) ? s : `[${JSON.stringify(s)}]`).join('?.')}`; }
-      else if (allFieldKeys.has(name)) { js = `${js}?.${String(allFieldKeys.get(name)).replace(/\W+/g, '_')}`; }
-      else if (name === 'filtered' || name === 'sorted' || name === 'sorted_by') { ai(ctx.page.name, `a ":${name}" list operator (${JSON.stringify(m.properties || m.args || null).slice(0, 80)}): JavaScript in the composer's JS view`); js = `__bubble(${JSON.stringify(name)}, ${js})`; }
-      else if (/^custom\.\w+_?$/.test(name) || /^_p_\w+$/.test(name) || /^[a-z0-9]+_(text|number|boolean|date|date_range|image|file|list|custom|option|user|geographic_address)[a-z0-9_.]*$/i.test(name)) { js = `${js}?.${fieldDisplay('', name.replace(/^_p_/, '')).replace(/\W+/g, '_')}`; }
-      else if (m.args === undefined && /^[A-Za-z_][\w.]*$/.test(name)) { stats.fieldReadsGuessed++; js = `${js}?.${name.replace(/^_p_/, '').split('.').map((p) => p.replace(/\W+/g, '_')).join('?.')}`; }
+      const listField = /_list_/.test(name);
+      const listed = name === 'filtered' ? filtered(js, m.properties) : name === 'sorted' ? sorted(js, m.properties) : null;
+      if (OPS[name]) { const props = m.properties && typeof m.properties === 'object' ? m.properties : undefined; js = OPS[name](js, a, (k) => props?.[k] !== undefined ? walkArgs(props[k]) : undefined, props); list = LIST_OPS.has(name); }
+      else if (name.startsWith('_api_c2_')) { const pth = apiFieldPath(name); js = read(pth.map((s) => /^\w+$/.test(s) ? s : `[${JSON.stringify(s)}]`).join('?.'), false); }
+      else if (allFieldKeys.has(name)) { js = read(String(allFieldKeys.get(name)).replace(/\W+/g, '_'), listField); }
+      else if (listed) { js = listed; list = true; }
+      else if (name === 'filtered' || name === 'sorted' || name === 'sorted_by') { ai(ctx.page.name, `a ":${name}" list operator (${JSON.stringify(m.properties || m.args || null).slice(0, 80)}): JavaScript in the composer's JS view`); js = `__bubble(${JSON.stringify(name)}, ${js})`; list = true; }
+      else if (/^custom\.\w+_?$/.test(name) || /^_p_\w+$/.test(name) || /^[a-z0-9]+_(text|number|boolean|date|date_range|image|file|list|custom|option|user|geographic_address)[a-z0-9_.]*$/i.test(name)) { js = read(fieldDisplay('', name.replace(/^_p_/, '')).replace(/\W+/g, '_'), listField); }
+      else if (m.args === undefined && /^[A-Za-z_][\w.]*$/.test(name)) { stats.fieldReadsGuessed++; js = read(name.replace(/^_p_/, '').split('.').map((p) => p.replace(/\W+/g, '_')).join('?.'), listField); }
       else { stats.exprOpsUnknown++; ai(ctx.page.name, `expression operator "${name}" not in the dictionary (args ${JSON.stringify(m.args ?? null).slice(0, 60)})`); js = `__bubble(${JSON.stringify(name)}, ${js}${a !== undefined ? ', ' + a : ''})`; }
       m = m.next;
     }
     return js;
   }
-  function walk(n) { if (!n || typeof n !== 'object') return lit(n); const r = root(n); if (r && typeof r === 'object' && 'done' in r) return r.done; return n.next ? chain(r, n.next) : r; }
+  function walk(n) { if (!n || typeof n !== 'object') return lit(n); const r = root(n); if (r && typeof r === 'object' && 'done' in r) return r.done; return n.next ? chain(r, n.next, LIST_ROOTS.has(n.type)) : r; }
   const js = walk(node);
   return { js, chips, text: describe(node) };
 }

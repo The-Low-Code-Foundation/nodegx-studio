@@ -2,7 +2,7 @@
   "name": "nodegx-studio",
   "version": "0.1.0",
   "private": true,
-  "description": "A Design / Workflow / Data editor for NodeGX apps, on your own machine. Imports apps built on the Bubble\u2122 platform.",
+  "description": "A Design / Workflow / Data editor for NodeGX apps, on your own machine. Imports apps built on the Bubble™ platform.",
   "license": "GPL-3.0-only",
   "main": "app/main.cjs",
   "engines": {
@@ -11,14 +11,15 @@
   "scripts": {
     "start": "node app/launch.mjs",
     "serve": "node editor/serve.mjs",
-    "check": "node editor/rules-check.mjs && node editor/pagedata-check.mjs && node editor/reusable-check.mjs && node editor/check.mjs && node import/check.mjs && node app/check.mjs",
+    "check": "node editor/rules-check.mjs && node editor/pagedata-check.mjs && node editor/reusable-check.mjs && node editor/check.mjs && node import/check.mjs && node import/dictionary-check.mjs && node app/check.mjs",
     "check:editor": "node editor/check.mjs",
     "check:pagedata": "node editor/pagedata-check.mjs",
     "check:reusable": "node editor/reusable-check.mjs",
     "check:rules": "node editor/rules-check.mjs",
     "check:import": "node import/check.mjs",
     "check:app": "node app/check.mjs",
-    "smoke": "node app/launch.mjs --smoke"
+    "smoke": "node app/launch.mjs --smoke",
+    "check:dictionary": "node import/dictionary-check.mjs"
   },
   "devDependencies": {
     "electron": "43.2.0"

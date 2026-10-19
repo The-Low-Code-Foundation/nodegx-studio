@@ -247,6 +247,8 @@ Expression's name cut off.
 - **Not built:** adding a hover / pressed look from the tab (only the ones there are edited), Bubble's "1 inherited from
   Style" count on the badge, a rule on a reusable's copy (its inputs are wires already), and conditions the composer
   should offer by type (STU-052).
+- **Richard looked (2026-10-19, s5)** at `docs/look/s4/` (the tab on four template elements, the six feature rows as one
+  reusable, the todo Sign-in card made reusable): *"Looks right, carry on."*
 
 ---
 
@@ -663,6 +665,48 @@ query start/end and element draws, to measure).
 | STU-042 | **A fidelity gate** from Rico Trevisan's frozen cases (bubble_ex `test/support/fidelity`, fetched at a pinned commit, not vendored) — read his reply on ricotrevisan/bubble_ex#238 first. | the converter is graded against Bubble's own screenshots at 390 and 1440 px |
 | STU-044 | **The importer's expressions graded against the dictionary.** Its compiler has 125 operators of its own, written without the community dictionary; by name only 37 of the dictionary's 94 match (an undercount: the dictionary uses Bubble's display names, ":count", "<", the importer the internal ones, `count`, `less_than`), weakest on Date 2/15, Date Range 0/11 and Integer range 3/11. Compile each phrasebook row's Bubble example through the importer and compare with the phrasebook's executed answer. | a gate prints covered / wrong / missing per data type, and every wrong one is fixed or filed |
 | STU-043 | **Plugins.** A shim for Bubble's client-side plugin API (`instance.publishState`, `triggerEvent`, `data`) so a plugin's own code can run; licence ruling first. | one real plugin element runs in an imported app |
+
+**STU-044, built (s5): `npm run check:dictionary` (`import/dictionary-check.mjs`, cases in `import/dictionary.mjs`).**
+The dictionary names an operator as Bubble's editor shows it (":count"); an app stores the internal name (`count`). The
+join is a table, one entry per phrasebook row: the internal name, and where that name comes from: **bubble_ex** (Rico
+Trevisan's vocabulary and compiler at 5f1c480, written from real payloads, which also says whether an operand sits in
+`args` or in `properties`) or nothing (the importer's own name, never seen in a payload). The gate builds a Bubble app
+with one Group per case (its data source is the expression: a Group's data source becomes an Expression with nothing
+around it), runs the real converter, evaluates each Expression and compares with the phrasebook's executed answer, or
+Bubble's stated result, or a probe where the dictionary's example cannot tell right from wrong (the dates are local, so
+it runs in Europe/Paris). It fails on a wrong row that is not filed.
+
+| measured | covered | wrong | missing | no NodeGX answer |
+|---|---|---|---|---|
+| before (the importer as s4 left it) | 51 | 14 | 24 | 5 |
+| after | 65 | 2 (filed) | 22 | 5 |
+
+Fixed in the importer: **split by**, **find & replace**, **extract** and **rounded down** read their operands from
+`properties` (`separator`; `find`, `replace`, `use_regex`; `component_to_extract`), where bubble_ex shows Bubble keeps
+them; the importer read `args`, so split by split on `undefined`, find & replace returned the text unchanged, and
+**rounded down** was not an operator at all: it compiled, silently, as a read of a field called `rounded_down`
+(`stats.fieldReadsGuessed`, nothing in the report). Find & replace now replaces every match. **formatted as** (a date)
+printed `Thu Jul 06 2023 14:22:00 GMT+0200 (…)`; it now writes Bubble's patterns (dateFormat's tokens:
+`ddd dS mm-yy HH:MM` → `Thu 6th 07-23 14:22`; a named format is its own pattern). **JSON-safe** on a date gives the ISO
+instant. **+(months) / +(years)** clamp (31 January + 1 month was 3 March, now 28 February). **equals rounded down to**
+compared milliseconds whatever the unit. **A field read off a list** (`Search for people's location`, the dictionary's
+":each item's") was `items?.location`, undefined; after a search, an option set's options or a list operator it is now
+every item's field, and a list field read off a list reads flat (Teams' members). **:filtered** and **:sorted** were
+handed to a person; they compile now (bubble_ex's constraint table; an empty constraint value matches nothing unless
+"Ignore empty constraints" is set, as bubble_ex replayed; numbers sort as numbers).
+
+- **Filed, STU-044-FORMATNUMBER (rows 122, 123):** ":formatted as" a number keeps its settings in `properties` under
+  keys no payload here shows (bubble_ex keeps them verbatim and names none), so currency and decimal places print the
+  number as it is. Wants one real payload of each.
+- **Missing (22):** 21 rows whose internal name no payload or bubble_ex shows and the importer has no operator for
+  (":truncated from end to", ":extract with Regex", ":floor", ":ceiling", "^", the range comparisons, ":start / :end /
+  :center", "<-max-> / <-min->", "Date − Date :formatted as years"), and ":group by". Each wants its name from a real
+  app before it can be written; Richard's real app export (not in this repo) is the place to look.
+- **17 covered rows rest on the importer's own name** (":append", "<-range->", ":min / :max / :average", the importer's
+  range operators, "change minutes to", ":random item", ":items from #", ":format as text" and others): they compute
+  the right thing, and nothing says a real app reaches them under that name.
+- Not measured: whether Bubble's ":plus item" leaves out an item the list already holds (the probe was dropped, not
+  guessed), and Bubble's "+(days)" over a summer-time change (NodeGX's own Date Add counts a day as 24 hours).
 
 ---
 
