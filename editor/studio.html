@@ -854,6 +854,20 @@ function reusableKeys() {
     return draws;
   });
 }
+/** The settings the first copy of a reusable is given (pages first, in the picker's order), kept to what it declares. */
+function firstCopyValues(key, declared) {
+  const type = '/' + key;
+  for (const k of [...pageKeys(), ...Object.keys(registry()).filter((k) => !isPage(k))]) {
+    if (k === key) continue;
+    const text = files.read(`components/${k}/nodes.json`);
+    if (!text?.includes(JSON.stringify(type))) continue;
+    try {
+      const copy = JSON.parse(text).nodes.find((n) => n.type === type);
+      if (copy) return Object.fromEntries(Object.entries(copy.parameters || {}).filter(([p]) => declared.has(p)));
+    } catch { /* unreadable: look on */ }
+  }
+  return {};
+}
 /** What the preview is given: the project's files, and while a reusable is open, the canvas page holding one copy of it. */
 function previewFiles() {
   const all = files.entries();
@@ -864,7 +878,8 @@ function previewFiles() {
     const target = store.readComponent(pageKey).files.nodes.nodes;
     // a copy takes only what its reusable declares (STU-014-INSTANCEHIDE): an imported reusable's shown/hidden comes from its copy
     const declared = new Set(target.filter((n) => n.type === 'Component Inputs').flatMap((n) => (n.ports || []).map((p) => p.name)));
-    const parameters = Object.fromEntries(['mounted', 'visible'].filter((p) => declared.has(p)).map((p) => [p, true]));
+    // the copy shows what the first placed copy is given (a grouped row's icon and text), else it draws them empty
+    const parameters = { ...firstCopyValues(pageKey, declared), ...Object.fromEntries(['mounted', 'visible'].filter((p) => declared.has(p)).map((p) => [p, true])) };
     const cid = '00000000-0000-5000-8000-0000000c4a75', at = '2026-10-19T00:00:00.000Z', dir = `components/${CANVAS}/`;
     out[dir + 'component.json'] = JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/component-v2.json', id: cid, name: 'Reusable canvas', path: '/' + CANVAS, type: 'page', created: at, modified: at, modifiedBy: 'nodegx-studio' });
     out[dir + 'nodes.json'] = JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/nodes-v2.json', componentId: cid, version: 1, visualRoots: ['studioCanvasPage'], nodes: [
@@ -979,7 +994,9 @@ function portsOf(node, plug) {
     try {
       const comp = store.readComponent(key).files;
       const ioType = plug === 'input' ? 'Component Inputs' : 'Component Outputs';
-      for (const n of comp.nodes.nodes) if (n.type === ioType) for (const p of n.ports || []) if (!seen.has(p.name)) seen.set(p.name, { name: p.name, label: p.displayName || p.name, type: tname(p.type), signal: tname(p.type) === 'signal', group: 'Component' });
+      // an input with no name of its own reads as what it feeds inside ("Why it did not work" · Text), not its port name cut off
+      const inner = (ioId, port) => { if (plug !== 'input') return null; const w = comp.connections.connections.filter((c) => c.fromId === ioId && c.fromProperty === port); const t = w.length === 1 && comp.nodes.nodes.find((x) => x.id === w[0].toId); const tp = t && libPorts(t.type).find((q) => q.name === w[0].toProperty); return tp ? { of: t.label || typeName(t.type), label: tp.displayName || tp.name, type: tp.type } : null; };
+      for (const n of comp.nodes.nodes) if (n.type === ioType) for (const p of n.ports || []) if (!seen.has(p.name)) { const i = p.displayName ? null : inner(n.id, p.name); seen.set(p.name, { name: p.name, label: p.displayName || i?.label || p.name, type: tname(i?.type ?? p.type), raw: i ? { type: i.type } : undefined, signal: tname(p.type) === 'signal', group: 'Component', of: i?.of }); }
     } catch { /* unknown component */ }
   }
   for (const p of libPorts(node.type)) if (p.plug === plug || p.plug === 'input/output') if (!seen.has(p.name)) seen.set(p.name, { name: p.name, label: p.displayName || p.name, type: tname(p.type), signal: tname(p.type) === 'signal', raw: p });
@@ -1434,7 +1451,7 @@ function editablePorts(node, { wireOnly = false } = {}) {
     for (const p of t.ports || []) push(p);
     for (const d of t.dynamicports || []) if (d.ports && conditionHolds(d.condition, { ...defaultsOf(t), ...params })) for (const p of d.ports) push(p);
   }
-  if (node.type.startsWith('/')) for (const p of portsOf(node, 'input')) push({ name: p.name, displayName: p.label, type: p.type, group: 'Component', plug: 'input' });
+  if (node.type.startsWith('/')) for (const p of portsOf(node, 'input')) push({ name: p.name, displayName: p.label, type: p.raw?.type ?? p.type, group: p.of ?? 'Component', plug: 'input' });
   const priority = t?.connectionPanel?.groupPriority || [];
   const rank = (g) => { const i = priority.indexOf(g); return i === -1 ? 50 + g.length : i; };
   out.sort((a, b) => rank(a.group || 'General') - rank(b.group || 'General') || (a.index ?? 0) - (b.index ?? 0));

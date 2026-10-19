@@ -665,6 +665,9 @@ try {
     await rebuilt(n0); await wait(600);
     const on = JSON.parse(await b.evaluate(`JSON.stringify({ page: __ob.preview.frame.contentWindow.Noodl.Navigation._noodlRuntime.context.rootComponent.nodeScope.getNodesWithTypeRecursive('Router')[0]._internal.currentPage?.component, queries: document.getElementById('querycount').textContent, title: document.getElementById('elements-title').textContent, rows: [...document.querySelectorAll('#tree .row')].map(r => r.querySelector('.seg')?.textContent), drawn: __ob.preview.elementsOf('ppText').length, copies: (__ob.preview.frame.contentDocument.body.innerText.match(/probe panel/g) || []).length })`));
     ok(on.page === '/__studio/Reusable canvas' && /when shown/.test(on.queries) && on.title === 'Elements in this reusable' && on.rows.join() === 'Panel,Probe text' && on.drawn === 1 && on.copies === 1, 'opened, Design lists the reusable\'s own elements and the app shows one copy of it alone, on Studio\'s canvas page (its queries counted "when shown")', on);
+    // the canvas's copy is given what the first copy on a page is (pr1, n = 1): its Task query asks "position > 1"
+    const canvasAsked = JSON.parse(await b.evaluate(`JSON.stringify((__ob.preview.frame.contentWindow.__studioLog || []).filter(e => e.kind === 'request' && /\\/classes\\/Task$/.test(e.path || '') && e.body?._method === 'GET').map(e => e.body.where?.position?.$gt))`));
+    ok(canvasAsked.join() === '1', 'the canvas\'s copy shows the first copy\'s values (its query asks with n = 1, as Probe 1 does)', canvasAsked);
     ok(!existsSync(join(project, 'components/__studio')) && !readFileSync(join(project, 'components/App/nodes.json'), 'utf8').includes('__studio'), 'the canvas page is Studio\'s: not in the project folder, not in its router');
     await select('ppText');
     ok((await b.evaluate('document.querySelector("#right .head input")?.value')) === 'Probe text', 'clicking its text in the canvas selects it');
