@@ -61,7 +61,7 @@ another platform; this reads only your own app.
 ```bash
 npm run check:editor   # 46 checks: drives the editor headless against a copy of NodeGX's todo template
 npm run check:import   # the converter on the example editor requests (26 checks; 32 with a template bundle)
-npm run check:app      # 23 checks: drives the desktop app — welcome screen, a template, reopen, an import, the recent list
+npm run check:app      # 34 checks: drives the desktop app — welcome screen, a template and its backend, reopen, an import, the recent list
 npm run smoke -- /path/to/project   # the desktop app opens the project and the app draws (no path: the welcome screen)
 ```
 
@@ -72,7 +72,7 @@ npm run smoke -- /path/to/project   # the desktop app opens the project and the 
 | `app/` | the Electron shell: the welcome screen (`welcome.html`, `actions.mjs`), the editor server for a project folder in a window, the gate |
 | `editor/` | `studio.html` (the whole editor, one file), `serve.mjs` (project files, save, the backend proxy), the gate |
 | `import/` | the Bubble importer, its fixtures (example editor requests) and its gate |
-| `lib/` | where the NodeGX checkout is |
+| `lib/` | where the NodeGX checkout is; `backend.mjs`, the project's backend through NodeGX's own backend code |
 | `docs/` | the scope, the importer's dictionary, screenshots, and `history/` (how this started) |
 
 ## Licence

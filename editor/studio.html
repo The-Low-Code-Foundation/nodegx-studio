@@ -91,6 +91,8 @@
   header .status.busy::before { background: var(--warn); }
   header .status.bad { color: var(--danger); }
   header .status.bad::before { background: var(--danger); }
+  header .status.backend { border: 0; background: none; padding: 0 0 0 14px; border-left: 1px solid var(--line); border-radius: 0; cursor: pointer; }
+  header .status.backend.off::before { background: var(--line-2); }
   main { grid-column: 2; min-height: 0; }
   section.tab { height: 100%; display: grid; min-height: 0; }
   section[hidden] { display: none; }
@@ -326,6 +328,7 @@
     <label class="toggle" id="previewmode-l"><input type="checkbox" id="previewmode"><i></i>Use the app</label>
     <div class="spacer"></div>
     <div class="status" id="status">starting…</div>
+    <button class="status backend" id="backendpill" title="The app's backend">…</button>
   </header>
 
   <main>
@@ -414,6 +417,30 @@ $('projname').textContent = opened.name;
 document.title = `${opened.name} — NodeGX Studio`;
 let files = NodegxPreview.memoryFiles(opened.files);
 let store = new NodegxPreview.V2ProjectStore(files);
+
+/* STU-004: the project's backend, as serve.mjs runs it — started (or adopted) on open, stopped on close. */
+let backendState = opened.backend ?? { phase: 'none' };
+const backendUp = () => backendState.phase === 'running' || backendState.phase === 'adopted';
+const hostOf = (endpoint) => { try { return new URL(endpoint).host; } catch { return endpoint || ''; } };
+function showBackend() {
+  const b = backendState, pill = $('backendpill');
+  const [text, kind, tip] = {
+    none: ['No backend', 'off', 'This app is bound to no backend. Data can start one.'],
+    starting: ['Backend starting…', 'busy', `Starting ${b.name} at ${b.endpoint}`],
+    running: [`Backend · ${hostOf(b.endpoint)}`, '', `${b.name} at ${b.endpoint}, started by Studio for this project. It stops when you close the project.`],
+    adopted: [`Backend · ${hostOf(b.endpoint)}`, '', `${b.name} at ${b.endpoint} was already running (the NodeGX editor, Claude Code or another Studio window started it), so Studio uses it and leaves it running.`],
+    remote: [`Backend · ${hostOf(b.endpoint)}`, '', `This app uses the backend at ${b.endpoint}. Studio does not start or stop it.`],
+    failed: ['Backend did not start', 'bad', `${b.name || 'The backend'} did not start: ${b.error}`]
+  }[b.phase] ?? [b.phase, 'off', ''];
+  pill.textContent = text; pill.className = `status backend ${kind}`; pill.title = tip;
+  window.__ob.backend = b;
+}
+function takeBackend(next) {
+  const was = backendState.phase;
+  backendState = next;
+  showBackend();
+  if (tab === 'data' && was !== next.phase) renderData();
+}
 let persisted = { ...opened.files };
 const undoStack = [];
 
@@ -1638,12 +1665,38 @@ const projectJson = () => store.readProjectFile();
 const writeProject = (pj) => writeJsonFile('nodegx.project.json', pj);
 const collections = () => projectJson()?.metadata?.dbCollections || [];
 const schemaTables = () => { try { return JSON.parse(files.read('backend/schema.json') || '[]').filter((s) => s.action === 'createTable'); } catch { return []; } };
+/** The collections the app's own nodes name (`collectionName`), with the record fields they set (`prop-*`): a
+    template like the todo list declares no types and is still an app with data (STU-004). */
+function appCollections() {
+  const found = new Map();
+  for (const [p, text] of Object.entries(files.entries())) {
+    if (!p.startsWith('components/') || !p.endsWith('/nodes.json')) continue;
+    let nodes; try { nodes = JSON.parse(text).nodes || []; } catch { continue; }
+    for (const n of nodes) {
+      const name = n.parameters?.collectionName;
+      if (typeof name !== 'string' || !name) continue;
+      const fields = found.get(name) ?? new Set();
+      for (const k of Object.keys(n.parameters)) if (k.startsWith('prop-')) fields.add(k.slice(5));
+      found.set(name, fields);
+    }
+  }
+  return found;
+}
+/** The running backend's own tables (its admin schema), fetched each time Data draws; [] when there is none. */
+let liveTables = [];
+async function readLiveTables() {
+  liveTables = [];
+  if (!backendUp()) return;
+  try { liveTables = ((await api('/admin/schema')).tables || []).filter((t) => !t.name.startsWith('_')); } catch { /* shown by the rows */ }
+}
 for (const b of document.querySelectorAll('#data .subtabs button')) b.onclick = () => { dataSub = b.dataset.sub; for (const x of document.querySelectorAll('#data .subtabs button')) x.setAttribute('aria-selected', x === b); $('data-types').hidden = dataSub !== 'types'; $('data-options').hidden = dataSub !== 'options'; renderData(); };
 function renderTypes() {
   const box = $('types'); box.innerHTML = '';
   const names = new Set();
   for (const c of collections()) { names.add(c.name); box.append(h('div', { class: 'row', 'aria-selected': selType === c.name, onclick: () => { selType = c.name; renderData(); } }, icon('db'), c.name, h('span', { class: 't' }, `${c.columns?.length ?? 0} fields`))); }
-  for (const t of schemaTables()) if (!names.has(t.table)) box.append(h('div', { class: 'row', 'aria-selected': selType === t.table, onclick: () => { selType = t.table; renderData(); } }, icon('db'), t.table, h('span', { class: 't' }, 'schema.json')));
+  for (const t of schemaTables()) if (!names.has(t.table)) { names.add(t.table); box.append(h('div', { class: 'row', 'aria-selected': selType === t.table, onclick: () => { selType = t.table; renderData(); } }, icon('db'), t.table, h('span', { class: 't' }, 'schema.json'))); }
+  const undeclared = [...new Set([...appCollections().keys(), ...liveTables.map((t) => t.name)])].filter((n) => !names.has(n)).sort();
+  for (const name of undeclared) box.append(h('div', { class: 'row', 'aria-selected': selType === name, onclick: () => { selType = name; renderData(); } }, icon('db'), name, h('span', { class: 't' }, appCollections().has(name) ? 'used by the app' : 'on the backend')));
   if (!box.children.length) box.append(h('div', { class: 'hint' }, 'No data types yet.'));
 }
 $('newtype').onclick = () => {
@@ -1657,15 +1710,19 @@ $('newtype').onclick = () => {
 const FIELD_TYPES = ['String', 'Number', 'Boolean', 'Date', 'Pointer', 'Array', 'Object', 'File', 'GeoPoint'];
 async function renderData() {
   if (dataSub === 'options') return renderOptionSets();
+  await readLiveTables();
   renderTypes();
   const main = $('datamain'); main.innerHTML = '';
   if (!selType) { main.append(h('div', { class: 'empty' }, 'Pick a data type.')); return; }
   const pj = projectJson();
   const coll = (pj?.metadata?.dbCollections || []).find((c) => c.name === selType);
   const fromSchema = schemaTables().find((t) => t.table === selType);
-  const cols = coll?.columns || fromSchema?.columns || [];
+  const live = liveTables.find((t) => t.name === selType);
+  const used = appCollections().get(selType);
+  const cols = coll?.columns || fromSchema?.columns || [...(live?.columns || []), ...[...(used || [])].filter((f) => !live?.columns?.some((c) => c.name === f)).map((name) => ({ name, type: '' }))];
   main.append(h('h2', {}, selType));
   if (fromSchema && !coll) main.append(h('div', { class: 'bar' }, h('span', { class: 'note' }, 'Defined in backend/schema.json (read-only here).')));
+  else if (!coll) main.append(h('div', { class: 'bar' }, h('span', { class: 'note' }, `${used ? 'The app\u2019s Record nodes use this type' : 'This type is on the backend'}; the project does not declare it, so its fields are the ones ${used ? 'the app sets' : 'the backend holds'} (read-only here).`)));
   const ft = h('table', {}, h('tr', {}, h('th', {}, 'Field'), h('th', {}, 'Type'), h('th', {}, 'Of type'), h('th', {})));
   cols.forEach((col, i) => ft.append(h('tr', {},
     h('td', {}, coll ? h('input', { type: 'text', value: col.name, onchange: (e) => { col.name = e.target.value; writeProject(pj); renderData(); } }) : col.name),
@@ -1688,8 +1745,19 @@ async function api(path, init) {
 }
 async function renderRows(box, cols) {
   box.innerHTML = '';
-  const backend = opened.backend;
-  if (!backend?.endpoint) { box.append(h('div', { class: 'note' }, 'This project is not bound to a backend, so there are no rows to show. Provision one with the nodegx server (provision_backend).')); return; }
+  const backend = backendState;
+  if (backend.phase === 'none') {
+    const start = h('button', { class: 'primary', onclick: async () => {
+      start.disabled = true; start.textContent = 'Starting a backend…';
+      const r = await fetch('/api/backend-provision', { method: 'POST' }); const j = await r.json();
+      if (!r.ok) { toast(j.error); start.disabled = false; start.textContent = 'Start a backend for this app'; return; }
+      takeBackend(j); for (const w of j.warnings || []) toast(w);
+    } }, 'Start a backend for this app');
+    box.append(h('div', { class: 'note' }, 'This app is bound to no backend, so it has nowhere to keep rows. Studio can start one on this machine — the same kind the NodeGX editor and Claude Code start — and bind the app to it.'), h('div', { class: 'bar' }, start));
+    return;
+  }
+  if (backend.phase === 'starting') { box.append(h('div', { class: 'note' }, `${backend.name} is starting…`)); return; }
+  if (backend.phase === 'failed') { box.append(h('div', { class: 'note' }, `${backend.name || 'The backend'} did not start: ${backend.error}`)); return; }
   let rows;
   try { rows = (await api(`/classes/${encodeURIComponent(selType)}?limit=100`)).results || []; }
   catch (err) { box.append(h('div', { class: 'note' }, `The backend at ${backend.endpoint} did not answer for ${selType}: ${err.message}`)); return; }
@@ -1886,7 +1954,9 @@ if (first.status === 'ok') {
 }
 renderAll();
 // from here on, a file changed outside Studio is taken in and drawn (STU-002)
-new EventSource(`/api/events?client=${windowId}`).onmessage = (e) => takeOutside(JSON.parse(e.data));
+new EventSource(`/api/events?client=${windowId}`).onmessage = (e) => { const m = JSON.parse(e.data); if (m.backend) takeBackend(m.backend); else takeOutside(m); };
+$('backendpill').onclick = () => switchTab('data');
+showBackend();
 document.title = `ready ${opened.name} pages=${pageKeys().length} visual=${visualIds.length}`;
 </script>
 </html>

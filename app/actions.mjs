@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
+import { attachNewBackend, needsBackend } from '../lib/backend.mjs';
 import { nodegxRepo, studioRoot } from '../lib/nodegx.mjs';
 
 export const isProject = (dir) => !!dir && existsSync(join(dir, 'nodegx.project.json'));
@@ -20,8 +21,8 @@ export const isProject = (dir) => !!dir && existsSync(join(dir, 'nodegx.project.
  * this list with it.
  */
 const TEMPLATES = [
-  { slug: 'todo-list', dir: 'todo-list', category: 'data-app', title: 'Todo list', needsBackend: true, summary: 'One list in the order you will do things, with deadlines, next actions and a history nothing is deleted from — and a Today tab for things that repeat (every day, week or month, at their times).' },
-  { slug: 'planning', dir: 'planning', category: 'data-app', title: 'Planning', needsBackend: true, summary: 'A week for people who bill by the hour: hour budgets for billable, building, admin and hobby work, a strip of next moves, money that is ticked when it happens, and one sentence a night about what to do tomorrow.' },
+  { slug: 'todo-list', dir: 'todo-list', category: 'data-app', title: 'Todo list', summary: 'One list in the order you will do things, with deadlines, next actions and a history nothing is deleted from — and a Today tab for things that repeat (every day, week or month, at their times).' },
+  { slug: 'planning', dir: 'planning', category: 'data-app', title: 'Planning', summary: 'A week for people who bill by the hour: hour budgets for billable, building, admin and hobby work, a strip of next moves, money that is ticked when it happens, and one sentence a night about what to do tomorrow.' },
   { slug: 'rocket-school', dir: 'rocket-school', category: 'game', title: 'Rocket School', summary: 'Maths and typing practice for ages 8 to 12, in English and French: four games, 62 skills from CE2 to 6e, and progress kept in the browser.' },
   { slug: 'pixel-dungeon', dir: 'pixel-game', category: 'game', title: 'Pixel dungeon', summary: 'A turn-based dungeon played with the arrow keys. The five rooms are one list in one node, so a sixth room is one more entry.' },
   { slug: 'story-engine', dir: 'story-engine', category: 'game', title: 'Story engine', summary: 'A branching story where choices hand you things and some only appear once you carry them. The whole story is one list you can rewrite.' }
@@ -29,8 +30,9 @@ const TEMPLATES = [
 
 const templateDir = (t) => join(nodegxRepo, 'templates', t.dir);
 
-/** The list the welcome screen draws; a template whose folder is missing from the checkout is listed as unavailable. */
-export const templates = () => TEMPLATES.map((t) => ({ ...t, needsBackend: !!t.needsBackend, available: isProject(templateDir(t)) }));
+/** The list the welcome screen draws; a template whose folder is missing from the checkout is listed as unavailable.
+    Whether it needs a backend is NodeGX's rule read off the folder (a security policy, or a cloud function). */
+export const templates = () => TEMPLATES.map((t) => ({ ...t, needsBackend: needsBackend(templateDir(t)), available: isProject(templateDir(t)) }));
 
 /**
  * The editor writes these into a project it opens, with paths of the machine that opened it; the shelf refuses a
@@ -56,8 +58,13 @@ function nameAfterFolder(dir) {
   writeFileSync(file, JSON.stringify(project, null, 2) + (text.endsWith('\n') ? '\n' : ''));
 }
 
-/** Copies a template into `dest` (a new or empty folder) and names the project after the folder. Resolves with the project folder. */
-export function createFromTemplate(slug, dest) {
+/**
+ * Copies a template into `dest` (a new or empty folder) and names the project after the folder. A template that needs
+ * a backend gets one created and bound here, as the NodeGX editor does (STU-004); opening the project starts it. A
+ * backend that could not be made does not stop the project: it opens, and its status bar says there is no backend.
+ * Resolves with the project folder and what happened to the backend.
+ */
+export async function createFromTemplate(slug, dest) {
   const t = TEMPLATES.find((x) => x.slug === slug);
   if (!t) throw new Error(`There is no template called ${slug}.`);
   if (!isProject(templateDir(t))) throw new Error(`The ${t.title} template is not in the NodeGX checkout at ${nodegxRepo}.`);
@@ -71,7 +78,13 @@ export function createFromTemplate(slug, dest) {
     if (created) rmSync(dest, { recursive: true, force: true });
     throw err;
   }
-  return dest;
+  let backend;
+  try {
+    backend = await attachNewBackend(dest);
+  } catch (err) {
+    backend = { status: 'failed', reason: err.message };
+  }
+  return { dir: dest, backend };
 }
 
 /* ---------------------------------------------------------------- import */

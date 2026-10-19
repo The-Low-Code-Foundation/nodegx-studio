@@ -36,7 +36,8 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 | Live with outside edits — a file changed by Claude Code (MCP), VS Code or `git pull` is drawn without a reload; a clash with Studio's own edit asks | works (2026-10-19) | `check:editor` 46/46 |
 | Styles — global styles as NodeGX variants | works | `check:editor` |
 | Bubble importer — pages, elements, styles, workflows, expressions, option sets, reusables, custom states, data types, privacy rules → `nodegx.security.json`, backend workflows → cloud functions, Data-tab rows | spike, measured on a real 18-page app (0 validation errors) | `check:import` 26/26 |
-| Desktop app — Electron window, a welcome screen (recent projects, NodeGX's templates, Import an app), File → Open Recent, a smoke mode | first cut (2026-10-19) | `check:app` 23/23, `smoke` |
+| Desktop app — Electron window, a welcome screen (recent projects, NodeGX's templates, Import an app), File → Open Recent, a smoke mode | first cut (2026-10-19) | `check:app` 34/34, `smoke` |
+| The project's backend — started (or adopted) on open, stopped on close, shown in the status bar; a template that needs one gets one; Data's "Start a backend" for an app with none | works (2026-10-19) | `check:app` 34/34 |
 
 [history/](history/) is how it started (NodeGX phase 123, working title "Open Bubble"): the brief, the look, the
 first play test and every ruling taken.
@@ -84,7 +85,7 @@ Electron's own Node; `npm run smoke -- <dir>` opens a project headless and exits
 |---|---|---|
 | STU-002 | **Files changed outside Studio appear in Studio.** Watch the project folder; when a file changes that Studio did not write (Claude Code through MCP, VS Code, `git pull`), reload the project into the store and redraw, keeping the selection and the open tab. A change that conflicts with an unsaved Studio edit asks. | Claude Code adds a button through the NodeGX MCP server and it appears in Design within 2 s, without a manual reload; the gate does the same with a plain file write |
 | STU-003 | **Welcome screen and recent projects.** Open, New from a template (NodeGX's templates), Import an app, and the last ten projects. | a first run with no argument shows it; reopening the app offers the last project |
-| STU-004 | **The project's backend, from the app.** A project that names a local backend gets it started on open (`nodegx-backend serve` on the project's own data folder) and stopped on close; the status bar says where it is. | open the todo template copy, add a row in Data, quit, reopen: the row is there |
+| STU-004 | **The project's backend, from the app.** A project that names a local backend gets it started on open (`nodegx-backend serve` on that backend's own data folder, where NodeGX keeps it) and stopped on close; the status bar says where it is. | open the todo template copy, add a row in Data, quit, reopen: the row is there |
 | STU-005 | **Work with Claude Code.** "Connect Claude Code" writes the project's `.mcp.json` entry for the NodeGX MCP server (the same writer the NodeGX editor uses, never a second one) and shows the one command to start a session in the folder. | from a fresh project, the button then `claude` in the folder lists the NodeGX tools |
 | STU-006 | **Runs without a NodeGX checkout.** A build step copies the kit pieces Studio uses (deploy runtime, in-page preview, look and specs modules, backend, MCP server) into `vendor/` at pinned NodeGX versions; `lib/nodegx.mjs` prefers `vendor/`. | a fresh clone + `npm install` + `npm start` works on a machine with no OpenNoodl folder |
 | STU-007 | **Packaged and signed.** electron-builder for macOS (signed, notarised), Windows and Linux, on NodeGX's release workflow. | a downloadable build opens a project on all three |
@@ -116,6 +117,31 @@ list on disk: 23/23; with the progress message's guard removed it fails (a refus
 "Copying…" message that travels on another channel and lands after it). Stopping the app with Ctrl-C / SIGTERM now
 takes its editor server with it. Not in it: a blank project (NodeGX's own blank, `hello-world`, is an object inside
 the editor's code, not a folder), and templates come from the checkout until STU-006 vendors them.
+
+**Done (STU-004, 2026-10-19).** Studio runs a project's backend with NodeGX's own backend code, not a copy of it:
+`lib/backend.mjs` bundles the MCP server's `packages/noodl-mcp/src/backend/` from the checkout on every start
+(esbuild, 0.2 s, into the ignored `.kit/`), so a backend Studio starts is the same kind, in the same place
+(`~/.noodl/backends/<id>/`, or `NODEGX_BACKENDS_DIR`), under the same ownership rule (the project's id in the
+backend's `projectIds`) as one the NodeGX editor or Claude Code starts, and each one sees the others' runtime record:
+a backend that is already running is **adopted** and left running on close, never started twice on one database. On
+open, `serve.mjs` reads `metadata.cloudservices`; a local backend is started with `--project-dir` (the project's
+`nodegx.security.json` is the policy a new backend starts on) and `--parent-pid` (a killed Studio takes it with it),
+and the server follows a binding that changes while it runs (Claude Code's `provision_backend`, a `git pull`). Quitting
+or closing the project stops a backend Studio started, and the app waits for that before it quits or opens anything
+else. The header says **Backend · 127.0.0.1:8584** (starting, adopted, a remote backend and a failure each say so);
+clicking it opens Data. A new project from a template that needs a backend — NodeGX's own rule, read off the folder: a
+security policy or a cloud function — gets one created, owned and bound at creation and started when it opens, as in
+the NodeGX editor (`ensureTemplateBackend`). An app bound to nothing gets **Start a backend for this app** in Data
+(NodeGX's provision, seeded with the declared types). Data now also lists the types the app's Record nodes use and
+the ones the running backend holds — the todo template declares none, so before this its Data tab was empty — and
+reads rows as the backend's admin (its own `secrets.json`, read by the server, never sent to the page), as the NodeGX
+editor's Data Browser does: the todo template's policy refuses rows to anyone not signed in. Measured: the todo copy's
+row added in Data is on the backend, still there after quit and reopen, and a visitor with no sign-in gets 403
+(`check:app` 34/34, 11 new; `check:editor` 46/46). Not graded: the wait on quit — with it removed the gate still
+passes, because the server and the backend stop well before Electron exits on this machine. Kit notes: the runtime
+record's `owner.kind` has no value for Studio, so Studio's records say `noodl-mcp`; the bundled kit cannot find the
+backend service from `.kit/`, so Studio sets `NODEGX_BACKEND_ENTRY` to the checkout's `nodegx-backend/dist/cli.js`
+(that build is the checkout's, of 2026-10-12, older than some of its sources).
 
 Order: STU-002 first (it is what makes "local" feel alive, and STU-005 depends on it), then STU-003–005, then
 STU-006–007 when someone outside the team needs to run it.

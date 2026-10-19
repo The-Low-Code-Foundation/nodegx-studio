@@ -32,8 +32,8 @@ let server = null;
 let actions = null; // app/actions.mjs, an ES module
 
 /** Starts serve.mjs on a free loopback port under Electron's own Node, and resolves with its URL. */
-function startServer(projectDir) {
-  stopServer();
+async function startServer(projectDir) {
+  await stopServer();
   return new Promise((ok, no) => {
     const child = spawn(process.execPath, [serveJs, projectDir], {
       env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
@@ -57,15 +57,29 @@ function startServer(projectDir) {
 
 /** app.exit skips before-quit, so every exit goes through here and takes the server with it. */
 function quit(code) {
-  stopServer();
-  app.exit(code);
+  stopServer().then(() => app.exit(code));
 }
 
+/**
+ * Stops the editor server and resolves once it has gone. It stops the project's backend on its way out (STU-004),
+ * which takes up to a few seconds; opening the project again before that finished would adopt a backend that is
+ * about to stop, so nothing opens, and the app does not quit, until it has.
+ */
 function stopServer() {
-  if (server) {
-    server.kill();
-    server = null;
-  }
+  const child = server;
+  server = null;
+  if (!child || child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+  return new Promise((ok) => {
+    const late = setTimeout(() => {
+      child.kill('SIGKILL');
+      ok();
+    }, 10000);
+    child.once('exit', () => {
+      clearTimeout(late);
+      ok();
+    });
+    child.kill();
+  });
 }
 
 /** The one window. Its page reports readiness in document.title ("ready …"), which the window does not show. */
@@ -124,7 +138,7 @@ function loadCut(err) {
 
 /** STU-003: the welcome screen. Showing it closes the open project (every edit is already saved). */
 async function welcome() {
-  stopServer();
+  await stopServer();
   menu();
   const w = windowFor();
   w.setTitle('NodeGX Studio');
@@ -203,7 +217,7 @@ function handlers() {
       const dest = await chooseDestination(`New project from ${t.title}`, t.title, 'Create');
       if (!dest) return { cancelled: true };
       busy(`Copying ${t.title}…`);
-      const dir = actions.createFromTemplate(slug, dest);
+      const { dir } = await actions.createFromTemplate(slug, dest);
       later(() => open(dir));
     })
   );
@@ -283,6 +297,10 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => app.quit());
-app.on('before-quit', stopServer);
+app.on('before-quit', (event) => {
+  if (!server) return;
+  event.preventDefault();
+  stopServer().then(() => app.quit());
+});
 // Ctrl-C in the terminal that started it, or a gate stopping it: the editor server goes too, never left running alone
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => quit(0));

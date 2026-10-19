@@ -6,3 +6,5 @@ import/*.bubble
 import/exports/
 *.dynamic.js
 *.pem
+# the kit pieces lib/backend.mjs bundles from the NodeGX checkout on every start
+.kit/

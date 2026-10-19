@@ -15,7 +15,16 @@
  *   GET  /api/events?client=id  server-sent events: `{ changed: { path: text }, removed: [path] }` whenever a file of the
  *                          project changes and Studio did not write it (Claude Code through MCP, VS Code, `git pull`)
  *   ANY  /api/backend/*    forwarded to the project's bound backend (`metadata.cloudservices.endpoint`) with the app id
- *                          header the runtime sends; the Data tab reads rows through it
+ *                          header the runtime sends; the Data tab reads rows through it, as the backend's admin when it
+ *                          is a local one (its own `secrets.json`, read here and never sent to the page)
+ *   GET  /api/backend-status    the project's backend (STU-004): `{ phase, name, endpoint, error }`, also pushed over
+ *                          /api/events as `{ backend }` whenever it changes
+ *   POST /api/backend-provision a backend for a project bound to none: NodeGX's provision, then the binding
+ *
+ * STU-004: a project bound to a local backend (`lib/backend.mjs`) has it started when this server starts — or adopted
+ * when the NodeGX editor or Claude Code already runs it — and stopped when this server stops (SIGTERM / SIGINT; the
+ * backend's own --parent-pid guard covers a kill). A change to the binding (Claude Code's provision_backend, a
+ * `git pull`) is followed the same way.
  *
  * The page holds the project in memory in the kit's own store (`V2ProjectStore` over `memoryFiles`), makes every edit
  * through it, and sends the files it changed here. This file knows nothing about nodes.
@@ -25,6 +34,7 @@ import http from 'node:http';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { nodegxRepo } from '../lib/nodegx.mjs';
+import * as backends from '../lib/backend.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = nodegxRepo;
@@ -108,6 +118,7 @@ function flush() {
     }
   }
   if (Object.keys(changed).length || removed.length) tell({ changed, removed });
+  if ('nodegx.project.json' in changed) followBackend();
 }
 watch(projectDir, { recursive: true }, (_kind, name) => {
   const rel = name ? String(name).split(sep).join('/') : '';
@@ -133,14 +144,41 @@ function readBody(req) {
   });
 }
 
-function backendOf() {
+/* STU-004: the project's backend. `backend` is what the page shows; `ours` is a backend this server started (and so
+   stops); everything that starts, adopts or stops one goes through `serial` one at a time. */
+let backend = { phase: 'none' };
+let ours = null;
+let serial = Promise.resolve();
+const setBackend = (next) => {
+  backend = next;
+  tell({ backend });
+};
+const inTurn = (fn) => (serial = serial.then(fn, fn));
+async function reconcileBackend() {
+  const binding = backends.bindingOf(projectDir);
+  if (ours && ours !== binding.instanceId) {
+    await backends.stop(ours).catch(() => {});
+    ours = null;
+  }
+  if (!binding.endpoint) return setBackend({ phase: 'none' });
+  let config;
   try {
-    const project = JSON.parse(readFileSync(join(projectDir, 'nodegx.project.json'), 'utf8'));
-    return project.metadata?.cloudservices ?? null;
-  } catch {
-    return null;
+    config = await backends.localBackendOf(projectDir);
+  } catch (err) {
+    return setBackend({ phase: 'failed', endpoint: binding.endpoint, error: err.message });
+  }
+  if (!config) return setBackend({ phase: 'remote', endpoint: binding.endpoint });
+  if (backend.id === config.id && (backend.phase === 'running' || backend.phase === 'adopted')) return;
+  setBackend({ phase: 'starting', id: config.id, name: config.name, endpoint: binding.endpoint });
+  try {
+    const up = await backends.startFor(projectDir, config);
+    if (up.phase === 'running') ours = up.id;
+    setBackend(up);
+  } catch (err) {
+    setBackend({ phase: 'failed', id: config.id, name: config.name, endpoint: binding.endpoint, error: err.message });
   }
 }
+const followBackend = () => inTurn(reconcileBackend);
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
@@ -157,11 +195,13 @@ const server = http.createServer(async (req, res) => {
       const files = projectFiles(projectDir);
       known.clear();
       for (const [p, t] of Object.entries(files)) known.set(p, t);
-      return json(200, { dir: projectDir, name: projectDir.split(sep).pop(), files, backend: backendOf() });
+      return json(200, { dir: projectDir, name: projectDir.split(sep).pop(), files, backend });
     }
     if (url.pathname === '/api/events') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
       res.write(': watching the project folder\n\n');
+      // the page connects after it has drawn, which a backend may have finished starting before: it hears where it is now
+      res.write(`data: ${JSON.stringify({ backend })}\n\n`);
       clients.set(res, url.searchParams.get('client'));
       req.on('close', () => clients.delete(res));
       return;
@@ -196,20 +236,36 @@ const server = http.createServer(async (req, res) => {
       if (written.length || gone.length) tell({ changed: Object.fromEntries(written.map((rel) => [rel, files[rel]])), removed: gone }, client);
       return json(200, { written, removed: gone });
     }
+    if (url.pathname === '/api/backend-status') return json(200, backend);
+    if (url.pathname === '/api/backend-provision' && req.method === 'POST') {
+      try {
+        const up = await inTurn(async () => {
+          const made = await backends.provisionFor(projectDir);
+          if (made.phase === 'running') ours = made.id;
+          setBackend(made);
+          return made;
+        });
+        return json(200, up);
+      } catch (err) {
+        return json(409, { error: err.message });
+      }
+    }
     if (url.pathname.startsWith('/api/backend/')) {
-      const backend = backendOf();
-      if (!backend?.endpoint) return json(503, { error: 'This project is not bound to a backend (no metadata.cloudservices.endpoint).' });
-      const target = backend.endpoint.replace(/\/$/, '') + url.pathname.slice('/api/backend'.length) + url.search;
+      const binding = backends.bindingOf(projectDir);
+      const endpoint = backend.phase === 'running' || backend.phase === 'adopted' ? backend.endpoint : binding.endpoint;
+      if (!endpoint) return json(503, { error: 'This project is not bound to a backend (no metadata.cloudservices.endpoint).' });
+      const target = endpoint.replace(/\/$/, '') + url.pathname.slice('/api/backend'.length) + url.search;
       const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : await readBody(req);
+      const headers = { 'X-Parse-Application-Id': binding.appId ?? binding.instanceId ?? '', 'Content-Type': req.headers['content-type'] ?? 'application/json' };
+      // the Data tab is the app's owner looking at its data: on a local backend it asks as the backend's admin, as the
+      // NodeGX editor's Data Browser does, so a policy that keeps rows from the app's visitors does not keep them from it
+      const token = backend.id ? await backends.adminTokenOf(backend.id) : null;
+      if (token) headers['X-Parse-Master-Key'] = token;
       let upstream;
       try {
-        upstream = await fetch(target, {
-          method: req.method,
-          headers: { 'X-Parse-Application-Id': backend.appId ?? backend.instanceId ?? '', 'Content-Type': req.headers['content-type'] ?? 'application/json' },
-          body
-        });
+        upstream = await fetch(target, { method: req.method, headers, body });
       } catch (err) {
-        return json(502, { error: `The backend at ${backend.endpoint} did not answer: ${err.message}` });
+        return json(502, { error: `The backend at ${endpoint} did not answer: ${err.message}` });
       }
       return send(upstream.status, Buffer.from(await upstream.arrayBuffer()), upstream.headers.get('content-type') ?? types['.json']);
     }
@@ -225,4 +281,7 @@ const server = http.createServer(async (req, res) => {
     json(500, { error: err.message });
   }
 });
-server.listen(Number(flag('--port')) || 0, '127.0.0.1', () => console.log(`nodegx-studio: http://127.0.0.1:${server.address().port}/  (${projectDir})`));
+server.listen(Number(flag('--port')) || 0, '127.0.0.1', () => {
+  console.log(`nodegx-studio: http://127.0.0.1:${server.address().port}/  (${projectDir})`);
+  followBackend(); // after the window has somewhere to load: a backend takes a second or two to answer
+});

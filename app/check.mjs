@@ -4,8 +4,10 @@
  * CDP: the first run shows the welcome screen; a template click makes a project and opens it; the next start offers
  * that project again; a destination that holds files is refused and left as it was; an import from the committed
  * fixtures ends with the project open; a project gone from disk is shown as gone and can be taken off the list; and
- * stopping the app takes its editor server with it. Every assertion reads the files written, the recent list on disk
- * or the window's page — never the app's own claim.
+ * stopping the app takes its editor server with it. STU-004: the todo template's copy gets a backend of its own
+ * (under a backends folder of the gate's own, NODEGX_BACKENDS_DIR), started on open, a row added in Data is still
+ * there after a quit and a reopen, and quitting stops the backend. Every assertion reads the files written, the
+ * recent list on disk, the backend over HTTP or the window's page — never the app's own claim.
  *
  *   node app/check.mjs            PASS n/n and exit 0, or the failing lines and exit 1
  *   node app/check.mjs --shots    also writes docs/look/stu-003-*.png
@@ -34,6 +36,25 @@ const userData = join(tmp, 'user-data');
 const projects = join(tmp, 'projects');
 mkdirSync(projects);
 const recentFile = join(userData, 'recent-projects.json');
+const backendsDir = join(tmp, 'backends');
+process.env.NODEGX_BACKENDS_DIR = backendsDir; // the app and its servers inherit it: nothing is written to ~/.noodl
+const bindingOf = (dir) => readJson(join(dir, 'nodegx.project.json')).metadata?.cloudservices ?? {};
+/** What the backend itself says, asked as its admin (its own secrets.json). */
+async function backendRows(dir, collection) {
+  const { instanceId, endpoint } = bindingOf(dir);
+  const token = readJson(join(backendsDir, instanceId, 'secrets.json')).adminToken;
+  const r = await fetch(`${endpoint}/classes/${collection}`, { headers: { 'X-Parse-Application-Id': instanceId, 'X-Parse-Master-Key': token } });
+  return (await r.json()).results;
+}
+const backendAnswers = async (dir) => { try { return (await fetch(`${bindingOf(dir).endpoint}/health`, { signal: AbortSignal.timeout(1500) })).ok; } catch { return false; } };
+const backendUp = (b) => b.until(`['running', 'adopted'].includes(window.__ob?.backend?.phase) && window.__ob.backend`, 30000);
+/** Data → the type → the rows' note ("n row(s) on …"). */
+async function openRows(b, type) {
+  await b.clickSel('#backendpill');
+  await b.until(`[...document.querySelectorAll('#types .row')].some((r) => r.textContent.startsWith(${JSON.stringify(type)}))`, 10000);
+  await b.evaluate(`[...document.querySelectorAll('#types .row')].find((r) => r.textContent.startsWith(${JSON.stringify(type)})).click()`);
+  return b.until(`[...document.querySelectorAll('#datamain .note')].map((n) => n.textContent).find((t) => t.includes('row(s) on'))`, 10000);
+}
 const recentDirs = () => (existsSync(recentFile) ? readJson(recentFile).projects.map((p) => p.dir) : []);
 const serversOf = () => { try { return execFileSync('pgrep', ['-f', `serve.mjs ${tmp}`], { encoding: 'utf8' }).trim().split('\n').filter(Boolean); } catch { return []; } };
 
@@ -90,8 +111,27 @@ try {
     ok(!existsSync(join(todos, '.mcp.json')) && !existsSync(join(todos, 'CLAUDE.md')), 'no editor-written agent files with another machine\'s paths');
     ok(JSON.stringify(recentDirs()) === JSON.stringify([todos]), 'the recent list on disk names it', recentDirs());
     ok(serversOf().length === 1, 'one editor server runs for it', serversOf());
+
+    console.log('2b. its backend (STU-004)');
+    const bound = bindingOf(todos);
+    const config = bound.instanceId && existsSync(join(backendsDir, bound.instanceId, 'config.json')) ? readJson(join(backendsDir, bound.instanceId, 'config.json')) : {};
+    ok(bound.type === 'nodegx' && config.name === 'My todos backend' && config.projectIds?.includes(readJson(join(todos, 'nodegx.project.json')).id), 'the copy is bound to a backend of its own, owned by its id, where NodeGX keeps backends', { bound, config });
+    const up = await backendUp(b);
+    ok(up && up.phase === 'running' && up.endpoint === bound.endpoint && (await backendAnswers(todos)), 'opening it started that backend, and it answers', up);
+    ok(/^Backend · 127\.0\.0\.1:\d+$/.test(await b.evaluate(`document.querySelector('#backendpill').textContent`)), 'the status bar says where it is', await b.evaluate(`document.querySelector('#backendpill').textContent`));
+    ok(JSON.stringify(readJson(join(backendsDir, bound.instanceId, 'security.json'))) === JSON.stringify(readJson(join(todos, 'nodegx.security.json'))), 'its policy is the template\'s own nodegx.security.json');
+    const visitor = await fetch(`${bound.endpoint}/classes/Task`, { headers: { 'X-Parse-Application-Id': bound.instanceId } });
+    ok(visitor.status >= 400, 'a visitor with no sign-in is refused the tasks, as the policy says', visitor.status);
+    const note = await openRows(b, 'Task');
+    ok(/^0 row\(s\)/.test(note || ''), 'Data lists Task, which the app uses but does not declare, and shows its rows: none yet', note);
+    await b.evaluate(`[...document.querySelectorAll('#datamain button')].find((x) => /New entry/.test(x.textContent)).click()`);
+    const after = await b.until(`[...document.querySelectorAll('#datamain .note')].map((n) => n.textContent).find((t) => t.startsWith('1 row(s)'))`, 10000);
+    const rows = await backendRows(todos, 'Task');
+    ok(after && rows.length === 1, 'New entry adds a row, and the backend holds it', { after, rows: rows.length });
+    await shot(b, 'backend-row');
     await stop();
     ok(serversOf().length === 0, 'stopping the app stops its editor server', serversOf());
+    ok(!(await backendAnswers(todos)) && !existsSync(join(backendsDir, bound.instanceId, 'runtime.json')), 'and the backend it started, leaving no runtime record');
   }
 
   console.log('3. the next start offers the last project');
@@ -103,7 +143,11 @@ try {
     await shot(b, 'welcome-reopen');
     await b.clickSel('#reopen');
     ok(/^ready My todos /.test(await editorReady(b)), 'Reopen opens it in the editor');
+    ok((await backendUp(b))?.phase === 'running', 'its backend is started again');
+    const note = await openRows(b, 'Task');
+    ok(/^1 row\(s\)/.test(note || '') && (await backendRows(todos, 'Task')).length === 1, 'the row added before the quit is there', note);
     await stop();
+    ok(!(await backendAnswers(todos)), 'quitting stops it again');
   }
 
   console.log('4. a destination that already holds files');
@@ -170,6 +214,11 @@ try {
 } finally {
   await stop();
   for (const pid of serversOf()) try { process.kill(Number(pid)); } catch {}
+  // a backend left by a failed run: its runtime record names it (each one also stops itself once its server is gone)
+  for (const id of existsSync(backendsDir) ? readdirSync(backendsDir) : []) {
+    const rec = join(backendsDir, id, 'runtime.json');
+    if (existsSync(rec)) try { process.kill(readJson(rec).pid); } catch {}
+  }
   rmSync(tmp, { recursive: true, force: true });
 }
 const passed = results.filter(Boolean).length;
