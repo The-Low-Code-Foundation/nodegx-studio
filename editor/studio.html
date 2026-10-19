@@ -120,7 +120,7 @@
   .list { padding: 0 6px 12px; }
 
   /* ---- Design ---- */
-  #design { grid-template-columns: 260px 1fr 330px; }
+  #design { grid-template-columns: 260px 1fr 360px; }
   .palette { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 12px 12px; }
   .palette button { text-align: left; padding: 6px 8px; display: flex; gap: 8px; align-items: center; border-color: var(--line); color: var(--ink-2); }
   .palette button:hover { border-color: var(--accent-line); color: var(--ink); }
@@ -147,7 +147,58 @@
   .mp-name { position: absolute; top: 3px; left: 6px; color: var(--ink-2); }
   .mp-top { grid-area: t; } .mp-right { grid-area: r; } .mp-bottom { grid-area: b; } .mp-left { grid-area: l; }
   .mp-core { grid-area: c; background: var(--panel); border: 1px solid var(--line-2); border-radius: 4px; padding: 8px 4px; text-align: center; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* STU-051: the panel as Bubble draws it */
+  .ptabs { display: flex; gap: 2px; padding: 8px 12px 0; border-bottom: 1px solid var(--line); }
+  .ptabs button { padding: 6px 10px; border-radius: var(--r) var(--r) 0 0; color: var(--muted); border-bottom: 2px solid transparent; }
+  .ptabs button[aria-pressed=true] { color: var(--accent-ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .ptabs .count { margin-left: 5px; background: var(--accent-soft); color: var(--accent-ink); border-radius: 8px; padding: 0 6px; font-size: 11px; }
+  .sec2 summary { justify-content: flex-start; gap: 6px; }
+  .sec2 summary .acts { margin-left: auto; display: flex; gap: 4px; }
+  .sec2 summary .acts button { font-size: 15px; line-height: 1; padding: 0 6px; }
+  .sec2 > :not(summary) + :not(summary) { margin-top: 6px; }
+  .sec2 .none { color: var(--muted); font-size: 12px; padding: 0 0 4px; }
+  .sec2 .sub { color: var(--ink-2); font-size: 12px; padding: 4px 0 0; }
+  .sec2 .side { border-top: 1px dashed var(--line); padding-top: 4px; }
+  .sec2 .endrow { display: flex; justify-content: flex-end; }
+  .props .field .ctl { min-width: 0; }
+  .props .sec2 .field { grid-template-columns: 72px 1fr 22px; }
+  .len { display: flex; align-items: center; gap: 4px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--panel); padding: 0 6px; min-width: 0; height: 28px; }
+  .len input { border: 0; padding: 0; height: 26px; min-width: 0; width: 100%; background: transparent; box-shadow: none; }
+  .len input:focus { outline: none; }
+  .len:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .len .g { color: var(--muted); font-size: 12px; flex: none; }
+  .len .u { color: var(--muted); font-size: 11px; flex: none; }
+  .len.off { background: var(--panel-2); }
+  .len.wiredlen { background: var(--accent-soft); border-color: var(--accent-line); }
+  .len.wiredlen .chip { flex: 1; min-width: 0; border: 0; padding: 0; background: none; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; min-width: 0; }
+  .four { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .segctl { display: flex; border: 1px solid var(--line-2); border-radius: var(--r); padding: 2px; gap: 2px; background: var(--panel); min-width: 0; }
+  .segctl button { flex: 1; padding: 3px 4px; border-radius: 4px; color: var(--ink-2); display: grid; place-items: center; font-size: 12px; white-space: nowrap; min-width: 0; }
+  .segctl button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent-ink); box-shadow: inset 0 0 0 1px var(--accent-line); }
+  .ag { display: inline-grid; place-items: center; }
+  .cchip { display: flex; gap: 4px; align-items: center; }
+  .cbtn { flex: 1; display: flex; align-items: center; gap: 8px; padding: 3px 8px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--panel); min-width: 0; height: 28px; text-align: left; }
+  .cbtn .swatch { width: 16px; height: 16px; border-radius: 3px; border: 1px solid var(--line-2); flex: none; }
+  .cbtn .cname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+  .cbtn .u { color: var(--muted); font-size: 11px; }
+  .cchip .bolt { opacity: .35; } .cchip:hover .bolt { opacity: 1; }
+  .props select.wide { width: 100%; }
+  .badge { font-size: 11px; color: var(--warn); border: 1px solid #fcd34d; background: #fffbeb; border-radius: 8px; padding: 0 6px; grid-column: 2; justify-self: start; }
+  .expand { padding: 2px; width: 22px; height: 22px; color: var(--muted); }
+  .shsum { color: var(--muted); font-size: 12px; align-self: center; }
+  .props .row.wf { padding: 6px 8px; cursor: pointer; }
+  .menu.colours { min-width: 240px; max-width: 260px; }
+  .cpick { display: grid; grid-template-columns: 34px 1fr 64px; gap: 6px; align-items: center; padding-bottom: 4px; }
+  .cpick input[type=color] { width: 34px; height: 28px; padding: 0; border: 1px solid var(--line-2); border-radius: var(--r); }
+  .cgrid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; padding: 0 8px 4px; }
+  .cgrid .cell { aspect-ratio: 1; border: 1px solid var(--line-2); border-radius: 4px; padding: 0; cursor: pointer; }
+  .cgrid .cell.on { outline: 2px solid var(--accent); outline-offset: 1px; }
   .tree .row { gap: 6px; }
+  .tree .into { opacity: 0; color: var(--muted); padding: 0 4px; border-radius: 3px; flex: none; cursor: pointer; font-size: 12px; }
+  .tree .row:hover .into { opacity: 1; } .tree .into:hover { background: var(--line); color: var(--ink); }
+  .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 2px 4px 6px; font-size: 12px; color: var(--muted); }
+  .crumbs button { padding: 1px 6px; font-size: 12px; } .crumbs b { color: var(--ink); font-weight: 600; }
   .tree .chev { width: 14px; height: 14px; flex: none; display: grid; place-items: center; cursor: pointer; border-radius: 3px; }
   .tree .chev:hover { background: var(--line); }
   .tree .chev::before { content: ''; width: 5px; height: 5px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); }
@@ -704,7 +755,7 @@ function writeJsonFile(path, value) { snapshot(); files.write(path, JSON.stringi
 
 /* ================= the real app ================= */
 const preview = await NodegxPreview.mountPreview($('app'), { runtimeBase: '/runtime/' });
-window.__ob = { preview, get store() { return store; }, get files() { return files; } };
+window.__ob = { preview, get store() { return store; }, get files() { return files; }, ports: (id) => editablePorts(byId[id]) };
 let lib, libIndex = new Map();
 let lastShow = null;
 let rebuildTimer;
@@ -715,7 +766,7 @@ function rebuild(delay = 120) {
     rebuilding = true;
     status('Rebuilding the app…', 'busy');
     const s = await preview.update(files.entries());
-    lastShow = s; window.__ob.shows = (window.__ob.shows || 0) + 1;
+    lastShow = s;
     rebuilding = false;
     showProblems(s);
     if (s.status === 'ok') {
@@ -729,6 +780,8 @@ function rebuild(delay = 120) {
       const first = s.report?.diagnostics?.find((d) => d.severity === 'error');
       status(`The app is not shown: ${first ? first.message.slice(0, 160) : s.message || s.status}`, 'bad');
     }
+    // counted once the page is on screen again and its elements mapped, so a reader of the app measures the new one
+    window.__ob.shows = (window.__ob.shows || 0) + 1;
   }, delay);
 }
 
@@ -1160,16 +1213,29 @@ const isContainer = (id) => kidsOf(id).length > 0;
 const chainOf = (id) => { const out = [id]; let k; while ((k = kidsOf(out[out.length - 1])).length === 1 && isContainer(k[0])) out.push(k[0]); return out; };
 const countIn = (id) => kidsOf(id).reduce((a, c) => a + 1 + countIn(c), 0);
 const wordsOf = (n) => { const t = n.parameters?.text ?? n.parameters?.label; return typeof t === 'string' ? t.split('\n')[0].slice(0, 40) : ''; };
+// opened inside a part (double-click, or its ⤢): the list shows that part's interior only, as the NodeGX editor shows a
+// component's own nodes; the crumbs lead back. Selecting an element outside it leaves it.
+let treeRoot = null;
+const within = (id, root) => { for (let p = id; p !== undefined && byId[p]; p = byId[p].parent) if (p === root) return true; return false; };
 function renderOutline(tree) {
-  if (sel && sel !== treeRevealed) { for (let p = byId[sel]?.parent; p !== undefined && byId[p]; p = byId[p].parent) treeOpen.add(p); treeRevealed = sel; }
-  const rootId = visualIds[0];
+  if (sel && sel !== treeRevealed) { for (let p = byId[sel]?.parent; p !== undefined && byId[p]; p = byId[p].parent) treeOpen.add(p); treeRevealed = sel; if (treeRoot && !within(sel, treeRoot)) treeRoot = null; }
+  if (treeRoot && !byId[treeRoot]) treeRoot = null;
+  const rootId = treeRoot || visualIds[0];
+  if (treeRoot) {
+    const up = []; for (let p = byId[treeRoot].parent; p !== undefined && byId[p]; p = byId[p].parent) up.unshift(p);
+    const crumbs = h('div', { class: 'crumbs' }, h('button', { class: 'quiet', title: 'Back to the whole page', onclick: () => { treeRoot = null; renderTree(); } }, '←'));
+    for (const p of up.filter((x) => !chainOf(visualIds[0]).includes(x))) crumbs.append(h('button', { class: 'quiet', onclick: () => { treeRoot = p === visualIds[0] ? null : p; renderTree(); } }, labelOf(p)), '›');
+    crumbs.append(h('b', {}, labelOf(treeRoot)));
+    tree.append(crumbs);
+  }
   const rowFor = (id, d) => {
     const chain = chainOf(id), tail = chain[chain.length - 1], n = byId[id], kids = kidsOf(tail);
     const open = d === 0 || chain.some((c) => treeOpen.has(c));
     const toggle = (e) => { e.stopPropagation(); if (open) chain.forEach((c) => treeOpen.delete(c)); else treeOpen.add(id); renderTree(); };
     const seg = (c, i) => h('span', { class: `seg${i ? ' inner' : ''}${sel === c ? ' on' : ''}`, title: i ? `${labelOf(c)} — a wrapper inside ${labelOf(chain[i - 1])}` : undefined, onclick: (e) => { e.stopPropagation(); select(c); elOf(c)?.scrollIntoView({ block: 'nearest' }); } }, labelOf(c));
     const words = wordsOf(n), nStates = statesOf(id).length;
-    tree.append(h('div', { class: 'row', 'aria-selected': chain.includes(sel), style: `padding-left:${4 + d * 14}px`, onclick: () => { select(id); elOf(id)?.scrollIntoView({ block: 'nearest' }); }, onmouseenter: () => { hover = id; draw(); }, onmouseleave: () => { hover = null; draw(); } },
+    const goIn = (e) => { e.stopPropagation(); treeRoot = id; for (const c of chain) treeOpen.add(c); renderTree(); };
+    tree.append(h('div', { class: 'row', 'aria-selected': chain.includes(sel), style: `padding-left:${4 + d * 14}px`, onclick: () => { select(id); elOf(id)?.scrollIntoView({ block: 'nearest' }); }, ondblclick: d > 0 && kids.length ? goIn : undefined, onmouseenter: () => { hover = id; draw(); }, onmouseleave: () => { hover = null; draw(); } },
       kids.length ? h('span', { class: `chev${open ? ' open' : ''}`, onclick: toggle }) : h('span', { class: 'chev none' }),
       icon(glyphOf(n.type)),
       h('span', { class: 'segs' }, seg(id, 0)),
@@ -1179,7 +1245,9 @@ function renderOutline(tree) {
         : h('span', { class: 'wrap', title: `Inside: ${chain.slice(1).map(labelOf).join(' › ')} — click to select`, onclick: (e) => { e.stopPropagation(); select(tail); } }, `› ${chain.length - 1}`)) : null,
       words ? h('span', { class: 'words' }, words) : null,
       nStates ? h('span', { class: 'chip state', title: `${nStates} custom state(s)` }, nStates) : null,
-      h('span', { class: 't' }, kids.length && !open ? String(countIn(tail)) : (words ? '' : n.label ? typeName(n.type) : ''))));
+      h('span', { class: 't' }, kids.length && !open ? String(countIn(tail)) : (words ? '' : n.label ? typeName(n.type) : '')),
+      // at the row's end, so a click on the row's middle selects and never opens
+      d > 0 && kids.length ? h('span', { class: 'into', title: `Open inside ${labelOf(id)}: list only what it holds (or double-click)`, onclick: goIn }, '⤢') : null));
     if (open) for (const k of kids) rowFor(k, d + 1);
   };
   if (rootId) rowFor(rootId, 0);
@@ -1261,8 +1329,352 @@ function tokensOf(category) {
   return (pj?.metadata?.designTokens?.customTokens || []).filter((t) => !category || (t.category || '').startsWith(category)).map((t) => t.name);
 }
 let propTimer;
+/* ================= STU-051: the panel as Bubble draws it =================
+   Two tabs (Visual, Interaction) and Bubble's sections in Bubble's order — Content, Configure, Size, Layout, Style,
+   Text, Appearance, Border, Background, Shadow — each claiming the element's ports by name; a port no section claims
+   is drawn in "More" with the plain field, so nothing a node has is out of reach. Border, Background and Shadow are
+   added and removed as a whole ("No border added yet"). Sides and corners are pairs that open into four (⛶). A value
+   that comes from somewhere (a wire, a composed expression) keeps the plain field with its chip. The size axes read
+   `sizeMode` as two choices — the NodeGX editor's sizeModeAxes.ts, re-made here. */
+let propTab = 'visual';
+const secOpen = { Appearance: false, More: false };
+const fourWay = new Set(); // `${id}:${what}` — a pair opened into four sides
+const SIZE_MODES = { explicit: [false, false], contentWidth: [true, false], contentHeight: [false, true], contentSize: [true, true] };
+const sizeModeOf = (w, hh) => (w ? (hh ? 'contentSize' : 'contentWidth') : hh ? 'contentHeight' : 'explicit');
+const WEIGHTS = [[100, 'Thin'], [200, 'Extra Light'], [300, 'Light'], [400, 'Regular'], [500, 'Medium'], [600, 'Semi Bold'], [700, 'Bold'], [800, 'Extra Bold'], [900, 'Black']];
+const CONTENT_PORTS = ['text', 'label', 'src', 'alt', 'placeholder', 'iconIconSource', 'iconSourceType', 'iconImageSource'];
+const CONFIGURE_PORTS = ['textOverflow', 'wordBreak', 'useLabel', 'srcSet', 'useIcon', 'iconSpacing', 'iconPlacement', 'iconSize', 'iconColor'];
+const INTERACTION_PORTS = ['mounted', 'visible', 'enabled', 'keepsFocus'];
+const INTERACTION_GROUPS = new Set(['Drop Zone', 'File Drop', 'Drag Source', 'Scroll To Index', 'Scroll Into View', 'Scroll To Element']);
+/** A colour as Bubble writes it: a token's name, or #RRGGBB and its opacity. */
+function colourName(v) {
+  if (v === undefined || v === null || v === '') return { name: '', alpha: '' };
+  const tok = String(v).match(/^var\(--([\w-]+)\)/); if (tok) { const t = tok[1].replace(/^color_/, '').replace(/[_-]/g, ' '); return { name: t.charAt(0).toUpperCase() + t.slice(1), alpha: '' }; }
+  const m = String(v).match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)$/);
+  if (m) return { name: '#' + [m[1], m[2], m[3]].map((x) => Number(x).toString(16).padStart(2, '0')).join('').toUpperCase(), alpha: `${Math.round(100 * (m[4] === undefined ? 1 : Number(m[4])))}%` };
+  const hx = String(v).match(/^#([0-9a-f]{6})([0-9a-f]{2})?$/i); if (hx) return { name: '#' + hx[1].toUpperCase(), alpha: hx[2] ? `${Math.round(parseInt(hx[2], 16) / 2.55)}%` : '100%' };
+  return { name: String(v), alpha: '' };
+}
+const hexAlpha = (hex, pct) => { const n = parseInt(hex.slice(1), 16); return pct >= 100 ? hex.toUpperCase() : `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${Math.max(0, pct) / 100})`; };
+/** Small drawings for the alignment segments: boxes in a frame, laid along the direction they mean. */
+function alignGlyph(kind, value, dir = 'column') {
+  const s = (inner) => { const el = h('span', { class: 'ag' }); el.innerHTML = `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3">${inner}</svg>`; return el; };
+  const at = { start: 2, center: 5.5, end: 9, 'flex-start': 2, 'flex-end': 9, left: 2, right: 9, top: 2, bottom: 9 };
+  if (kind === 'self') { const p = at[value] ?? 5.5, vert = ['top', 'bottom'].includes(value) || (value === 'center' && dir === 'y'); return s(vert ? `<line x1="1" y1="${value === 'top' ? 1.5 : value === 'bottom' ? 14.5 : 8}" x2="15" y2="${value === 'top' ? 1.5 : value === 'bottom' ? 14.5 : 8}"/><rect x="5" y="${p + 0.5}" width="6" height="4.5" rx="1" fill="currentColor"/>` : `<line x1="${value === 'left' ? 1.5 : value === 'right' ? 14.5 : 8}" y1="1" x2="${value === 'left' ? 1.5 : value === 'right' ? 14.5 : 8}" y2="15"/><rect x="${p + 0.5}" y="5" width="4.5" height="6" rx="1" fill="currentColor"/>`); }
+  // container: three boxes along the main axis (justify) or across it (align)
+  const row = dir === 'row';
+  const along = { 'flex-start': [1.5, 5, 8.5], center: [3.5, 7, 10.5], 'flex-end': [5.5, 9, 12.5], 'space-between': [1.5, 7, 12.5], 'space-around': [2.5, 7, 11.5], 'space-evenly': [2.5, 7, 11.5] }[value];
+  if (kind === 'justify' && along) return s(`<rect x=".5" y=".5" width="15" height="15" rx="2" stroke-opacity=".45"/>` + along.map((a) => row ? `<rect x="${a}" y="5" width="2.5" height="6" fill="currentColor" stroke="none"/>` : `<rect x="5" y="${a}" width="6" height="2.5" fill="currentColor" stroke="none"/>`).join(''));
+  const cross = { 'flex-start': [2, 5], center: [5, 5], 'flex-end': [8, 5], stretch: [2, 11] }[value];
+  if (kind === 'align' && cross) return s(`<rect x=".5" y=".5" width="15" height="15" rx="2" stroke-opacity=".45"/>` + [3, 7, 11].map((a) => row ? `<rect x="${a - 1}" y="${cross[0] + 0.5}" width="2.5" height="${cross[1]}" fill="currentColor" stroke="none"/>` : `<rect x="${cross[0] + 0.5}" y="${a - 1}" width="${cross[1]}" height="2.5" fill="currentColor" stroke="none"/>`).join(''));
+  return h('span', { class: 'ag' }, String(value).replace('flex-', ''));
+}
+function renderBubblePanel(right, node) {
+  const params = node.parameters || {};
+  const variant = variantsFor(node.type).find((v) => v.name === node.variant);
+  const inherit = variant?.parameters || {};
+  const ports = editablePorts(node);
+  const P = Object.fromEntries(ports.map((p) => [p.name, p]));
+  const wiredIn = Object.fromEntries(conns.filter((c) => c.toId === node.id).map((c) => [c.toProperty, c]));
+  const claimed = new Set();
+  const has = (name) => !!P[name];
+  const eff = (name) => params[name] !== undefined ? params[name] : inherit[name] !== undefined ? inherit[name] : P[name]?.default;
+  const own = (name) => params[name];
+  // a choice changes what the panel shows (a pressed segment, a section added), so it redraws; renderProps keeps the focus
+  const setMany = (values, opts = {}) => edits(pageKey, Object.entries(values).map(([name, value]) => ({ edit: 'set_parameter', component: pageKey, id: node.id, name, value })), { rebuildApp: true, redraw: true, ...opts });
+  const set = (name, value) => setMany({ [name]: value });
+  const take = (...names) => { const got = names.filter((n) => has(n)); for (const n of got) claimed.add(n); return got; };
+  const plain = (name) => { claimed.add(name); return fieldFor(node, P[name], params[name], wiredIn[name]); };
+  // a value that comes from somewhere keeps the plain field and its chip
+  const wired = (name) => !!wiredIn[name];
+  const row = (label, control, extra) => h('div', { class: 'field' }, h('label', { title: label }, label), h('div', { class: 'ctl' }, control), extra ?? null);
+  const len = (name, { glyph, place, title, unit = 'px' } = {}) => {
+    claimed.add(name);
+    const v = own(name), inh = inherit[name] ?? P[name]?.default;
+    return h('span', { class: 'len', title: title || P[name]?.displayName || name }, glyph ? h('span', { class: 'g' }, glyph) : null,
+      h('input', { type: 'text', value: showLen(v), placeholder: place ?? (inh !== undefined && typeof inh !== 'string' ? showLen(inh) : String(inh ?? '')), list: 'tokens-space',
+        onchange: (e) => { const r = readLen(e.target.value); if (r === null) { e.target.value = showLen(v); return toast('A length: 16, 16px, 10% or a spacing token'); } set(name, r); } }),
+      h('span', { class: 'u' }, (typeof v === 'object' && v?.unit && v.unit !== 'px') || (typeof v === 'string' && /var\(/.test(v)) ? '' : unit));
+  };
+  const num = (name, { glyph, scale = 1, unit = '', place } = {}) => {
+    claimed.add(name);
+    const v = own(name), inh = inherit[name] ?? P[name]?.default;
+    const show = (x) => x === undefined || x === null || x === '' ? '' : typeof x === 'number' ? String(Math.round(x * scale * 100) / 100) : String(x);
+    return h('span', { class: 'len', title: P[name]?.displayName || name }, glyph ? h('span', { class: 'g' }, glyph) : null,
+      h('input', { type: 'text', value: show(v), placeholder: place ?? show(typeof inh === 'number' ? inh : undefined),
+        onchange: (e) => { const t = e.target.value.trim(); if (!t) return set(name, undefined); const n = Number(t.replace(/%$/, '')); if (Number.isNaN(n)) { e.target.value = show(v); return; } set(name, n / scale); } }),
+      h('span', { class: 'u' }, unit));
+  };
+  const choice = (name, options, { blank } = {}) => {
+    claimed.add(name);
+    const cur = eff(name);
+    return h('select', { onchange: (e) => set(name, e.target.value === '' ? undefined : e.target.value) },
+      blank !== undefined ? h('option', { value: '' }, blank) : null,
+      ...options.map(([v, l]) => h('option', { value: v, selected: String(cur) === String(v) && (blank === undefined || own(name) !== undefined || inherit[name] !== undefined) }, l)));
+  };
+  const seg = (name, options, kind, dir) => {
+    claimed.add(name);
+    const cur = eff(name);
+    return h('div', { class: 'segctl' }, ...options.map(([v, l]) => h('button', { class: 'quiet', title: l, 'aria-pressed': String(cur) === String(v), onclick: () => set(name, String(cur) === String(v) && own(name) !== undefined ? undefined : v) }, kind ? alignGlyph(kind, v, dir) : null, kind ? null : l)));
+  };
+  // a side fed from somewhere: its source as a chip, × to stop taking it
+  const wiredMini = (name, glyph) => { claimed.add(name); const w = wiredIn[name]; return h('span', { class: 'len wiredlen', title: `${P[name]?.displayName || name} comes from elsewhere` }, h('span', { class: 'g' }, glyph), sourceChip(w.fromId, w.fromProperty), h('button', { class: 'quiet tiny', title: 'Stop taking the value from there', onclick: () => edits(pageKey, [{ edit: 'disconnect', component: pageKey, from: { node: w.fromId, port: w.fromProperty }, to: { node: node.id, port: name } }]) }, icon('x'))); };
+  const bolt = (name) => P[name] ? h('button', { class: 'quiet bolt', title: 'Insert dynamic data — take this value from an element, a state, an option set, or compose it', onclick: (e) => sourceMenu(e, node, P[name]) }, icon('bolt')) : null;
+  const chip = (name) => {
+    claimed.add(name);
+    if (wired(name)) return fieldFor(node, P[name], params[name], wiredIn[name]);
+    const v = eff(name), cn = colourName(v);
+    return h('div', { class: 'cchip' }, h('button', { class: 'cbtn', title: P[name]?.displayName || name, onclick: (e) => colourPicker(e, v, (nv) => set(name, nv)) },
+      h('span', { class: 'swatch', style: `background:${resolveColor(v ?? '')}` }), h('span', { class: 'cname' }, cn.name || 'None'), cn.alpha ? h('span', { class: 'u' }, cn.alpha) : null), bolt(name));
+  };
+  // a pair (↕ top+bottom, ↔ left+right) that opens into four sides
+  const pair = (what, label, names, glyphs) => {
+    const got = names.filter(has); if (!got.length) return null;
+    got.forEach((n) => claimed.add(n));
+    const key = `${node.id}:${what}`;
+    const open = fourWay.has(key) || names.some((n) => wired(n));
+    const toggle = h('button', { class: 'quiet expand', title: open ? 'Pairs' : 'Each side', onclick: () => { open ? fourWay.delete(key) : fourWay.add(key); renderProps(); } }, open ? '⊟' : '⛶');
+    if (open) return row(label, h('div', { class: 'four' }, ...[0, 3, 2, 1].map((i) => names[i]).map((n) => has(n) ? (wired(n) ? wiredMini(n, glyphs[names.indexOf(n)]) : len(n, { glyph: glyphs[names.indexOf(n)] })) : h('span'))), toggle);
+    const [a, b2, c, d] = names; // top, right, bottom, left
+    const pairOf = (x, y, glyph, title) => {
+      const vx = own(x), vy = own(y), same = showLen(vx) === showLen(vy);
+      return h('span', { class: 'len', title }, h('span', { class: 'g' }, glyph), h('input', { type: 'text', value: same ? showLen(vx) : '', placeholder: same ? showLen(inherit[x] ?? P[x]?.default) || '0' : 'Mixed', list: 'tokens-space',
+        onchange: (e) => { const r = readLen(e.target.value); if (r === null) return toast('A length: 16, 16px, 10% or a spacing token'); setMany({ [x]: r, [y]: r }); } }), h('span', { class: 'u' }, same && typeof vx === 'string' && /var\(/.test(vx) ? '' : 'px'));
+    };
+    return row(label, h('div', { class: 'two' }, pairOf(a, c, glyphs[4] ?? '↕', `${label} top and bottom`), pairOf(d, b2, glyphs[5] ?? '↔', `${label} left and right`)), toggle);
+  };
+  // a section; Border, Background and Shadow are added and removed whole
+  const section = (title, body, { present, add, remove, empty, extra } = {}) => {
+    const kids = (Array.isArray(body) ? body : [body]).flat().filter(Boolean);
+    if (!kids.length && present === undefined) return null;
+    const isOpen = secOpen[title] ?? true;
+    const det = h('details', { class: 'group sec2', open: isOpen, ontoggle: (e) => { secOpen[title] = e.target.open; } },
+      h('summary', {}, title, h('span', { class: 'acts' }, extra ?? null,
+        present === undefined ? null : h('button', { class: 'quiet tiny', title: present ? `Remove the ${title.toLowerCase()}` : `Add a ${title.toLowerCase()}`, onclick: (e) => { e.preventDefault(); secOpen[title] = true; present ? remove() : add(); } }, present ? '−' : '+'))));
+    if (present === false) det.append(h('div', { class: 'none' }, empty));
+    else det.append(...kids);
+    return det;
+  };
+
+  const tabs = h('div', { class: 'ptabs' }, ...[['visual', 'Visual'], ['interaction', 'Interaction']].map(([k, l]) => {
+    const n = k === 'interaction' ? events().filter((ev) => ev.node === node.id).length + statesOf(node.id).length : 0;
+    return h('button', { class: 'quiet', 'aria-pressed': propTab === k, onclick: () => { propTab = k; renderProps(); } }, l, n ? h('span', { class: 'count' }, n) : null);
+  }));
+  right.append(tabs);
+  const wrap = h('div', { class: 'props' });
+  right.append(wrap);
+  const add = (...xs) => { for (const x of xs) if (x) wrap.append(x); };
+
+  if (propTab === 'interaction') {
+    const mine = events().filter((ev) => ev.node === node.id);
+    add(section('Workflows', [
+      ...mine.map((ev) => h('div', { class: 'row wf', onclick: () => { selEvent = ev; switchTab('workflow'); } }, icon('workflow'), eventTitle(ev).replace(/^When [^:]+: /, 'When '), h('span', { class: 't' }, `${countSteps(chain(ev.node, ev.port))} steps`))),
+      h('div', { class: 'hint' }, mine.length ? 'Open one to change its steps.' : 'No workflow starts at this element. Add one in Workflow.')]));
+    add(section('Visibility', [has('visible') ? plain('visible') : null, has('mounted') ? plain('mounted') : null]));
+    add(section('Options', ['enabled', 'keepsFocus'].filter(has).map(plain)));
+    const more = new Map();
+    for (const p of ports) if (INTERACTION_GROUPS.has(p.group)) { if (!more.has(p.group)) more.set(p.group, []); more.get(p.group).push(p); }
+    for (const [g, ps] of more) { if (secOpen[g] === undefined) secOpen[g] = ps.some((p) => params[p.name] !== undefined); add(section(g, ps.map((p) => plain(p.name)))); }
+    add(customStatesSection(node));
+    return;
+  }
+
+  // Content and Configure: the element's own subject, with the plain fields (the text box, the composer, the ⚡)
+  // an icon is the Icon element's content; on a button or an input it is a setting, shown once the icon is on
+  const isIcon = node.type === 'net.noodl.visual.icon', iconPorts = ['iconSourceType', 'iconIconSource', 'iconImageSource', 'iconSpacing', 'iconPlacement', 'iconSize', 'iconColor'];
+  const content = CONTENT_PORTS.filter((n) => has(n) && (isIcon || !n.startsWith('icon')));
+  add(section('Content', content.map(plain)));
+  const configure = [...CONFIGURE_PORTS, ...(isIcon ? [] : ['iconSourceType', 'iconIconSource', 'iconImageSource'])].filter((n) => has(n) && !claimed.has(n))
+    .filter((n) => isIcon || !has('useIcon') || eff('useIcon') || !iconPorts.includes(n));
+  add(section('Configure', configure.map((n) => P[n]?.type === 'color' || tname(P[n]?.type) === 'color' ? row(P[n].displayName || n, chip(n)) : plain(n))));
+  if (!isIcon) iconPorts.forEach((n) => has(n) && claimed.add(n));
+
+  // Size: each axis Fixed / Fill / Fit and its value, then the min and max
+  const size = [];
+  if (has('sizeMode') || has('width') || has('height')) {
+    const sm = eff('sizeMode') ?? 'explicit';
+    const fits = SIZE_MODES[sm] ?? [false, false];
+    claimed.add('sizeMode');
+    for (const [axis, i, mn, mx, lab] of [['width', 0, 'minWidth', 'maxWidth', 'Width'], ['height', 1, 'minHeight', 'maxHeight', 'Height']]) {
+      if (!has(axis)) continue;
+      const v = eff(axis);
+      const isPct = (typeof v === 'object' && v?.unit === '%') || (typeof v === 'number' && axis === 'width' && own(axis) === undefined && inherit[axis] === undefined);
+      const fill = !fits[i] && isPct && Number(typeof v === 'object' ? v.value : v) === 100;
+      const mode = fits[i] ? 'fit' : fill ? 'fill' : 'fixed';
+      const pick = h('select', { title: `${lab}: given, filling its parent, or taken from the content`, onchange: (e) => {
+        const m = e.target.value, f = [...fits]; f[i] = m === 'fit';
+        const next = { sizeMode: sizeModeOf(f[0], f[1]) };
+        if (m === 'fill') next[axis] = { value: 100, unit: '%' };
+        if (m === 'fixed') { const r = elOf(node.id)?.getBoundingClientRect(); next[axis] = { value: Math.round(r ? r[axis] : 100), unit: 'px' }; }
+        if (next.sizeMode === sm) delete next.sizeMode;
+        setMany(next);
+      } }, ...[['fixed', 'Fixed'], ['fill', 'Fill'], ['fit', 'Fit']].map(([k, l]) => h('option', { value: k, selected: mode === k }, l)));
+      claimed.add(axis);
+      size.push(row(lab, h('div', { class: 'two' }, pick, mode === 'fixed' ? len(axis) : h('label', { class: 'len off' }, h('input', { type: 'text', disabled: true, placeholder: mode === 'fit' ? 'Auto' : '100%' })))));
+      if (has(mn) || has(mx)) size.push(row('', h('div', { class: 'two' }, has(mn) ? len(mn, { glyph: i ? '⇕' : '⇔', place: `Min ${i ? 'H' : 'W'}`, title: `Min ${lab.toLowerCase()}` }) : h('span'), has(mx) ? len(mx, { glyph: i ? '⇕' : '⇔', place: `Max ${i ? 'H' : 'W'}`, title: `Max ${lab.toLowerCase()}` }) : h('span'))));
+    }
+    if (has('objectFit')) size.push(row('Image fit', choice('objectFit', [['contain', 'Contain'], ['cover', 'Cover'], ['fill', 'Stretch'], ['none', 'Original size'], ['scale-down', 'Shrink to fit']])));
+  }
+  add(section('Size', size));
+
+  // Layout: where it sits in its parent, how it lays out its children, its spacing
+  const dir = eff('flexDirection') ?? 'column';
+  const layout = [];
+  if (has('position') && eff('position') !== 'relative') layout.push(row('Position', choice('position', [['relative', 'In the flow'], ['absolute', 'Absolute'], ['sticky', 'Sticky'], ['fixed', 'Fixed to the screen']])));
+  if (has('alignX') || has('alignY')) layout.push(row('Alignment', h('div', { class: 'two' }, has('alignX') ? seg('alignX', [['left', 'Left'], ['center', 'Centre'], ['right', 'Right']], 'self') : h('span'), has('alignY') ? seg('alignY', [['top', 'Top'], ['center', 'Middle'], ['bottom', 'Bottom']], 'self', 'y') : h('span'))));
+  if (has('flexDirection')) {
+    layout.push(h('div', { class: 'sub' }, 'Container layout'));
+    layout.push(seg('flexDirection', [['column', '↓ Column'], ['row', '→ Row'], ['none', '◫ Align']]));
+    if (dir !== 'none') {
+      layout.push(h('div', { class: 'sub' }, 'Container alignment'));
+      if (has('justifyContent')) layout.push(row(dir === 'row' ? 'Along' : 'Down', seg('justifyContent', [['flex-start', 'Start'], ['center', 'Centre'], ['flex-end', 'End'], ['space-between', 'Spread']], 'justify', dir)));
+      if (has('alignItems')) layout.push(row('Across', seg('alignItems', [['flex-start', 'Start'], ['center', 'Centre'], ['flex-end', 'End'], ['stretch', 'Stretch']], 'align', dir)));
+      if (has('flexWrap')) layout.push(row('Wrap', choice('flexWrap', [['nowrap', 'One line'], ['wrap', 'Wrap'], ['wrap-reverse', 'Wrap, reversed']])));
+      if (has('rowGap') || has('columnGap')) layout.push(row('Gap', h('div', { class: 'two' }, has('rowGap') ? len('rowGap', { glyph: '↕', title: 'Gap between rows' }) : h('span'), has('columnGap') ? len('columnGap', { glyph: '↔', title: 'Gap between columns' }) : h('span'))));
+    }
+    if (has('clip')) layout.push(plain('clip'));
+  }
+  layout.push(h('div', { class: 'sub' }, 'Spacing'));
+  const pad = pair('padding', 'Padding', ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'], ['⤒', '⇥', '⤓', '⇤']);
+  const mar = pair('margin', 'Margin', ['marginTop', 'marginRight', 'marginBottom', 'marginLeft'], ['⤒', '⇥', '⤓', '⇤']);
+  if (!pad && !mar) layout.pop(); else layout.push(pad, mar);
+  add(section('Layout', layout));
+
+  // Style: the style it wears (a variant of its type), as Bubble's style chip
+  if (!node.type.startsWith('/') && node.type !== 'Page') {
+    const mine = variantsFor(node.type);
+    const overridden = variant && Object.keys(inherit).some((k) => params[k] !== undefined);
+    // a node's own value wins over its variant's, so wearing a style means dropping the element's own values for what the style sets (Bubble: a styled element has no overrides)
+    const s = h('select', { onchange: (e) => { const v = mine.find((x) => x.name === e.target.value); edits(pageKey, [{ edit: 'set_variant', component: pageKey, id: node.id, variant: e.target.value || undefined }, ...Object.keys(v?.parameters || {}).filter((k) => params[k] !== undefined).map((k) => ({ edit: 'set_parameter', component: pageKey, id: node.id, name: k, value: undefined }))], { redraw: true }); toast(e.target.value ? `${labelOf(node.id)} now wears ${e.target.value}` : `${labelOf(node.id)} wears no style`); } }, h('option', { value: '' }, '(no style)'));
+    for (const v of mine) s.append(h('option', { value: v.name, selected: node.variant === v.name }, v.name));
+    add(section('Style', [h('div', { class: 'field' }, h('label', {}, 'Style'), s, overridden ? h('span', { class: 'badge', title: 'This element sets some of what its style sets' }, 'Overridden') : null),
+      h('div', { class: 'field' }, h('label', {}), h('div', { style: 'display:flex;gap:6px' }, h('button', { class: 'tiny', title: 'Save this element\'s properties as a style every element of this type can wear', onclick: () => saveAsStyle(node) }, icon('styles'), 'Save as a style'), node.variant ? h('button', { class: 'tiny', onclick: () => { tab = 'styles'; selStyle = { typename: node.type, name: node.variant }; switchTab('styles'); } }, 'Edit style') : null))]));
+  }
+
+  // Text: the font, its weight and size, the alignment, bold / italic, the colour; the rest behind ⋯
+  if (has('fontFamily') || has('fontSize') || has('color')) {
+    const fonts = new Set(['Inter', 'system-ui', 'Georgia', 'Menlo']);
+    for (const n of nodes) if (typeof n.parameters?.fontFamily === 'string') fonts.add(n.parameters.fontFamily);
+    for (const t of tokensOf('typography')) fonts.add(`var(${t})`);
+    const textMore = fourWay.has(`${node.id}:text`);
+    const w = eff('fontWeight');
+    const txt = [
+      has('fontFamily') ? (claimed.add('fontFamily'), h('select', { class: 'wide', onchange: (e) => set('fontFamily', e.target.value || undefined) }, h('option', { value: '' }, `App font${eff('fontFamily') === undefined ? '' : ''}`), ...[...fonts].map((f) => h('option', { value: f, selected: own('fontFamily') === f || (own('fontFamily') === undefined && inherit.fontFamily === f) }, f.replace(/^var\(--font_?/, 'Token ').replace(/\)$/, ''))))) : null,
+      h('div', { class: 'two' },
+        has('fontWeight') ? (claimed.add('fontWeight'), h('select', { title: 'Weight', onchange: (e) => set('fontWeight', e.target.value === '' ? undefined : e.target.value) }, h('option', { value: '' }, '(default)'), ...(typeof w === 'string' && /^var\(/.test(w) ? [h('option', { value: w, selected: true }, showLen(w))] : []), ...WEIGHTS.map(([k, l]) => h('option', { value: k, selected: String(w) === String(k) }, `${k} (${l})`)))) : h('span'),
+        has('fontSize') ? len('fontSize', { title: 'Font size' }) : h('span')),
+      h('div', { class: 'two' },
+        has('textAlignX') ? seg('textAlignX', [['left', 'Left'], ['center', 'Centre'], ['right', 'Right']], 'self') : h('span'),
+        h('div', { class: 'segctl' },
+          has('fontWeight') ? h('button', { class: 'quiet', title: 'Bold', 'aria-pressed': Number(w) >= 700, onclick: () => set('fontWeight', Number(w) >= 700 ? undefined : 700) }, h('b', {}, 'B')) : null,
+          has('fontStyle') ? (claimed.add('fontStyle'), h('button', { class: 'quiet', title: 'Italic', 'aria-pressed': eff('fontStyle') === 'italic', onclick: () => set('fontStyle', eff('fontStyle') === 'italic' ? undefined : 'italic') }, h('i', {}, 'I'))) : null,
+          h('button', { class: 'quiet', title: textMore ? 'Fewer text settings' : 'Line height, letter spacing, case', 'aria-pressed': textMore, onclick: () => { textMore ? fourWay.delete(`${node.id}:text`) : fourWay.add(`${node.id}:text`); renderProps(); } }, '⋯'))),
+      has('color') ? chip('color') : null];
+    if (textMore) {
+      if (has('textAlignY')) txt.push(row('Up / down', seg('textAlignY', [['top', 'Top'], ['center', 'Middle'], ['bottom', 'Bottom']], 'self', 'y')));
+      if (has('lineHeight')) txt.push(row('Line height', num('lineHeight', { place: 'Auto' })));
+      if (has('letterSpacing')) txt.push(row('Letter spacing', len('letterSpacing', { place: 'Auto' })));
+      if (has('textTransform')) txt.push(row('Case', choice('textTransform', [['none', 'As typed'], ['uppercase', 'UPPERCASE'], ['lowercase', 'lowercase'], ['capitalize', 'Capitalised']])));
+      if (has('fontVariantNumeric')) txt.push(row('Numerals', choice('fontVariantNumeric', [['normal', 'Proportional'], ['tabular-nums', 'Even width']])));
+      if (has('textStyle')) txt.push(plain('textStyle'));
+    } else ['textAlignY', 'lineHeight', 'letterSpacing', 'textTransform', 'fontVariantNumeric', 'textStyle'].forEach((n) => has(n) && claimed.add(n));
+    add(section('Text', txt));
+  }
+
+  // Appearance (closed, as Bubble has it): opacity, rotation, the corners
+  const look = [];
+  if (has('opacity')) look.push(row('Opacity', num('opacity', { scale: 100, unit: '%', glyph: '◐' })));
+  if (has('transformRotation')) look.push(row('Rotation', num('transformRotation', { unit: '°', glyph: '↻' })));
+  if (has('borderRadius')) {
+    const key = `${node.id}:radius`, corners = ['borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius'];
+    const open = fourWay.has(key) || corners.some((c) => own(c) !== undefined);
+    const toggle = h('button', { class: 'quiet expand', title: open ? 'One radius' : 'Each corner', onclick: () => { open ? fourWay.delete(key) : fourWay.add(key); renderProps(); } }, open ? '⊟' : '⛶');
+    look.push(open ? row('Radius', h('div', { class: 'four' }, ...corners.map((c, i) => len(c, { glyph: ['⌜', '⌝', '⌞', '⌟'][i] }))), toggle) : row('Radius', len('borderRadius', { glyph: '⌜' }), toggle));
+    corners.forEach((c) => has(c) && claimed.add(c));
+  }
+  if (has('mixBlendMode')) look.push(row('Blend', choice('mixBlendMode', (P.mixBlendMode.type.enums || []).map((o) => [o.value ?? o, String(o.label ?? o)]))));
+  for (const n of ['backdropBlur', 'transformScale', 'zIndex']) if (has(n)) look.push(row(P[n].displayName || n, num(n)));
+  if (secOpen.Appearance === false && ['opacity', 'transformRotation', 'borderRadius'].some((n) => own(n) !== undefined && own(n) !== 0 && own(n) !== 1)) secOpen.Appearance = true;
+  add(section('Appearance', look));
+
+  // Border, Background, Shadow: added and removed whole
+  if (has('borderStyle')) {
+    const sides = ['Top', 'Right', 'Bottom', 'Left'];
+    const allBorder = ['borderStyle', 'borderWidth', 'borderColor', ...sides.flatMap((s) => [`border${s}Style`, `border${s}Width`, `border${s}Color`])].filter(has);
+    allBorder.forEach((n) => claimed.add(n));
+    const present = (eff('borderStyle') && eff('borderStyle') !== 'none') || sides.some((s) => own(`border${s}Style`) && own(`border${s}Style`) !== 'none');
+    const key = `${node.id}:border`, each = fourWay.has(key) || sides.some((s) => own(`border${s}Style`) !== undefined || own(`border${s}Width`) !== undefined);
+    const toggle = h('button', { class: 'quiet expand', title: each ? 'One border' : 'Each side', onclick: () => { each ? fourWay.delete(key) : fourWay.add(key); renderProps(); } }, each ? '⊟' : '⛶');
+    const styles = [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted'], ['none', 'None']];
+    const body = each
+      ? sides.map((s) => h('div', { class: 'side' }, h('div', { class: 'sub' }, s), h('div', { class: 'two' }, choice(`border${s}Style`, styles, { blank: '(as all)' }), len(`border${s}Width`)), chip(`border${s}Color`)))
+      : [h('div', { class: 'two' }, choice('borderStyle', styles), len('borderWidth')), chip('borderColor')];
+    add(section('Border', [...body, h('div', { class: 'endrow' }, toggle)], { present, empty: 'No border added yet.',
+      add: () => setMany({ borderStyle: 'solid', borderWidth: { value: 1, unit: 'px' }, borderColor: '#6B6B6B' }),
+      remove: () => setMany(Object.fromEntries(allBorder.map((n) => [n, n === 'borderStyle' && inherit.borderStyle && inherit.borderStyle !== 'none' ? 'none' : undefined]))) }));
+  }
+  if (has('backgroundColor')) {
+    const bgs = ['backgroundColor', 'backgroundGradient', 'backgroundImage', 'backgroundPosition', 'backgroundSize'].filter(has);
+    bgs.forEach((n) => claimed.add(n));
+    const bg = eff('backgroundColor');
+    const present = (bg && bg !== 'transparent') || !!eff('backgroundGradient') || !!eff('backgroundImage') || wired('backgroundColor');
+    const body = [chip('backgroundColor')];
+    if (eff('backgroundGradient') || wired('backgroundGradient')) body.push(plain('backgroundGradient'));
+    if (eff('backgroundImage') || wired('backgroundImage')) body.push(plain('backgroundImage'), plain('backgroundSize'), plain('backgroundPosition'));
+    add(section('Background', body, { present, empty: 'No background added yet.',
+      add: () => set('backgroundColor', '#FFFFFF'),
+      remove: () => setMany(Object.fromEntries(bgs.map((n) => [n, n === 'backgroundColor' && inherit.backgroundColor && inherit.backgroundColor !== 'transparent' ? 'transparent' : undefined]))) }));
+  }
+  if (has('boxShadowEnabled')) {
+    const sh = ['boxShadowEnabled', 'boxShadowSource', 'boxShadowToken', 'boxShadowOffsetX', 'boxShadowOffsetY', 'boxShadowBlurRadius', 'boxShadowSpreadRadius', 'boxShadowInset', 'boxShadowColor'].filter(has);
+    sh.forEach((n) => claimed.add(n));
+    const present = !!eff('boxShadowEnabled');
+    const v = (n) => showLen(eff(n)) || '0';
+    claimed.add('boxShadowInset');
+    const inset = h('select', { onchange: (e) => set('boxShadowInset', e.target.value === 'inside' ? true : undefined) }, h('option', { value: 'outside' }, 'Outside'), h('option', { value: 'inside', selected: !!eff('boxShadowInset') }, 'Inside'));
+    const body = [h('div', { class: 'two' }, inset, h('span', { class: 'shsum' }, `${v('boxShadowOffsetX')}, ${v('boxShadowOffsetY')}, ${v('boxShadowBlurRadius')}px, ${v('boxShadowSpreadRadius')}px`)),
+      h('div', { class: 'two' }, len('boxShadowOffsetX', { glyph: 'X' }), len('boxShadowOffsetY', { glyph: 'Y' })),
+      h('div', { class: 'two' }, len('boxShadowBlurRadius', { glyph: '◌', title: 'Blur' }), len('boxShadowSpreadRadius', { glyph: '◎', title: 'Spread' })),
+      chip('boxShadowColor')];
+    add(section('Shadow', body, { present, empty: 'No shadow added yet.', add: () => set('boxShadowEnabled', true), remove: () => setMany(Object.fromEntries(sh.map((n) => [n, undefined]))) }));
+  }
+
+  // everything no section claimed, with the plain field — nothing a node has is out of reach
+  for (const n of INTERACTION_PORTS) claimed.add(n);
+  const rest = new Map();
+  for (const p of ports) if (!claimed.has(p.name) && !INTERACTION_GROUPS.has(p.group)) { if (!rest.has(p.group || 'General')) rest.set(p.group || 'General', []); rest.get(p.group || 'General').push(p); }
+  if (rest.size) add(section('More', [...rest].flatMap(([g, ps]) => [h('div', { class: 'sub' }, g), ...ps.map((p) => fieldFor(node, p, params[p.name], wiredIn[p.name]))])));
+}
+/** Bubble's colour popover: a picker, the hex and its opacity, the app's tokens, the colours the app already uses. */
+function colourPicker(e, current, pick) {
+  closeMenu('.menu');
+  const menu = popover(e, 'colours');
+  const cn = colourName(current);
+  const hex = /^#[0-9A-F]{6}$/.test(cn.name) ? cn.name : '#000000';
+  let alpha = cn.alpha ? parseInt(cn.alpha, 10) : 100;
+  const wheel = h('input', { type: 'color', value: hex.toLowerCase(), oninput: (ev) => { hexIn.value = ev.target.value.toUpperCase(); pick(hexAlpha(ev.target.value, alpha)); } });
+  const hexIn = h('input', { type: 'text', value: hex, onchange: (ev) => { const v = ev.target.value.trim(); if (/^#?[0-9a-f]{6}$/i.test(v)) pick(hexAlpha(v.startsWith('#') ? v : '#' + v, alpha)); else if (v) pick(v); } });
+  const alphaIn = h('input', { type: 'text', value: `${alpha}`, title: 'Opacity, %', onchange: (ev) => { alpha = Math.max(0, Math.min(100, Number(ev.target.value) || 0)); pick(hexAlpha(hexIn.value, alpha)); } });
+  menu.append(h('div', { class: 'cpick' }, wheel, hexIn, h('span', { class: 'len' }, alphaIn, h('span', { class: 'u' }, '%'))));
+  const grid = (title, list) => { if (!list.length) return; menu.append(h('div', { class: 'hint' }, title)); menu.append(h('div', { class: 'cgrid' }, ...list.map(([v, name]) => h('button', { class: `cell${v === current ? ' on' : ''}`, title: name, style: `background:${resolveColor(v)}`, onclick: () => { closeMenu('.menu'); pick(v); } })))); };
+  // the colours this page already uses first (an imported app's palette), then every colour token the app has
+  const used = new Map();
+  for (const n of nodes) for (const [k, v] of Object.entries(n.parameters || {})) if (/[cC]olor$/.test(k) && typeof v === 'string' && v !== 'transparent') used.set(v, (used.get(v) || 0) + 1);
+  grid('Used on this page', [...used].sort((a, b) => b[1] - a[1]).map(([v, c]) => [v, `${colourName(v).name}${colourName(v).alpha && colourName(v).alpha !== '100%' ? ' ' + colourName(v).alpha : ''} · ${c}×`]));
+  const toks = new Set(tokensOf('color')); for (const [k, v] of Object.entries(appVars())) if (isColourText(v) && !/-rgb$/.test(k)) toks.add(k);
+  grid('Tokens', [...toks].map((t) => [`var(${t})`, colourName(`var(${t})`).name]));
+  menu.append(h('div', { style: 'display:flex;justify-content:flex-end;padding-top:6px' }, h('button', { class: 'tiny quiet', onclick: () => { closeMenu('.menu'); pick(undefined); } }, 'Clear')));
+  document.body.append(menu); dismissOnOutside(menu);
+}
 function renderProps() {
-  const right = $('right'); right.innerHTML = '';
+  const right = $('right');
+  // a redraw keeps the focus on the same control (tabbing through four sides, a value just chosen)
+  const a = document.activeElement, focusKey = a && right.contains(a) && a.matches('input,select,textarea') ? [a.closest('[title]')?.title, a.tagName, [...right.querySelectorAll(a.tagName)].filter((x) => x.closest('[title]')?.title === a.closest('[title]')?.title).indexOf(a)] : null;
+  renderPropsInto(right);
+  if (focusKey) { const again = [...right.querySelectorAll(focusKey[1])].filter((x) => x.closest('[title]')?.title === focusKey[0])[focusKey[2]]; if (again) { again.focus(); again.select?.(); } }
+}
+function renderPropsInto(right) {
+  right.innerHTML = '';
   if (selItem) return renderItem(right);
   if (!sel || !byId[sel]) { right.append(h('div', { class: 'empty' }, 'Click an element in the page to see its properties.')); return; }
   const node = byId[sel];
@@ -1272,6 +1684,7 @@ function renderProps() {
     sel !== pageRootId() ? h('button', { class: 'quiet danger', title: 'Delete element', onclick: () => removeNode(sel) }, icon('trash')) : h('span'),
     h('div', { class: 'type' }, `${typeName(node.type)}${node.parent !== undefined ? ` · in ${labelOf(node.parent)}` : ''}`));
   right.append(head);
+  if (isVisualType(node.type) && !node.type.startsWith('/') && node.type !== 'Page') return renderBubblePanel(right, node);
   const wrap = h('div', { class: 'props' });
   // the style it wears (a variant of its type), as Bubble's style dropdown at the top of the element
   const mine = variantsFor(node.type);
@@ -1397,7 +1810,7 @@ function colourMenu(e, current, pick) {
 /** STU-051 (spike): margin and padding as one box — margin around, padding inside — each side a length or a token's name. */
 const MP_SIDES = ['Top', 'Right', 'Bottom', 'Left'];
 const showLen = (v) => v == null ? '' : typeof v === 'object' ? (v.unit && v.unit !== 'px' ? `${v.value}${v.unit}` : String(v.value)) : typeof v === 'string' && /var\(--([\w-]+)/.test(v) ? v.match(/var\(--([\w-]+)/)[1] : String(v);
-const readLen = (t) => { t = t.trim(); if (!t) return undefined; if (/^var\(/.test(t)) return t; if (/^--/.test(t)) return `var(${t})`; const m = t.match(/^(-?[\d.]+)\s*(px|%)?$/); if (m) return { value: Number(m[1]), unit: m[2] || 'px' }; return tokensOf('').includes(`--${t}`) ? `var(--${t})` : null; };
+const readLen = (t) => { t = t.trim(); if (!t) return undefined; if (/^var\(/.test(t)) return t; if (/^--/.test(t)) return `var(${t})`; const m = t.match(/^(-?[\d.]+)\s*(px|%)?$/); if (m) return { value: Number(m[1]), unit: m[2] || 'px' }; return tokensOf('').includes(`--${t}`) || appVars()[`--${t}`] !== undefined ? `var(--${t})` : null; };
 function marginPaddingBox(node, ports) {
   const params = node.parameters || {};
   const has = (name) => ports.some((p) => p.name === name);
@@ -1497,9 +1910,21 @@ const closeMenu = (selector = '.menu') => { for (const m of document.querySelect
 function resolveColor(v) {
   if (!v) return 'transparent';
   const m = String(v).match(/^var\((--[\w-]+)\)/);
-  if (m) { const t = (store.readProjectFile()?.metadata?.designTokens?.customTokens || []).find((t) => t.name === m[1]); return t?.value || '#eee'; }
+  // what the app draws first (a dark theme sets other values than the project file lists), then the project file
+  if (m) { const t = (store.readProjectFile()?.metadata?.designTokens?.customTokens || []).find((t) => t.name === m[1]); return appVars()[m[1]] || t?.value || '#eee'; }
   return v;
 }
+/** The app's tokens as the app draws them: every CSS variable on the page it runs in (NodeGX's own tokens and the
+    project's), name → value. A token the project file does not list (`--surface`, `--space-2`) is still the app's. */
+function appVars() {
+  const doc = preview?.frame?.contentDocument; if (!doc?.documentElement) return {};
+  const cs = getComputedStyle(doc.documentElement), out = {};
+  const take = (style) => { for (const k of style) if (k.startsWith('--')) out[k] = cs.getPropertyValue(k).trim(); };
+  take(doc.documentElement.style);
+  for (const sh of doc.styleSheets) { let rules; try { rules = sh.cssRules; } catch { continue; } for (const r of rules) if (r.style && /(^|,)\s*(:root|html)\b/.test(r.selectorText || '')) take(r.style); }
+  return out;
+}
+const isColourText = (v) => /^(#[0-9a-f]{3,8}|rgba?\(|hsla?\(|oklch\(|transparent$)/i.test(String(v).trim());
 function renderDatalists() {
   for (const old of document.querySelectorAll('datalist')) old.remove();
   const dl = (id, names) => document.body.append(h('datalist', { id }, ...names.map((n) => h('option', { value: `var(${n})` }))));

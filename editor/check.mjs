@@ -163,6 +163,8 @@ try {
   {
     // a custom state on the card, with a default (the card is picked in the tree: its centre on the page is the Email input)
     await clickText('#tree .row', 'Sign-in card'); await wait(350);
+    // custom states are on the element's Interaction tab, as Bubble keeps what an element does (STU-051)
+    await clickText('#right .ptabs button', 'Interaction'); await wait(250);
     let n0 = await shows();
     await clickText('#right .states button', 'New state'); await rebuilt(n0);
     const v = onDisk(SIGN + 'nodes.json').nodes.find((n) => n.type === 'Variable2' && n.metadata?.customState?.of === card);
@@ -173,6 +175,7 @@ try {
     await b.type('Hello'); await b.evaluate(`document.querySelector('#right .states td:nth-child(3) input').dispatchEvent(new Event('change'))`); await rebuilt(n0);
     ok(onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === stateId)?.parameters?.value === 'Hello', 'its default value is the Variable\'s value parameter on disk');
     await shot('design-states');
+    await clickText('#right .ptabs button', 'Visual'); await wait(250);
   }
   {
     // the composer: the title's Text = the card's state + " world", as a chip in the mixed view, then JavaScript typed beside it
@@ -330,6 +333,92 @@ try {
     await shot('styles');
     await b.clickSel('[data-tab=design]'); await wait(300); await shot('design');
     await b.clickSel('[data-tab=workflow]'); await wait(300); await shot('workflow');
+  }
+  console.log('check: the panel as Bubble draws it, the page as its parts (STU-051, STU-050)');
+  {
+    await b.clickSel('[data-tab=design]'); await wait(300);
+    const bySign = (label) => sign.nodes.nodes.find((n) => n.label === label).id;
+    const buttons = bySign('Buttons'), email = bySign('Email');
+    const inFrame = (id, prop) => b.evaluate(`__ob.preview.frame.contentWindow.getComputedStyle(__ob.preview.elementsOf(${JSON.stringify(id)})[0])[${JSON.stringify(prop)}]`);
+    const sec = (title) => `[...document.querySelectorAll('#right .sec2')].find(d => d.querySelector('summary').textContent.startsWith(${JSON.stringify(title)}))`;
+    const rowIn = (label) => `[...document.querySelectorAll('#right .sec2 .field')].find(f => f.querySelector('label')?.textContent === ${JSON.stringify(label)})`;
+    // the shape: Bubble's sections in Bubble's order, and outside Content, Configure and More not one bare text field
+    const shape = async () => JSON.parse(await b.evaluate(`JSON.stringify({ secs: [...document.querySelectorAll('#right .sec2 > summary')].map(s => s.firstChild.textContent), bare: [...document.querySelectorAll('#right .sec2 input[type=text], #right .sec2 textarea')].filter(i => !i.closest('.len') && !['Content', 'Configure', 'More'].includes(i.closest('.sec2').querySelector('summary').firstChild.textContent)).map(i => i.closest('.field')?.querySelector('label')?.textContent || i.placeholder) })`));
+    const order = ['Content', 'Configure', 'Size', 'Layout', 'Style', 'Text', 'Appearance', 'Border', 'Background', 'Shadow', 'More'];
+    for (const [id, what] of [[card, 'a Group'], [title1, 'a Text'], [signInBtn, 'a Button'], [email, 'a Text Input']]) {
+      if (id === card) await clickText('#tree .row', 'Sign-in card'); else await select(id);
+      await wait(400);
+      const sh = await shape();
+      ok(sh.secs.length >= 5 && sh.secs.every((t, i, a) => i === 0 || order.indexOf(a[i - 1]) < order.indexOf(t)) && sh.bare.length === 0, `${what}: Bubble's sections in Bubble's order, every value outside Content and More edited through a typed control`, sh);
+    }
+    // a token-valued colour reads as the token's name, and its swatch is the colour the app draws
+    await clickText('#tree .row', 'Sign-in card'); await wait(400);
+    const bg = JSON.parse(await b.evaluate(`JSON.stringify({ name: ${sec('Background')}.querySelector('.cname').textContent, swatch: getComputedStyle(${sec('Background')}.querySelector('.swatch')).backgroundColor })`));
+    ok(bg.name === 'Surface' && bg.swatch === await inFrame(card, 'backgroundColor'), 'the card\'s background var(--surface) reads "Surface", its swatch the colour the app draws', { ...bg, drawn: await inFrame(card, 'backgroundColor') });
+    const padTxt = await b.evaluate(`${rowIn('Padding')}.querySelector('input').value`);
+    ok(padTxt === 'space-6', 'a spacing token reads as its name', padTxt);
+    await shot('panel-group');
+    // the padding pair ↔ writes left and right
+    let n0 = await shows();
+    await b.evaluate(`(() => { const i = ${rowIn('Padding')}.querySelectorAll('.two input')[1]; i.value = '24'; i.dispatchEvent(new Event('change')); })()`); await rebuilt(n0);
+    let cp = onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === card).parameters;
+    ok(cp.paddingLeft?.value === 24 && cp.paddingRight?.value === 24 && cp.paddingTop === 'var(--space-6)' && (await inFrame(card, 'paddingLeft')) === '24px', 'Padding ↔ 24 writes left and right, keeps top, and the app draws it', { l: cp.paddingLeft, t: cp.paddingTop });
+    n0 = await shows();
+    await b.evaluate(`(() => { const i = ${rowIn('Padding')}.querySelectorAll('.two input')[1]; i.value = 'space-6'; i.dispatchEvent(new Event('change')); })()`); await rebuilt(n0);
+    cp = onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === card).parameters;
+    ok(cp.paddingLeft === 'var(--space-6)' && cp.paddingRight === 'var(--space-6)', 'a token typed by its name is written as the token', cp.paddingLeft);
+    // Border, added and removed whole, on the button row
+    await b.evaluate(`(() => { const r = [...document.querySelectorAll('#tree .row')].find(e => e.textContent.startsWith('Sign-in card')); const c = r.querySelector('.chev'); if (!c.classList.contains('open')) c.click(); })()`); await wait(300);
+    await clickText('#tree .row', 'Buttons'); await wait(400);
+    n0 = await shows();
+    await b.evaluate(`${sec('Border')}.querySelector('summary .acts button').click()`); await rebuilt(n0);
+    let bp = onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === buttons).parameters;
+    ok(bp.borderStyle === 'solid' && bp.borderWidth?.value === 1 && (await inFrame(buttons, 'borderTopWidth')) === '1px', '+ on Border adds a solid 1 px border the app draws', { style: bp.borderStyle, drawn: await inFrame(buttons, 'borderTopWidth') });
+
+    n0 = await shows();
+    await b.evaluate(`${sec('Border')}.querySelector('summary .acts button').click()`); await rebuilt(n0);
+    bp = onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === buttons).parameters;
+    ok(bp.borderStyle === undefined && bp.borderWidth === undefined && (await inFrame(buttons, 'borderTopWidth')) === '0px', '− takes it off the file and the app', { style: bp.borderStyle });
+    // the container layout, Row → Column → Row
+    for (const want of ['column', 'row']) {
+      n0 = await shows();
+      await b.evaluate(`[...${sec('Layout')}.querySelectorAll('.segctl button')].find(x => x.textContent.includes(${JSON.stringify(want === 'row' ? 'Row' : 'Column')})).click()`); await rebuilt(n0);
+      ok(onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === buttons).parameters.flexDirection === want && (await inFrame(buttons, 'flexDirection')) === want, `Container layout → ${want} is written and drawn`);
+    }
+    // Width → Fill on a button: 100 %, and the app draws it wider
+    await select(createBtn);
+    const w0 = await centreOf(createBtn);
+    n0 = await shows();
+    await b.evaluate(`(() => { const s = ${rowIn('Width')}.querySelector('select'); s.value = 'fill'; s.dispatchEvent(new Event('change')); })()`); await rebuilt(n0);
+    const w1 = await centreOf(createBtn), cw = onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === createBtn).parameters.width;
+    ok(cw?.value === 100 && cw?.unit === '%' && w1.w > w0.w, 'Width → Fill writes 100 % and the app draws the button wider', { width: cw, before: w0.w, after: w1.w });
+    // a colour from the app's tokens: written as the token, drawn as it
+    await select(title1);
+    await b.evaluate(`${sec('Text')}.querySelector('.cbtn').scrollIntoView({ block: 'center' })`); await wait(150);
+    await b.clickSel('#right .sec2 .cbtn'); await wait(300);
+    const tokenCells = await b.evaluate(`[...[...document.querySelectorAll('.menu.colours .cgrid')].find(g => g.previousElementSibling?.textContent === 'Tokens')?.querySelectorAll('.cell') ?? []].map(c => c.title)`);
+    n0 = await shows();
+    await b.evaluate(`[...document.querySelectorAll('.menu.colours .cgrid .cell')].find(c => c.title === 'Primary').click()`); await rebuilt(n0);
+    const tColour = onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === title1).parameters.color;
+    const primary = await b.evaluate(`getComputedStyle(__ob.preview.frame.contentDocument.documentElement).getPropertyValue('--primary').trim()`);
+    const drawnTitle = await inFrame(title1, 'color');
+    ok(tokenCells.includes('Primary') && tokenCells.includes('Surface') && tColour === 'var(--primary)' && (await b.evaluate(`${sec('Text')}.querySelector('.cname').textContent`)) === 'Primary', 'the picker lists the app\'s tokens by name (its own and NodeGX\'s); picking Primary writes var(--primary) and the chip reads Primary', { cells: tokenCells.length, written: tColour, primary, drawn: drawnTitle });
+    n0 = await shows(); await b.evaluate(`(() => { const s = ${sec('Text')}.querySelector('.cbtn'); s.click(); })()`); await wait(250);
+    await b.evaluate(`[...document.querySelectorAll('.menu.colours .cgrid .cell')].find(c => c.title === 'Foreground').click()`); await rebuilt(n0);
+    // the Interaction tab: the Sign in button's workflow is listed there, and opens in Workflow
+    await select(signInBtn);
+    await clickText('#right .ptabs button', 'Interaction'); await wait(250);
+    const wfs = await b.evaluate(`[...document.querySelectorAll('#right .row.wf')].map(r => r.textContent)`);
+    ok(wfs.length >= 1 && wfs.every((t) => /^When /.test(t)), 'the Interaction tab lists the workflows that start at the element', wfs);
+    await clickText('#right .ptabs button', 'Visual'); await wait(250);
+    // STU-050: the page as its parts; a part opened lists only what it holds
+    const rest = await b.evaluate(`document.querySelectorAll('#tree .row').length`);
+    await b.evaluate(`(() => { const r = [...document.querySelectorAll('#tree .row')].find(e => e.textContent.startsWith('Sign-in card')); r.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); })()`); await wait(300);
+    const inside = JSON.parse(await b.evaluate(`JSON.stringify({ crumbs: !!document.querySelector('#tree .crumbs'), rows: [...document.querySelectorAll('#tree .row')].map(r => r.querySelector('.seg')?.textContent) })`));
+    ok(inside.crumbs && inside.rows[0] === 'Sign-in card' && !inside.rows.includes('Top right'), 'double-clicking a part lists only what it holds, with the way back', inside);
+    await b.evaluate(`document.querySelector('#tree .crumbs button').click()`); await wait(300);
+    ok((await b.evaluate(`!document.querySelector('#tree .crumbs')`)), '← goes back to the whole page', rest);
+    ok((b.problems || []).filter((p) => !/Invalid connection|doesn't have a port|Failed to load resource|fonts\.g|^\[noodl\]/.test(p)).length === 0, 'no exceptions while the panel was used', b.problems.slice(-3));
   }
   console.log('check: files changed outside Studio (STU-002)');
   {
