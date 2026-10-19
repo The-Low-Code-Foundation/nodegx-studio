@@ -1,7 +1,7 @@
 Continue NodeGX Studio (~/vscode_projects/nodegx-studio, public, GPL-3.0; plan of record: docs/SCOPE.md). Edit in
 this repo, not OpenNoodl. Gates run on Node 22 (`~/.nvm/versions/node/v22.22.0/bin`): `npm run check:rules` (20/20),
 `check:phrases` (85/85), `check:dictionary` (PASS 65 covered / 2 wrong filed / 22 missing / 5 none), `check:editor`
-(153/153), `check:pagedata` (33/33), `check:reusable` (12/12), `check:import` (74/74 with the template bundle:
+(159/159), `check:pagedata` (33/33), `check:reusable` (12/12), `check:import` (74/74 with the template bundle:
 import/exports/template is present, gitignored), `check:app` (34/34). Read on 2026-10-19: editor, import and
 dictionary on the code at be15e66 / b8a21de (s7); rules, phrases, pagedata, reusable and app in s6 at 1334249, and
 none of them reads app-to-nodegx.mjs or studio.html, the only code changed since. Kit pieces and the phrasebook
@@ -10,7 +10,18 @@ another session's jest/vitest to finish first; `check:editor` takes about 4 minu
 docs/look/s2-*.png (restore the tracked ones after: `git ls-files -m docs/look | xargs git checkout --`). The server
 reads studio.html on every request: do not edit it while a gate runs (serve.mjs is read once at the gate's start).
 
-Where it stands (2026-10-19, s7; main is ahead of GitHub, unpushed until Richard says). Built this session (SCOPE.md):
+Built in s8 (2026-10-19, de7892e): M3's first two, STU-020 and STU-021 (SCOPE.md). A ⚡ on every element with a
+workflow, on the canvas and in the element list; hover names each event's steps in order; a click opens that event's card
+alone, full screen; ← <element> or Esc returns to Design with it selected. `check:editor` 159/159 on de7892e; mutant
+(summary reversed) 158/159. Not mutant-tested: the "reaches a step" rule (no signal wired only into values on the gate's
+page). Fixed on the way: a draft event outlived its page and threw on a reusable's canvas. No pictures taken for Richard
+yet (`--shots` writes docs/look/s2-workflow-card.png, new).
+
+Next buildable while Richard is away: STU-023 (names from steps; a renamed card keeps its name — decide where the name
+lives, e.g. the element's metadata per port), then STU-022 (the tree as the index, filters by effect / trigger, search
+over step names and targets), then STU-024 (importer merges split workflows; needs a fixture with overlapping lanes).
+
+Where it stood after s7 (2026-10-19, s7; main is ahead of GitHub, unpushed until Richard says). Built this session (SCOPE.md):
 - STU-053-DROPDOWNVALUE fixed: "Dropdown's value's name" looks the chosen record up among the dropdown's choices (one
   Expression per dropdown) and reads the field; "Dropdown's value" alone still wires the id. Mutant 73/74.
 - Components that draw nothing are no longer reusables: the todo template's Commands and Logic say "visual" and draw
