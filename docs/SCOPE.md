@@ -88,6 +88,39 @@ These two come before M2's remaining work and M3: he will play-test data in a se
 | STU-050 | **A condensed element list, grouped into components.** The page's list shows the page as a few named parts (its components and top-level groups), each opening into its own elements, the way the NodeGX editor's component tree does, instead of every element of the page in one tree. A group of elements can be made into a component from the list. | on the converted template app the page list fits without scrolling at 1000 px tall, every element is still reachable in two clicks, and "make a component from this group" writes a component the app draws the same |
 | STU-051 | **A properties panel with real controls.** Typed controls in place of free text: sizes with units, colours and spacing from the project's tokens, alignment and layout pickers, fonts, images, enums as choices, grouped and ordered the way Bubble's panel is (Appearance / Layout / Conditional) and the NodeGX editor's is. Reuse the NodeGX editor's property editor types where they can run in Studio's page; Bubble's own panel (Richard offered screenshots of every element's) is the guide for grouping. | every property of a Group, Text, Button, Input and Image on the template app is edited through a typed control, and a token-valued colour reads as the token's name |
 
+**Looked (2026-10-19, s2), on a copy of the template app; pictures in `docs/look/playtest-1/`.** The page is one
+`Page` holding 208 elements up to 10 deep: 9 named sections (Header, Hero, Color Data, Benefit, Feature, Pricing and
+Stuff, Contact Holder, Footer, Floating Mobile Nav Menu), 8 of them a single "Group Margin" wrapper around the content.
+The element list drew all 209 rows: 5,944 px against 956 px of room, six screens. The panel drew 90 rows for a Group
+(2,634 px), 85 for a Button, 72 for an Image, 54 for a Text (2,679 px): the controls are partly typed already (enums,
+number + unit, a swatch), but every field carried a second "Insert dynamic data" line, margins and padding were eight
+plain text fields, Border Style ×5 and Corner Radius ×5 are five same-named rows each (one per side, not said), two
+groups are both called "Style", colours read `rgba(9, 23, 71, 1)`. The template has **no design tokens** (its Bubble
+export predates colour tokens; the importer already turns `color_tokens` into project tokens, `app-to-nodegx.mjs:91`)
+and **no Input element**, so STU-051's "token reads as its name" and "Input" need another app or an added element.
+Defects found: a multi-line text (3 on the page) shown in a one-line field, which drops the line break on the first
+keystroke; an icon's `{ class, code }` source shown as `[object Object]`; no list in Studio ever showed its selection
+(`h()` wrote `aria-selected=""`) — fixed on main, 6229716.
+
+**What of the NodeGX editor can come.** None of its property editor or component tree runs in Studio's page: every
+control is React + SCSS modules + `@noodl-core-ui` (whose `Icon` needs webpack's `require.context`), wired to
+`ProjectModel` / `UndoQueue` / `EventDispatcher`. Its pure modules can be bundled as an ES module and used as they are:
+`propertyPanelTiers` (group tiers and order: basic groups `General` first, then Dimensions, Layout, Alignment, …, the
+"Advanced CSS" groups folded into one), `propertyPanelFilter` (a filter box from 12 rows), `propertyPanelHints`,
+`model/sizeModeAxes`, `model/alignRows` + `alignToolsIcons` (SVG strings), `model/colorField`,
+`components/marginPaddingEdit` (one import to cut), `readNumberFieldEdit` (copy out of its React file),
+`nodegx-project-contract/tokens.ts` (`DEFAULT_TOKENS`), and for the list `layersTree`, `componentSections`,
+`componentUsage`, `folderDisplay`. The controls themselves are re-made in Studio's DOM.
+
+**The spike (branch `spike/stu-050-051`, gates 77/33/34 green), shown to Richard before the build.** The list opens on
+the page's 9 parts (10 rows, 274 px); a wrapper with one container child folds into its parent's row as a "› n" mark;
+a row says what it holds (a text's words, how many elements); clicking an element in the page opens the tree to it.
+By the tree alone 89 of 209 elements are two opens or fewer away and the deepest six — "two clicks" is not met by
+the tree, only by the page. The panel: the ⚡ at the row's end (Text panel 2,679 → 1,981 px), a text box that keeps
+line breaks, an icon's name, font weight by name, the app's colours (13, most used first) behind the swatch, margin and
+padding as one box. Not in it: "make a component from this group" (it needs STU-015, opening a reusable on its own),
+the grouping (waits for Richard's Bubble screenshots), size-mode and alignment pickers, fonts, images.
+
 ---
 
 ## M1 — The desktop app
