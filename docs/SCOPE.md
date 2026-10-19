@@ -121,6 +121,52 @@ line breaks, an icon's name, font weight by name, the app's colours (13, most us
 padding as one box. Not in it: "make a component from this group" (it needs STU-015, opening a reusable on its own),
 the grouping (waits for Richard's Bubble screenshots), size-mode and alignment pickers, fonts, images.
 
+**Richard's answers (2026-10-19).** (1) The list: deep Bubble trees end up showing only the first letter of a name;
+he wants the NodeGX way — click into a part and see only its inside, "as an option". (2) Making components: the
+importer should group elements into components "but not too aggressively"; otherwise Claude Code through the MCP
+server tidies up after an import (which it will have to do anyway, remaking the plugins). (3) 27 screenshots of
+Bubble's new property panel (GroupFocus, FloatingGroup, Popup, Image, Dropdown, Input, RepeatingGroup, Button, Text;
+the colour, border, shadow, style, choices and auto-binding popovers; the Conditional and Interaction tabs). Not
+committed (they are Bubble's UI); what they say is here.
+
+**Bubble's panel, read off the screenshots.** Header: the element's icon and name, a ⋯ menu. Tabs: Visual,
+Interaction (count badge), Conditional (count badge). Visual, in this order: **Content** (per type: Text's text box
+with "Add dynamic ⌘/"; Button's type and text; Image's "Select image" popover — upload, generate with AI, crop,
+search free, ALT; Input's placeholder, auto-binding, initial content; Dropdown's placeholder, auto-binding, choices
+Static/Dynamic, default; a container's type of content and data source), **Configure** (per type: Text's links /
+BBCode / nofollow toggles; Input's format, character limit, autofill, password check; RepeatingGroup's scroll
+direction, rows/columns fixed/fit/fill, min sizes, separators, masonry; Popup's grayout colour and blur; FloatingGroup's
+float relative to and z-index; GroupFocus's reference element and offsets), **Size** (width and height each Fixed /
+Fill / Fit and a value; min and max beside), **Layout** (Position X/Y in a fixed parent; Alignment; Container layout
+Column / Row / Align / Fixed; Container alignment, five icons; Spacing: gap, padding ↕ ↔ ⛶, margin ↕ ↔ ⛶), **Style**
+(the style chip, edit, detach, "Overridden"), **Text** (font, weight "400 (Regular)", size, align L/C/R, B I U, ⋯,
+the colour chip "Primary contrast" + ⚡), **Appearance** (closed: opacity %, rotation, radius ⛶ four corners),
+**Border / Background / Shadow** ("+", "No border added yet", "−"; border style + width + ⛶ each side + colour;
+background colour / gradient / image; shadow summary "Outside 2,2,4px,0px" opening X, Y, blur, spread, colour). The
+colour popover: a picker, hex and %, "Variables" (the app's colour tokens) with search. Interaction: Workflows
+("This element is clicked" → its actions), Visibility, Options (make clickable), Transitions, SEO heading tag,
+Advanced tooltip. Conditional: rules WHEN … THEN a property, "1 inherited from Style".
+Bubble elements in them NodeGX draws with no one node of its own: **GroupFocus, FloatingGroup, Popup,
+RepeatingGroup's cell grid, a Dropdown's dynamic choices, an Input's formats** — for the importer's coverage list.
+
+**Built (s2b, `spike/stu-050-051` 3950fcd; check:editor 95/95, pagedata 33/33, app 34/34).** STU-051: the Visual
+tab as above for every visual element (not Page, not a reusable's copy: they keep the old panel), each section
+claiming its ports by name and More holding the rest with the plain field; Interaction holds the element's workflows
+(opening Workflow), visibility, options, drag/drop/scroll and its custom states. A colour reads as Bubble writes it
+or as its token's name, its swatch the colour the app draws — read off the running app, because a dark theme's values
+are not in the project file (the todo app's `--surface` is #1f2022 on screen, light in the file). STU-050: double-click
+a part, or its ⤢ at the row's end, and the list shows only what it holds, with crumbs back. Two defects fixed on the
+way: `__ob.shows` counted a redraw before the page was shown again (a gate could measure the old app), and an
+invisible ⤢ mid-row caught a click meant to select.
+Against the done-when lines: STU-051 — the gate grades a Group, Text, Button and Text Input on the todo app
+(no bare text field outside Content, Configure and More) and "a token-valued colour reads as the token's name" (the
+card's Surface); **More still holds plain fields** (transform origin, Pos X/Y, Scale, z-index on some types, a Text
+Input's label styling), and there is **no Conditional tab** (Studio has no conditionals to show yet). STU-050 — the
+page list fits (10 rows, 274 px, on the Bubble template); "two clicks" is now "open a part, then its element", per
+Richard's answer; **"make a component from this group" is not built**: it needs STU-015 (a reusable opened on its
+own). The importer's candidates, measured on the template (the same structure ≥3 times, ≥5 elements, not inside
+another repeat): "Group Horizontal Buttons" ×6 of 7 elements (the feature items) and the pricing columns ×3 of 14.
+
 ---
 
 ## M1 — The desktop app

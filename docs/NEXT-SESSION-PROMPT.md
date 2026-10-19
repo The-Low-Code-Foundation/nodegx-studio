@@ -7,15 +7,19 @@ Where it stands (2026-10-19, main = GitHub): page data (STU-010–013), STU-013-
 their workflow runs), STU-014 (R8 ruled: a reusable's data asks while that copy is shown; copies' shown/hidden reaches
 their reusable; visibility conditions that restate the default are skipped). SCOPE.md has the measurements.
 
-Richard's first play test (STU-050, STU-051; SCOPE.md "Next — Richard's first play test"): LOOKED and SPIKED
-2026-10-19 s2 — SCOPE.md has the measurements, what of the NodeGX editor can come (pure modules only; every control is
-re-made), the defects found, and the spike. The spike is on branch `spike/stu-050-051` (not merged, not pushed): the
-page as its 9 parts with wrappers folded in, the ⚡ inline, a line-break-keeping text box, the app's colours behind the
-swatch, margin/padding as one box. Pictures: docs/look/playtest-1/. It waits on Richard: (1) does the list's shape
-match what he meant, and should "two clicks" hold through the tree (opening a part opens all of it) or through the
-page; (2) does a page's parts become reusables by hand from the list ("Make reusable") or by the importer; (3) his
-Bubble property-panel screenshots, which settle STU-051's grouping. Build from his answers; the template app has no
-tokens and no Input, so STU-051's acceptance needs an app with both.
+Richard's first play test (STU-050, STU-051; SCOPE.md "Next — Richard's first play test"): BUILT 2026-10-19 s2b, on
+main (unpushed until Richard says). He answered the three questions and sent 27 screenshots of Bubble's panel — SCOPE.md
+has his answers, the panel read off them, what is built and what is not against each done-when line. The Design tab's
+right panel is now Bubble's Visual / Interaction tabs and sections; the left list is the page's parts, a part opened
+on its own by double-click. Pictures to show him first: run the app on his template copy and on the todo template.
+
+Next, in order: (1) his look at the new panel — show it on his app before building more; (2) STU-015, a reusable opened
+on its own, which "make a component from this group" (STU-050's last line) needs; then that action in the list and the
+importer's grouping (the same structure ≥3 times, ≥5 elements, not inside another repeat — on the template: the
+feature items ×6, the pricing columns ×3); (3) STU-051's rest: what still sits in More, a Conditional tab, Bubble's
+image popover; (4) the Bubble elements with no NodeGX node of their own (GroupFocus, FloatingGroup, Popup,
+RepeatingGroup cells, dynamic Dropdown choices, Input formats) — check the importer's coverage. Then his second
+sitting: data.
 
 Not to forget: STU-015 (open a reusable in Studio), STU-014-INSTANCELAYOUT (445 static settings on copies reach nothing;
 wants Richard's look before switching on), row searches still asked once per row, rulings R4–R6 open.
