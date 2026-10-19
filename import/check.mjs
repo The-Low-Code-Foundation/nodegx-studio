@@ -117,6 +117,56 @@ const countBy = (text, re) => (text.match(re) || []).length;
   }
 }
 
+// ---------------------------------------------------------------- 1c. STU-013: repeated searches on a page are one page data item
+// Three Texts ask "someDataType where name is a" (one of them beside "… is b"), two ask "… where owner is Current User".
+// On a second page, three Texts ask "… where owner is Parent group's thing": two in one group, one in another.
+{
+  const base = path.join(tmp, 'editor requests', 'app.export.json');
+  if (exists(base)) {
+    const synth = readJson(base);
+    const q = (constraints) => ({ type: 'Search', properties: { thing_type: 'custom.somedatatype', constraints }, next: { type: 'Message', name: 'count' } });
+    const byName = (v) => q({ 0: { key: 'name_text', constraint_type: 'equals', value: v } });
+    const mine = () => q({ 0: { key: 'owner_user', constraint_type: 'equals', value: { type: 'CurrentUser' } } });
+    const text = (...entries) => ({ type: 'TextExpression', entries: Object.fromEntries(entries.map((e, i) => [i, e])) });
+    const t = (id, value) => ({ id, type: 'Text', name: `Text ${id}`, properties: { text: value } });
+    synth.pages = { spage: { type: 'Page', id: 'spage', name: 'index', properties: { new_responsive: true, container_layout: 'column' }, elements: {
+      t1: t('t1', text(byName('a'))), t2: t('t2', text('a: ', byName('a'))), t3: t('t3', text(byName('a'), ' / ', byName('b'))),
+      t4: t('t4', text(mine())), t5: t('t5', text(mine())),
+      t9: { id: 't9', type: 'Text', name: 'Text t9', properties: { text: 'Hi', background_style: 'bgcolor', bgcolor: '#ffffff', font_color: '#000000' }, states: { 0: { condition: { type: 'CurrentUser', next: { type: 'Message', name: 'logged_in' } }, properties: { font_color: '#ff0000' } } } } } },
+      gpage: { type: 'Page', id: 'gpage', name: 'groups', properties: { new_responsive: true, container_layout: 'column' }, elements: Object.fromEntries(['g1', 'g2'].map((gid) => [gid, { id: gid, type: 'Group', name: `Group ${gid}`, properties: { container_layout: 'column', data_source: { type: 'CurrentUser' } },
+        elements: Object.fromEntries((gid === 'g1' ? ['t6', 't7'] : ['t8']).map((id) => [id, t(id, text(q({ 0: { key: 'owner_user', constraint_type: 'equals', value: { type: 'ElementParent' } } })))])) }])) } };
+    const out = path.join(tmp, 'stu013'); fs.mkdirSync(out); const exp = path.join(out, 'app.export.json'); fs.writeFileSync(exp, JSON.stringify(synth));
+    const c = run([path.join(here, 'app-to-nodegx.mjs'), exp, path.join(out, 'project')]);
+    if (check('STU-013: the page with repeated searches converts', c.status === 0, (c.stderr || c.stdout).slice(-600))) {
+      const { readItems } = await import('../editor/pagedata.mjs');
+      const dir = path.join(out, 'project', 'components', 'Pages', 'index');
+      const nodes = readJson(path.join(dir, 'nodes.json')).nodes, conns = readJson(path.join(dir, 'connections.json')).connections;
+      const queries = nodes.filter((n) => n.type === 'DbCollection2');
+      check('STU-013: six searches on the page are three queries', queries.length === 3, `${queries.length} queries`);
+      const items = readItems(nodes, conns);
+      check('STU-013: each query is a page data item Studio reads back', items.length === 3 && items.every((i) => i.collection === 'someDataType' && !i.unsupported), JSON.stringify(items));
+      const a = items.find((i) => i.where.some((w) => w.value === 'a')), b = items.find((i) => i.where.some((w) => w.value === 'b')), u = items.find((i) => i.where.some((w) => w.from));
+      check('STU-013: "name is a" is an equalTo on name, typed in', a && a.where.length === 1 && a.where[0].field === 'name' && a.where[0].op === 'equalTo', JSON.stringify(a));
+      const readsOf = (item) => item ? conns.filter((w) => w.fromId === item.id && nodes.find((n) => n.id === w.toId)?.type === 'Expression').length : 0;
+      check('STU-013: the three Texts that ask "name is a" read the one item', readsOf(a) === 3, `${readsOf(a)} readers`);
+      check('STU-013: "name is b" is its own item, read once', b && b.id !== a?.id && readsOf(b) === 1, JSON.stringify(b));
+      check('STU-013: "owner is Current User" is one item whose value is wired from the page, read twice', u && u.where[0].from && u.where[0].port === 'qp-owner' && readsOf(u) === 2, JSON.stringify(u));
+      check('STU-013: nothing wires an item\'s Do: it runs on open and again on change (runOnChange)', !conns.some((w) => queries.some((qq) => qq.id === w.toId) && w.toProperty === 'fetch') && queries.every((qq) => qq.parameters['runOnChange-collectionName'] === true && qq.parameters['runOnChange-querySettings'] === true) && queries.find((qq) => qq.id === u?.id)?.parameters['runOnChange-qp-owner'] === true);
+      const report = fs.readFileSync(path.join(out, 'project', 'docs', 'IMPORT-REPORT.md'), 'utf8');
+      const colourTo = conns.filter((w) => w.toProperty === 'color').map((w) => nodes.find((n) => n.id === w.toId));
+      check('STU-013-GROUPCOLOR: a boxed Text\'s conditional font colour is wired to the Text inside the box, not the Group', colourTo.length === 1 && colourTo[0]?.type === 'Text', JSON.stringify(colourTo.map((n) => n && [n.type, n.label])));
+      const gdir = path.join(out, 'project', 'components', 'Pages', 'groups');
+      const gnodes = readJson(path.join(gdir, 'nodes.json')).nodes, gconns = readJson(path.join(gdir, 'connections.json')).connections;
+      const gitems = readItems(gnodes, gconns);
+      const fed = (item) => gconns.find((w) => w.toId === item.id && w.toProperty === item.where[0]?.port);
+      const feeder = (item) => gnodes.find((n) => n.id === fed(item)?.fromId);
+      check('STU-013: "owner is Parent group\'s thing" is one item per group, not one per Text (2 items for 3 Texts)', gitems.length === 2, `${gitems.length} items`);
+      check('STU-013: each of those items takes its value from its own group\'s data', gitems.length === 2 && gitems.every((i) => fed(i)) && new Set(gitems.map((i) => (gconns.find((w) => w.toId === feeder(i)?.id) || {}).fromId)).size === 2, JSON.stringify(gitems.map((i) => [i.id, feeder(i)?.label])));
+      check('STU-013: the report says nine searches became five queries', report.includes('| searches → page data | 9 | 5 queries (4 repeated searches read the query already there) |'), (/\| searches → [^\n]*/.exec(report) || ['no row'])[0]);
+    }
+  }
+}
+
 // ---------------------------------------------------------------- 2. the template's run-mode bundle (gitignored; optional)
 {
   const tplDir = path.join(here, 'exports', 'template');

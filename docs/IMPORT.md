@@ -208,7 +208,7 @@ values). Never commit a bundle.
 | reusable elements | 33 (of 41; the others live on the gated pages) | 33 components, placed as instances |
 | option sets | 45 | 45 components (a Static Data node each) |
 | custom states | 93 | 93 Variables |
-| *Do a search for* | 235 | 235 query nodes with their constraints as a filter |
+| *Do a search for* | 235 | 235 query nodes with their constraints as a filter (since STU-013, 2026-10-19: page data items, a repeated search reads the one already there; 236 → 111 on the refetched app, SCOPE.md M2) |
 | data types | 40 | 40 collections |
 | styles | 118 | 110 variants |
 | `validate_project` | 11,556 nodes, 22,895 endpoints | **0 errors**, 5,237 warnings (raw px and colours, by design) |

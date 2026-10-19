@@ -35,7 +35,7 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 | Data tab — types and fields, rows on the bound backend, option sets | works | `check:editor` |
 | Live with outside edits — a file changed by Claude Code (MCP), VS Code or `git pull` is drawn without a reload; a clash with Studio's own edit asks | works (2026-10-19) | `check:editor` 46/46 |
 | Styles — global styles as NodeGX variants | works | `check:editor` |
-| Bubble importer — pages, elements, styles, workflows, expressions, option sets, reusables, custom states, data types, privacy rules → `nodegx.security.json`, backend workflows → cloud functions, Data-tab rows | spike, measured on a real 18-page app (0 validation errors) | `check:import` 26/26 |
+| Bubble importer — pages, elements, styles, workflows, expressions, option sets, reusables, custom states, data types, privacy rules → `nodegx.security.json`, backend workflows → cloud functions, Data-tab rows | spike, measured on a real 17-page app (0 validation errors); its searches arrive as page data (STU-013) | `check:import` 38/38 |
 | Desktop app — Electron window, a welcome screen (recent projects, NodeGX's templates, Import an app), File → Open Recent, a smoke mode | first cut (2026-10-19) | `check:app` 34/34, `smoke` |
 | The project's backend — started (or adopted) on open, stopped on close, shown in the status bar; a template that needs one gets one; Data's "Start a backend" for an app with none | works (2026-10-19) | `check:app` 34/34 |
 | Claude Code — "Connect Claude Code" in the header (and File) registers the NodeGX MCP server for the folder with the NodeGX editor's own writer and shows the command that starts a session there | works (2026-10-19) | `check:editor` 56/56 |
@@ -257,6 +257,43 @@ to "latest note's title" both show "Buy milk"; the header reads "1 query on open
 label wired from `notes.items`); a condition makes a third; removing that condition is refused and the file keeps it;
 the action list has Refresh and no query; Refresh → notes is one wire. With the form's and the edit's twin checks
 both removed, 4 of those lines fail.
+
+**Done (STU-013, 2026-10-19).** The importer writes every *Do a search for* on a page, in a row or in a reusable as a
+page data item in the R7 format, through `queryParameters` from `editor/pagedata.mjs`, so it is the node Studio's own
+form writes: `{type, conditions}` with the neutral operators, `visualSort`, `runOnChange-…: true`,
+`metadata.pageData = { name, first: false }`. The same search again in that component reads the item already there.
+"The same" is what Bubble wrote, byte for byte, plus where a value read off the element comes from: *This element* is
+that element, *Parent group's thing* is the nearest group holding data (or the row), a workflow's parameter is that
+workflow. Nothing wires an item's Do any more: it runs when the page opens and again when a value it reads changes.
+A search inside a backend workflow stays an ordinary query in the function, not page data.
+
+The operators changed with the format, and that fixed a silent drop: the old shape (`{combinator, rules}`) only knows
+the English names in `VISUAL_OPERATORS`, and the importer wrote `contains`, `does not contain` and `exists`, which are
+not among them (`contain` is), so the runtime dropped those conditions and the search asked for everything (25 of the
+real app's 256 searches had one). `is_empty` was written as "exists"; `is_not_empty` was not mapped at all. Now a text
+field's "contains" is `containsIgnoreCase`, a list field's is `equalTo` (the Parse wire's array membership), "is in"
+is `containedIn` over the other list's ids, and empty / not empty are `exists` false / true.
+
+Measured on the real app (17 pages, 3,933 elements): queries **236 → 111**; on the pages and their rows **137 → 60**.
+The export holds 153 searches on pages, 70 distinct within their page; 19 sit in a conditional's data source, which the
+importer reports and does not convert, so 137 is what it reached. `validate_project`: 2 errors before, **0** after,
+warnings unchanged at 5,328. The 2 were older defects that made the preview refuse the whole app, fixed on the way:
+STU-013-GROUPCOLOR (a Text with a background is a Group around a Text, and a conditional font colour was wired to the
+Group: it goes to the Text now) and STU-013-CLOUDRESULT ("Result of step" after *Schedule API workflow* read `result`,
+which a Cloud Function node does not have; it reads as empty now, with a finding). Rendered
+in `preview-solo` with no backend: index, the page with the most searches (90 queries before, 37 now), draws the same
+260 elements and three byte-identical 1440×900 screenshots (before, before again, after). The other pages could not be
+compared, which is the next finding: **STU-013-NAVLOOP** (found, not fixed) — the converted app pushes
+`/user_dashboard` and `/trybeup` (index, named after its title) by turns, about 8 times a second from its first 100 ms,
+before and after alike (156–173 pushes in 20 s; counted by wrapping the frame's `history.pushState`), so every path
+lands back on index, and with every query failing for want of a backend the page's main thread is saturated
+(`render_report` never answered on it). Six "Go to page user_dashboard" steps on index are the candidates; which one
+loops, and why "Only when" does not stop it, is the next session's question.
+`check:import` 38/38 (12 new): six searches on a page are three items that `readItems` reads back, three Texts read
+the one item, a value from the page is one wire into `qp-owner`, nothing wires `fetch`, a "Parent group's thing"
+search is one item per group (not per Text), and a boxed Text's conditional colour lands on its Text. With the merge
+off, 5 of them fail; keyed on the element instead of the group, 3; with no key for the group at all, 3; with the colour
+going to the Group, 1.
 
 Not settled, for STU-014: a condition whose page value is empty is **dropped** by the runtime, not left unmatched
 (`dropUnresolvedConnected`, "every graph relies on it", read in `queryutils.ts`, not measured here). So "first Org
