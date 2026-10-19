@@ -299,6 +299,20 @@ element shows now; *Another property* on each look.
 - **Not built:** Bubble's "1 inherited from Style" count on the badge; a look on a reusable's copy; a property the
   person might want in a state that the node library does not allow (it is not offered: the runtime would not draw it).
 
+**Renaming a reusable, built (s6).** With a reusable open on its own, ✎ beside its name opens a field ("Every copy of
+it, on every page, takes the new name."). The rename stays in the reusable's folder: its three files are written under
+the new key and the old ones removed (the kit's store, `writeComponent` + `deleteComponent`), and in every other
+component each copy's type `/<key>` and any setting holding the path (a For Each's template, a list of components) is
+rewritten. The NodeGX editor gets this from its model (a node's type is the component object); Studio's model is the
+files, so each reference is rewritten. A name another component in the folder has is refused before anything is
+written. One gesture, one undo, and the undo reopens it under its old name (undo used to keep a page key the files no
+longer had).
+- Gate: `check:editor` 151/151 (5 new): the Sign-in card made reusable, a For Each naming it written from outside, then
+  renamed Login card: files, registry, the copy and the template follow, the page still draws it; "Probe panel" refused
+  with nothing written; one undo restores all of it. Not mutant-tested.
+- Pictures for Richard, s6: `docs/look/s6/` (the Text Input panel and its Label text, the image popover, the look menu
+  and a hover look added, the rename field).
+
 ---
 
 ## M1 — The desktop app

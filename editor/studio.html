@@ -319,6 +319,9 @@
   .menu.newitem .note { margin: 8px 0; padding: 8px 10px; border-radius: var(--r); background: var(--panel-2); color: var(--ink-2); font-size: 12px; }
   .menu.newitem .note.twin { background: #e8f6ee; color: #11683a; }
   .menu.newitem .foot { display: flex; gap: 6px; justify-content: flex-end; }
+  .menu.renamereusable { min-width: 260px; padding-bottom: 8px; }
+  .menu.renamereusable > input { margin: 4px 8px; width: calc(100% - 16px); }
+  .menu.renamereusable .foot { display: flex; justify-content: flex-end; padding: 4px 8px 0; }
   .events .row small { color: var(--muted); font-size: 11px; }
   .events .row[aria-selected=true] small { color: var(--accent-ink); opacity: .75; }
   #steps { overflow: auto; padding: 24px 28px; }
@@ -471,7 +474,7 @@
     <button id="undo" title="Undo (⌘Z)"><svg class="i"><use href="#i-undo"/></svg><span class="tip">Undo <kbd>⌘Z</kbd></span></button>
   </nav>
   <header>
-    <div class="crumb"><span id="projname">…</span><span class="sep">/</span><label id="pagepick-l"><select id="pagepick" title="Page"></select></label><span class="queries" id="querycount" hidden></span></div>
+    <div class="crumb"><span id="projname">…</span><span class="sep">/</span><label id="pagepick-l"><select id="pagepick" title="Page"></select></label><button id="renamereusable" class="quiet tiny" hidden title="Rename this reusable">✎</button><span class="queries" id="querycount" hidden></span></div>
     <div class="seg" id="widthseg" title="Preview width">
       <button data-w="100%" aria-pressed="true">Fill</button><button data-w="1280">1280</button><button data-w="1024">1024</button><button data-w="768">768</button><button data-w="390">Phone</button>
     </div>
@@ -697,6 +700,8 @@ async function undo() {
   if (!snap) return toast('Nothing to undo');
   files = NodegxPreview.memoryFiles(snap);
   store = new NodegxPreview.V2ProjectStore(files);
+  // what was open may be gone (a rename taken back): its old name, else where the app starts
+  if (!registry()[pageKey]) { pageKey = (renamedFrom[pageKey] && registry()[renamedFrom[pageKey]]) ? renamedFrom[pageKey] : startPageKey() ?? pageKeys()[0]; sel = null; selEvent = null; treeRoot = null; }
   await persist();
   readGraph();
   rebuild();
@@ -807,6 +812,58 @@ function makeReusable(id) {
   const ports = r.inputs.length + r.outputs.length;
   toast(`${key.split('/').pop()} is reusable: ${elements} element${elements === 1 ? '' : 's'} moved into it${ports ? `, ${ports} wire${ports === 1 ? '' : 's'} to the page through the copy` : ''}`);
   return { key, ...r };
+}
+/**
+ * A reusable renamed, in the folder it is in. Its files move to the new name, and everything that names it follows: each
+ * copy's type (`/<key>`) and any setting holding its path (a For Each's template, a list of components), in every other
+ * component. One gesture, one undo. The NodeGX editor gets this from its model (a node's type is the component itself);
+ * here the files are the model, so each reference is rewritten.
+ */
+const renamedFrom = {}; // new key → the key it had, so an undo can reopen it under its old name
+function renameReusable(oldKey, name) {
+  name = String(name || '').replace(/\//g, ' ').trim();
+  if (!name) return toast('A reusable needs a name');
+  const dir = oldKey.includes('/') ? oldKey.slice(0, oldKey.lastIndexOf('/') + 1) : '';
+  const newKey = dir + name;
+  if (newKey === oldKey) return;
+  if (registry()[newKey]) return toast(`There is already a ${newKey}`);
+  const from = '/' + oldKey, to = '/' + newKey;
+  const swap = (v) => v === from ? to : Array.isArray(v) ? v.map(swap) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, swap(x)])) : v;
+  snapshot();
+  let copies = 0, places = 0;
+  try {
+    const c = store.readComponent(oldKey);
+    const others = store.componentKeys().filter((k) => k !== oldKey).map((k) => store.readComponent(k));
+    store.writeComponent(newKey, { ...c.files, component: { ...c.files.component, name, path: to, modified: new Date().toISOString(), modifiedBy: 'nodegx-studio' } }, { expectNew: true });
+    store.deleteComponent(oldKey);
+    for (const o of others) {
+      let touched = false;
+      const nodes = o.files.nodes.nodes.map((n) => {
+        const params = n.parameters ? swap(n.parameters) : n.parameters;
+        const changed = n.type === from || JSON.stringify(params) !== JSON.stringify(n.parameters);
+        if (!changed) return n;
+        touched = true;
+        if (n.type === from) copies++; else places++;
+        return { ...n, ...(n.type === from ? { type: to } : {}), ...(n.parameters ? { parameters: params } : {}) };
+      });
+      if (touched) store.writeComponent(o.key, { ...o.files, nodes: { ...o.files.nodes, nodes } }, { ifRevision: o.revision });
+    }
+  } catch (err) { const snap = undoStack.pop(); if (snap) { files = NodegxPreview.memoryFiles(snap); store = new NodegxPreview.V2ProjectStore(files); } toast(err.message); return; }
+  persist();
+  renamedFrom[newKey] = oldKey;
+  if (pageKey === oldKey) pageKey = newKey;
+  readGraph(); renderAll(); rebuild();
+  toast(`${oldKey.split('/').pop()} is now ${name}: ${copies} cop${copies === 1 ? 'y' : 'ies'}${places ? ` and ${places} other setting${places === 1 ? '' : 's'}` : ''} follow${copies + places === 1 ? 's' : ''}`);
+  return { newKey, copies, places };
+}
+/** The name field for the reusable that is open: Enter or Rename renames it, Escape leaves it. */
+function renameReusableMenu(e) {
+  closeMenu('.menu');
+  const key = pageKey, menu = popover(e, 'renamereusable');
+  const field = h('input', { type: 'text', value: key.split('/').pop(), 'aria-label': 'New name', onkeydown: (ev) => { if (ev.key === 'Enter') go(); } });
+  const go = () => { closeMenu('.menu'); renameReusable(key, field.value); };
+  menu.append(h('div', { class: 'h' }, 'Rename this reusable'), field, h('div', { class: 'hint' }, 'Every copy of it, on every page, takes the new name.'), h('div', { class: 'foot' }, h('button', { class: 'tiny', onclick: go }, 'Rename')));
+  document.body.append(menu); dismissOnOutside(menu); field.select();
 }
 /** The project file and the styles file are plain JSON here (the serializer is not in the bundle); the official editor reads either unchanged. */
 function writeJsonFile(path, value) { snapshot(); files.write(path, JSON.stringify(value, null, 2)); persist(); rebuild(); }
@@ -1065,7 +1122,9 @@ function renderPagePick() {
   $('pagedata-title').textContent = isPage(pageKey) ? 'Page data' : 'Data';
   $('newpagedata').title = isPage(pageKey) ? 'A search the page runs once, named, that any element can read' : 'A search this reusable makes while a copy of it is shown, named, that any of its elements can read';
   $('elements-title').textContent = isPage(pageKey) ? 'Elements on this page' : 'Elements in this reusable';
+  $('renamereusable').hidden = !reus.includes(pageKey);
 }
+$('renamereusable').onclick = (e) => renameReusableMenu(e);
 /**
  * The app starts on what Studio shows (`previewFiles`). Its own logic may then go elsewhere (Todo sends a visitor to
  * Sign in): once the Router's current page has not changed for 400 ms (at most 3 s), Design follows it. Read off the

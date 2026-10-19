@@ -913,6 +913,50 @@ try {
     await useApp(false);
     ok(!before && after && after.length > 0, 'through the copy, a wrong sign-in still shows why it did not work (typed values out, the error and its showing in)', { before, after });
   }
+  console.log('check: a reusable renamed');
+  {
+    // a For Each on Sign in whose template is the reusable, written from outside Studio: a setting that names it
+    const out0 = await b.evaluate('__ob.outside || 0');
+    { const f = join(project, SIGN + 'nodes.json'); const j = JSON.parse(readFileSync(f, 'utf8')); j.nodes.push({ id: 'feProbe', type: 'For Each', label: 'Cards', parent: 'siRoot', parameters: { template: '/Reusable/Sign-in card', templateType: 'explicit' } }); j.nodes.find((n) => n.id === 'siRoot').children.push('feProbe'); writeFileSync(f + '.tmp-check', JSON.stringify(j, null, 2)); renameSync(f + '.tmp-check', f); }
+    await b.until(`(__ob.outside || 0) > ${out0}`, 8000); await wait(600);
+    let n0 = await shows();
+    await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Reusable/Sign-in card'; s.dispatchEvent(new Event('change')); })()`);
+    await rebuilt(n0); await wait(600);
+    ok(await b.evaluate(`!document.getElementById('renamereusable').hidden`), 'a reusable open on its own has ✎ beside its name to rename it');
+    await b.clickSel('#renamereusable'); await b.until('document.querySelector(".menu.renamereusable")', 4000);
+    n0 = await shows();
+    await b.evaluate(`(() => { const i = document.querySelector('.menu.renamereusable input'); i.value = 'Login card'; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+    await rebuilt(n0); await wait(900);
+    const named = () => { const reg = onDisk('components/_registry.json').components, page = onDisk(SIGN + 'nodes.json').nodes; return { newReg: !!reg['Reusable/Login card'], oldReg: !!reg['Reusable/Sign-in card'], oldFiles: existsSync(join(project, 'components/Reusable/Sign-in card/nodes.json')), comp: existsSync(join(project, 'components/Reusable/Login card/component.json')) ? onDisk('components/Reusable/Login card/component.json') : null, copies: page.filter((n) => n.type.startsWith('/Reusable/')).map((n) => n.type), template: page.find((n) => n.id === 'feProbe')?.parameters.template }; };
+    let r = named();
+    const picked = await b.evaluate(`document.getElementById('pagepick').value`);
+    ok(r.newReg && !r.oldReg && !r.oldFiles && r.comp?.name === 'Login card' && r.comp?.path === '/Reusable/Login card' && JSON.stringify(r.copies) === JSON.stringify(['/Reusable/Login card']) && r.template === '/Reusable/Login card' && picked === 'Reusable/Login card',
+      'renamed to Login card: its files and registry entry move, the copy on Sign in and the For Each\'s template follow, and it stays open under the new name', { ...r, comp: r.comp && { name: r.comp.name, path: r.comp.path }, picked });
+    n0 = await shows();
+    await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Pages/Sign in'; s.dispatchEvent(new Event('change')); })()`);
+    await rebuilt(n0); await wait(800);
+    ok((await appText()).includes('Create account') && (await status()).startsWith('App on screen'), 'Sign in still draws the card through its renamed copy', await status());
+    // the same name as another reusable in the folder is refused, and nothing is written
+    n0 = await shows();
+    await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Reusable/Login card'; s.dispatchEvent(new Event('change')); })()`);
+    await rebuilt(n0); await wait(400);
+    const other = await b.evaluate(`[...document.querySelectorAll('#pagepick optgroup option')].map(o => o.value).find(v => v !== 'Reusable/Login card' && v.startsWith('Reusable/'))`);
+    if (other) {
+      const reg0 = readFileSync(join(project, 'components/_registry.json'), 'utf8');
+      await b.clickSel('#renamereusable'); await b.until('document.querySelector(".menu.renamereusable")', 4000);
+      await b.evaluate(`(() => { const i = document.querySelector('.menu.renamereusable input'); i.value = ${JSON.stringify(other.split('/').pop())}; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+      await wait(800);
+      ok(readFileSync(join(project, 'components/_registry.json'), 'utf8') === reg0 && /already/.test(await b.evaluate(`document.getElementById('toast').textContent`)), `a name another reusable in the folder has (${other}) is refused, nothing written`, { other, toast: await b.evaluate(`document.getElementById('toast').textContent`) });
+    } else ok(false, 'another reusable in Reusable/ to clash with', await b.evaluate(`[...document.querySelectorAll('#pagepick option')].map(o => o.value)`));
+    // one undo takes the whole rename back
+    n0 = await shows();
+    await b.clickSel('#undo'); await rebuilt(n0); await wait(900);
+    r = named();
+    ok(!r.newReg && r.oldReg && r.oldFiles && JSON.stringify(r.copies) === JSON.stringify(['/Reusable/Sign-in card']) && r.template === '/Reusable/Sign-in card', 'one undo takes the whole rename back: the old name, its files, the copy and the template', r);
+    n0 = await shows();
+    await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Pages/Sign in'; s.dispatchEvent(new Event('change')); })()`);
+    await rebuilt(n0); await wait(600);
+  }
   ok((await status()).startsWith('App on screen'), 'after every edit the app still validates and draws', await status());
   const problems = b.problems.filter((p) => !/Invalid connection|doesn't have a port|Failed to load resource|fonts\.g|^\[noodl\]/.test(p)); // `[noodl]` lines are the app's own runtime (a Navigate with no target yet), not the editor
   ok(problems.length === 0, 'no exceptions in the editor page', problems.slice(0, 3));
