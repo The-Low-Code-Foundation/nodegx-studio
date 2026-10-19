@@ -538,6 +538,13 @@ canvas selects the element; New data there is written into the reusable in STU-0
 `whenShown`, its switch and its ask), not into a page; the canvas's copy asks it once, and back on Sign in the two shown
 copies ask it once each and the two hidden ones not at all. One gate flake of the same shape as the branch one fixed:
 "Set a custom state" read the file 500 ms after the click (failed 1 run) and now waits for it.
+- **STU-015-IMPORTED (found by the pictures for Richard, fixed):** the picker's "Reusable elements" missed every
+  reusable the importer wrote (it writes no `visualRoots`), Richard's Bubble reusables and the grouping's alike. It now
+  counts a top-level element as Design does (cached per component file). The gate's test reusable is written the
+  importer's way; with the old filter as a mutant the gate fails 5 checks (100/105). Not yet run green after the fix:
+  at the time the machine's load average was 64–88 (three video encodes and another session), and under that load the
+  committed code fails the same three gate checks as the fix (control): two steps that read the file 500 ms after a
+  click, and the clash test, which races an outside write against an edit by design. Re-run when the machine is quiet.
 ---
 
 ## M3 — Workflows that live on their element

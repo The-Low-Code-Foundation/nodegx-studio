@@ -839,11 +839,19 @@ const isPage = (k) => registry()[k]?.type === 'page';
  * reusable here is a component a page can place that draws something (the list the palette offers, with elements).
  */
 const CANVAS = '__studio/Reusable canvas', CANVAS_PATH = '__studio-reusable';
+const drawsMemo = new Map(); // component key → [its nodes.json text, whether it draws]: the list and the panel ask on every render
 function reusableKeys() {
   return Object.keys(registry()).filter((k) => {
     const e = registry()[k];
     if (e.type === 'page' || e.type === 'root' || e.type === 'logic' || k === 'App' || k.startsWith('__') || k.startsWith('Option sets/')) return false;
-    try { return (store.readComponent(k).files.nodes.visualRoots || []).length > 0; } catch { return false; }
+    const text = files.read(`components/${k}/nodes.json`);
+    const hit = drawsMemo.get(k);
+    if (hit && hit[0] === text) return hit[1];
+    // draws something: listed top elements, or (as the importer writes them, without visualRoots) a top-level element
+    let draws = false;
+    try { const n = JSON.parse(text); draws = (n.visualRoots || []).length > 0 || n.nodes.some((x) => x.parent === undefined && (x.children?.length || isVisualType(x.type))); } catch { /* unreadable: not offered */ }
+    drawsMemo.set(k, [text, draws]);
+    return draws;
   });
 }
 /** What the preview is given: the project's files, and while a reusable is open, the canvas page holding one copy of it. */
@@ -1032,6 +1040,7 @@ async function followSoon() {
 }
 /** Design (and Workflow) on another page or reusable: the app is rebuilt starting there (`previewFiles`). */
 function openComponent(key) {
+  if (!registry()[key]) return;
   pageKey = key; sel = null; selEvent = null; selItem = null; treeRoot = null; readGraph();
   renderAll();
   rebuild(0);

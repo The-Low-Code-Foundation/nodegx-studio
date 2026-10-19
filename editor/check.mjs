@@ -38,13 +38,14 @@ const tmp = mkdtempSync(join(tmpdir(), 'nodegx-studio-check-'));
 const project = join(tmp, 'todo-list');
 cpSync(join(repo, 'templates/todo-list'), project, { recursive: true });
 {
+  // written as the importer writes a reusable (no visualRoots: STU-015's picker once missed every imported one)
   // STU-014 (R8): a reusable with its own item, placed nowhere yet (its copies arrive at the end, as an outside edit). Its
   // copies say which one asked by the value they pass: "Task where position > n". mounted comes from the copy, as the importer writes it.
   const rel = 'Reusable/Probe panel', dir = join(project, 'components', rel), cid = '11111111-2222-5333-8444-555555555555';
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'component.json'), JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/component-v2.json', id: cid, name: 'Probe panel', path: '/' + rel, type: 'visual', created: '2026-10-19T00:00:00.000Z', modified: '2026-10-19T00:00:00.000Z', modifiedBy: 'check' }, null, 2));
   let files = {
-    nodes: { $schema: 'https://opennoodl.dev/schemas/nodes-v2.json', componentId: cid, version: 1, visualRoots: ['ppRoot'], nodes: [
+    nodes: { $schema: 'https://opennoodl.dev/schemas/nodes-v2.json', componentId: cid, version: 1, nodes: [
       { id: 'ppIn', type: 'Component Inputs', label: 'From the copy', ports: [{ name: 'n', plug: 'output', type: 'number' }, { name: 'mounted', plug: 'output', type: 'boolean' }], x: 300, y: 40 },
       { id: 'ppRoot', type: 'Group', label: 'Panel', parameters: { sizeMode: 'contentHeight' }, children: ['ppText'], x: 40, y: 40 },
       { id: 'ppText', type: 'Text', label: 'Probe text', parent: 'ppRoot', parameters: { text: 'probe panel' }, x: 40, y: 120 }] },
