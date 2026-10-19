@@ -167,6 +167,47 @@ Richard's answer; **"make a component from this group" is not built**: it needs 
 own). The importer's candidates, measured on the template (the same structure ≥3 times, ≥5 elements, not inside
 another repeat): "Group Horizontal Buttons" ×6 of 7 elements (the feature items) and the pricing columns ×3 of 14.
 
+**Richard's look (2026-10-19, s3).** Shown on a copy of his template app and the todo app (the page's parts, a part
+opened, a Text, a Group, a Button, the Interaction tab): *"Holy shit it looks great."* He asked whether looking so
+like Bubble gets us in trouble. Read for the answer: Bubble's terms (bubble.io/terms, read that day) have no clause
+against a competing product or a similar look; §8(b) lets a user reuse their own workflows and design elsewhere;
+§3(b)(ii) bans decompiling the Platform, which reading the panel as a user is not; their lever is suspending the
+account (§3, §13(b)). A panel's structure is a way of working, not something owned. What stays out of Studio: their
+name, icons, screenshots, help text, colours, and "a Bubble clone" in anything we publish. Three of their phrases had
+come in word for word and were reworded the same day ("No border added yet" → "No border. + adds one.", "Insert
+dynamic data" → the ⚡ "Take this value from…" / "Insert a value"). Correction to the line above: the imported app
+**does** have conditionals to show — Bubble's "when the page is narrower than 768" rules arrive as an Expression wired
+into the property (`Text C: marginTop when Current Page Width's less_than 768`), which the panel can only show as a
+cut-off chip until there is a Conditional tab.
+
+**STU-050's last line, built (s3).** *Make it reusable*, on a selected group's panel: the group and what it holds, and
+the logic only they use, move into `Reusable/<its name>`; a copy takes its place (same parent, same place among its
+siblings); page data stays on the page. A wire across the group's edge becomes an input or output of the reusable,
+named after the element inside ("Email onTextChanged", "Sign in onClick", typed a signal where the node library says
+so), bare only for the group itself; two page values into one inside port are one input with two wires. One gesture,
+one undo. The pure part is `editor/reusable.mjs` (`extractReusable`), which the importer uses too.
+- `check:reusable` 12/12 (new, no browser): on the todo app's Sign in page, every node and every one of the 21 wires
+  is accounted for; the page's sign-in, sign-up and navigation stay on the page; page data stays (with the control
+  that it would move without `stays`); `validate_project` finds no new error or warning, and, as the control, does
+  report a broken wire put inside the new reusable.
+- `check:editor`: the card made reusable on Sign in, then signed in wrongly *through the copy*: the typed email and
+  password go out through its outputs, its Sign in click reaches the page's Log In, and the page's error and its
+  showing come back in. The copy shows "Invalid username/password.".
+
+**The importer's grouping, built (s3).** `import/group.mjs`: the same shape (each element's type and style, its
+children's shapes, in order) at least 3 times on a page, at least 5 elements, largest first, nothing inside a taken one
+taken again. Everything but the settings must match (keys besides `parameters`, and the wires among their own elements),
+or the shape is left alone and the report says why. Settings that differ between the occurrences become inputs each copy
+sets; the same everywhere stays inside. The page's logic never moves (each copy keeps its own workflows through its
+outputs). The report gets a section, "Repeated structures → reusables". On Richard's template: **"Horizontal Buttons",
+6 copies** (the feature rows; each copy sets its top and bottom margin and its icon), and two shapes left as they were:
+the 3 pricing columns ("Button H" has a different hover / pressed look in one of them) and 4 logo blocks ("Text AZ"
+likewise). The look, measured: the template converted with and without grouping (`NODEGX_STUDIO_NO_GROUPING=1`), both
+drawn by `preview-solo` at 1280 px — the same 227 elements with the same text, place, size, colours and font size, the
+same page height; the screenshots differ only in the two phone-mockup images, and the control (the same project drawn
+twice) differs there too (907 rows). `check:import` 58/58 with the template bundle (two new checks, validate_project 0
+errors). Not measured: the real app (its export is not in this repo).
+
 ---
 
 ## M1 — The desktop app
@@ -330,7 +371,7 @@ wires: Query Records takes any wired input name (the runtime keeps an unknown on
 its name, how many elements read it, what it asks as a sentence ("first Note where title is set, by title"), and its
 last run in the app on screen ("1 row · 5 ms · 0.2 s after the app opened"). Clicking a row opens the item on the right:
 type, every match or the first one, conditions (a field, an operator, a typed value or ⚡ a value from the page),
-sort, a limit, its readers (click one to select it) and its last run. A field's **Insert dynamic data** lists the page
+sort, a limit, its readers (click one to select it) and its last run. A field's **⚡ (take this value from)** lists the page
 data first ("latest note's title", "notes · count"), and its chip is green. The header beside the page name reads
 **"N queries on open"**. Both numbers are counted off **the requests the app made**, never off the nodes: `serve.mjs`
 puts `editor/probe.js` first in the frame's runtime page (in the frame only, never the deployed app), and it logs
@@ -341,7 +382,7 @@ page, "0 queries on open" before; an item made through the panel is one Query Re
 to "latest note's title" both show "Buy milk"; the header reads "1 query on open"; the row says 2 readers and 1 row.
 
 **Done (STU-012, 2026-10-19).** No path in the editor writes a second identical query on a page:
-- **New page data**, from the left column and from **Insert dynamic data → New page data…** (Bubble's "Do a
+- **New page data**, from the left column and from a field's **⚡ → New page data…** (Bubble's "Do a
   search for…", in the composer too), is one form: name, type, every / first, one optional condition. When an item
   already asks that, it says so as you type ("notes already asks this … Create uses it") and the button reads **Use
   notes**: the field reads that item, and no node is written.
@@ -463,6 +504,40 @@ Not done here: rows (R8 gives them no data of their own, yet the importer still 
 item in the row's component, 6 on the real app, each row asking); an item that depends on another item; and Studio
 cannot open a reusable yet (STU-015), so a reusable's items come from the importer, MCP or by hand for now. Still
 not settled from STU-013: a condition whose page value is empty is dropped by the runtime.
+
+**Done (STU-015, 2026-10-19, s3).** A reusable opens on its own, as Bubble opens one: from the page picker (pages
+first, then a "Reusable elements" group: every component a page can place that draws something), by double-clicking a
+copy's row in the element list or its ⤢, or from a copy's panel (**Edit <name>** — "every copy changes with it").
+Design then edits the reusable's own graph; the list says "Elements in this reusable", the Data section "Data". The
+app on screen is the project plus one page Studio adds in memory, `__studio/Reusable canvas` at `/__studio-reusable`,
+holding a single copy (given `mounted`/`visible` true when the reusable declares them, as imported ones do). That page
+is only in what the preview is given (`previewFiles()`): never in the project folder, never in its router file. New data
+made on a reusable is written in STU-014's form (`createEdits(…, { root })`), so each copy asks while it is shown; the
+query count reads "N queries when shown".
+
+- **STU-015-PAGENAV (found here, fixed):** Studio's page picker never really changed pages. It navigated by path, and
+  the runtime cuts its base URL ("/runtime/", 9 characters) off every path it reads but never adds it to one it writes:
+  "/sign-in" read as "" and every page but the start page landed on the start page (the todo app's own redirect hid
+  it). The runtime half is filed in NodeGX's ledger as **P123-STU015-BASEURL** (a deploy in a sub-folder should have the
+  same fault; read, not measured).
+- **The fix, after three that were not enough:** Studio no longer navigates the app at all. What the preview is given
+  (`previewFiles()`) makes every router that lists the page Studio shows *start* there (the canvas, while a reusable is
+  open), so the app opens on it; switching pages is a rebuild. Studio then only follows the app's own redirect (Todo
+  sends a visitor to Sign in), once the Router's current page has not changed for 400 ms (at most 3 s), read off the
+  Router and never the address bar. What did not hold, measured on the gate: navigating by component at once raced the
+  app's own redirect and all four of STU-014's copies asked at open (3 runs of 3; navigating to the page already shown,
+  once or twice, made no copy ask — not the cause); settling 350 ms first fixed that but followed a redirect still in
+  flight to the wrong page under load and dropped the open page data item (3 runs, three different page data steps;
+  the state dump on the gate's failure showed Design had switched to Todo); following only once the app had reached the
+  asked page missed a page that redirects at once. With the start page: `check:editor` 105/105 twice in a row. A bonus:
+  the app no longer draws the start page first, so a page's "N queries on open" are its own.
+
+Gate (`check:editor`): the picker lists the reusables; opened, the list is the reusable's own two elements and the app
+shows one copy alone on Studio's canvas page (the Router's current page; queries counted "when shown"); the canvas is in neither the project folder nor its router; a click in the
+canvas selects the element; New data there is written into the reusable in STU-014's form (read back with `readItems`:
+`whenShown`, its switch and its ask), not into a page; the canvas's copy asks it once, and back on Sign in the two shown
+copies ask it once each and the two hidden ones not at all. One gate flake of the same shape as the branch one fixed:
+"Set a custom state" read the file 500 ms after the click (failed 1 run) and now waits for it.
 ---
 
 ## M3 — Workflows that live on their element
@@ -571,3 +646,7 @@ exception** (Richard, 2026-10-19): it is "the importer" / **File → Import an A
 project is stamped `nodegx-studio` (`metadata.imported.by`; `from: "bubble"` is a plain fact about the source). Its
 help text may say it imports apps built on the Bubble™ platform. The disclaimer in the README stays. Bubble's terms (§8(b)) let a person reuse their own app's design and workflows on another platform;
 the importer reads only the person's own app.
+
+Studio's panel follows how Bubble's is organised (a way of working, not something anyone owns), but **its words, icons
+and pictures are Studio's own**: no Bubble UI wording copied in, no Bubble icons or colours, no screenshots of Bubble's
+UI in the repo or anything published, and never "a Bubble clone" (Richard's look, 2026-10-19).
