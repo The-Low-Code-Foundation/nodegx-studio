@@ -931,16 +931,27 @@ const drawsMemo = new Map(); // component key → [its nodes.json text, whether 
 function reusableKeys() {
   return Object.keys(registry()).filter((k) => {
     const e = registry()[k];
-    if (e.type === 'page' || e.type === 'root' || e.type === 'logic' || k === 'App' || k.startsWith('__') || k.startsWith('Option sets/')) return false;
-    const text = files.read(`components/${k}/nodes.json`);
-    const hit = drawsMemo.get(k);
-    if (hit && hit[0] === text) return hit[1];
-    // draws something: listed top elements, or (as the importer writes them, without visualRoots) a top-level element
-    let draws = false;
-    try { const n = JSON.parse(text); draws = (n.visualRoots || []).length > 0 || n.nodes.some((x) => x.parent === undefined && (x.children?.length || isVisualType(x.type))); } catch { /* unreadable: not offered */ }
-    drawsMemo.set(k, [text, draws]);
-    return draws;
+    if (e.type === 'page' || e.type === 'root' || k === 'App' || k.startsWith('__') || k.startsWith('Option sets/')) return false;
+    return componentDraws(k);
   });
+}
+/**
+ * Whether a component draws something: listed top elements, or (as the importer writes them, without visualRoots) a
+ * top-level element. Not its registry type: the todo template's Commands and Logic say "visual" and draw nothing, and a
+ * Command holding a Write history copy was taken for an element because that copy's type said "visual" too.
+ */
+function componentDraws(k, seen = new Set()) {
+  const e = registry()[k];
+  if (!e) return true; // not in the registry: taken as drawn, as before
+  if (e.type === 'logic' || seen.has(k)) return false;
+  const text = files.read(`components/${k}/nodes.json`);
+  const hit = drawsMemo.get(k);
+  if (hit && hit[0] === text) return hit[1];
+  seen.add(k);
+  let draws = false;
+  try { const n = JSON.parse(text); draws = (n.visualRoots || []).length > 0 || n.nodes.some((x) => x.parent === undefined && (x.children?.length || (x.type.startsWith('/') ? componentDraws(x.type.slice(1), seen) : isVisualType(x.type)))); } catch { /* unreadable: not offered */ }
+  drawsMemo.set(k, [text, draws]);
+  return draws;
 }
 /** The settings the first copy of a reusable is given (pages first, in the picker's order), kept to what it declares. */
 function firstCopyValues(key, declared) {
@@ -1041,8 +1052,11 @@ function readGraph() {
 const typeDef = (type) => libIndex.get(type);
 const typeName = (type) => typeDef(type)?.displayNodeName || typeDef(type)?.displayName || (type.startsWith('/') ? type.split('/').pop() : type);
 const labelOf = (id) => byId[id]?.label || typeName(byId[id]?.type ?? '?');
-const isVisualType = (type) => type.startsWith('/') ? registry()[type.slice(1)]?.type !== 'logic' : (typeDef(type)?.category === 'Visual' || ['Group', 'Text', 'Page', 'For Each', 'Component Children'].includes(type) || type.startsWith('net.noodl.controls.') || type.startsWith('net.noodl.visual.'));
+const isVisualType = (type) => type.startsWith('/') ? componentDraws(type.slice(1)) : (typeDef(type)?.category === 'Visual' || ['Group', 'Text', 'Page', 'For Each', 'Component Children'].includes(type) || type.startsWith('net.noodl.controls.') || type.startsWith('net.noodl.visual.'));
 const holdsChildren = (type) => { const t = typeDef(type); return !!(t?.allowChildren || t?.allowChildrenWithCategory) || (type.startsWith('/') && isVisualType(type)); };
+// a node library port with no display name ("zIndex", "backdropBlur") is said in words, not as its raw name
+const PORT_WORDS = { zIndex: 'Layer (z-index)' };
+const portWords = (name) => PORT_WORDS[name] || String(name).replace(/^[a-z]/, (c) => c.toUpperCase()).replace(/([a-z0-9])([A-Z])(?=[a-z])/g, (m, a, b) => `${a} ${b.toLowerCase()}`);
 const libPorts = (type) => { const t = typeDef(type); return t ? [...(t.ports || []), ...(t.dynamicports || []).flatMap((d) => d.ports || [])] : []; };
 const tname = (t) => (typeof t === 'object' && t !== null ? t.name : t) ?? '*';
 /** The custom states of the page: Variable nodes that remember which element they hang on. */
@@ -1087,7 +1101,7 @@ function portsOf(node, plug) {
       for (const n of comp.nodes.nodes) if (n.type === ioType) for (const p of n.ports || []) if (!seen.has(p.name)) { const i = p.displayName ? null : inner(n.id, p.name); seen.set(p.name, { name: p.name, label: p.displayName || i?.label || p.name, type: tname(i?.type ?? p.type), raw: i ? { type: i.type } : undefined, signal: tname(p.type) === 'signal', group: 'Component', of: i?.of }); }
     } catch { /* unknown component */ }
   }
-  for (const p of libPorts(node.type)) if (p.plug === plug || p.plug === 'input/output') if (!seen.has(p.name)) seen.set(p.name, { name: p.name, label: p.displayName || p.name, type: tname(p.type), signal: tname(p.type) === 'signal', raw: p });
+  for (const p of libPorts(node.type)) if (p.plug === plug || p.plug === 'input/output') if (!seen.has(p.name)) seen.set(p.name, { name: p.name, label: p.displayName && p.displayName !== p.name ? p.displayName : portWords(p.name), type: tname(p.type), signal: tname(p.type) === 'signal', raw: p });
   const spec = specPortsFor(node.type, node.parameters || {}, node.id);
   if (spec) for (const p of spec[plug === 'input' ? 'inputs' : 'outputs']) if (!seen.has(p.name)) seen.set(p.name, p);
   for (const p of node.ports || []) if ((p.plug === plug || p.plug === 'input/output') && !seen.has(p.name)) seen.set(p.name, { name: p.name, label: p.displayName || p.name, type: tname(p.type), signal: tname(p.type) === 'signal' });
@@ -1397,9 +1411,8 @@ function renderPalette() {
     pal.append(h('button', { 'aria-pressed': pending?.type === type, onclick: (e) => armPending({ type, params }, e.currentTarget) }, icon(glyph), typeName(type)));
   }
   const comps = $('components'); comps.innerHTML = '';
-  for (const k of Object.keys(registry())) {
-    const e = registry()[k];
-    if (e.type === 'page' || e.type === 'root' || e.type === 'logic' || k === pageKey || k === 'App' || k.startsWith('__') || k.startsWith('Option sets/')) continue;
+  for (const k of reusableKeys()) {
+    if (k === pageKey) continue;
     comps.append(h('button', { title: k, onclick: (ev) => armPending({ type: '/' + k, params: {} }, ev.currentTarget) }, icon('component'), k.split('/').pop()));
   }
 }
@@ -1536,7 +1549,7 @@ function editablePorts(node, { wireOnly = false } = {}) {
   const spec = specPortsFor(node.type, params, node.id);
   // a spec port wins over the library's of the same name, but only the library says whether a state may change it
   const libStates = new Set([...(t?.ports || []), ...(t?.dynamicports || []).flatMap((d) => d.ports || [])].filter((p) => p.allowVisualStates).map((p) => p.name));
-  if (spec) for (const p of spec.inputs) push({ name: p.name, displayName: p.label, plug: 'input', group: p.group || 'General', type: p.enums ? { name: 'enum', enums: p.enums.map((v) => ({ value: v, label: p.labels?.[v] ?? String(v).replace(/^\/Pages\//, '') })) } : (p.codeEditor ? { name: p.type, codeeditor: p.codeEditor } : p.connectionsOnly ? { name: p.type, allowConnectionsOnly: true } : p.type), default: p.default, description: p.description, ...(libStates.has(p.name) ? { allowVisualStates: true } : {}) });
+  if (spec) for (const p of spec.inputs) push({ name: p.name, displayName: p.label && p.label !== p.name ? p.label : portWords(p.name), plug: 'input', group: p.group || 'General', type: p.enums ? { name: 'enum', enums: p.enums.map((v) => ({ value: v, label: p.labels?.[v] ?? String(v).replace(/^\/Pages\//, '') })) } : (p.codeEditor ? { name: p.type, codeeditor: p.codeEditor } : p.connectionsOnly ? { name: p.type, allowConnectionsOnly: true } : p.type), default: p.default, description: p.description, ...(libStates.has(p.name) ? { allowVisualStates: true } : {}) });
   for (const p of node.dynamicports || []) push({ ...p, group: p.group || 'General' });
   for (const p of synthPorts(node)) push(p);
   if (t) {
@@ -1856,7 +1869,7 @@ function renderBubblePanel(right, node) {
     corners.forEach((c) => has(c) && claimed.add(c));
   }
   if (has('mixBlendMode')) look.push(row('Blend', choice('mixBlendMode', (P.mixBlendMode.type.enums || []).map((o) => [o.value ?? o, String(o.label ?? o)]))));
-  for (const n of ['backdropBlur', 'transformScale', 'zIndex']) if (has(n)) look.push(row(P[n].displayName || n, num(n)));
+  for (const n of ['backdropBlur', 'transformScale', 'zIndex']) if (has(n)) look.push(row(P[n].displayName && P[n].displayName !== n ? P[n].displayName : portWords(n), num(n)));
   if (secOpen.Appearance === false && ['opacity', 'transformRotation', 'transformX', 'transformY', 'borderRadius'].some((n) => own(n) !== undefined && own(n) !== 0 && own(n) !== 1)) secOpen.Appearance = true;
   add(section('Appearance', look));
 
@@ -2092,7 +2105,7 @@ function rulePropertyMenu(e, node, pick, only) {
     const q = search.value.trim().toLowerCase();
     let group = null;
     for (const p of ports) {
-      const label = p.displayName || p.name;
+      const label = p.displayName && p.displayName !== p.name ? p.displayName : portWords(p.name);
       if (q && !label.toLowerCase().includes(q) && !p.name.toLowerCase().includes(q)) continue;
       if ((p.group || 'General') !== group) { group = p.group || 'General'; list.append(h('div', { class: 'h' }, group)); }
       list.append(h('div', { class: 'item', 'data-port': p.name, onclick: () => { closeMenu('.menu'); pick(p); } }, label));

@@ -764,6 +764,10 @@ try {
     const PANEL = 'components/Reusable/Probe panel/';
     const offered = await b.evaluate(`[...document.querySelectorAll('#pagepick optgroup option')].map(o => o.value)`);
     ok(offered.includes('Reusable/Probe panel') && !offered.some((k) => k.startsWith('Pages/')), 'the page picker lists the reusables after the pages', offered);
+    // the template's Commands and Logic say "visual" in the registry and draw nothing; a Command holds a Write history copy
+    const palette = await b.evaluate(`[...document.querySelectorAll('#components button')].map(b => b.title)`);
+    const logicOnes = ['Commands/Add task', 'Commands/Close task', 'Logic/Write history', 'Logic/Todo data'];
+    ok(palette.includes('Todo/Task row') && offered.includes('Todo/Task row') && !logicOnes.some((k) => palette.includes(k) || offered.includes(k)), 'components that draw nothing (Commands, Logic) are not offered as reusable elements', { palette, offered });
     let n0 = await shows();
     await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Reusable/Probe panel'; s.dispatchEvent(new Event('change')); })()`);
     await rebuilt(n0); await wait(600);
@@ -855,6 +859,9 @@ try {
     // taking theirs first once hid Background Color from this menu
     const props = JSON.parse(await b.evaluate(`JSON.stringify((() => { const lib = __ob.preview.nodeLibrary.nodetypes.find(t => t.name === 'net.noodl.controls.button'); const may = new Set(lib.ports.filter(p => p.allowVisualStates).map(p => p.name)); const mine = __ob.ports('siCreate').map(p => p.name); return { menu: [...document.querySelectorAll('.menu.ruleprops .item')].map(i => i.dataset.port).sort(), allowed: mine.filter(n => may.has(n)).sort(), all: mine.length }; })())`));
     ok(props.menu.join() === props.allowed.join() && props.allowed.includes('backgroundColor') && props.all > props.allowed.length, 'then exactly the properties the node library lets a state change (allowVisualStates), not all of them', { menu: props.menu.length, allowed: props.allowed.length, all: props.all, missing: props.allowed.filter((n) => !props.menu.includes(n)).slice(0, 8) });
+    const raw = await b.evaluate(`[...document.querySelectorAll('.menu.ruleprops .item')].map(i => i.textContent).filter(t => /^[a-z]+[A-Z]/.test(t))`);
+    const layer = await b.evaluate(`document.querySelector('.menu.ruleprops .item[data-port=zIndex]')?.textContent`);
+    ok(!raw.length && layer === 'Layer (z-index)', 'a property with no name in the node library is said in words ("zIndex" read raw)', { raw, layer });
     const bg0 = await drawnBg();
     n0 = await shows();
     await b.evaluate(`document.querySelector('.menu.ruleprops .item[data-port=backgroundColor]')?.scrollIntoView({ block: 'nearest' })`);

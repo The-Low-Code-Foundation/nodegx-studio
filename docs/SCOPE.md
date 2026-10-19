@@ -313,6 +313,23 @@ longer had).
 - Pictures for Richard, s6: `docs/look/s6/` (the Text Input panel and its Label text, the image popover, the look menu
   and a hover look added, the rename field).
 
+**Two of s6's leftovers, fixed (s7).**
+- **Logic components offered as reusables.** The todo template's 19 Commands and 8 Logic components say `"visual"` in
+  their component.json and draw nothing; the palette skipped only a registry type of `logic`, and the page picker's
+  draw test (`reusableKeys`) took a Command for drawing because it holds a Write history copy, whose type said visual
+  too. Now `componentDraws(key)` answers for both and for `isVisualType('/…')`: a component draws when it lists top
+  elements or a top-level node draws, a copy of another component counting only if that one draws (a cycle draws
+  nothing). So a Command copy placed on a page is logic in the tree and the Workflow tab, not an element.
+- **A property with no name said raw.** The kit's spec labels some ports with their own name ("zIndex"), which Studio
+  took as the label; the look menu and the Visual tab now say a camelCase name in words, and zIndex as "Layer
+  (z-index)".
+- Gate: `check:editor` 153/153 (2 new: the palette and the picker offer Task row and none of four Commands / Logic; no
+  look-menu entry is camelCase and zIndex reads "Layer (z-index)"). Mutant (`reusableKeys` back to the registry type):
+  152/153, the palette listing Write history, Add task, Move task… The copy-is-logic half on a page is not
+  mutant-tested.
+- **Left as it is:** a new rule's value starting as the property's value now. It is the choice a look makes too
+  (`lookStart`: adding one changes nothing on screen until it is set), and the toast says "set what it becomes".
+
 ---
 
 ## M1 — The desktop app
