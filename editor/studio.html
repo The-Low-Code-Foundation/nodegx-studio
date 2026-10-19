@@ -76,9 +76,9 @@
   header .crumb .sep { color: var(--line-2); }
   header .crumb select { width: auto; padding: 3px 24px 3px 8px; border-color: transparent; background-color: transparent; font-weight: 500; }
   header .crumb select:hover { border-color: var(--line-2); }
-  header .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: var(--r); overflow: hidden; }
-  header .seg button { border: 0; border-radius: 0; padding: 4px 9px; color: var(--muted); }
-  header .seg button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent-ink); }
+  header .seg, .pageitem .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: var(--r); overflow: hidden; }
+  header .seg button, .pageitem .seg button { border: 0; border-radius: 0; padding: 4px 9px; color: var(--muted); }
+  header .seg button[aria-pressed=true], .pageitem .seg button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent-ink); }
   header .toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); cursor: pointer; user-select: none; }
   header .toggle i { width: 30px; height: 16px; border-radius: 8px; background: var(--line-2); position: relative; transition: background .15s; }
   header .toggle i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 6px; background: #fff; transition: left .15s; }
@@ -158,9 +158,9 @@
   .drop { position: absolute; background: var(--accent); pointer-events: none; border-radius: 2px; }
   .drop.into { background: transparent; border: 2px dashed var(--accent); }
   .props { padding: 0 12px 24px; }
-  .props .head { padding: 12px 12px 10px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto; gap: 6px 8px; align-items: center; }
-  .props .head input { font-weight: 600; }
-  .props .head .type { color: var(--muted); font-size: 12px; grid-column: 1 / -1; }
+  .right > .head, .props .head { padding: 12px 12px 10px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto; gap: 6px 8px; align-items: center; }
+  .right > .head input, .props .head input { font-weight: 600; }
+  .right > .head .type, .props .head .type { color: var(--muted); font-size: 12px; grid-column: 1 / -1; }
   .group { border-bottom: 1px solid var(--line); }
   .group summary { padding: 9px 0; font-weight: 600; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; color: var(--ink); }
   .group summary::after { content: ''; width: 8px; height: 8px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); margin-right: 4px; transition: transform .12s; }
@@ -187,6 +187,37 @@
   /* ---- Workflow ---- */
   #workflow { grid-template-columns: 280px 1fr; }
   .events .row { padding: 7px 8px; flex-direction: column; align-items: flex-start; gap: 1px; white-space: normal; }
+  /* page data (STU-011): one row per item — its name and readers, the question as a sentence, its last run in the app */
+  .pagedata .row { padding: 6px 8px; flex-direction: column; align-items: stretch; gap: 1px; white-space: normal; }
+  .pagedata .row .top { display: flex; align-items: center; gap: 8px; }
+  .pagedata .row .top svg.i { width: 14px; height: 14px; color: var(--muted); }
+  .pagedata .row .name { font-weight: 500; color: var(--ink); overflow: hidden; text-overflow: ellipsis; }
+  .pagedata .row small { color: var(--muted); font-size: 11px; padding-left: 22px; }
+  .pagedata .row small.run { font-variant-numeric: tabular-nums; }
+  .pagedata .row[aria-selected=true] small, .pagedata .row[aria-selected=true] .name { color: var(--accent-ink); }
+  .pagedata .hint { padding: 2px 8px 6px; }
+  .queries { margin-left: 10px; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .queries.none { background: var(--panel-2); color: var(--muted); }
+  .queries.off { background: transparent; color: var(--muted); }
+  .chip.data { background: #e8f6ee; color: #11683a; border-color: #bfe3cc; }
+  .pageitem .field.wide { grid-template-columns: 1fr; }
+  .pageitem .conds { display: flex; flex-direction: column; gap: 6px; }
+  .pageitem .cond { display: grid; grid-template-columns: 1fr 96px 1.2fr auto; gap: 4px; align-items: center; }
+  .pageitem .cond.sort { grid-template-columns: 1fr 110px auto; }
+  .pageitem .valrow { display: flex; gap: 2px; align-items: center; min-width: 0; }
+  .pageitem .cond .from { display: flex; gap: 2px; align-items: center; min-width: 0; }
+  .pageitem .cond .from .chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .pageitem .sentence { margin: 8px 0 2px; padding: 8px 10px; border-radius: var(--r); background: var(--panel-2); color: var(--ink-2); font-size: 12px; }
+  .pageitem .hint.warn { color: var(--warn); padding: 6px 0; }
+  .menu.newitem { width: 420px; padding: 10px 12px; }
+  .menu.newitem .field { grid-template-columns: 64px 1fr; }
+  .menu.newitem .cond { display: grid; grid-template-columns: 1fr 96px 1fr; gap: 4px; }
+  .menu.newitem .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: var(--r); overflow: hidden; justify-self: start; }
+  .menu.newitem .seg button { border: 0; border-radius: 0; padding: 4px 9px; color: var(--muted); }
+  .menu.newitem .seg button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent-ink); }
+  .menu.newitem .note { margin: 8px 0; padding: 8px 10px; border-radius: var(--r); background: var(--panel-2); color: var(--ink-2); font-size: 12px; }
+  .menu.newitem .note.twin { background: #e8f6ee; color: #11683a; }
+  .menu.newitem .foot { display: flex; gap: 6px; justify-content: flex-end; }
   .events .row small { color: var(--muted); font-size: 11px; }
   .events .row[aria-selected=true] small { color: var(--accent-ink); opacity: .75; }
   #steps { overflow: auto; padding: 24px 28px; }
@@ -328,7 +359,7 @@
     <button id="undo" title="Undo (⌘Z)"><svg class="i"><use href="#i-undo"/></svg><span class="tip">Undo <kbd>⌘Z</kbd></span></button>
   </nav>
   <header>
-    <div class="crumb"><span id="projname">…</span><span class="sep">/</span><label id="pagepick-l"><select id="pagepick" title="Page"></select></label></div>
+    <div class="crumb"><span id="projname">…</span><span class="sep">/</span><label id="pagepick-l"><select id="pagepick" title="Page"></select></label><span class="queries" id="querycount" hidden></span></div>
     <div class="seg" id="widthseg" title="Preview width">
       <button data-w="100%" aria-pressed="true">Fill</button><button data-w="1280">1280</button><button data-w="1024">1024</button><button data-w="768">768</button><button data-w="390">Phone</button>
     </div>
@@ -343,6 +374,8 @@
     <section class="tab" id="design">
       <aside>
         <div class="search"><svg class="i"><use href="#i-search"/></svg><input type="text" id="treesearch" placeholder="Search elements"></div>
+        <h3 class="sec">Page data <button class="tiny primary" id="newpagedata" title="A search the page runs once, named, that any element can read"><svg class="i"><use href="#i-plus"/></svg>New</button></h3>
+        <div class="pagedata list" id="pagedata"></div>
         <h3 class="sec">Elements on this page</h3>
         <div class="tree list" id="tree"></div>
         <h3 class="sec">Visual elements</h3>
@@ -399,6 +432,8 @@
 <script src="/preview.js"></script>
 <script type="module">
 import { hasSpec, specs, drawnPorts, portProjectFromStore, portContextFor, expressionPorts } from './specs.js';
+import { applyEdit } from './edits.mjs';
+import { OPERATORS, createEdits, updateEdits, removeEdits, readItems, readFrom, readersOf, itemOfSource, sameAs, signature, describe, lastRun, queriesOnOpen } from './pagedata.mjs';
 
 const $ = (id) => document.getElementById(id);
 const h = (tag, attrs = {}, ...kids) => {
@@ -600,81 +635,6 @@ $('clash-theirs').onclick = () => {
   takeOutside({ changed: Object.fromEntries(clash.filter((c) => c.theirs !== null).map((c) => [c.path, c.theirs])), removed: clash.filter((c) => c.theirs === null).map((c) => c.path) }, { all: true });
 };
 
-/* ================= the eight edits, with the reference's semantics (editor-suite/edits.ts), plus two fields ================= */
-function applyEdit(filesIn, edit) {
-  const out = JSON.parse(JSON.stringify(filesIn));
-  const nodes = out.nodes.nodes;
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  const must = (id, what) => { const n = byId.get(id); if (!n) throw new Error(`${what}: node "${id}" does not exist.`); return n; };
-  const attach = (child, parentId, index) => {
-    const parent = must(parentId, 'attach');
-    if (!parent.children) parent.children = [];
-    if (!parent.children.includes(child.id)) {
-      const at = index !== undefined ? Math.max(0, Math.min(index, parent.children.length)) : parent.children.length;
-      parent.children.splice(at, 0, child.id);
-    }
-    child.parent = parentId;
-  };
-  switch (edit.edit) {
-    case 'add_node': {
-      const id = edit.id ?? uuid();
-      if (byId.has(id)) throw new Error(`add_node: "${id}" exists`);
-      const node = { id, type: edit.type };
-      if (edit.label !== undefined) node.label = edit.label;
-      if (edit.x !== undefined) node.x = edit.x;
-      if (edit.y !== undefined) node.y = edit.y;
-      if (edit.parameters) node.parameters = { ...edit.parameters };
-      if (edit.metadata) node.metadata = { ...edit.metadata };
-      if (edit.parent !== undefined) attach(node, edit.parent, edit.index);
-      nodes.push(node);
-      return { files: out, id };
-    }
-    case 'remove_node': {
-      must(edit.id, 'remove_node');
-      const doomed = new Set([edit.id]);
-      let grew = true;
-      while (grew) { grew = false; for (const n of nodes) if (n.parent !== undefined && doomed.has(n.parent) && !doomed.has(n.id)) { doomed.add(n.id); grew = true; } }
-      out.nodes.nodes = nodes.filter((n) => !doomed.has(n.id));
-      for (const n of out.nodes.nodes) if (n.children) { n.children = n.children.filter((c) => !doomed.has(c)); if (!n.children.length) delete n.children; }
-      out.connections.connections = out.connections.connections.filter((c) => !doomed.has(c.fromId) && !doomed.has(c.toId));
-      if (out.nodes.visualRoots) { out.nodes.visualRoots = out.nodes.visualRoots.filter((id) => !doomed.has(id)); if (!out.nodes.visualRoots.length) delete out.nodes.visualRoots; }
-      return { files: out };
-    }
-    case 'connect': {
-      const c = { fromId: edit.from.node, fromProperty: edit.from.port, toId: edit.to.node, toProperty: edit.to.port };
-      must(c.fromId, 'connect'); must(c.toId, 'connect');
-      if (out.connections.connections.some((x) => sameWire(x, c))) throw new Error('connect: that wire exists');
-      out.connections.connections.push(c);
-      return { files: out };
-    }
-    case 'disconnect': {
-      const c = { fromId: edit.from.node, fromProperty: edit.from.port, toId: edit.to.node, toProperty: edit.to.port };
-      out.connections.connections = out.connections.connections.filter((x) => !sameWire(x, c));
-      return { files: out };
-    }
-    case 'set_parameter': {
-      const node = must(edit.id, 'set_parameter');
-      if (edit.value === undefined) { if (node.parameters) delete node.parameters[edit.name]; }
-      else node.parameters = { ...(node.parameters ?? {}), [edit.name]: edit.value };
-      return { files: out };
-    }
-    case 'move': { const node = must(edit.id, 'move'); node.x = edit.x; node.y = edit.y; return { files: out }; }
-    case 'rename': { const node = must(edit.id, 'rename'); node.label = edit.label; return { files: out }; }
-    case 'add_child': {
-      const node = must(edit.id, 'add_child'); must(edit.parent, 'add_child');
-      if (edit.parent === edit.id) throw new Error('add_child: own parent');
-      for (let cur = byId.get(edit.parent); cur; cur = cur.parent !== undefined ? byId.get(cur.parent) : undefined) if (cur.id === edit.id) throw new Error('add_child: inside own subtree');
-      if (node.parent !== undefined) { const old = byId.get(node.parent); if (old?.children) { old.children = old.children.filter((c) => c !== node.id); if (!old.children.length) delete old.children; } }
-      attach(node, edit.parent, edit.index);
-      return { files: out };
-    }
-    // two fields of the node record the eight do not touch: the variant it wears, and what the editor remembers about it
-    case 'set_variant': { const node = must(edit.id, 'set_variant'); if (edit.variant) node.variant = edit.variant; else delete node.variant; return { files: out }; }
-    case 'set_metadata': { const node = must(edit.id, 'set_metadata'); node.metadata = { ...(node.metadata ?? {}), ...edit.metadata }; for (const k of Object.keys(edit.metadata)) if (edit.metadata[k] === undefined) delete node.metadata[k]; if (!Object.keys(node.metadata).length) delete node.metadata; return { files: out }; }
-  }
-  throw new Error('unknown edit');
-}
-const sameWire = (a, b) => a.fromId === b.fromId && a.fromProperty === b.fromProperty && a.toId === b.toId && a.toProperty === b.toProperty;
 
 /** One gesture = one write: every edit applied to the component's files, then written once with ifRevision. */
 function edits(componentKey, list, { rebuildApp = true, redraw } = {}) {
@@ -689,7 +649,7 @@ function edits(componentKey, list, { rebuildApp = true, redraw } = {}) {
   if (rebuildApp) rebuild();
   // an edit that changes which fields or steps exist redraws the panel; typing into a field does not (it would lose the caret)
   const structural = redraw ?? list.some((e) => !['set_parameter', 'rename', 'move'].includes(e.edit) || (e.edit === 'set_parameter' && e.name === 'collectionName'));
-  if (structural) setTimeout(() => { if (tab === 'workflow') renderWorkflow(); else if (tab === 'design') { renderTree(); renderProps(); } }, 0);
+  if (structural) setTimeout(() => { if (tab === 'workflow') renderWorkflow(); else if (tab === 'design') { renderPageData(); renderTree(); renderProps(); } }, 0);
   return ids;
 }
 /** A brand-new component (an option set): three files and a registry entry through the store. */
@@ -782,6 +742,7 @@ function followApp() {
   }
 }
 let nodes = [], conns = [], byId = {}, visualIds = [], depthOf = {}, legacyName = '';
+let pageItems = [], selItem = null; // the page's data items (STU-010), and the one open in the right panel
 function readGraph() {
   const stored = store.readComponent(pageKey);
   const comp = stored.files;
@@ -793,6 +754,8 @@ function readGraph() {
   const walk = (id, d) => { if (!byId[id] || id in depthOf) return; depthOf[id] = d; visualIds.push(id); for (const c of byId[id].children || []) walk(c, d + 1); };
   const roots = comp.nodes.visualRoots?.length ? comp.nodes.visualRoots : nodes.filter((n) => n.parent === undefined && (n.children || isVisualType(n.type))).map((n) => n.id);
   for (const r of roots) walk(r, 0);
+  pageItems = readItems(nodes, conns);
+  if (selItem && !pageItems.some((i) => i.id === selItem)) selItem = null;
 }
 const typeDef = (type) => libIndex.get(type);
 const typeName = (type) => typeDef(type)?.displayNodeName || typeDef(type)?.displayName || (type.startsWith('/') ? type.split('/').pop() : type);
@@ -958,7 +921,7 @@ function draw() {
   }
 }
 const box = (r, cls, tag, size) => h('div', { class: `box ${cls}`, style: `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px` }, h('div', { class: 'tag' }, tag, size ? h('span', { style: 'opacity:.75;font-weight:400' }, size) : null));
-function select(id) { sel = id; hover = null; renderTree(); renderProps(); draw(); }
+function select(id) { sel = id; hover = null; if (id) selItem = null; renderTree(); renderPageData(); renderProps(); draw(); }
 
 overlay.addEventListener('mousemove', (e) => {
   if (gesture) return onGestureMove(e);
@@ -1218,6 +1181,7 @@ function tokensOf(category) {
 let propTimer;
 function renderProps() {
   const right = $('right'); right.innerHTML = '';
+  if (selItem) return renderItem(right);
   if (!sel || !byId[sel]) { right.append(h('div', { class: 'empty' }, 'Click an element in the page to see its properties.')); return; }
   const node = byId[sel];
   const params = node.parameters || {};
@@ -1329,6 +1293,7 @@ function sourceChip(fromId, port) {
   if (n.metadata?.customState) return h('span', { class: 'chip state' }, icon('state'), `${labelOf(n.metadata.customState.of)}'s ${stateName(n)}`);
   if (n.type.startsWith('/Option sets/')) return h('span', { class: 'chip opt' }, icon('list'), `${n.type.split('/').pop()} · ${portLabel(n, 'output', port)}`);
   if (isComposed(n)) return h('span', { class: 'chip expr' }, icon('fx'), composedPreview(n));
+  if (isPageDataNode(n)) return h('span', { class: 'chip data' }, icon('db'), pageDataChip(fromId, port));
   return h('span', { class: 'chip' }, `${labelOf(fromId)}'s ${portLabel(n, 'output', port)}`);
 }
 /** Every value a field can take from the page, grouped as Bubble's dropdown is. */
@@ -1336,13 +1301,15 @@ function valueSources(forNode) {
   const groups = [];
   const rank = (o) => { const g = (o.raw?.group || o.group || 'General'); return g === 'General' ? 0 : /Advanced|Bounding Box|Mounted/.test(g) ? 3 : /States|Events|Component/.test(g) ? 1 : 2; };
   const outs = (n) => portsOf(n, 'output').filter((o) => !o.signal).sort((a, b) => rank(a) - rank(b));
+  const data = pageDataSources();
+  if (data.length) groups.push(['Page data', data]);
   const states = statesOf().filter((n) => n.id !== forNode?.id).map((n) => ({ node: n.id, port: 'value', text: `${labelOf(n.metadata.customState.of)}'s ${stateName(n)}`, sub: n.metadata.customState.type, kind: 'state' }));
   if (states.length) groups.push(['Custom states', states]);
   const sets = optionSetKeys().map((k) => ({ setKey: k, text: `${k.split('/').pop()} · all options`, sub: 'option set', kind: 'opt' }));
   if (sets.length) groups.push(['Option sets', sets]);
   const elements = [], logic = [];
   for (const n of nodes) {
-    if (n.id === forNode?.id || n.metadata?.customState || isComposed(n) || n.type.startsWith('/Option sets/')) continue;
+    if (n.id === forNode?.id || n.metadata?.customState || isComposed(n) || n.type.startsWith('/Option sets/') || isPageDataNode(n)) continue;
     const list = isVisualType(n.type) ? elements : logic;
     for (const o of outs(n)) list.push({ node: n.id, port: o.name, text: `${labelOf(n.id)}'s ${o.label}`, sub: `${typeName(n.type)} · ${o.type}`, kind: isVisualType(n.type) ? 'el' : 'logic' });
   }
@@ -1358,7 +1325,7 @@ function optionSetInstance(setKey) {
   const [id] = edits(pageKey, [{ edit: 'add_node', component: pageKey, type: '/' + setKey, label: setKey.split('/').pop(), x: 1000, y: 100 + logicN * 70 }], { redraw: false });
   return id;
 }
-function sourceMenu(e, node, p, onPick) {
+function sourceMenu(e, node, p, onPick, initial = '') {
   closeMenu(onPick ? '.menu:not(.composer)' : '.menu');
   const menu = popover(e);
   const search = h('input', { type: 'text', placeholder: 'Search values…' });
@@ -1366,6 +1333,13 @@ function sourceMenu(e, node, p, onPick) {
   const pick = (src) => {
     closeMenu(onPick ? '.menu:not(.composer)' : '.menu');
     if (src.setKey) src = { ...src, node: optionSetInstance(src.setKey), port: 'items' };
+    if (src.item) {
+      // a first item's field must be listed on its record node first: in the same gesture as the wire when there is one
+      const r = readFrom(itemById(src.item), src.what, { component: pageKey, nodes });
+      if (onPick) { if (r.edits.length) edits(pageKey, r.edits, { redraw: false }); return onPick({ node: r.node, port: r.port, text: r.text }); }
+      edits(pageKey, [...r.edits, { edit: 'connect', component: pageKey, from: { node: r.node, port: r.port }, to: { node: node.id, port: p.name } }]);
+      return toast(`${p.displayName || p.name} now comes from ${r.text}`);
+    }
     if (onPick) return onPick(src);
     edits(pageKey, [{ edit: 'connect', component: pageKey, from: { node: src.node, port: src.port }, to: { node: node.id, port: p.name } }]);
     toast(`${p.displayName || p.name} now comes from ${src.text}`);
@@ -1374,16 +1348,19 @@ function sourceMenu(e, node, p, onPick) {
     list.innerHTML = '';
     const q2 = (q || '').toLowerCase();
     if (!q2 && !onPick) list.append(h('div', { class: 'item', onclick: () => { closeMenu(); openComposer(e, node, p, null, onPick); } }, icon('fx'), 'Compose an expression…', h('small', {}, 'chips, JavaScript, or both')));
+    // Bubble's "Do a search for…": never a search in the field, always page data, made or reused here
+    if (!q2 || /search|data|new/.test(q2)) list.append(h('div', { class: 'item', onclick: (ev) => newItemForm(ev, (it) => (it.first ? sourceMenu(e, node, p, onPick, `${it.name}'s`) : pick({ item: it.id, what: 'list', text: `${it.name} · the list` })), { keepComposer: !!onPick }) }, icon('plus'), 'New page data…', h('small', {}, 'do a search, once, for the page')));
     for (const [title, items] of valueSources(node)) {
       const shown = items.filter((it) => !q2 || it.text.toLowerCase().includes(q2));
       if (!shown.length) continue;
       list.append(h('div', { class: 'h' }, title));
-      for (const it of shown) list.append(h('div', { class: 'item', onclick: () => pick(it) }, icon(it.kind === 'state' ? 'state' : it.kind === 'opt' ? 'list' : it.kind === 'el' ? glyphOf(byId[it.node].type) : 'code'), it.text, h('small', {}, it.sub)));
+      for (const it of shown) list.append(h('div', { class: 'item', onclick: () => pick(it) }, icon(it.kind === 'state' ? 'state' : it.kind === 'opt' ? 'list' : it.kind === 'data' ? 'db' : it.kind === 'el' ? glyphOf(byId[it.node].type) : 'code'), it.text, h('small', {}, it.sub)));
     }
     if (!list.children.length) list.append(h('div', { class: 'hint' }, 'Nothing on this page matches.'));
   };
   search.oninput = () => fill(search.value);
-  fill('');
+  search.value = initial;
+  fill(initial);
   menu.append(h('div', { class: 'search' }, icon('search'), search), list); document.body.append(menu); search.focus();
   dismissOnOutside(menu);
 }
@@ -1406,6 +1383,246 @@ function renderDatalists() {
   dl('tokens-color', tokensOf('color')); dl('tokens-space', tokensOf('spacing').concat(tokensOf('radius'), tokensOf('typography-size'), tokensOf('typography'))); dl('tokens-font', tokensOf('typography'));
 }
 
+/* ================= page data (STU-010 / STU-011): a search lives once on the page, by name, and elements read it ================= */
+const isPageDataNode = (n) => !!(n?.metadata?.pageData || n?.metadata?.pageDataRecord);
+const itemById = (id) => pageItems.find((i) => i.id === id);
+/** Every data type the app knows: declared, in backend/schema.json, named by its own nodes, or on the running backend. */
+const typeNames = () => [...new Set([...collections().map((c) => c.name), ...schemaTables().map((t) => t.table), ...appCollections().keys(), ...liveTables.map((t) => t.name)])].filter(Boolean).sort();
+function fieldsOf(type) {
+  const out = new Set();
+  const colName = (c) => (typeof c === 'string' ? c : c?.name);
+  for (const c of collections()) if (c.name === type) for (const col of c.columns || []) out.add(colName(col));
+  for (const t of schemaTables()) if (t.table === type) for (const col of t.columns || []) out.add(colName(col));
+  for (const f of appCollections().get(type) || []) out.add(f);
+  for (const t of liveTables) if (t.name === type) for (const col of t.columns || []) out.add(colName(col));
+  for (const f of [undefined, 'objectId', 'ACL']) out.delete(f);
+  return [...out].sort();
+}
+/** What a field can read from the page's data: a list's items, count and emptiness; a first item's fields. */
+function pageDataSources() {
+  const out = [];
+  for (const it of pageItems) {
+    if (it.unsupported) continue;
+    if (it.first) {
+      for (const f of [...new Set([...(it.fields || []), ...fieldsOf(it.collection)])]) out.push({ item: it.id, what: f, text: `${it.name}'s ${f}`, sub: `the first ${it.collection}`, kind: 'data' });
+      out.push({ item: it.id, what: 'empty', text: `${it.name} is empty`, sub: 'yes / no', kind: 'data' });
+    } else {
+      out.push({ item: it.id, what: 'list', text: `${it.name} · the list`, sub: `every ${it.collection} it finds`, kind: 'data' });
+      out.push({ item: it.id, what: 'count', text: `${it.name} · count`, sub: 'number', kind: 'data' });
+      out.push({ item: it.id, what: 'empty', text: `${it.name} is empty`, sub: 'yes / no', kind: 'data' });
+    }
+  }
+  return out;
+}
+function pageDataChip(fromId, port) {
+  const it = itemOfSource(pageItems, fromId);
+  if (!it) return port;
+  if (fromId === it.recordId && port.startsWith('prop-')) return `${it.name}'s ${port.slice(5)}`;
+  return { items: `${it.name} · the list`, count: `${it.name} · count`, isEmpty: `${it.name} is empty`, firstItemId: `${it.name}'s id` }[port] ?? `${it.name} · ${port}`;
+}
+/** What the app's frame wrote down (./probe.js): its requests and its moves between pages. */
+const frameWindow = () => { try { return preview.frame?.contentWindow ?? null; } catch { return null; } };
+const frameLog = () => { try { return frameWindow()?.__studioLog || []; } catch { return []; } };
+function runText(run) {
+  if (!run) return 'has not run in this preview';
+  if (run.running) return 'running…';
+  const ms = `${Math.round(run.ms)} ms`;
+  if (!(run.status >= 200 && run.status < 300)) return `refused by the backend (${run.status || 'no answer'}) · ${ms}`;
+  return `${run.rows ?? '?'} row${run.rows === 1 ? '' : 's'} · ${ms} · ${(run.t / 1000).toFixed(1)} s after the app opened`;
+}
+const sentence = (it) => describe(it, (from) => (from ? chipText(from.node, from.port) : 'nothing yet'));
+
+function renderPageData() {
+  const box = $('pagedata'); box.innerHTML = '';
+  const log = frameLog();
+  for (const it of pageItems) {
+    const n = readersOf(it, nodes, conns).length;
+    box.append(h('div', { class: 'row', 'aria-selected': selItem === it.id, 'data-item': it.id, onclick: () => openItem(it.id) },
+      h('div', { class: 'top' }, icon('db'), h('span', { class: 'name' }, it.name), h('span', { class: 't', title: 'How many elements read it' }, `${n} reader${n === 1 ? '' : 's'}`)),
+      h('small', {}, sentence(it)),
+      h('small', { class: 'run' }, runText(lastRun(it, log)))));
+  }
+  if (!pageItems.length) box.append(h('div', { class: 'hint' }, 'No page data yet. A search is made here once, by name, and any element reads it.'));
+}
+function openItem(id) { selItem = id; sel = null; hover = null; renderTree(); renderPageData(); renderProps(); draw(); }
+
+$('newpagedata').onclick = (e) => newItemForm(e, (it) => openItem(it.id));
+
+/**
+ * The one way a search is made (STU-012): name it, say what it asks. If an item on the page already asks exactly that,
+ * the form says so as you type and Create uses that item: no path writes a second identical query on a page.
+ * `onMade(item, reused)` gets the item either way.
+ */
+function newItemForm(e, onMade, { keepComposer = false } = {}) {
+  const close = () => closeMenu(keepComposer ? '.menu:not(.composer)' : '.menu');
+  close();
+  const types = typeNames();
+  if (!types.length) return toast('There are no data types yet: make one in the Data tab first.');
+  const menu = popover(e, 'newitem');
+  let first = false;
+  const name = h('input', { type: 'text', placeholder: 'what elements will call it: tasks, org…', 'aria-label': 'Name' });
+  const type = h('select', { 'aria-label': 'Type' }, ...types.map((t) => h('option', { value: t }, t)));
+  const fields = () => { for (const old of document.querySelectorAll('#newitem-fields')) old.remove(); document.body.append(h('datalist', { id: 'newitem-fields' }, ...fieldsOf(type.value).map((f) => h('option', { value: f })))); };
+  const field = h('input', { type: 'text', list: 'newitem-fields', placeholder: 'field (optional)', 'aria-label': 'Where field' });
+  const op = h('select', { 'aria-label': 'Where operator' }, ...OPERATORS.map(([v, label]) => h('option', { value: v }, label)));
+  const value = h('input', { type: 'text', placeholder: 'value', 'aria-label': 'Where value' });
+  const gives = h('div', { class: 'seg' }, ...[[false, 'Every match'], [true, 'The first one']].map(([f, label]) => h('button', { 'aria-pressed': String(f === first), onclick: () => { first = f; for (const b of gives.children) b.setAttribute('aria-pressed', b.textContent === label); check(); } }, label)));
+  const note = h('div', { class: 'note' });
+  const create = h('button', { class: 'primary' }, 'Create');
+  const parse = (raw) => (/^-?\d+(\.\d+)?$/.test(raw) ? Number(raw) : raw === 'true' ? true : raw === 'false' ? false : raw);
+  const draft = () => {
+    const f = field.value.trim();
+    const where = !f ? [] : op.value === 'exists' ? [{ field: f, op: 'exists', value: true }] : op.value === 'isEmpty' ? [{ field: f, op: 'isEmpty' }] : [{ field: f, op: op.value, value: parse(value.value) }];
+    return { name: name.value.trim(), collection: type.value, match: 'all', where, sort: [], first };
+  };
+  const check = () => {
+    const twin = sameAs(pageItems, draft());
+    note.textContent = twin ? `${twin.name} already asks this (${sentence(twin)}), so Create uses it: the page still runs it once.` : `It will ask for ${sentence({ ...draft(), name: '' })}.`;
+    note.className = `note${twin ? ' twin' : ''}`;
+    create.textContent = twin ? `Use ${twin.name}` : 'Create';
+  };
+  create.onclick = () => {
+    const d = draft();
+    const twin = sameAs(pageItems, d);
+    close();
+    if (twin) { toast(`${twin.name} already asks that, so it is used: one question, one query`); return onMade(twin, true); }
+    const base = d.name || d.collection.replace(/^./, (c) => c.toLowerCase()) + (d.first ? '' : 's');
+    let nm = base, i = 2;
+    while (pageItems.some((x) => x.name === nm)) nm = `${base} ${i++}`;
+    const logicN = nodes.filter((n) => !isVisualType(n.type)).length;
+    const made = createEdits({ ...d, name: nm }, { component: pageKey, x: 1000, y: 100 + logicN * 70 });
+    edits(pageKey, made.edits, { redraw: false });
+    toast(`${nm} is page data: one query, run when the page opens`);
+    onMade(itemById(made.id), false);
+  };
+  for (const el of [name, field, value]) el.oninput = check;
+  type.onchange = () => { fields(); check(); };
+  op.onchange = check;
+  fields();
+  menu.append(h('div', { class: 'h' }, 'New page data'),
+    h('div', { class: 'field' }, h('label', {}, 'Name'), name),
+    h('div', { class: 'field' }, h('label', {}, 'Type'), type),
+    h('div', { class: 'field' }, h('label', {}, 'Gives'), gives),
+    h('div', { class: 'field' }, h('label', {}, 'Where'), h('div', { class: 'cond' }, field, op, value)),
+    note,
+    h('div', { class: 'foot' }, h('button', { onclick: close }, 'Cancel'), create));
+  document.body.append(menu); name.focus(); check();
+  // opened from the composer, it closes on a click outside both, and leaves the composer open
+  if (keepComposer) setTimeout(() => document.addEventListener('mousedown', function outside(ev) { if (!menu.isConnected) return; if (!menu.contains(ev.target) && !ev.target.closest('.composer')) menu.remove(); else document.addEventListener('mousedown', outside, { once: true }); }, { once: true }), 0);
+  else dismissOnOutside(menu);
+}
+
+/** The page's "N queries on open", counted off the requests the app made, never off its nodes. */
+function urlPathOf(key) { try { const p = store.readComponent(key).files.nodes.nodes.find((n) => n.type === 'Page'); return String(p?.parameters?.urlPath ?? '').replace(/^\//, '').replace(/\/$/, ''); } catch { return undefined; } }
+function renderQueryCount() {
+  const el = $('querycount');
+  const w = frameWindow();
+  if (!w) { el.hidden = true; return; }
+  const mine = urlPathOf(pageKey), start = startPageKey();
+  const isPage = (path) => {
+    const [p, hash = ''] = String(path).split('#');
+    const loc = (hash ? hash.replace(/^\/?/, '') : p.replace(/^\/runtime\/?/, '').replace(/^\//, '')).split('?')[0].replace(/\/$/, '');
+    return loc === mine || (loc === '' && pageKey === start);
+  };
+  let r; try { r = queriesOnOpen(frameLog(), isPage, { now: w.performance.now() }); } catch { r = { arrived: false }; }
+  if (!r.arrived) { el.hidden = false; el.className = 'queries off'; el.textContent = 'not open in the app'; el.title = 'The app is on another page, so this page\'s queries on open cannot be counted.'; return; }
+  const n = r.queries.length;
+  el.hidden = false; el.className = `queries${n ? '' : ' none'}`;
+  el.textContent = `${n} quer${n === 1 ? 'y' : 'ies'} on open${r.settled ? '' : '…'}`;
+  el.title = n ? `The requests the app made opening this page:\n${r.queries.map((q) => `${decodeURIComponent(q.path.split('/').pop())} · ${q.t1 !== undefined ? Math.round(q.t1 - q.t0) + ' ms' : 'running'}${q.rows !== undefined ? ` · ${q.rows} rows` : ''}`).join('\n')}` : 'The app asked the backend nothing when this page opened.';
+}
+let probeSeen = '', probeFrame = null;
+setInterval(() => {
+  if (tab !== 'design') return;
+  renderQueryCount();
+  const log = frameLog();
+  const seen = `${log.length}:${log.filter((e) => e.t1 !== undefined).length}`;
+  if (seen === probeSeen && preview.frame === probeFrame) return;
+  probeSeen = seen; probeFrame = preview.frame;
+  renderPageData();
+  const run = $('itemrun'); const it = selItem && itemById(selItem);
+  if (run && it) run.textContent = runText(lastRun(it, log));
+}, 500);
+
+/** The item in the right panel: what it asks, who reads it, what it did in the app. */
+function renderItem(right) {
+  const it = itemById(selItem);
+  if (!it) { selItem = null; return renderProps(); }
+  if (!liveTables.length && backendUp() && !renderItem.asked) { renderItem.asked = true; readLiveTables().then(() => { if (selItem === it.id) renderProps(); }); }
+  /** One change: the item as it is now (never the one this panel was drawn from) with `patch(it)` applied. */
+  const save = (patch, { redraw = true } = {}) => {
+    const now = itemById(it.id); if (!now) return;
+    const next = { ...now, ...patch(now) };
+    const twin = signature(next) !== signature(now) && pageItems.find((o) => o.id !== now.id && signature(o) === signature(next));
+    if (twin) { toast(`That would ask exactly what ${twin.name} asks. One question is one item: read ${twin.name}, or ask something different.`); return renderProps(); }
+    const list = updateEdits(now, next, { component: pageKey, nodes, conns });
+    if (!list.length) return;
+    edits(pageKey, list, { redraw: false });
+    renderPageData();
+    if (redraw) renderProps();
+  };
+  const later = (fn) => { clearTimeout(propTimer); propTimer = setTimeout(fn, 400); };
+  const fieldList = `fields-${slug(it.collection || 'none')}`;
+  for (const old of document.querySelectorAll(`datalist[id^="fields-"]`)) old.remove();
+  document.body.append(h('datalist', { id: fieldList }, ...fieldsOf(it.collection).map((f) => h('option', { value: f }))));
+  right.append(h('div', { class: 'head' },
+    h('input', { type: 'text', value: it.name, 'aria-label': 'Name', oninput: (e) => { const v = e.target.value.trim(); if (v) later(() => save(() => ({ name: v }), { redraw: false })); } }),
+    h('button', { class: 'quiet danger', title: 'Delete this page data', onclick: () => { const readers = readersOf(it, nodes, conns).length; edits(pageKey, removeEdits(it, { component: pageKey })); selItem = null; renderPageData(); renderProps(); toast(`Removed ${it.name}${readers ? ` — ${readers} element${readers === 1 ? '' : 's'} no longer read it` : ''}`); } }, icon('trash')),
+    h('div', { class: 'type' }, 'Page data · one query, run when the page opens')));
+  const wrap = h('div', { class: 'props pageitem' });
+  if (it.unsupported) wrap.append(h('div', { class: 'hint warn' }, `Its filter has ${it.unsupported}, which Studio cannot show yet. Edit it in the NodeGX editor; Studio leaves it as it is.`));
+  const asks = h('details', { class: 'group', open: true }, h('summary', {}, 'Asks for'));
+  const typeSel = h('select', { disabled: !!it.unsupported, onchange: (e) => save(() => ({ collection: e.target.value })) }, ...[...new Set([it.collection, ...typeNames()])].filter(Boolean).map((t) => h('option', { value: t, selected: t === it.collection }, t)));
+  asks.append(h('div', { class: 'field' }, h('label', {}, 'Type'), typeSel));
+  const gives = h('div', { class: 'seg' }, ...[[false, 'Every match'], [true, 'The first one']].map(([first, label]) => h('button', { 'aria-pressed': String(it.first === first), disabled: !!it.unsupported, onclick: () => save(() => ({ first })) }, label)));
+  asks.append(h('div', { class: 'field' }, h('label', {}, 'Gives'), gives));
+  // the conditions: a field, an operator, and a typed value or one from the page
+  const conds = h('div', { class: 'conds' });
+  it.where.forEach((c, i) => {
+    const setCond = (patch, opts) => save((now) => ({ where: now.where.map((x, j) => (j === i ? { ...x, ...patch } : x)) }), opts);
+    const valueBox = c.op === 'exists' || c.op === 'isEmpty' ? h('span', { class: 'hint' }, '')
+      : c.from ? h('div', { class: 'from' }, sourceChip(c.from.node, c.from.port), h('button', { class: 'quiet tiny', title: 'Type a value instead', onclick: () => setCond({ from: undefined, value: '' }) }, icon('x')))
+      : h('div', { class: 'valrow' },
+        h('input', { type: 'text', value: c.value === undefined ? '' : String(c.value), placeholder: 'value', oninput: (e) => { const raw = e.target.value; const v = /^-?\d+(\.\d+)?$/.test(raw) ? Number(raw) : raw === 'true' ? true : raw === 'false' ? false : raw; later(() => setCond({ value: v }, { redraw: false })); } }),
+        h('button', { class: 'quiet tiny', title: 'Take the value from the page: an element, a state, Current User, other page data', onclick: (e) => sourceMenu(e, null, { name: 'value', displayName: c.field || 'value' }, (src) => setCond({ from: { node: src.node, port: src.port }, value: undefined })) }, icon('bolt')));
+    conds.append(h('div', { class: 'cond' },
+      h('input', { type: 'text', value: c.field, list: fieldList, placeholder: 'field', oninput: (e) => { const v = e.target.value.trim(); if (v) later(() => setCond({ field: v }, { redraw: false })); } }),
+      h('select', { onchange: (e) => setCond({ op: e.target.value, ...(e.target.value === 'exists' ? { value: true, from: undefined } : {}) }) }, ...OPERATORS.map(([op, label]) => h('option', { value: op, selected: op === c.op }, label))),
+      valueBox,
+      h('button', { class: 'quiet danger tiny', title: 'Remove this condition', onclick: () => save((now) => ({ where: now.where.filter((_, j) => j !== i) })) }, icon('x'))));
+  });
+  asks.append(h('div', { class: 'field wide' }, h('label', {}, 'Where'), conds));
+  const addRow = h('div', { class: 'field' }, h('label', {}), h('div', { style: 'display:flex;gap:6px;align-items:center' },
+    h('button', { class: 'tiny', disabled: !!it.unsupported, onclick: () => save((now) => ({ where: [...now.where, { field: fieldsOf(now.collection)[0] || 'field', op: 'equalTo', value: '' }] })) }, icon('plus'), 'Add a condition'),
+    it.where.length > 1 ? h('select', { style: 'width:auto', onchange: (e) => save(() => ({ match: e.target.value })) }, h('option', { value: 'all', selected: it.match === 'all' }, 'all must hold'), h('option', { value: 'any', selected: it.match === 'any' }, 'any one holds')) : null));
+  asks.append(addRow);
+  // the order
+  const sorts = h('div', { class: 'conds' });
+  it.sort.forEach((s, i) => {
+    const setSort = (patch, opts) => save((now) => ({ sort: now.sort.map((x, j) => (j === i ? { ...x, ...patch } : x)) }), opts);
+    sorts.append(h('div', { class: 'cond sort' },
+      h('input', { type: 'text', value: s.field, list: fieldList, placeholder: 'field', oninput: (e) => { const v = e.target.value.trim(); if (v) later(() => setSort({ field: v }, { redraw: false })); } }),
+      h('select', { onchange: (e) => setSort({ order: e.target.value }) }, h('option', { value: 'ascending', selected: s.order === 'ascending' }, 'ascending'), h('option', { value: 'descending', selected: s.order === 'descending' }, 'descending')),
+      h('button', { class: 'quiet danger tiny', title: 'Stop sorting by this', onclick: () => save((now) => ({ sort: now.sort.filter((_, j) => j !== i) })) }, icon('x'))));
+  });
+  asks.append(h('div', { class: 'field wide' }, h('label', {}, 'Sorted by'), sorts));
+  asks.append(h('div', { class: 'field' }, h('label', {}), h('div', {}, h('button', { class: 'tiny', disabled: !!it.unsupported, onclick: () => save((now) => ({ sort: [...now.sort, { field: fieldsOf(now.collection)[0] || 'createdAt', order: 'ascending' }] })) }, icon('plus'), 'Sort by'))));
+  if (!it.first) asks.append(h('div', { class: 'field' }, h('label', { title: 'With none, the backend decides (100 for a NodeGX backend)' }, 'At most'), h('input', { type: 'text', value: it.limit ?? '', placeholder: 'the backend\'s default', oninput: (e) => { const raw = e.target.value.trim(); const v = raw === '' ? undefined : Number(raw); if (raw === '' || Number.isInteger(v)) later(() => save(() => ({ limit: v }), { redraw: false })); } })));
+  asks.append(h('div', { class: 'sentence' }, sentence(it)));
+  wrap.append(asks);
+  // who reads it
+  const readers = readersOf(it, nodes, conns);
+  const rd = h('details', { class: 'group', open: true }, h('summary', {}, `Read by ${readers.length} element${readers.length === 1 ? '' : 's'}`));
+  for (const id of readers) rd.append(h('div', { class: 'row', onclick: () => byId[id] && isVisualType(byId[id].type) ? select(id) : null }, icon(byId[id] ? glyphOf(byId[id].type) : 'code'), labelOf(id)));
+  if (!readers.length) rd.append(h('div', { class: 'hint' }, 'Nothing reads it yet. Select an element, and in a field choose ', h('b', {}, 'Insert dynamic data'), ' → ', h('i', {}, it.first ? `${it.name}'s <field>` : `${it.name} · the list`)));
+  wrap.append(rd);
+  // what it did in the app on screen
+  const ran = h('details', { class: 'group', open: true }, h('summary', {}, 'In the app'));
+  ran.append(h('div', { class: 'field' }, h('label', {}, 'Last run'), h('div', { id: 'itemrun' }, runText(lastRun(it, frameLog())))));
+  wrap.append(ran);
+  right.append(wrap);
+}
+
 /* ================= the expression composer: chips, JavaScript, or both — one Expression node ================= */
 /** The chips of a composed Expression: each input name → where its value comes from. */
 function chipsOf(expr) {
@@ -1417,6 +1634,7 @@ function chipText(fromId, port) {
   const n = byId[fromId]; if (!n) return port;
   if (n.metadata?.customState) return `${labelOf(n.metadata.customState.of)}'s ${stateName(n)}`;
   if (n.type.startsWith('/Option sets/')) return `${n.type.split('/').pop()} · ${portLabel(n, 'output', port)}`;
+  if (isPageDataNode(n)) return pageDataChip(fromId, port);
   return `${labelOf(fromId)}'s ${portLabel(n, 'output', port)}`;
 }
 function composedPreview(expr) {
@@ -1446,7 +1664,7 @@ function openComposer(e, node, p, existing, onPick) {
   };
   /** A chip for a name in the text; in the mixed view it is a non-editable island with its own delete. */
   const chip = (name, editable) => h('span', { class: `chip ${chipKind(name)}`, contenteditable: editable ? 'false' : undefined, 'data-name': name, title: name }, chips.get(name).text, h('button', { title: 'Remove', onclick: (ev) => { ev.preventDefault(); removeName(name); } }, icon('x')));
-  const chipKind = (name) => { const c = chips.get(name); const n = byId[c.node]; return n?.metadata?.customState ? 'state' : n?.type.startsWith('/Option sets/') ? 'opt' : ''; };
+  const chipKind = (name) => { const c = chips.get(name); const n = byId[c.node]; return n?.metadata?.customState ? 'state' : n?.type.startsWith('/Option sets/') ? 'opt' : n && isPageDataNode(n) ? 'data' : ''; };
   const removeName = (name) => { text = text.replace(new RegExp(`\\b${name.replace(/[$]/g, '\\$')}\\b`, 'g'), '').replace(/\s{2,}/g, ' ').trim(); chips.delete(name); renderBody(); };
   const insertName = (src) => {
     let base = slug(src.text.replace(/'s/g, ' ').replace(/·/g, ' ')); let name = base, i = 2;
@@ -1527,7 +1745,7 @@ function openComposer(e, node, p, existing, onPick) {
 let selEvent = null; // { node, port }
 const draftEvents = [];
 const openSteps = new Set();
-const isHelperNode = (n) => n.metadata?.customState || isComposed(n) || n.type.startsWith('/Option sets/');
+const isHelperNode = (n) => n.metadata?.customState || isComposed(n) || n.type.startsWith('/Option sets/') || isPageDataNode(n);
 function events() {
   const list = [];
   const seen = new Set();
@@ -1564,6 +1782,8 @@ function chain(node, port, visited = new Set()) {
     const step = { id: next.toId, via: next.toProperty, from: { node, port }, siblings: outs.slice(1) };
     steps.push(step);
     if (byId[next.toId].type === 'Condition') { step.branches = { yes: chain(next.toId, 'ontrue', visited), no: chain(next.toId, 'onfalse', visited) }; break; }
+    // a refresh ends the chain: a step hung on the item's "fetched" would run on every run of it, page open included
+    if (isPageDataNode(byId[next.toId])) { step.refresh = true; break; }
     const d = doneOf(byId[next.toId]); if (!d) break;
     node = next.toId; port = d;
   }
@@ -1609,15 +1829,23 @@ function renderChain(into, steps, from, startN, prefix = '') {
       col.append(grid);
       last = null; break;
     }
-    const d = doneOf(byId[s.id]);
+    const d = !s.refresh && doneOf(byId[s.id]);
     last = d ? { node: s.id, port: d } : null;
     n++;
   }
   into.append(col);
+  if (steps.at(-1)?.refresh) into.append(h('div', { class: 'hint', style: 'padding:8px 2px' }, 'A refresh ends the workflow: a step after it would also run every time the page data loads.'));
   if (last) into.append(h('div', { class: 'addrow' }, h('button', { class: steps.length ? '' : 'primary', onclick: (e) => addActionMenu(e, last) }, icon('plus'), 'Add an action'), h('button', { title: 'A step that splits this workflow into a Yes and a No chain (a Condition node)', onclick: () => addAction('Condition', last) }, icon('branch'), 'Add a branch')));
 }
 function stepCard(s, n) {
   const node = byId[s.id];
+  if (s.refresh) {
+    const it = itemById(s.id);
+    return h('div', { class: 'step' }, h('div', { class: 'num' }, n),
+      h('h3', {}, 'Refresh page data', h('span', {}, it?.name ?? labelOf(s.id))),
+      h('div', { class: 'acts' }, h('button', { class: 'quiet tiny danger', title: 'Stop refreshing it here (the page data stays)', onclick: () => deleteStep(s) }, icon('trash'))),
+      h('div', { class: 'lines' }, h('span', {}, it ? sentence(it) : ''), h('span', { style: 'color:var(--muted)' }, 'What it asks is edited in Design → Page data.')));
+  }
   const params = node.parameters || {};
   const ins = portsOf(node, 'input');
   const isCond = node.type === 'Condition';
@@ -1654,6 +1882,7 @@ function stepCard(s, n) {
 }
 function deleteStep(s) {
   const node = byId[s.id];
+  if (s.refresh) { edits(pageKey, [{ edit: 'disconnect', component: pageKey, from: s.from, to: { node: s.id, port: s.via } }]); return toast(`The workflow no longer refreshes ${labelOf(s.id)}; the page data stays`); }
   const doomed = [s.id];
   if (s.branches) for (const side of ['yes', 'no']) (function walk(list) { for (const x of list) { doomed.push(x.id); if (x.branches) { walk(x.branches.yes); walk(x.branches.no); } } })(s.branches[side]);
   for (const id of [...doomed]) for (const e of nodes) if (isComposed(e) && e.metadata.composedFor.node === id) doomed.push(e.id); // its composed expressions go with it
@@ -1662,7 +1891,7 @@ function deleteStep(s) {
 }
 const ACTIONS = [
   ['RouterNavigate', 'Go to page', 'nav'], ['NewDbModelProperties', 'Create a new record', 'db'], ['SetDbModelProperties', 'Make changes to a record', 'db'], ['DeleteDbModelProperties', 'Delete a record', 'db'],
-  ['DbCollection2', 'Fetch records (query)', 'db'], ['Set Variable', 'Set a custom state or variable', 'state'], ['Condition', 'Branch (Yes / No)', 'branch'], ['net.noodl.user.LogIn', 'Log the user in', 'user'], ['net.noodl.user.LogOut', 'Log the user out', 'user'],
+  ['@refresh', 'Refresh page data', 'db'], ['Set Variable', 'Set a custom state or variable', 'state'], ['Condition', 'Branch (Yes / No)', 'branch'], ['net.noodl.user.LogIn', 'Log the user in', 'user'], ['net.noodl.user.LogOut', 'Log the user out', 'user'],
   ['net.noodl.user.SignUp', 'Sign the user up', 'user'], ['Send Event', 'Send an event', 'bolt'], ['JavaScriptFunction', 'Run JavaScript', 'code'], ['Timer', 'Wait (timer)', 'bolt'], ['Navigate To Path', 'Go to a URL path', 'nav'], ['Show Popup', 'Show a popup', 'page']
 ];
 function addActionMenu(e, from) {
@@ -1673,18 +1902,34 @@ function addActionMenu(e, from) {
   const fill = (q) => {
     list.innerHTML = '';
     const q2 = q.toLowerCase();
-    const named = ACTIONS.filter(([t]) => libIndex.has(t) || hasSpec(t));
-    const rest = (lib?.nodetypes || []).filter((t) => t.category !== 'Visual' && !ACTIONS.some(([a]) => a === t.name)).map((t) => [t.name, t.displayNodeName || t.name, 'code']);
+    const named = ACTIONS.filter(([t]) => t === '@refresh' || libIndex.has(t) || hasSpec(t));
+    // a query is page data, made in Design: a workflow refreshes one, it never writes its own (STU-012)
+    const rest = (lib?.nodetypes || []).filter((t) => t.category !== 'Visual' && t.name !== 'DbCollection2' && !ACTIONS.some(([a]) => a === t.name)).map((t) => [t.name, t.displayNodeName || t.name, 'code']);
     for (const [title, all] of [['Actions', named], ['Every other node', rest]]) {
-      const shown = all.filter(([type, label]) => (!q2 || label.toLowerCase().includes(q2) || type.toLowerCase().includes(q2)) && triggerOf({ type, parameters: {} }));
+      const shown = all.filter(([type, label]) => (!q2 || label.toLowerCase().includes(q2) || type.toLowerCase().includes(q2)) && (type === '@refresh' || triggerOf({ type, parameters: {} })));
       if (!shown.length) continue;
       list.append(h('div', { class: 'h' }, title));
-      for (const [type, label, ic] of shown) list.append(h('div', { class: 'item', onclick: () => { closeMenu(); if (type === 'Set Variable' && statesOf().length) return setStateMenu(e, from); addAction(type, from); } }, icon(ic), label, h('small', {}, typeName(type))));
+      for (const [type, label, ic] of shown) list.append(h('div', { class: 'item', onclick: () => { closeMenu(); if (type === '@refresh') return refreshMenu(e, from); if (type === 'Set Variable' && statesOf().length) return setStateMenu(e, from); addAction(type, from); } }, icon(ic), label, h('small', {}, type === '@refresh' ? 'runs a page data item again now' : typeName(type))));
     }
   };
   fill('');
   menu.append(h('div', { class: 'search' }, icon('search'), search), list); document.body.append(menu); search.focus();
   dismissOnOutside(menu);
+}
+/** Which page data item the step runs again: a wire into its Do, never a second query (STU-012). */
+function refreshMenu(e, from) {
+  if (!pageItems.length) return toast('This page has no page data to refresh: make it in Design → Page data.');
+  const menu = popover(e);
+  menu.append(h('div', { class: 'h' }, 'Refresh which page data?'));
+  for (const it of pageItems) menu.append(h('div', { class: 'item', onclick: () => {
+    closeMenu();
+    if (conns.some((c) => c.fromId === from.node && c.fromProperty === from.port && c.toId === it.id && c.toProperty === 'storageFetch')) return toast(`This workflow already refreshes ${it.name}`);
+    edits(pageKey, [{ edit: 'connect', component: pageKey, from: { node: from.node, port: from.port }, to: { node: it.id, port: 'storageFetch' } }]);
+    if (!events().some((ev) => ev.node === selEvent.node && ev.port === selEvent.port)) draftEvents.length = 0;
+    renderWorkflow();
+    toast(`${labelOf(from.node)} now refreshes ${it.name}: it asks the backend again, and every element reading it updates`);
+  } }, icon('db'), it.name, h('small', {}, sentence(it))));
+  document.body.append(menu); dismissOnOutside(menu);
 }
 /** Bubble's "Set state": which custom state (or a plain page variable) the Set Variable step writes. */
 function setStateMenu(e, from) {
@@ -1999,7 +2244,7 @@ function switchTab(name) {
 for (const b of document.querySelectorAll('#rail [role=tab]')) b.onclick = () => switchTab(b.dataset.tab);
 function renderAll() {
   renderPagePick(); renderDatalists();
-  if (tab === 'design') { renderPalette(); renderTree(); renderProps(); draw(); }
+  if (tab === 'design') { renderPalette(); renderPageData(); renderTree(); renderProps(); draw(); }
   if (tab === 'workflow') renderWorkflow();
   if (tab === 'data') renderData();
   if (tab === 'styles') renderStyles();

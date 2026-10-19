@@ -208,8 +208,13 @@ try {
     const evPort = (first.match(/: (.+?)[A-Z][a-z]+ *$/) || [])[1];
     await clickText('#steps .addrow button', 'Add a branch'); await wait(300);
     await b.until('document.querySelector("#steps .step.cond")', 5000);
-    let wires = onDisk(SIGN + 'connections.json').connections; let nodes = onDisk(SIGN + 'nodes.json').nodes;
-    const cond = nodes.find((n) => n.type === 'Condition' && wires.some((w) => w.fromId === card && w.toId === n.id && w.toProperty === 'eval'));
+    // the branch is drawn before its save lands: wait for the file, not a fixed time (it was read 300 ms in and missed, 1 run in 5)
+    let wires, nodes, cond;
+    for (const t0 = Date.now(); Date.now() - t0 < 5000; await wait(150)) {
+      wires = onDisk(SIGN + 'connections.json').connections; nodes = onDisk(SIGN + 'nodes.json').nodes;
+      cond = nodes.find((n) => n.type === 'Condition' && wires.some((w) => w.fromId === card && w.toId === n.id && w.toProperty === 'eval'));
+      if (cond) break;
+    }
     ok(cond, 'Add a branch on the card\'s event writes a Condition node wired from that signal into Evaluate', { event: first, condition: cond?.id });
     const cols = await b.evaluate(`[...document.querySelectorAll('#steps .branch h4')].map(h => h.textContent)`);
     ok(cols.join(',') === 'Yes,No', 'the branch shows a Yes column and a No column under the step', cols);
@@ -385,6 +390,115 @@ try {
     const other = await agentApi('POST');
     ok(other.state === 'other' && other.others?.join() === 'svelte' && readFileSync(MCP, 'utf8') === theirs, 'a .mcp.json of the person\'s own servers is left as it is and the panel offers the entry to add', other.state);
     await b.evaluate('document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }))'); await wait(100);
+  }
+  console.log('check: page data (STU-010, STU-011)');
+  {
+    // last: it wires the Sign in page's two texts, which the sections before read as plain text
+    await b.clickSel('[data-tab=design]'); await wait(400);
+    const qc = () => b.evaluate('document.getElementById("querycount").textContent');
+    await b.until('/on open$/.test(document.getElementById("querycount").textContent)', 10000);
+    ok((await qc()) === '0 queries on open', 'before: the Sign in page header reads "0 queries on open", counted off the requests the app made', await qc());
+    for (const title of ['Water the plants', 'Buy milk']) await fetch(`http://127.0.0.1:${backendPort}/classes/Note`, { method: 'POST', headers: { 'X-Parse-Application-Id': 'studio_check', 'content-type': 'application/json' }, body: JSON.stringify({ title }) });
+    const setIn = async (sel, value, event = 'input') => { await b.evaluate(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event(${JSON.stringify(event)})); })()`); await wait(event === 'input' ? 800 : 500); };
+    /** The New page data form: a name, a type, every / first, an optional condition; returns what its note and button said. */
+    const form = async ({ name = '', type, first = false, where }) => {
+      await b.until('document.querySelector(".menu.newitem")', 4000);
+      await setIn('.menu.newitem input[aria-label=Name]', name);
+      await setIn('.menu.newitem select[aria-label=Type]', type, 'change');
+      if (first) { await clickText('.menu.newitem .seg button', 'The first one'); await wait(200); }
+      if (where) { await setIn('.menu.newitem input[aria-label="Where field"]', where.field); await setIn('.menu.newitem select[aria-label="Where operator"]', where.op, 'change'); }
+      const said = await b.evaluate(`({ note: document.querySelector('.menu.newitem .note').textContent, button: document.querySelector('.menu.newitem .foot .primary').textContent })`);
+      await clickText('.menu.newitem .foot button', said.button); await wait(800);
+      return said;
+    };
+    await b.clickSel('#newpagedata'); await form({ name: 'latest note', type: 'Note' });
+    await clickText('#right .pageitem .seg button', 'The first one'); await wait(500);
+    await clickText('#right .pageitem button', 'Add a condition'); await wait(500);
+    await setIn('#right .pageitem .cond input', 'title');
+    await setIn('#right .pageitem .cond select', 'exists', 'change');
+    await clickText('#right .pageitem button', 'Sort by'); await wait(500);
+    await setIn('#right .pageitem .cond.sort input', 'title');
+    await shot('page-data-item');
+    const signNodes = () => onDisk(SIGN + 'nodes.json').nodes;
+    const q = signNodes().find((n) => n.metadata?.pageData?.name === 'latest note');
+    ok(q?.type === 'DbCollection2' && q.parent === undefined && q.parameters.collectionName === 'Note' && q.parameters.storageLimit === 1
+      && JSON.stringify(q.parameters.visualFilter) === JSON.stringify({ type: 'and', conditions: [{ field: 'title', operator: 'exists', value: true, valueSource: 'static' }] })
+      && JSON.stringify(q.parameters.visualSort) === JSON.stringify([{ property: 'title', order: 'ascending' }]), '"latest note" made in Design\'s Page data is one Query Records node on disk: first Note where title is set, by title', q?.parameters);
+    const rec = signNodes().find((n) => n.metadata?.pageDataRecord?.item === q?.id);
+    ok(rec?.type === 'Model2' && onDisk(SIGN + 'connections.json').connections.some((c) => c.fromId === q.id && c.fromProperty === 'firstItemId' && c.toId === rec.id && c.toProperty === 'modelId'), 'its first record is an Object node bound to it', rec);
+    // two Texts on screen whose text nothing feeds yet: the lead, and one placed now from the palette (the App name's is the composer's by now)
+    { const n0 = await shows(); await b.clickSel('#palette button:nth-child(2)'); const at = await centreOf(signNodes().find((n) => n.label === 'What this is').id); await b.click(at.x, at.y); await rebuilt(n0); }
+    const fed = new Set(onDisk(SIGN + 'connections.json').connections.filter((c) => c.toProperty === 'text').map((c) => c.toId));
+    const free = signNodes().filter((n) => n.type === 'Text' && !fed.has(n.id)).map((n) => n.id);
+    const visible = await b.evaluate(`${JSON.stringify(free)}.filter((id) => (__ob.preview.elementsOf(id)[0]?.getBoundingClientRect().height || 0) > 0)`);
+    const texts = visible.slice(0, 2);
+    if (texts.length < 2) throw new Error(`fewer than two free Texts on the Sign in page: ${JSON.stringify(visible)}`);
+    for (const id of texts) {
+      await select(id);
+      const at = await b.evaluate(`(() => { const f = [...document.querySelectorAll('#right .field')].find((f) => f.querySelector('label')?.textContent === 'Text'); const btn = f?.querySelector('.from button'); if (!btn) return null; btn.scrollIntoView({ block: 'nearest' }); const r = btn.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+      if (!at) throw new Error(`no "Insert dynamic data" on the Text field of ${id}`);
+      await b.click(at.x, at.y);
+      const n0 = await shows(); await menuItem("latest note's title"); await rebuilt(n0);
+    }
+    const wires = onDisk(SIGN + 'connections.json').connections;
+    ok(texts.every((id) => wires.some((c) => c.fromId === rec?.id && c.fromProperty === 'prop-title' && c.toId === id && c.toProperty === 'text')) && rec && signNodes().find((n) => n.id === rec.id).parameters?.properties === 'title', 'both texts are wired from the record\'s title, which the record node now lists', wires.filter((c) => c.fromId === rec?.id));
+    const shown = `(() => ${JSON.stringify(texts)}.map((id) => __ob.preview.elementsOf(id)[0]?.innerText.trim()))()`;
+    await b.until(`${shown}.every((t) => t === 'Buy milk')`, 15000);
+    ok((await b.evaluate(shown)).every((t) => t === 'Buy milk'), 'the item shows on screen through two text elements: "Buy milk", the first by title of the notes with a title', await b.evaluate(shown));
+    await b.until('document.getElementById("querycount").textContent === "1 query on open"', 10000);
+    ok((await qc()) === '1 query on open', 'the page header reads "1 query on open": one item, two readers, one request', await qc());
+    const row = await b.evaluate(`document.querySelector('#pagedata .row[data-item]')?.innerText`);
+    ok(/2 readers/.test(row) && /1 row · \d+ ms/.test(row), 'its row in Page data says 2 readers and its last run in the app (1 row, how long)', row);
+    await shot('page-data');
+  }
+  console.log('check: one question, one query (STU-012)');
+  {
+    const queries = () => onDisk(SIGN + 'nodes.json').nodes.filter((n) => n.type === 'DbCollection2');
+    const byName = (name) => queries().find((n) => n.metadata?.pageData?.name === name);
+    const setIn = async (sel, value, event = 'input') => { await b.evaluate(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event(${JSON.stringify(event)})); })()`); await wait(event === 'input' ? 800 : 500); };
+    const form = async ({ name = '', type, first = false, where }) => {
+      await b.until('document.querySelector(".menu.newitem")', 4000);
+      await setIn('.menu.newitem input[aria-label=Name]', name);
+      await setIn('.menu.newitem select[aria-label=Type]', type, 'change');
+      if (first) { await clickText('.menu.newitem .seg button', 'The first one'); await wait(200); }
+      if (where) { await setIn('.menu.newitem input[aria-label="Where field"]', where.field); await setIn('.menu.newitem select[aria-label="Where operator"]', where.op, 'change'); }
+      const said = await b.evaluate(`({ note: document.querySelector('.menu.newitem .note').textContent, button: document.querySelector('.menu.newitem .foot .primary').textContent })`);
+      await clickText('.menu.newitem .foot button', said.button); await wait(800);
+      return said;
+    };
+    await b.clickSel('#newpagedata'); await form({ name: 'notes', type: 'Note' });
+    const notes = byName('notes');
+    ok(notes && queries().length === 2, 'a second, different question ("every Note") is a second item', queries().map((n) => n.metadata?.pageData?.name));
+    // the same question from a field's "Insert dynamic data → New page data…" (Bubble's "Do a search for")
+    const btn = onDisk(SIGN + 'nodes.json').nodes.find((n) => n.type === 'net.noodl.controls.button' && n.parameters?.label === 'Button')?.id;
+    await select(btn);
+    const at = await b.evaluate(`(() => { const f = [...document.querySelectorAll('#right .field')].find((f) => f.querySelector('label')?.textContent === 'Label'); const btn = f?.querySelector('.from button'); if (!btn) return null; btn.scrollIntoView({ block: 'nearest' }); const r = btn.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+    if (!at) throw new Error('no "Insert dynamic data" on the button\'s Label');
+    await b.click(at.x, at.y); await menuItem('New page data…');
+    const said = await form({ name: 'all the notes', type: 'Note' });
+    ok(/^notes already asks this/.test(said.note) && said.button === 'Use notes', 'asking it again, the form says which item already asks it and offers to use it', said);
+    ok(queries().length === 2 && onDisk(SIGN + 'connections.json').connections.some((c) => c.fromId === notes.id && c.fromProperty === 'items' && c.toId === btn && c.toProperty === 'label'), '"Use notes" writes no query: the field reads the item that asks it', { queries: queries().length });
+    await b.clickSel('#newpagedata'); await form({ name: 'titled', type: 'Note', where: { field: 'title', op: 'exists' } });
+    const titled = byName('titled');
+    ok(titled && queries().length === 3, 'one with a condition is a different question, so a third item', titled?.parameters?.visualFilter);
+    // the only other way to a twin: editing one into another's question
+    await b.evaluate(`document.querySelector('#right .pageitem .cond button.danger').click()`); await wait(800);
+    const toastText = await b.evaluate('document.getElementById("toast").textContent');
+    ok(/exactly what notes asks/.test(toastText) && byName('titled')?.parameters?.visualFilter?.conditions?.length === 1 && queries().length === 3, 'removing its condition would make it ask what notes asks: refused, and the file keeps the condition', toastText);
+    // Workflow: a step refreshes an item; it never writes a query of its own
+    await b.clickSel('[data-tab=workflow]'); await wait(300);
+    await b.evaluate(`[...document.querySelectorAll("#events .row")].find(r => r.firstChild.textContent.startsWith("When Sign in: Click")).click()`); await wait(300);
+    const addRows = await b.evaluate(`document.querySelectorAll('#steps .addrow').length`);
+    await clickText('#steps .addrow button', 'Add an action');
+    await b.until(`document.querySelectorAll('.menu .item').length > 0`, 4000);
+    const offeredAll = await b.evaluate(`[...document.querySelectorAll('.menu .item')].map((i) => i.textContent)`);
+    ok(offeredAll.some((t) => t.startsWith('Refresh page data')) && !offeredAll.some((t) => /Fetch records|Query Records/.test(t)), 'the action list offers "Refresh page data" and no way to write a query', offeredAll.filter((t) => /Refresh|Fetch|Quer/.test(t)));
+    await menuItem('Refresh page data'); await menuItem('notes');
+    const refreshes = onDisk(SIGN + 'connections.json').connections.filter((c) => c.toId === notes.id && c.toProperty === 'storageFetch');
+    ok(refreshes.length === 1 && queries().length === 3, 'Refresh → notes is one wire into the item\'s Do, and no new query node', refreshes);
+    const stepsText = await b.evaluate(`document.getElementById('steps').innerText`);
+    ok(/Refresh page data/.test(stepsText) && /A refresh ends the workflow/.test(stepsText) && (await b.evaluate(`document.querySelectorAll('#steps .addrow').length`)) === addRows - 1, 'the chain shows it as a Refresh step and ends there (no step can hang on the item\'s every run)', stepsText.slice(-200));
+    await b.clickSel('[data-tab=design]'); await wait(400);
   }
   ok((await status()).startsWith('App on screen'), 'after every edit the app still validates and draws', await status());
   const problems = b.problems.filter((p) => !/Invalid connection|doesn't have a port|Failed to load resource|fonts\.g|^\[noodl\]/.test(p)); // `[noodl]` lines are the app's own runtime (a Navigate with no target yet), not the editor

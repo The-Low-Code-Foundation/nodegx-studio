@@ -194,6 +194,11 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/') return send(200, readFileSync(join(here, 'studio.html')), types['.html']);
     if (url.pathname === '/preview.js') return send(200, readFileSync(bundle), types['.js']);
     if (url.pathname === '/look.js' || url.pathname === '/specs.js') return send(200, readFileSync(join(orbit, url.pathname.slice(1))), types['.js']);
+    // the app's frame gets Studio's probe first in its head (what it asks the backend, which page it is on): STU-011
+    if (url.pathname === '/runtime/index.html') {
+      const probe = `<script>${readFileSync(join(here, 'probe.js'), 'utf8')}</script>`;
+      return send(200, readFileSync(join(runtimeDir, 'index.html'), 'utf8').replace(/<head[^>]*>/i, (tag) => tag + probe), types['.html']);
+    }
     if (url.pathname === '/api/project' && req.method === 'GET') {
       const files = projectFiles(projectDir);
       known.clear();

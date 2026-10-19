@@ -39,6 +39,7 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 | Desktop app — Electron window, a welcome screen (recent projects, NodeGX's templates, Import an app), File → Open Recent, a smoke mode | first cut (2026-10-19) | `check:app` 34/34, `smoke` |
 | The project's backend — started (or adopted) on open, stopped on close, shown in the status bar; a template that needs one gets one; Data's "Start a backend" for an app with none | works (2026-10-19) | `check:app` 34/34 |
 | Claude Code — "Connect Claude Code" in the header (and File) registers the NodeGX MCP server for the folder with the NodeGX editor's own writer and shows the command that starts a session there | works (2026-10-19) | `check:editor` 56/56 |
+| Page data — a search is a named item on the page (Design → Page data), read by any element as dynamic data; made or reused through one form, never twice; readers, last run and "N queries on open" counted off the app's own requests; a workflow refreshes an item | works (2026-10-19), format awaits ruling R7 | `check:pagedata` 26/26, `check:editor` 71/71 |
 
 [history/](history/) is how it started (NodeGX phase 123, working title "Open Bubble"): the brief, the look, the
 first play test and every ruling taken.
@@ -211,6 +212,59 @@ create/save/delete notifications, so "re-runs when its inputs change" needs no r
 | STU-013 | **The importer merges repeated searches** into page data items: identical searches on a page become one item; elements and steps read it. | the real app's pages convert with 70 queries instead of 153 and still render the same |
 | STU-014 | **Scopes beyond the page.** A reusable's own data; a repeating group's row (Bubble's "Current cell's thing" is already a row value, not a search); an item that depends on another. | ruling R8 taken; a reusable with its own item renders in two places, querying once per instance |
 
+**Done (STU-010, 2026-10-19, on the proposed R7).** `editor/pagedata.mjs` is the format, pure, nodes and wires in and
+items or edits out. An item is one Query Records node (`DbCollection2`) in the page's own component, inside no element,
+with `metadata.pageData = { name, first }`; the NodeGX editor, the MCP server and the runtime read it as the ordinary
+node it is. What it asks is `collectionName`, `visualFilter` in the shape the NodeGX editor writes (`{type, conditions}`,
+neutral operators), `visualSort` and a limit. A condition's value is typed (`valueSource: 'static'`) or comes from the
+page (`'connected'`, a wire into `qp-<field>`). Studio writes `runOnChange-…: true` for every input it uses: the NodeGX
+editor's migration (NDA-017, SBR-016) writes `false` into a node whose `Do` is wired, and a workflow may wire `Do`. A
+"first" item is the same query with a limit of 1, plus one Object node (`Model2`, `metadata.pageDataRecord`) bound to
+`firstItemId`; an element reads "org's name" from its `prop-name`, and the record node learns each field as it is
+read. A list item is read whole (`items`, `count`, `isEmpty`). Readers are counted off the wires (a composed Expression
+counts as the element it feeds), and two items asking the same thing are found by `signature` whatever the order of
+their conditions. `check:pagedata` 26/26: a list item, a first item with a page value, readers, twins, an update
+(renamed, list ↔ first, a condition dropped) and a removal, each written, saved and read back from disk; then
+`validate_project` says nothing about the items' nodes and nothing new about the page. It cannot grade the value
+wires: Query Records takes any wired input name (the runtime keeps an unknown one as a setting), so a wire to
+`qp-nope` validates clean (measured). That is why the round-trip asserts them, and `check:editor` runs the app.
+
+**Done (STU-011, 2026-10-19).** Design's left column has **Page data** above the element tree: one row per item with
+its name, how many elements read it, what it asks as a sentence ("first Note where title is set, by title"), and its
+last run in the app on screen ("1 row · 5 ms · 0.2 s after the app opened"). Clicking a row opens the item on the right:
+type, every match or the first one, conditions (a field, an operator, a typed value or ⚡ a value from the page),
+sort, a limit, its readers (click one to select it) and its last run. A field's **Insert dynamic data** lists the page
+data first ("latest note's title", "notes · count"), and its chip is green. The header beside the page name reads
+**"N queries on open"**. Both numbers are counted off **the requests the app made**, never off the nodes: `serve.mjs`
+puts `editor/probe.js` first in the frame's runtime page (in the frame only, never the deployed app), and it logs
+every backend request with its body, timing and row count, and every move between pages. "On open" is from the
+app's arrival at the page until the network has been quiet for a second. An item's last run is the newest logged
+query with its collection, order, limit and filter fields. Measured in `check:editor` (71/71, 15 new): on the Sign in
+page, "0 queries on open" before; an item made through the panel is one Query Records node on disk; two Texts wired
+to "latest note's title" both show "Buy milk"; the header reads "1 query on open"; the row says 2 readers and 1 row.
+
+**Done (STU-012, 2026-10-19).** No path in the editor writes a second identical query on a page:
+- **New page data**, from the left column and from **Insert dynamic data → New page data…** (Bubble's "Do a
+  search for…", in the composer too), is one form: name, type, every / first, one optional condition. When an item
+  already asks that, it says so as you type ("notes already asks this … Create uses it") and the button reads **Use
+  notes**: the field reads that item, and no node is written.
+- An edit that would make an item ask exactly what another asks is refused with the other's name.
+- The Workflow tab's "Fetch records (query)" is gone, and so is Query Records from "Every other node". In their place,
+  **Refresh page data** wires the step's signal into an existing item's `Do`. A refresh ends its chain: a step after
+  it would hang on the item's `fetched`, which fires on every run of the item, page open included. Deleting the
+  step removes the wire, never the item.
+`check:editor`: a different question is a second item; the same one from a button's field reuses it (2 queries, the
+label wired from `notes.items`); a condition makes a third; removing that condition is refused and the file keeps it;
+the action list has Refresh and no query; Refresh → notes is one wire. With the form's and the edit's twin checks
+both removed, 4 of those lines fail.
+
+Not settled, for STU-014: a condition whose page value is empty is **dropped** by the runtime, not left unmatched
+(`dropUnresolvedConnected`, "every graph relies on it", read in `queryutils.ts`, not measured here). So "first Org
+where creator is Current User" before anyone signs in asks for every Org the backend lets that visitor see. An item
+that depends on a value may need to wait for it. Two smaller things the gate found and fixed on the way: the Workflow
+section read a branch's file 300 ms after drawing it and sometimes before the save landed (it now waits for the
+file); the right panel's header CSS never matched the header (`.props .head`, but the header sits beside `.props`).
+
 ---
 
 ## M3 — Workflows that live on their element
@@ -298,7 +352,7 @@ query start/end and element draws, to measure).
 | R4 | After a branch, can both sides rejoin into one next step? | phase 123 |
 | R5 | Can a custom state live inside a reusable? | phase 123 |
 | R6 | Where do option sets live — one component each, or one file? | phase 123 |
-| R7 | Page data's home in the format: page-root Query Records named by metadata (proposed), or a new file per page? | M2 |
+| R7 | Page data's home in the format: page-root Query Records named by metadata (proposed, and built on: STU-010–012), or a new file per page? | M2 |
 | R8 | Which scopes get their own data: page, reusable, repeating group row, popup? | M2 |
 
 ## Writing about Bubble
