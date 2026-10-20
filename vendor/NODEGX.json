@@ -1,15 +1,15 @@
 {
   "nodegx": {
     "repository": "https://github.com/The-Low-Code-Foundation/NodeGX",
-    "commit": "f8250d80348a647e19756fc7f8fff3255d7de7fc",
-    "committed": "2026-10-20T15:12:38+02:00",
-    "subject": "docs(p112 own-020): R48 — AC5 for Cline met by DeepSeek V4.1 Flash (tgz35 → 0.2.4c is one kit version; a retry-tap pass counts); OpenCode's AC5 still open"
+    "commit": "6cba197ad9d9ad96772cda382ecbe96b52e19b80",
+    "committed": "2026-10-20T15:52:52+02:00",
+    "subject": "fix(p112 own-024): the community app's bar says its name; no devotional promised; a taken email says so; an add empties its fields"
   },
-  "built": "2026-10-20T13:20:26.244Z",
+  "built": "2026-10-20T13:55:30.171Z",
   "esbuild": "0.25.12",
   "npm": {
     "@nodegx/mcp": "0.2.2",
-    "@nodegx/preview": "0.2.2"
+    "@nodegx/preview": "0.2.3"
   },
   "sources": 229,
   "files": {
@@ -17,7 +17,6 @@
     "backend.cjs": "ea77e71f7818f99af805dbc3b0e90885d8d955a4cadc55e518c3e9a15db861bb",
     "look.js": "0df321ba069438bdb215cc1276249dd997b221cd51940f80c830515c91a82c8c",
     "phrasebook/rows.js": "fef66fcff1b2c7e683f39672745c59004431a0c94405ebeb5496dd0d985de560",
-    "preview/noodl-preview-in-page.js": "41148a40161015477380cbbb13982e2f83c6e99ab5258979b72487f95dc73eac",
     "specs.js": "82a807c970730d2f8dc996784b4f669089a19296a099644e12488ba27d7d4c59",
     "templates/pixel-game/components/_registry.json": "de0875f75e5144a3fa7cccdcadb87c1d12be6b9e589286f3b0d60f3ec18a0139",
     "templates/pixel-game/components/App/component.json": "1ab96cc8ac12d8062f53d076a44238fa973ffc8243d992122a5df42586897e1b",

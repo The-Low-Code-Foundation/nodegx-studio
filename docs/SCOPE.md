@@ -40,7 +40,7 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 | Desktop app — Electron window, a welcome screen (recent projects, NodeGX's templates, Import an app), File → Open Recent, a smoke mode | first cut (2026-10-19) | `check:app` 34/34, `smoke` |
 | The project's backend — started (or adopted) on open, stopped on close, shown in the status bar; a template that needs one gets one; Data's "Start a backend" for an app with none | works (2026-10-19) | `check:app` 34/34 |
 | Claude Code — "Connect Claude Code" in the header (and File) registers the NodeGX MCP server for the folder with the NodeGX editor's own writer and shows the command that starts a session there | works (2026-10-19) | `check:editor` 56/56 |
-| Runs without a NodeGX checkout — the kit from npm at pinned versions and `vendor/` at one NodeGX commit; `NODEGX_REPO` for working on the kit and Studio together | works (2026-10-20, s13) | `check:vendor`, every gate on the vendored kit |
+| Runs without a NodeGX checkout — the kit from npm at pinned versions (`@nodegx/preview` 0.2.3, `@nodegx/mcp` 0.2.2) and `vendor/` at one NodeGX commit; `NODEGX_REPO` for working on the kit and Studio together | works (2026-10-20, s13) | `check:vendor`, every gate on the vendored kit |
 | Page data — a search is a named item on the page (Design → Page data), read by any element as dynamic data; made or reused through one form, never twice; readers, last run and "N queries on open" counted off the app's own requests; a workflow refreshes an item | works (2026-10-19), R7 ruled | `check:pagedata` 26/26, `check:editor` 71/71 |
 | Workflows on their element (M3) — a ⚡ on every element with a workflow, on the canvas and in the element list; its steps in order on hover; its card full screen from the badge, Back (or Esc) to the element; a card named by its steps until someone renames it; the page's cards under their elements, filtered by what they change or what starts them, searched over their steps; one card per event — imported A / not A splits are one branch, overlapping ones lanes side by side | STU-020, STU-021 (2026-10-19, s8), STU-023, STU-022, STU-024 (2026-10-20, s9) work | `check:editor` 170/170, `check:import` 79/79 |
 
@@ -359,7 +359,7 @@ Electron's own Node; `npm run smoke -- <dir>` opens a project headless and exits
 | STU-005 | **Work with Claude Code.** "Connect Claude Code" writes the project's `.mcp.json` entry for the NodeGX MCP server (the same writer the NodeGX editor uses, never a second one) and shows the one command to start a session in the folder. | from a fresh project, the button then `claude` in the folder lists the NodeGX tools |
 | STU-006 | **Runs without a NodeGX checkout.** A build step copies the kit pieces Studio uses (deploy runtime, in-page preview, look and specs modules, backend, MCP server) into `vendor/` at pinned NodeGX versions; `lib/nodegx.mjs` prefers `vendor/`. | a fresh clone + `npm install` + `npm start` works on a machine with no OpenNoodl folder |
 | STU-007 | **Packaged and signed.** electron-builder for macOS (signed, notarised), Windows and Linux, on NodeGX's release workflow. | a downloadable build opens a project on all three |
-| STU-008 | **Publish.** File → **Publish…** writes the app as a static site with NodeGX's own deploy — `@nodegx/preview`'s `nodegx-deploy`, the `deployToFolder` the NodeGX editor's *Deploy to Folder* runs, with the production engine npm ships (1.7 MB; a checkout's development engine is refused) — to a folder the person picks, and deploys the app's cloud functions to its backend when it has any (NodeGX's `deploy_cloud_functions`). The window then says where the site is and which backend it talks to; an app bound to a backend on 127.0.0.1 works on this machine only, and says so before it is published. Where else a site and its backend can go is R10. A site under a sub-path waits on P123-STU015-BASEURL. The deploy must carry P123-S2-VARIANTLOST's fix, which npm's 0.2.2 does not (STU-006): a newer release, or the deploy CLI vendored the way the in-page bundle is. | the todo template's copy published to a folder, served by any static server and opened in a browser: sign in, add a todo, and the row is on the backend |
+| STU-008 | **Publish.** File → **Publish…** writes the app as a static site with NodeGX's own deploy — `@nodegx/preview`'s `nodegx-deploy`, the `deployToFolder` the NodeGX editor's *Deploy to Folder* runs, with the production engine npm ships (1.7 MB; a checkout's development engine is refused) — to a folder the person picks, and deploys the app's cloud functions to its backend when it has any (NodeGX's `deploy_cloud_functions`). The window then says where the site is and which backend it talks to; an app bound to a backend on 127.0.0.1 works on this machine only, and says so before it is published. Where else a site and its backend can go is R10. A site under a sub-path waits on P123-STU015-BASEURL. The deploy must carry P123-S2-VARIANTLOST's fix: npm's 0.2.3 `nodegx-deploy` does (STU-006). | the todo template's copy published to a folder, served by any static server and opened in a browser: sign in, add a todo, and the row is on the backend |
 
 **Done (STU-002, 2026-10-19).** `serve.mjs` watches the project folder and keeps every file as Studio last read or
 wrote it, so Studio's own saves are recognised by their content and dropped; anything else goes to the page over
@@ -439,28 +439,29 @@ this session failed in Workflow ("Add a branch" picked the card's *Did Mount* ev
 
 **Done (STU-006, 2026-10-20, s13).** A fresh clone needs nothing but Node 22: `npm install`, `npm start`. The kit
 comes from two pinned places (`lib/nodegx.mjs` says where each piece is): **npm** for what NodeGX publishes —
-`@nodegx/preview` 0.2.2 (the deploy runtime) and `@nodegx/mcp` 0.2.2 (the MCP server and the backend service), exact
-versions in `package.json` — and **`vendor/`** (committed, 884 files, 9.4 MB) for what it does not: the five shelf
+`@nodegx/preview` 0.2.3 (the deploy runtime, the in-page bundle) and `@nodegx/mcp` 0.2.2 (the MCP server and the
+backend service), exact versions in `package.json` — and **`vendor/`** (committed, 883 files, 7.7 MB) for what it does not: the five shelf
 templates and the phrasebook (`git archive` at the commit, so a peer's uncommitted template edit is never taken),
 look.js and specs.js (as the Orbit `build.sh` bundles them), and `backend.cjs` / `agent.cjs`, the bundles
 `lib/backend.mjs` and `lib/agent.mjs` used to make from the checkout on every start (so a clone needs no esbuild).
 `npm run vendor` (with `NODEGX_REPO` set) rebuilds it from that checkout's HEAD and **refuses when any file a bundle
 was built from differs from that commit** (esbuild's own list of its inputs, 229 files); `vendor/NODEGX.json` names
-the commit (NodeGX `f8250d803`), the npm versions beside it and every file's hash; `npm run check:vendor` (first in
+the commit (NodeGX `6cba197ad`), the npm versions beside it and every file's hash; `npm run check:vendor` (first in
 `npm run check`) checks them and that every kit piece is there. `NODEGX_REPO=<checkout>` makes Studio and every gate
 use the checkout's pieces as built there, as before; nothing looks for a sibling `OpenNoodl` any more. The MCP
 server is named to the NodeGX editor's own front door through its escape hatch (`NOODL_MCP_ENTRY`), so Connect
 Claude Code registers `node_modules/@nodegx/mcp/dist/noodl-mcp.cjs`.
-- **Found: npm's `@nodegx/preview` 0.2.2 carries P123-S2-VARIANTLOST.** It was published on 2026-10-15, the fix
-  landed on the 16th, and nothing newer is on npm: on its in-page bundle `check:editor` was 169/170 (the Sign in
-  button went from `rgb(138, 169, 242)` to black once it wore its style). So the in-page bundle is vendored too,
-  built by `@nodegx/preview`'s own `build.mjs` in a sparse worktree of the commit outside the checkout (its own
-  `node_modules`: the workspace's packages are the worktree's, third-party ones the checkout's), never from the shared
-  checkout's `dist/`. When a release carries the fix: set `PREVIEW_FIXED_IN` in `scripts/vendor.mjs`, pin it, point
-  `kit.previewBundle` back at npm. Noted on the bug in NodeGX's ledger (OpenNoodl `1bc0b8a65`); that the published
-  `nodegx-deploy` and `render_report` draw without Looks too is read off the shared exporter, not measured.
-- **Measured on the vendored kit:** vendor PASS, rules 20/20, phrases 85/85, dictionary 65/2/22/5, editor 170/170,
-  timeline 43/43, app 34/34, pagedata 33/33, reusable 12/12, import 79/79 (its `validateSecurityConfig` check now
+- **Found: npm's `@nodegx/preview` 0.2.2 carried P123-S2-VARIANTLOST.** It was published on 2026-10-15, the fix
+  landed on the 16th: on its in-page bundle `check:editor` was 169/170 (the Sign in button went from
+  `rgb(138, 169, 242)` to black once it wore its style). For an hour Studio vendored that bundle too, built by
+  `@nodegx/preview`'s own `build.mjs` in a sparse worktree of the commit (the code is in `scripts/vendor.mjs` at
+  `320aa19`). Then **0.2.3 was published (2026-10-20 15:26)** with the fix in its in-page bundle and in its
+  `nodegx-deploy` (`node.variantName || void 0`); Studio pins it and vendors no bundle of its own. Noted on the bug
+  in NodeGX's ledger. `@nodegx/mcp` is still 0.2.2 on npm, so its `render_report` should still draw without Looks
+  (read off the shared exporter, not measured); Studio does not use it.
+- **Measured on the vendored kit** (first with the vendored bundle, again on preview 0.2.3; see the s13 prompt for
+  the last numbers): vendor PASS, rules 20/20, phrases 85/85, dictionary 65/2/22/5, editor 170/170, timeline 43/43,
+  app 34/34, pagedata 33/33, reusable 12/12, import 79/79 (its `validateSecurityConfig` check now
   runs from `vendor/backend.cjs`; it used to skip when the checkout's backend was not built). **The done-when:** a
   `git clone` into a scratch folder with no OpenNoodl beside it, every command run under `sandbox-exec` with reads of
   `~/vscode_projects/OpenNoodl` and `OpenNoodl-worktrees` denied (control: `head` of OpenNoodl's `package.json` in it
@@ -471,10 +472,11 @@ Claude Code registers `node_modules/@nodegx/mcp/dist/noodl-mcp.cjs`.
   it downloads its binary the first time `require('electron')` runs (`npm start` does), so the first start needs the
   network. Inside `sandbox-exec` Chromium's own sandbox cannot start, so those runs set `ELECTRON_DISABLE_SANDBOX=1`;
   a normal start does not.
-- **Gained:** npm's deploy engine is the production build (1.7 MB); a checkout's is the development one, which
+- **Gained:** npm's deploy engine is the production build (1.75 MB in 0.2.3); a checkout's is the development one, which
   `nodegx-deploy` refuses without `--allow-development-engine` — STU-008 starts from the right engine.
-- **Not in it:** the deploy runtime is npm's 0.2.2, older than the checkout: runtime fixes since 2026-10-15 (e.g.
-  P112-OWN020-UNWIREDSIGNAL, `3026899d4`) are not in a clone's Studio until NodeGX publishes again; the vendored pieces
+- **Not in it:** the runtime is npm's 0.2.3, packed before P112-OWN020-UNWIREDSIGNAL's fix (`3026899d4`): its
+  marker (`codeSignals`) is in the checkout's build twice and in neither npm release, so a clone's Studio lacks it
+  until NodeGX publishes again; the vendored pieces
   and npm's are from different days (both named in `NODEGX.json`). Measured on this Mac only, with the checkout hidden
   rather than absent; not on Windows or Linux. `check:editor` and `check:timeline` ran in the main clone on the same
   vendored files (same hashes), not in the scratch clone. STU-007 must put `node_modules/@nodegx/mcp` outside the
