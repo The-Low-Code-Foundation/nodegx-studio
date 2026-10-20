@@ -941,7 +941,7 @@ Mutants: no screen witness 22/24; copies draw nothing 23/24; the page's cards on
 | STU-042 | **A fidelity gate** from Rico Trevisan's frozen cases (bubble_ex `test/support/fidelity`, fetched at a pinned commit, not vendored) — read his reply on ricotrevisan/bubble_ex#238 first. | the converter is graded against Bubble's own screenshots at 390 and 1440 px |
 | STU-044 | **The importer's expressions graded against the dictionary.** Its compiler has 125 operators of its own, written without the community dictionary; by name only 37 of the dictionary's 94 match (an undercount: the dictionary uses Bubble's display names, ":count", "<", the importer the internal ones, `count`, `less_than`), weakest on Date 2/15, Date Range 0/11 and Integer range 3/11. Compile each phrasebook row's Bubble example through the importer and compare with the phrasebook's executed answer. | a gate prints covered / wrong / missing per data type, and every wrong one is fixed or filed |
 | STU-053 | **The Bubble elements NodeGX has no node of its own for.** A floating group, a popup, a group focus, a repeating group's cell grid, a dropdown's dynamic choices, an input's formats: each converted to what Bubble draws, or said in the report. | each converts to what Bubble draws or has a line in the report, graded on a fixture and on the template |
-| STU-043 | **Plugins.** A shim for Bubble's client-side plugin API (`instance.publishState`, `triggerEvent`, `data`) so a plugin's own code can run; licence ruling first. | one real plugin element runs in an imported app |
+| STU-043 | **Plugins, recreated (R9).** No shim and none of a plugin's own code in an imported app. The importer lists each plugin the app uses (its elements, actions and states, where each is used, the settings the app gives it) and writes a brief for it; from the brief, Claude Code (through Studio's "Connect Claude Code") recreates it in NodeGX in two separate sessions: one reads the plugin's code and writes down what it does, the other builds from that description alone. | one real plugin element in an imported app is replaced by a NodeGX component built by a session that never saw the plugin's code |
 
 **STU-044, built (s5): `npm run check:dictionary` (`import/dictionary-check.mjs`, cases in `import/dictionary.mjs`).**
 The dictionary names an operator as Bubble's editor shows it (":count"); an app stores the internal name (`count`). The
@@ -1024,6 +1024,21 @@ they are): 69/73, the four that grade them.
 **Taken.** R7 (Richard, 2026-10-19): page data is an ordinary Query Records node at the page root, named by
 `metadata.pageData`. No new file, nothing new in the format: the NodeGX editor, the MCP server and the runtime read
 it as the node it is. As built in STU-010–012.
+
+**Taken.** R9 (Richard, 2026-10-20): **plugins are recreated, not run.** His words: *"if you have plugins, you need
+to use an AI coder like Claude Code to read the plugin code and recreate it from scratch so we can avoid any licence
+issues."* This replaces STU-043's shim, which would have run the plugin's own code inside the imported app. How it
+is built (STU-043), so that "from scratch" holds:
+- **Two sessions, not one.** One reads the plugin's code (the client half is in the run-mode bundle `static.js`) and writes
+  a description of what it does: its fields, events, states and how it looks, never its code. A fresh session builds
+  the NodeGX version from that description only. The session that writes the code never sees the plugin's code, which
+  is the usual clean-room split; one session that reads and rewrites can carry the plugin's code over.
+- **A plugin that wraps an open-source library** (a chart, a map, a date picker): the rebuild uses that library
+  directly, under its own licence, which the brief names.
+- **A plugin's server-side actions** run on Bubble's servers and are not in the export: their description comes from
+  how the app uses them (what goes in, what comes back) and the plugin's public page.
+- Not legal advice: a paid plugin's terms can still forbid reading its code, so each brief names the plugin's terms
+  for the app's owner to check before the first session reads it.
 
 **Taken.** R8 (Richard, 2026-10-19): **pages and reusables** have their own data; a repeating group's row and a popup
 do not. His reason is the rule: *"you'll want to hide queries behind reusable elements so they don't all load at once

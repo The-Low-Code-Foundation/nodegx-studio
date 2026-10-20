@@ -111,8 +111,10 @@ elements and actions with no AI in the loop: the table covers what it uses. The 
 
 What is not a table row, and where an AI pass earns its place:
 
-1. **Plugin elements and plugin actions.** Their code is not in the export. Each is a port to a kit node or a
-   placeholder. AI can draft the kit node from the plugin's public source; a person signs it.
+1. **Plugin elements and plugin actions.** Their code is not in the app's JSON export; the client half is in the
+   run-mode bundle `static.js` (below), the server half only on Bubble's servers. Each is placed as a labelled
+   placeholder, then recreated, never run (ruling R9, 2026-10-20; STU-043): one Claude Code session reads the
+   plugin's code and writes down what it does, a second builds the NodeGX version from that description alone.
 2. **The old absolute layout** (pages and groups with no `container_layout`, the pre-2021 engine): converted
    faithfully as absolute boxes, which renders right and edits badly. Re-flowing it into rows and columns is a
    judgement, and an AI with the screenshot is good at it.
