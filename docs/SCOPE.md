@@ -842,6 +842,40 @@ query start/end and element draws, to measure).
 | STU-032 | **Inputs and outputs** per step, and **screenshots** per point with a scrubber. | scrubbing to a step shows the screen as it was then |
 | STU-033 | **Step mode** for one card, marked as not real timing. | stepping through a two-step card shows each step's values before it runs |
 
+**Done (STU-030, 2026-10-20, s9): the inventory.** Measured with `editor/trace-inventory.mjs` (the todo template, a
+backend, Studio in headless Chrome; three runs: the app's open to Sign in, Create account → the Todo page opens, a
+task added). The recording's numbers: [look/stu-030-trace.json](look/stu-030-trace.json).
+
+- **It is already on.** The in-page preview arms the trace at boot (owner `noodl-preview-in-page`), so a recording
+  starts with the app's open; the buffer holds 250 000 events.
+- **One clock.** A trace event's `t` is the frame's `performance.now()`, the same clock as the probe's requests
+  (`editor/probe.js`) and a MutationObserver in the frame, so the three lanes can sit on one time axis.
+- **Cost.** Boot to Sign in: 625 events in 77 ms; sign-up to the Todo page drawn: 929–968 events in about 450 ms;
+  adding a task: 430. About 160 bytes an event as JSON (~150 KB a run), pulled in 5–24 ms. No reason to sample.
+- **Workflows lane: there, but without "why".** Every signal crossing a wire is an event, in order, with its ports:
+  *2 ms Click → Run JavaScript, 4 ms → Create a record (store), 15 ms its Done → Write history, 29 ms → …*. But every
+  signal's `cause` is 0 (12 of 12 on sign-up, 8 of 8 on Add; and 425 of 956 values), so the trace cannot say what
+  made a step run — filed as P123-STU030-SIGNALCAUSE in NodeGX's bug ledger. The timeline can order steps by `seq`;
+  the "why" arrow waits on that fix.
+- **Names come from the files, not the trace's dictionary.** The dictionary is built from the nodes alive at the
+  time: 31 at boot (Sign in), 692 after the Todo page opened, and by then Sign in's nodes are gone, so the click that
+  started it all is a "?". Trace node ids are the files' node ids, so Studio names them from the project.
+- **Page data lane: start and end, for a query fired by a wire.** The Todo page's five queries are refreshed through
+  their component's input: a `storageFetch` pulse (sent as a value, true then false) at 86 ms, the same millisecond as
+  the request; `items` out at 129–152 ms, each exactly when its request answered (Task: 86 → 146 ms), even with no
+  rows. **Not in the trace:** a query that runs by itself (no wire into it), and every request made from JavaScript
+  (the Projects data: 4 of the 11 requests on open, Project / MoneyItem / MoneyMark / BalanceReading, and a second
+  Task request at 148 ms). The probe sees all 11, so the lane is the probe's requests, each matched to its query node
+  by collection where there is one.
+- **Screen lane: the trace sees values arrive, not drawing.** Adding a task: the title reaches a Text at 26 ms, is
+  on screen at 43 ms (MutationObserver). A page change is one mutation (the old page's subtree out, the new one in),
+  so the observer gives "the page changed" and "this text appeared", not which element drew; screenshots per point
+  (STU-032) have to come from outside the trace too.
+
+What STU-031 needs that the trace does not give: request times (probe, already in Studio), screen changes
+(MutationObserver or screenshots), names (the files), causes (the runtime fix). What it gets free: every step in
+order on the same clock as the other two.
+
 ---
 
 ## M5 — The importer as a product

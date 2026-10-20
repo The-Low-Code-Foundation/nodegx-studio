@@ -1,0 +1,339 @@
+{
+ "what": "STU-030: the runtime trace in Studio's in-page preview, on the todo template (editor/trace-inventory.mjs, 2026-10-20). Times in ms from the click.",
+ "trace": {
+  "enabled": true,
+  "owners": [
+   "noodl-preview-in-page"
+  ],
+  "clock": [
+   3658.4000000953674,
+   3658.4000000953674,
+   1792483360483
+  ]
+ },
+ "dictionary": {
+  "atBoot": 31,
+  "nodes": 692,
+  "edges": 2975
+ },
+ "runA_open_to_sign_in": {
+  "events": 625,
+  "byKind": {
+   "value": 619,
+   "signal": 6
+  },
+  "roots": 323,
+  "spanMs": 59,
+  "bytes": 102472,
+  "pullMs": 13
+ },
+ "runB_sign_up_to_todo": {
+  "events": 968,
+  "byKind": {
+   "value": 956,
+   "signal": 12
+  },
+  "roots": 437,
+  "spanMs": 469,
+  "bytes": 157614,
+  "pullMs": 24
+ },
+ "runB_requests": [
+  {
+   "request": "/users",
+   "startMs": 2,
+   "endMs": 51,
+   "rows": null
+  },
+  {
+   "request": "/classes/Project",
+   "startMs": 84,
+   "endMs": 106,
+   "rows": 0
+  },
+  {
+   "request": "/classes/MoneyItem",
+   "startMs": 84,
+   "endMs": 120,
+   "rows": 0
+  },
+  {
+   "request": "/classes/MoneyMark",
+   "startMs": 84,
+   "endMs": 123,
+   "rows": 0
+  },
+  {
+   "request": "/classes/BalanceReading",
+   "startMs": 85,
+   "endMs": 138,
+   "rows": 0
+  },
+  {
+   "request": "/classes/Task",
+   "startMs": 86,
+   "endMs": 146,
+   "rows": 0
+  },
+  {
+   "request": "/classes/Action",
+   "startMs": 86,
+   "endMs": 153,
+   "rows": 0
+  },
+  {
+   "request": "/classes/Event",
+   "startMs": 87,
+   "endMs": 133,
+   "rows": 0
+  },
+  {
+   "request": "/classes/Routine",
+   "startMs": 87,
+   "endMs": 129,
+   "rows": 0
+  },
+  {
+   "request": "/classes/RoutineCheck",
+   "startMs": 87,
+   "endMs": 142,
+   "rows": 0
+  },
+  {
+   "request": "/classes/Task",
+   "startMs": 148,
+   "endMs": 155,
+   "rows": 0
+  }
+ ],
+ "runB_queries_in_the_trace": [
+  {
+   "node": "dtTasks",
+   "component": "/Logic/Todo data",
+   "into": [
+    {
+     "port": "storageFetch",
+     "kind": "value",
+     "ms": 86,
+     "value": "true"
+    },
+    {
+     "port": "storageFetch",
+     "kind": "value",
+     "ms": 86,
+     "value": "false"
+    }
+   ],
+   "out": [
+    {
+     "port": "items",
+     "ms": 146,
+     "value": "[]"
+    }
+   ]
+  },
+  {
+   "node": "dtActions",
+   "component": "/Logic/Todo data",
+   "into": [
+    {
+     "port": "storageFetch",
+     "kind": "value",
+     "ms": 86,
+     "value": "true"
+    },
+    {
+     "port": "storageFetch",
+     "kind": "value",
+     "ms": 86,
+     "value": "false"
+    }
+   ],
+   "out": [
+    {
+     "port": "items",
+     "ms": 152,
+     "value": "[]"
+    }
+   ]
+  },
+  {
+   "node": "dtRecent",
+   "component": "/Logic/Todo data",
+   "into": [
+    {
+     "port": "storageFetch",
+     "kind": "value",
+     "ms": 86,
+     "value": "true"
+    },
+    {
+     "port": "storageFetch",
+     "kind": "value",
+     "ms": 86,
+     "value": "false"
+    }
+   ],
+   "out": [
+    {
+     "port": "items",
+     "ms": 133,
+     "value": "[]"
+    }
+   ]
+  },
+  {
+   "node": "dtRoutines",
+   "component": "/Logic/Todo data",
+   "into": [
+    {
+     "port": "storageFetch",
+     "kind": "value",
+     "ms": 86,
+     "value": "true"
+    },
+    {
+     "port": "storageFetch",
+     "kind": "value",
+     "ms": 86,
+     "value": "false"
+    }
+   ],
+   "out": [
+    {
+     "port": "items",
+     "ms": 129,
+     "value": "[]"
+    }
+   ]
+  },
+  {
+   "node": "dtChecks",
+   "component": "/Logic/Todo data",
+   "into": [
+    {
+     "port": "storageFetch",
+     "kind": "value",
+     "ms": 86,
+     "value": "true"
+    },
+    {
+     "port": "storageFetch",
+     "kind": "value",
+     "ms": 86,
+     "value": "false"
+    }
+   ],
+   "out": [
+    {
+     "port": "items",
+     "ms": 142,
+     "value": "[]"
+    }
+   ]
+  }
+ ],
+ "runB_signals": [
+  "1 ms (not in the dictionary).onClick -> (not in the dictionary).signup (cause 0)",
+  "1 ms (not in the dictionary).onClick -> (not in the dictionary).eval (cause 0)",
+  "51 ms (not in the dictionary).done -> (not in the dictionary).navigate (cause 0)",
+  "74 ms JavaScriptFunction.out-kind -> States.to-kind (cause 0)",
+  "75 ms JavaScriptFunction.out-go -> Set Variable.do (cause 0)",
+  "82 ms Group.didMount -> JavaScriptFunction.run (cause 0)",
+  "82 ms Page.didMount -> Condition.eval (cause 0)",
+  "83 ms Condition.ontrue -> /Logic/Todo data.refresh (cause 0)",
+  "83 ms Condition.ontrue -> JavaScriptFunction.run (cause 0)",
+  "83 ms Condition.ontrue -> JavaScriptFunction.run (cause 0)",
+  "83 ms Condition.ontrue -> /Logic/Projects.refresh (cause 0)",
+  "138 ms JavaScriptFunction.out-loaded -> JavaScriptFunction.run (cause 0)"
+ ],
+ "runC_add_a_task": {
+  "typed": "Add a task (it goes in at #1)",
+  "pressed": true,
+  "pressAt": 9564.299999952316,
+  "events": 430,
+  "signals": 8,
+  "roots": 174,
+  "requests": [
+   {
+    "method": "POST",
+    "path": "/classes/Task",
+    "startMs": 5,
+    "endMs": 16
+   },
+   {
+    "method": "POST",
+    "path": "/classes/Event",
+    "startMs": 18,
+    "endMs": 29
+   },
+   {
+    "method": "POST",
+    "path": "/classes/Task",
+    "startMs": 36,
+    "endMs": 44,
+    "rows": 1
+   },
+   {
+    "method": "POST",
+    "path": "/classes/Action",
+    "startMs": 36,
+    "endMs": 44,
+    "rows": 0
+   },
+   {
+    "method": "POST",
+    "path": "/classes/Event",
+    "startMs": 36,
+    "endMs": 44,
+    "rows": 1
+   },
+   {
+    "method": "POST",
+    "path": "/classes/Routine",
+    "startMs": 37,
+    "endMs": 44,
+    "rows": 0
+   },
+   {
+    "method": "POST",
+    "path": "/classes/RoutineCheck",
+    "startMs": 37,
+    "endMs": 45,
+    "rows": 0
+   }
+  ],
+  "titleFirstInTraceMs": -303,
+  "titleFirstInto": "net.noodl.controls.textinput.onTextChanged \u2192 JavaScriptFunction.in-text",
+  "titleIntoATextMs": 26,
+  "titleOnScreenMs": 43,
+  "mutations": 91,
+  "signalChain": [
+   "2 ms net.noodl.controls.button.onClick \u2192 JavaScriptFunction.run (cause 0)",
+   "2 ms JavaScriptFunction.out-go \u2192 Component Outputs.add (cause 0)",
+   "4 ms JavaScriptFunction.out-go \u2192 NewDbModelProperties.store (cause 0)",
+   "15 ms NewDbModelProperties.done \u2192 /Logic/Write history.do (cause 0)",
+   "17 ms JavaScriptFunction.out-create \u2192 NewDbModelProperties.store (cause 0)",
+   "29 ms NewDbModelProperties.done \u2192 JavaScriptFunction.run (cause 0)",
+   "35 ms JavaScriptFunction.out-go \u2192 Set Variable.do (cause 0)",
+   "35 ms Set Variable.done \u2192 Component Outputs.done (cause 0)"
+  ]
+ },
+ "screen_runB": {
+  "mutations": 4,
+  "drawnNodes": 1,
+  "drawnNodesWithAValueInTrace": 0,
+  "drawnWithNoTraceEvent": [
+   "Router"
+  ],
+  "mutationsUnmapped": 2
+ },
+ "screen_after": {
+  "text": 212,
+  "mutationsAll": 4,
+  "counted": 4,
+  "errors": [],
+  "sameFrame": true,
+  "sample": "Todo list\nList (0)\nToday (0)\nDone (0)\nLog\nSign out\n\u263c\nNothing on the list. Add the next thing you need to do.\nAdd\nAlso ke"
+ }
+}
