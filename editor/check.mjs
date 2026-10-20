@@ -276,9 +276,9 @@ try {
   }
   console.log('check: Workflow');
   await b.clickSel('[data-tab=workflow]'); await wait(300);
-  const events = await b.evaluate('[...document.querySelectorAll("#events .row")].map(r => r.firstChild.textContent)');
+  const events = await b.evaluate('[...document.querySelectorAll("#events .row")].map(r => r.querySelector("small").textContent)');
   ok(events.some((e) => /^When Sign in: /.test(e)) && events.some((e) => /^When Create account: /.test(e)), 'the sign-in page lists its button events', events);
-  await b.evaluate(`[...document.querySelectorAll("#events .row")].find(r => r.firstChild.textContent.startsWith("When Sign in: ")).click()`); await wait(300);
+  await b.evaluate(`[...document.querySelectorAll("#events .row")].find(r => r.querySelector("small").textContent.startsWith("When Sign in: ")).click()`); await wait(300);
   const steps = await b.evaluate('[...document.querySelectorAll("#steps .step h3")].map(r => r.firstChild.textContent)');
   ok(steps.length >= 1 && /Log In/i.test(steps[0]), 'the Sign in click\'s first step is the Log In action', steps);
   await b.clickSel('#steps .step .acts button'); await wait(200);
@@ -293,6 +293,15 @@ try {
     const first = await b.evaluate(`document.querySelector('.menu .item')?.textContent`);
     await b.clickSel('.menu .item'); await wait(300);
     const evPort = (first.match(/: (.+?)[A-Z][a-z]+ *$/) || [])[1];
+    const cardHead = async () => JSON.parse(await b.evaluate(`JSON.stringify({ name: document.querySelector('#steps .event-card h2')?.textContent, trigger: document.querySelector('#steps .event-card small')?.textContent, row: document.querySelector('#events .row[aria-selected=true] span')?.textContent })`));
+    const draft = await cardHead();
+    ok(draft.name === 'No steps yet' && /^When Sign-in card: /.test(draft.trigger), 'STU-023: a new workflow with no steps and no name says so; the event is the line under it', draft);
+    await b.clickSel('#steps .event-card .rename'); await wait(200);
+    await b.evaluate(`document.querySelector('#steps .event-card input.cardname').value = ''`);
+    await b.type('Check the card'); await b.key('Enter', 'Enter', 13); await wait(400);
+    const named = await cardHead();
+    const namesOnDisk = () => onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === card)?.metadata?.cardNames || {};
+    ok(named.name === 'Check the card' && named.row === 'Check the card' && Object.values(namesOnDisk()).includes('Check the card'), 'STU-023: Rename names the card, in its head and in the list, and the name is kept on the element on disk (metadata.cardNames)', { named, onDisk: namesOnDisk() });
     await clickText('#steps .addrow button', 'Add a branch'); await wait(300);
     await b.until('document.querySelector("#steps .step.cond")', 5000);
     // the branch is drawn before its save lands: wait for the file, not a fixed time (it was read 300 ms in and missed, 1 run in 5)
@@ -337,6 +346,14 @@ try {
     ok(condExpr && condExpr.parameters.expression === '1 > 2' && wires.some((w) => w.fromId === condExpr.id && w.fromProperty === 'result' && w.toId === cond.id && w.toProperty === 'condition'), 'the branch\'s condition is an Expression (1 > 2) wired into the Condition\'s input', { expression: condExpr?.parameters?.expression });
     const shown = await b.evaluate(`document.querySelector('#steps .step.cond .cond-line')?.textContent`);
     ok(/1 > 2/.test(shown || ''), 'the branch card reads the condition back', shown);
+    // a named card keeps its name through the steps added since; emptied, it reads its steps again (the branch, by its test)
+    const kept = await cardHead();
+    ok(kept.name === 'Check the card' && Object.values(namesOnDisk()).includes('Check the card'), 'STU-023: a renamed card keeps its name after a branch and two steps are added to it', kept);
+    await b.clickSel('#steps .event-card .rename'); await wait(200);
+    await b.evaluate(`document.querySelector('#steps .event-card input.cardname').value = ''`);
+    await b.key('Enter', 'Enter', 13); await wait(400);
+    const unnamed = await cardHead();
+    ok(/^(If |Branch)/.test(unnamed.name || '') && !Object.values(namesOnDisk()).includes('Check the card'), 'STU-023: an emptied name gives the card back to its steps, and the name leaves the file', { unnamed, onDisk: namesOnDisk() });
     // STU-013-NAVLOOP: NodeGX re-tests a Condition when its value changes, Evaluate wired or not. A branch tests when its
     // event reaches it: its value arriving as the app opens must not send No's "Go to page" (the runtime's own trace says)
     ok(nodes.find((n) => n.id === cond.id)?.parameters?.['runOnChange-condition'] === false, 'the branch is written to test only when its event reaches it (run on change off)', nodes.find((n) => n.id === cond.id)?.parameters);
@@ -519,7 +536,7 @@ try {
     await select(signInBtn);
     await clickText('#right .ptabs button', 'Interaction'); await wait(250);
     const wfs = await b.evaluate(`[...document.querySelectorAll('#right .row.wf')].map(r => r.textContent)`);
-    ok(wfs.length >= 1 && wfs.every((t) => /^When /.test(t)), 'the Interaction tab lists the workflows that start at the element', wfs);
+    ok(wfs.length >= 1 && wfs.every((t) => /When /.test(t)), 'the Interaction tab lists the workflows that start at the element', wfs);
     {
       // STU-020: the elements that should wear a ⚡, read off the file and the runtime's own node library (not Studio's
       // reading of events): a drawn element with a wire into another node's signal input. Email's Text Changed goes only
@@ -549,9 +566,12 @@ try {
       // STU-021: a click on the badge opens the card alone, full screen; Back returns to the element, selected
       const at = await b.evaluate(`(() => { const r = document.querySelector('#overlay .bolt.oncanvas[data-node=${JSON.stringify(signInBtn)}]').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
       await b.click(at.x, at.y); await wait(400);
-      const card1 = JSON.parse(await b.evaluate(`JSON.stringify({ shown: !document.getElementById('workflow').hidden, full: document.getElementById('workflow').classList.contains('card'), list: document.querySelector('#workflow > aside').offsetWidth, title: document.querySelector('#steps .event-card h2')?.textContent, steps: [...document.querySelectorAll('#steps .step h3 span')].map(s => s.textContent), back: document.querySelector('#steps .cardnav .back')?.textContent })`));
+      const card1 = JSON.parse(await b.evaluate(`JSON.stringify({ shown: !document.getElementById('workflow').hidden, full: document.getElementById('workflow').classList.contains('card'), list: document.querySelector('#workflow > aside').offsetWidth, title: document.querySelector('#steps .event-card h2')?.textContent, trigger: document.querySelector('#steps .event-card small')?.textContent, steps: [...document.querySelectorAll('#steps .step h3 span')].map(s => s.textContent), back: document.querySelector('#steps .cardnav .back')?.textContent })`));
       ok(card1.steps.length >= 2 && tip.includes(`Click${card1.steps.slice(0, 1)} (+1 more) → ${card1.steps.slice(1).join(' → ')}`), 'STU-020: hovering the Sign in ⚡ names its steps in the order its card draws them', { tip, steps: card1.steps });
-      ok(card1.shown && card1.full && card1.list === 0 && card1.title === 'When Sign in: Click' && /Sign in/.test(card1.back || ''), 'STU-021: clicking the ⚡ on the canvas opens that event\'s card full screen (no list beside it), with the way back', card1);
+      ok(card1.shown && card1.full && card1.list === 0 && /^When Sign in: Click/.test(card1.trigger || '') && /Sign in/.test(card1.back || ''), 'STU-021: clicking the ⚡ on the canvas opens that event\'s card full screen (no list beside it), with the way back', card1);
+      // STU-023: a card nobody named reads its steps (up to three; past that the first two, "…", the last)
+      const fromSteps = (card1.steps.length > 3 ? [card1.steps[0], card1.steps[1], '…', card1.steps.at(-1)] : card1.steps).join(' → ');
+      ok(card1.steps.length >= 2 && card1.title === fromSteps, 'STU-023: the Sign in click\'s card, never named, is named by its steps', { title: card1.title, steps: card1.steps });
       await shot('workflow-card');
       await b.clickSel('#steps .cardnav .back'); await wait(400);
       const back1 = JSON.parse(await b.evaluate(`JSON.stringify({ design: !document.getElementById('design').hidden, name: document.querySelector('#right .head input')?.value, box: !!document.querySelector('#overlay .box.sel') })`));
@@ -560,10 +580,10 @@ try {
       await b.evaluate(`${rowBolt(createBtn)}.scrollIntoView({ block: 'nearest' })`);
       const at2 = await b.evaluate(`(() => { const r = ${rowBolt(createBtn)}.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
       await b.click(at2.x, at2.y); await wait(400);
-      const title2 = await b.evaluate(`!document.getElementById('workflow').hidden && document.getElementById('workflow').classList.contains('card') ? document.querySelector('#steps .event-card h2')?.textContent : null`);
+      const title2 = await b.evaluate(`!document.getElementById('workflow').hidden && document.getElementById('workflow').classList.contains('card') ? document.querySelector('#steps .event-card small')?.textContent : null`);
       await b.key('Escape', 'Escape', 27); await wait(400);
       const back2 = JSON.parse(await b.evaluate(`JSON.stringify({ design: !document.getElementById('design').hidden, name: document.querySelector('#right .head input')?.value })`));
-      ok(title2 === 'When Create account: Click' && back2.design && back2.name === 'Create account', 'STU-021: the ⚡ on a row of the element list opens its card; Esc returns to the element', { title2, back2 });
+      ok(/^When Create account: Click/.test(title2 || '') && back2.design && back2.name === 'Create account', 'STU-021: the ⚡ on a row of the element list opens its card; Esc returns to the element', { title2, back2 });
       await select(signInBtn);
     }
     await clickText('#right .ptabs button', 'Visual'); await wait(250);
@@ -767,7 +787,7 @@ try {
     ok(/exactly what notes asks/.test(toastText) && byName('titled')?.parameters?.visualFilter?.conditions?.length === 1 && queries().length === 3, 'removing its condition would make it ask what notes asks: refused, and the file keeps the condition', toastText);
     // Workflow: a step refreshes an item; it never writes a query of its own
     await b.clickSel('[data-tab=workflow]'); await wait(300);
-    await b.evaluate(`[...document.querySelectorAll("#events .row")].find(r => r.firstChild.textContent.startsWith("When Sign in: Click")).click()`); await wait(300);
+    await b.evaluate(`[...document.querySelectorAll("#events .row")].find(r => r.querySelector("small").textContent.startsWith("When Sign in: Click")).click()`); await wait(300);
     const addRows = await b.evaluate(`document.querySelectorAll('#steps .addrow').length`);
     await clickText('#steps .addrow button', 'Add an action');
     await b.until(`document.querySelectorAll('.menu .item').length > 0`, 4000);

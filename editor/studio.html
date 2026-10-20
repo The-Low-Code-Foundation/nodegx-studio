@@ -339,7 +339,9 @@
   .wf { max-width: 860px; }
   .event-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 12px 16px; margin-bottom: 14px; display: flex; align-items: center; gap: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
   .event-card .ic { width: 32px; height: 32px; border-radius: 8px; background: #fff7ed; color: #c2410c; display: grid; place-items: center; }
-  .event-card h2 { margin: 0; font-size: 15px; font-weight: 600; }
+  .event-card h2 { margin: 0; font-size: 15px; font-weight: 600; cursor: text; }
+  .event-card .named { flex: 1; min-width: 0; }
+  .event-card input.cardname { font: inherit; font-size: 15px; font-weight: 600; width: 100%; padding: 2px 6px; margin: -3px 0 -3px -7px; border: 1px solid var(--accent); border-radius: var(--r); background: var(--panel); color: inherit; }
   .event-card small { color: var(--muted); display: block; }
   .chain { display: flex; flex-direction: column; gap: 0; }
   .chain .link { width: 2px; height: 14px; background: var(--line-2); margin-left: 27px; }
@@ -1742,7 +1744,7 @@ function renderBubblePanel(right, node) {
   if (propTab === 'interaction') {
     const mine = events().filter((ev) => ev.node === node.id);
     add(section('Workflows', [
-      ...mine.map((ev) => h('div', { class: 'row wf', onclick: () => openCard(ev) }, icon('workflow'), eventTitle(ev).replace(/^When [^:]+: /, 'When '), h('span', { class: 't' }, `${countSteps(chain(ev.node, ev.port))} steps`))),
+      ...mine.map((ev) => h('div', { class: 'row wf', onclick: () => openCard(ev) }, icon('workflow'), cardName(ev), h('span', { class: 't' }, `When ${portLabel(byId[ev.node], 'output', ev.port)} · ${countSteps(chain(ev.node, ev.port))} steps`))),
       h('div', { class: 'hint' }, mine.length ? 'Open one to change its steps.' : 'No workflow starts at this element. Add one in Workflow.')]));
     add(section('Visibility', [has('visible') ? plain('visible') : null, has('mounted') ? plain('mounted') : null]));
     add(section('Options', [...['enabled', 'keepsFocus'].filter(has).map(plain), ...ports.filter((p) => p.name.startsWith('runOnChange-')).map((p) => (claimed.add(p.name), fieldFor(node, { ...p, displayName: `A change to ${(CONFIGURE_AS[p.name.slice('runOnChange-'.length)] || P[p.name.slice('runOnChange-'.length)]?.displayName || p.displayName).toLowerCase()} runs what it feeds` }, params[p.name], wiredIn[p.name])))]));
@@ -2897,15 +2899,16 @@ function workflowsByElement() {
   wfCache = { nodes, conns, lib: libIndex, map };
   return map;
 }
-/** One step in a few words: its own name when it has one, else what it does ("Go to Home"). */
-function stepWords(s) {
+/** One step in a few words: its own name when it has one, else what it does ("Go to Home"). `short` (a card's name) drops "+1 more" and a branch's sides. */
+function stepWords(s, short = false) {
   const node = byId[s.id], p = node.parameters || {};
   if (s.refresh) return `Refresh ${itemById(s.id)?.name ?? labelOf(s.id)}`;
   if (s.branches) {
-    const side = (list) => list.map(stepWords).join(' → ') || 'nothing';
-    return `${node.label ? `If ${node.label.replace(/\?$/, '')}` : 'Branch'}: Yes → ${side(s.branches.yes)}; No → ${side(s.branches.no)}`;
+    const side = (list) => list.map((x) => stepWords(x)).join(' → ') || 'nothing';
+    const test = node.label ? `If ${node.label.replace(/\?$/, '')}` : 'Branch';
+    return short ? test : `${test}: Yes → ${side(s.branches.yes)}; No → ${side(s.branches.no)}`;
   }
-  const more = s.siblings.length ? ` (+${s.siblings.length} more)` : '';
+  const more = !short && s.siblings.length ? ` (+${s.siblings.length} more)` : '';
   if (node.label) return node.label + more;
   const words = ACTIONS.find(([t]) => t === node.type)?.[1];
   if (node.type === 'RouterNavigate' && p.target) return `Go to ${String(p.target).split('/').pop()}${more}`;
@@ -2913,11 +2916,38 @@ function stepWords(s) {
   if (words && p.collectionName) return `${words} (${p.collectionName})${more}`;
   return (words || typeName(node.type)) + more;
 }
-const eventSummary = (ev) => chain(ev.node, ev.port).map(stepWords).join(' → ');
+const eventSummary = (ev) => chain(ev.node, ev.port).map((s) => stepWords(s)).join(' → ');
+/* ---- STU-023: a card is named by what it does, from its steps, until someone names it. The name is kept on the element
+   the event starts at (metadata.cardNames, by port), so it follows the element and comes back with Undo; nothing else reads it ---- */
+const givenName = (ev) => byId[ev.node]?.metadata?.cardNames?.[ev.port] || '';
+function stepsName(ev) {
+  const words = chain(ev.node, ev.port).map((s) => stepWords(s, true));
+  if (!words.length) return 'No steps yet';
+  return (words.length > 3 ? [words[0], words[1], '…', words.at(-1)] : words).join(' → ');
+}
+const cardName = (ev) => givenName(ev) || stepsName(ev);
+/** An empty name gives the card back to its steps. */
+function renameCard(ev, typed) {
+  const name = typed.trim();
+  if (name === cardName(ev) || (!name && !givenName(ev))) return renderWorkflow();
+  const names = { ...(byId[ev.node].metadata?.cardNames || {}) };
+  if (name) names[ev.port] = name; else delete names[ev.port];
+  edits(pageKey, [{ edit: 'set_metadata', component: pageKey, id: ev.node, metadata: { cardNames: Object.keys(names).length ? names : undefined } }], { rebuildApp: false, redraw: true });
+}
+let renaming = null; // the card being renamed, `${node}.${port}`: another card never opens with its name field
+const isRenaming = (ev) => renaming === `${ev.node}.${ev.port}`;
+function cardTitle(ev) {
+  if (!isRenaming(ev)) return h('h2', { title: givenName(ev) ? 'Named by you. Rename it, or empty the name to name it from its steps.' : 'Named from its steps until you rename it', ondblclick: () => { renaming = `${ev.node}.${ev.port}`; renderWorkflow(); } }, cardName(ev));
+  const input = h('input', { class: 'cardname', type: 'text', value: cardName(ev), placeholder: stepsName(ev), 'aria-label': 'Name of this workflow',
+    onkeydown: (e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { e.stopPropagation(); renaming = null; renderWorkflow(); } },
+    onblur: (e) => { if (!isRenaming(ev)) return; renaming = null; renameCard(ev, e.target.value); } });
+  setTimeout(() => { input.focus(); input.select(); }, 0);
+  return input;
+}
 function hideBoltTip() { document.getElementById('bolttip')?.remove(); }
 function showBoltTip(anchor, evs) {
   hideBoltTip();
-  const tip = h('div', { class: 'bolttip', id: 'bolttip', role: 'tooltip' }, ...evs.map((ev) => h('div', {}, h('b', {}, portLabel(byId[ev.node], 'output', ev.port)), eventSummary(ev))));
+  const tip = h('div', { class: 'bolttip', id: 'bolttip', role: 'tooltip' }, ...evs.map((ev) => h('div', {}, h('b', {}, portLabel(byId[ev.node], 'output', ev.port)), givenName(ev) ? `${givenName(ev)}: ` : '', eventSummary(ev))));
   document.body.append(tip);
   const r = anchor.getBoundingClientRect();
   tip.style.left = `${Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8))}px`;
@@ -2934,7 +2964,7 @@ function cardMenu(e, evs) {
   closeMenu();
   const menu = popover(e);
   menu.append(h('div', { class: 'h' }, `Workflows on ${labelOf(evs[0].node)}`));
-  for (const ev of evs) menu.append(h('div', { class: 'item', onclick: () => { closeMenu(); openCard(ev); } }, icon('bolt'), `When ${portLabel(byId[ev.node], 'output', ev.port)}`, h('small', {}, eventSummary(ev))));
+  for (const ev of evs) menu.append(h('div', { class: 'item', onclick: () => { closeMenu(); openCard(ev); } }, icon('bolt'), cardName(ev), h('small', {}, `When ${portLabel(byId[ev.node], 'output', ev.port)}`)));
   document.body.append(menu); dismissOnOutside(menu);
 }
 // the card opened from Design fills the tab, with no list beside it; Back returns to the element it was opened from
@@ -2949,8 +2979,8 @@ function renderEvents() {
   const box = $('events'); box.innerHTML = '';
   const list = events();
   if (!list.length) box.append(h('div', { class: 'hint' }, 'No workflows on this page yet. New picks an element and one of its events.'));
-  for (const ev of list) box.append(h('div', { class: 'row', 'aria-selected': selEvent && selEvent.node === ev.node && selEvent.port === ev.port, onclick: () => { selEvent = ev; renderWorkflow(); } },
-    h('span', {}, eventTitle(ev)), h('small', {}, `${isVisualType(byId[ev.node].type) ? 'element' : 'logic'} · ${countSteps(chain(ev.node, ev.port))} step(s)`)));
+  for (const ev of list) box.append(h('div', { class: 'row', 'data-node': ev.node, 'data-port': ev.port, 'aria-selected': selEvent && selEvent.node === ev.node && selEvent.port === ev.port, onclick: () => { selEvent = ev; renderWorkflow(); } },
+    h('span', {}, cardName(ev)), h('small', {}, `${eventTitle(ev)} · ${isVisualType(byId[ev.node].type) ? 'element' : 'logic'} · ${countSteps(chain(ev.node, ev.port))} step(s)`)));
 }
 /** The chain from a signal: follow the first wired target, then its Done, and so on; a Condition ends the chain with two of its own. */
 function chain(node, port, visited = new Set()) {
@@ -2992,8 +3022,8 @@ function renderWorkflow() {
   const wf = h('div', { class: 'wf' });
   if (cardBack) wf.append(h('div', { class: 'cardnav' }, h('button', { class: 'quiet back', title: 'Back to the element in Design (Esc)', onclick: backFromCard }, '← ', labelOf(cardBack.node)),
     h('button', { class: 'quiet tiny', title: 'Every workflow on this page, listed', onclick: () => { cardBack = null; renderWorkflow(); } }, 'All workflows on this page')));
-  wf.append(h('div', { class: 'event-card' }, h('div', { class: 'ic' }, icon('bolt')), h('div', {}, h('h2', {}, eventTitle(ev)), h('small', {}, `${typeName(byId[ev.node].type)} · the "${portLabel(byId[ev.node], 'output', ev.port)}" signal`)),
-    h('div', { style: 'margin-left:auto' }, countSteps(chain(ev.node, ev.port)) ? null : h('button', { class: 'quiet', onclick: () => { const i = draftEvents.findIndex((d) => d.node === ev.node && d.port === ev.port); if (i >= 0) draftEvents.splice(i, 1); selEvent = null; renderWorkflow(); } }, 'Discard'))));
+  wf.append(h('div', { class: 'event-card' }, h('div', { class: 'ic' }, icon('bolt')), h('div', { class: 'named' }, cardTitle(ev), h('small', {}, `${eventTitle(ev)} · ${typeName(byId[ev.node].type)}`)),
+    h('div', { style: 'margin-left:auto;display:flex;gap:6px' }, isRenaming(ev) ? null : h('button', { class: 'quiet tiny rename', title: 'Name this workflow yourself; an empty name gives it back to its steps', onclick: () => { renaming = `${ev.node}.${ev.port}`; renderWorkflow(); } }, 'Rename'), countSteps(chain(ev.node, ev.port)) ? null : h('button', { class: 'quiet', onclick: () => { const i = draftEvents.findIndex((d) => d.node === ev.node && d.port === ev.port); if (i >= 0) draftEvents.splice(i, 1); selEvent = null; renderWorkflow(); } }, 'Discard'))));
   renderChain(wf, chain(ev.node, ev.port), { node: ev.node, port: ev.port }, 1);
   main.append(wf);
 }

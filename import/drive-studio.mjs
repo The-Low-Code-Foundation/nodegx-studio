@@ -36,8 +36,8 @@ try {
   await b.screenshot(join(outDir, 'ob-design.png'));
   console.log('props:', await b.evaluate(`[...document.querySelectorAll('#right .field label')].slice(0,12).map(l => l.textContent)`));
   await b.clickSel('[data-tab=workflow]'); await wait(400);
-  const events = await b.evaluate('[...document.querySelectorAll("#events .row")].map(r => r.firstChild.textContent)'); console.log('events:', events);
-  await b.evaluate(`([...document.querySelectorAll("#events .row")].find(r => /Click/.test(r.firstChild.textContent)) || document.querySelector("#events .row"))?.click()`); await wait(400);
+  const events = await b.evaluate('[...document.querySelectorAll("#events .row")].map(r => r.querySelector("small").textContent)'); console.log('events:', events);
+  await b.evaluate(`([...document.querySelectorAll("#events .row")].find(r => /Click/.test(r.querySelector("small").textContent)) || document.querySelector("#events .row"))?.click()`); await wait(400);
   console.log('steps:', await b.evaluate('[...document.querySelectorAll("#steps .step h3")].map(r => r.firstChild.textContent)'));
   await b.clickSel('#steps .step .acts button').catch(() => {}); await wait(300);
   await b.screenshot(join(outDir, 'ob-workflow.png'));

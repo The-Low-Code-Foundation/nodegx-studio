@@ -40,7 +40,7 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 | The project's backend — started (or adopted) on open, stopped on close, shown in the status bar; a template that needs one gets one; Data's "Start a backend" for an app with none | works (2026-10-19) | `check:app` 34/34 |
 | Claude Code — "Connect Claude Code" in the header (and File) registers the NodeGX MCP server for the folder with the NodeGX editor's own writer and shows the command that starts a session there | works (2026-10-19) | `check:editor` 56/56 |
 | Page data — a search is a named item on the page (Design → Page data), read by any element as dynamic data; made or reused through one form, never twice; readers, last run and "N queries on open" counted off the app's own requests; a workflow refreshes an item | works (2026-10-19), R7 ruled | `check:pagedata` 26/26, `check:editor` 71/71 |
-| Workflows on their element (M3) — a ⚡ on every element with a workflow, on the canvas and in the element list; its steps in order on hover; its card full screen from the badge, Back (or Esc) to the element | STU-020, STU-021 work (2026-10-19, s8) | `check:editor` 159/159 |
+| Workflows on their element (M3) — a ⚡ on every element with a workflow, on the canvas and in the element list; its steps in order on hover; its card full screen from the badge, Back (or Esc) to the element; a card named by its steps until someone renames it | STU-020, STU-021 (2026-10-19, s8), STU-023 (2026-10-20, s9) work | `check:editor` 164/164 |
 
 [history/](history/) is how it started (NodeGX phase 123, working title "Open Bubble"): the brief, the look, the
 first play test and every ruling taken.
@@ -735,6 +735,27 @@ badges are exactly that set; the list wears it on Sign in and Create account and
 names the Sign in click's steps in the order its card draws them; a real click on the canvas ⚡ opens the card full
 screen (the list 0 px wide) and Back selects the button again; the ⚡ on the Create account row opens its card and Esc
 returns. `check:editor` 159/159 (153 + 6). Mutant (the summary's steps reversed): 158/159, the hover check fails.
+
+**Done (STU-023, 2026-10-20, s9).** A card is **named by what it does**: its top-level steps in a few words, joined by
+→ (*"Sign in → Go to the list"*); a branch reads as its test ("If …", or "Branch" when its Condition has no label);
+past three steps, the first two, "…", the last; a card with no steps yet says *"No steps yet"*. **Rename** (or a
+double-click on the name) names it; Enter keeps it, Esc leaves it; an emptied name gives the card back to its steps.
+The name leads wherever a card is listed: the card's head, the Workflow list, the Interaction tab, the ⚡ menu (and
+the hover, before the steps); the event (*"When Sign in: Click · Button"*) is the line under it.
+
+- **Where the name lives:** on the element the event starts at, `metadata.cardNames` by port
+  (`{ "onClick": "Check the card" }`). It follows the element through a rename, is undone like any edit, needs no
+  new format, and the runtime never reads it. A step can be deleted or moved without touching it.
+- **Not built:** the importer names no card. Bubble's run-mode bundle carries no workflow name (0 of the template's
+  14 workflows; `event_color` on one); if Richard's paid export does, it goes into `cardNames`.
+- **Seen, not fixed:** a branch made in Studio has no label, so a card whose first step is one reads "Branch"; the
+  composed condition (*"If 1 > 2"*) would say more.
+
+Gate (`check:editor`): a new workflow with no steps reads "No steps yet", its event under it; Rename → "Check the
+card" is in the head, the list row and on disk on the element; after a branch and two steps it is still the name;
+emptied, it reads "Branch" again and leaves the file; the Sign in click, never named, reads "Sign in → Go to the
+list", its card's own steps. `check:editor` 164/164 (159 + 5). Mutant (the given name ignored): 162/164, both rename
+checks fail.
 
 ---
 
