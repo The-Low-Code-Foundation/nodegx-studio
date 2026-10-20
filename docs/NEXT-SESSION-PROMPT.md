@@ -17,8 +17,8 @@ not its to commit.
 
 Built in s12 (2026-10-20): **STU-033, step mode** (SCOPE.md "Done (STU-033)"). **Step through** on a card in the
 Workflow tab, or on a recorded run's row in the timeline (the only way in for a command such as Add task: the page
-picker lists no component without elements). A bar over every tab, "Not real timing: each step waits for you", Next
-step / Run the rest / Stop stepping; each step that ran shows its out, the one waiting its in (every value into it so
+picker lists no component without elements). Step mode is the timeline's drawer while it is on (Richard
+found a bar over the tabs too busy): "Not real timing", Next step / Run the rest / Stop stepping; each step that ran shows its out, the one waiting its in (every value into it so
 far). editor/stepper.mjs wraps `_setPulseFromConnection` / `_setValueFromConnection` and the context's
 `traceEdgeSend` in the app's frame. **Found:** a signal into a component goes on out of its Component Inputs as two
 VALUES (true, false), so every command's run was invisible to the timeline; timeline.mjs now starts a card's run on a

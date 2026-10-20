@@ -1002,7 +1002,7 @@ with the Add task command stepped through: steps 1 and 2 ran, step 3 waits holdi
   they could be merged?"* It was a second copy of the drawer's step lines, and it pushed the app down. Stop stepping
   gives the drawer back to the recording; Record turns step mode off (a recording is the app in real time); a step
   that waits opens the drawer if it was closed. The next time the card runs in the app,
-  each step waits before it runs: the bar lists the steps of the run, each one that ran with its **out** (what it
+  each step waits before it runs: the drawer lists the steps of the run, each one that ran with its **out** (what it
   sent), and the one waiting with its **in**: every value that has come into it so far, which is what it reads when
   it is let go, and the settings in the files where nothing is wired, marked "(set)". Run the rest lets the run go
   on without pausing (its steps are still listed, "ran without a pause"); the card's next run pauses again. Stop
