@@ -1,0 +1,3 @@
+# vendor/ is checked byte for byte against vendor/NODEGX.json (npm run check:vendor), and its templates are copied into
+# people's projects: a Windows checkout must not turn its line endings into CRLF
+vendor/** -text

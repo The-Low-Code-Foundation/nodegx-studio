@@ -25,9 +25,9 @@
     "smoke": "node app/launch.mjs --smoke",
     "check:dictionary": "node import/dictionary-check.mjs",
     "check:phrases": "node editor/phrases-check.mjs",
-    "package": "electron-builder --dir -c.mac.identity=-",
-    "dist": "electron-builder -c.mac.identity=-",
-    "dist:signed": "electron-builder"
+    "package": "electron-builder --dir --publish never -c.mac.identity=-",
+    "dist": "electron-builder --publish never -c.mac.identity=-",
+    "dist:signed": "electron-builder --publish never"
   },
   "dependencies": {
     "@nodegx/mcp": "0.2.2",
