@@ -597,6 +597,7 @@
     <div class="status" id="status">starting…</div>
     <button class="status backend" id="backendpill" title="The app's backend">…</button>
     <button class="status backend off" id="agentpill" title="Claude Code and this app">Claude Code</button>
+    <button class="primary" id="publishbtn" hidden title="Publish the app as a site, written by NodeGX's own deploy">Publish</button>
   </header>
 
   <main>
@@ -4115,6 +4116,19 @@ $('backendpill').onclick = () => switchTab('data');
 showBackend();
 $('agentpill').onclick = openAgent;
 window.__ob.openAgent = openAgent;
+
+/* STU-008: Publish — the desktop app asks where, runs NodeGX's deploy (lib/publish.mjs) and says what it did; the page
+   only says it is busy. In a browser (npm run serve) there is no desktop app to ask, so there is no button. */
+async function publishApp() {
+  const btn = $('publishbtn');
+  if (!window.studio?.publish || btn.disabled) return null;
+  btn.disabled = true; btn.textContent = 'Publishing…';
+  try { return (window.__ob.published = await window.studio.publish()); }
+  finally { btn.disabled = false; btn.textContent = 'Publish'; }
+}
+$('publishbtn').hidden = !window.studio?.publish;
+$('publishbtn').onclick = publishApp;
+window.__ob.publish = publishApp;
 loadAgent();
 document.title = `ready ${opened.name} pages=${pageKeys().length} visual=${visualIds.length}`;
 </script>

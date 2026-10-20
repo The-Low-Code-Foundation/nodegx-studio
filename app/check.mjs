@@ -136,7 +136,8 @@ try {
 
   console.log('3. the next start offers the last project');
   {
-    const b = await start();
+    const site = join(tmp, 'sites', 'My todos site');
+    const b = await start([site]);
     const t = await welcomeTitle(b);
     ok(t.startsWith('ready welcome · 1 recent'), 'the welcome screen counts one recent project', t);
     ok((await b.evaluate(`document.querySelector('#reopen')?.textContent`)) === 'Reopen My todos', 'its first button reopens My todos');
@@ -146,6 +147,16 @@ try {
     ok((await backendUp(b))?.phase === 'running', 'its backend is started again');
     const note = await openRows(b, 'Task');
     ok(/^1 row\(s\)/.test(note || '') && (await backendRows(todos, 'Task')).length === 1, 'the row added before the quit is there', note);
+
+    console.log('3b. Publish (STU-008; the site itself is graded by check:publish)');
+    ok(await b.evaluate(`!document.querySelector('#publishbtn').hidden`), 'the header has Publish in the desktop app');
+    await b.clickSel('#publishbtn');
+    const busy = await b.until(`document.querySelector('#publishbtn').textContent === 'Publishing…' || window.__ob.published`, 5000);
+    const pub = await b.until(`window.__ob.published`, 120000);
+    ok(busy && pub?.site === site && existsSync(join(site, 'index.html')) && existsSync(join(site, '.nodegx-publish.json')), 'clicking it publishes the open app to the folder chosen', { site: pub?.site, error: pub?.error });
+    ok(pub?.asked?.[0] === 'This app’s backend runs on this computer' && pub.said?.some((l) => l.includes('on this computer only')), 'before writing, it says the backend is this computer\'s; after, where the site is and what it talks to', pub?.said);
+    ok((await b.evaluate(`document.querySelector('#publishbtn').textContent`)) === 'Publish', 'the button is ready again');
+    ok(readJson(join(userData, 'published-sites.json'))[todos] === site, 'the folder is remembered for the next Publish of this app');
     await stop();
     ok(!(await backendAnswers(todos)), 'quitting stops it again');
   }

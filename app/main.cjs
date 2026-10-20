@@ -24,11 +24,14 @@ const hidden = smoke || args.includes('--hidden');
 const projectArg = args.find((a) => !a.startsWith('--'));
 const serveJs = path.join(__dirname, '..', 'editor', 'serve.mjs');
 const actionsUrl = require('node:url').pathToFileURL(path.join(__dirname, 'actions.mjs')).href;
+const publishUrl = require('node:url').pathToFileURL(path.join(__dirname, '..', 'lib', 'publish.mjs')).href;
 const recentFile = () => path.join(app.getPath('userData'), 'recent-projects.json');
+const sitesFile = () => path.join(app.getPath('userData'), 'published-sites.json');
 const testPicks = process.env.NODEGX_STUDIO_TEST_PICKS ? JSON.parse(process.env.NODEGX_STUDIO_TEST_PICKS) : null;
 
 let win = null;
 let server = null;
+let openDir = null; // the project the window shows, or null on the welcome screen
 let actions = null; // app/actions.mjs, an ES module
 
 /** Starts serve.mjs on a free loopback port under Electron's own Node, and resolves with its URL. */
@@ -123,6 +126,7 @@ async function open(projectDir) {
     if (smoke) quit(1);
     return;
   }
+  openDir = projectDir;
   actions.rememberRecent(recentFile(), projectDir);
   app.addRecentDocument(projectDir);
   menu();
@@ -140,6 +144,7 @@ function loadCut(err) {
 /** STU-003: the welcome screen. Showing it closes the open project (every edit is already saved). */
 async function welcome() {
   await stopServer();
+  openDir = null;
   menu();
   const w = windowFor();
   w.setTitle('NodeGX Studio');
@@ -223,6 +228,7 @@ function handlers() {
     })
   );
   ipcMain.handle('studio:import', asking(importFlow));
+  ipcMain.handle('studio:publish', asking(publishFlow));
   ipcMain.handle(
     'studio:forget',
     asking((dir) => {
@@ -242,6 +248,89 @@ async function importFlow() {
   busy('Importing — a large app takes a minute…');
   const { dir } = await actions.importApp(source, dest);
   later(() => open(dir));
+}
+
+/* ---------------------------------------------------------------- STU-008: Publish */
+
+/** The folder each project was last published to, so the next Publish offers it again (`{ [projectDir]: siteDir }`). */
+const readSites = () => {
+  try {
+    return JSON.parse(require('node:fs').readFileSync(sitesFile(), 'utf8'));
+  } catch {
+    return {};
+  }
+};
+const rememberSite = (dir, site) => {
+  const fs = require('node:fs');
+  fs.mkdirSync(path.dirname(sitesFile()), { recursive: true });
+  fs.writeFileSync(sitesFile(), JSON.stringify({ ...readSites(), [dir]: site }, null, 2) + '\n');
+};
+
+/** A question with buttons; under the gate the first button is the answer, and the question is kept for it to read. */
+async function ask(asked, options) {
+  asked.push(options.message);
+  if (testPicks) return 0;
+  return (await dialog.showMessageBox(win, options)).response;
+}
+
+const home = (p) => p.replace(app.getPath('home'), '~');
+
+/**
+ * File → Publish… (and the header's Publish): where the site goes, then NodeGX's deploy (lib/publish.mjs). An app
+ * whose backend is on this computer is said to work here only before anything is written; R10 rules where else it can go.
+ * Answers with what was published, and what the window said, so the page and the gate can read it.
+ */
+async function publishFlow() {
+  const dir = openDir;
+  if (!dir) return { error: 'Open a project first: Publish writes the open app as a site.' };
+  const pub = await import(publishUrl);
+  const asked = [];
+  const target = pub.backendTargetOf(dir);
+  if (target.local) {
+    const answer = await ask(asked, {
+      type: 'info',
+      message: 'This app’s backend runs on this computer',
+      detail: `The site will talk to ${target.endpoint}, which only this computer can reach, and only while Studio (or the NodeGX editor) runs that backend. Publish it to try it in a browser here; putting the app and its backend somewhere others can reach is not built yet.`,
+      buttons: ['Continue', 'Cancel'],
+      cancelId: 1
+    });
+    if (answer !== 0) return { cancelled: true, asked };
+  }
+  const last = readSites()[dir];
+  let out = null;
+  if (last && require('node:fs').existsSync(path.join(last, pub.MARKER)) && !testPicks) {
+    const { response } = await dialog.showMessageBox(win, { type: 'question', message: 'Publish again?', detail: `This app was last published to ${home(last)}. Publishing again replaces that site.`, buttons: [`Publish to ${path.basename(last)}`, 'Choose Another Folder…', 'Cancel'], cancelId: 2 });
+    if (response === 2) return { cancelled: true, asked };
+    if (response === 0) out = last;
+  }
+  out ??= await pick('save', {
+    title: 'Publish the app as a site',
+    message: 'Name the folder the site goes in. It is made for it.',
+    defaultPath: last ?? path.join(app.getPath('documents'), pub.defaultSiteName(dir)),
+    buttonLabel: 'Publish',
+    nameFieldLabel: 'Site:'
+  });
+  if (!out) return { cancelled: true, asked };
+  let result;
+  try {
+    result = await pub.publish(dir, out);
+  } catch (err) {
+    if (!testPicks) dialog.showErrorBox('The app was not published', err.message);
+    throw err;
+  }
+  rememberSite(dir, result.site);
+  const lines = [`${result.files} files in ${home(result.site)}. Serve that folder with any web server and open it in a browser.`];
+  if (result.backend.endpoint) lines.push(`It talks to the backend at ${result.backend.endpoint}${result.backend.local ? ', on this computer only' : ''}.`);
+  else lines.push('It has no backend: it keeps no rows.');
+  const fns = result.functions;
+  if (fns.status === 'deployed') lines.push(`Cloud functions: ${fns.result.functions.length} on the backend (${fns.result.changed ? 'updated' : 'already up to date'}).`);
+  else if (fns.status !== 'none') lines.push(`Cloud functions: ${fns.reason ?? 'not deployed'}.`);
+  if (result.exposed.length) lines.push(`Also published, and readable by anyone who can open the site: ${result.exposed.join(', ')}. The app does not need them; a .noodlignore in the project with those names keeps them out.`);
+  const summary = { ...result, asked, said: lines };
+  if (testPicks) return summary;
+  const { response } = await dialog.showMessageBox(win, { type: fns.status === 'failed' ? 'warning' : 'info', message: result.replaced ? 'The site was published again' : 'The app is published', detail: lines.join('\n\n'), buttons: ['Show the Site’s Folder', 'Done'], defaultId: 1, cancelId: 1 });
+  if (response === 0) shell.showItemInFolder(result.index);
+  return summary;
 }
 
 function menu() {
@@ -271,6 +360,7 @@ function menu() {
         },
         { type: 'separator' },
         { label: 'Show Project Folder', enabled: !!server, click: () => server && shell.openPath(server.spawnargs[2]) },
+        { label: 'Publish…', enabled: !!server, click: () => win?.webContents.executeJavaScript('window.__ob?.publish?.()') },
         { label: 'Connect Claude Code…', enabled: !!server, click: () => win?.webContents.executeJavaScript('window.__ob?.openAgent?.()') },
         { type: 'separator' },
         process.platform === 'darwin' ? { role: 'close' } : { role: 'quit' }

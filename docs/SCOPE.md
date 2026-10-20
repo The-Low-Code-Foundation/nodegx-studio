@@ -40,9 +40,26 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 | Desktop app — Electron window, a welcome screen (recent projects, NodeGX's templates, Import an app), File → Open Recent, a smoke mode | first cut (2026-10-19) | `check:app` 34/34, `smoke` |
 | The project's backend — started (or adopted) on open, stopped on close, shown in the status bar; a template that needs one gets one; Data's "Start a backend" for an app with none | works (2026-10-19) | `check:app` 34/34 |
 | Claude Code — "Connect Claude Code" in the header (and File) registers the NodeGX MCP server for the folder with the NodeGX editor's own writer and shows the command that starts a session there | works (2026-10-19) | `check:editor` 56/56 |
+| Publish — File → Publish… and the header's Publish write the app as a static site with NodeGX's own deploy (npm's production engine), into a new folder or the one this app went to last; its cloud functions go to its backend through NodeGX's `deploy_cloud_functions`; the window says where the site is, what it talks to, and that a backend on 127.0.0.1 works on this computer only | works (2026-10-20, s14) | `check:publish` 27/27, `check:app` 39/39 |
 | Runs without a NodeGX checkout — the kit from npm at pinned versions (`@nodegx/preview` 0.2.3, `@nodegx/mcp` 0.2.2) and `vendor/` at one NodeGX commit; `NODEGX_REPO` for working on the kit and Studio together | works (2026-10-20, s13) | `check:vendor`, every gate on the vendored kit |
 | Page data — a search is a named item on the page (Design → Page data), read by any element as dynamic data; made or reused through one form, never twice; readers, last run and "N queries on open" counted off the app's own requests; a workflow refreshes an item | works (2026-10-19), R7 ruled | `check:pagedata` 26/26, `check:editor` 71/71 |
 | Workflows on their element (M3) — a ⚡ on every element with a workflow, on the canvas and in the element list; its steps in order on hover; its card full screen from the badge, Back (or Esc) to the element; a card named by its steps until someone renames it; the page's cards under their elements, filtered by what they change or what starts them, searched over their steps; one card per event — imported A / not A splits are one branch, overlapping ones lanes side by side | STU-020, STU-021 (2026-10-19, s8), STU-023, STU-022, STU-024 (2026-10-20, s9) work | `check:editor` 170/170, `check:import` 79/79 |
+
+## The alpha (0.2) — the line
+
+Written 2026-10-20 (s14): proposed by Claude, and Richard's answer was *"Rock out"*. **Someone who is not Richard downloads
+Studio, opens or imports an app, changes it, and publishes it.** What that needs, in order:
+
+| | what | state |
+|---|---|---|
+| 1 | **STU-008 Publish** to a folder | done (s14) |
+| 2 | **STU-007 a downloadable build**: unsigned first, then signed and notarised on Richard's Apple credentials; Windows and Linux | open |
+| 3 | **STU-040 Import an App…** with the report shown in the app (the welcome screen's import works; the report is a file in the project) | open |
+| 4 | **A NodeGX npm release** carrying P112-OWN020-UNWIREDSIGNAL and P123-STU008-BACKENDPUBLIC, then Studio's pins bumped and `npm run vendor` at that commit | waits on NodeGX |
+| 5 | **main pushed** | waits on Richard |
+
+Not in the alpha: STU-041–043 (the converter's one home, the fidelity gate, plugins), the timeline's gaps, rulings
+R4–R6, and R10 beyond a folder on this machine.
 
 [history/](history/) is how it started (NodeGX phase 123, working title "Open Bubble"): the brief, the look, the
 first play test and every ruling taken.
@@ -481,6 +498,45 @@ Claude Code registers `node_modules/@nodegx/mcp/dist/noodl-mcp.cjs`.
   rather than absent; not on Windows or Linux. `check:editor` and `check:timeline` ran in the main clone on the same
   vendored files (same hashes), not in the scratch clone. STU-007 must put `node_modules/@nodegx/mcp` outside the
   asar archive (`extraResources`): Claude Code runs that file with an external `node`.
+
+**Done (STU-008, 2026-10-20, s14).** File → **Publish…** (enabled with a project open) and a **Publish** button at the
+right of the header (the desktop app only: in a browser, `npm run serve`, there is no main process to ask) run one flow
+in `app/main.cjs`, and `lib/publish.mjs` does the work:
+- **The site is NodeGX's deploy.** `@nodegx/preview`'s engine (`dist/nodegx-deploy.cjs`, which its `nodegx-deploy`
+  bin runs) under Electron-as-Node: `<project> <out>`, one JSON report. npm's engine is the production one (1,753,200
+  bytes); the engine itself refuses a development one, so Studio adds no check of its own. The site carries the
+  project's backend binding (`metadata.cloudservices`), so it talks to the backend Studio runs.
+- **The folder is Studio's.** The engine writes over what is there and deletes nothing (measured: an old bundle and a
+  stray file both survived a second deploy), and it deploys happily into the project's own folder, which the next
+  publish would then copy as part of the app. So Publish refuses a folder inside the project or holding it, and any
+  folder with files in it unless this project was published there: `.nodegx-publish.json` beside the site names the
+  project id and every file that publish wrote, and a republish deletes exactly those (never a path outside the site,
+  whatever the marker says) before the new deploy. A file the person put there (a `CNAME`) stays. The last folder
+  per project is kept in the user data folder (`published-sites.json`), and the next Publish offers it first.
+- **Before anything is written**, an app whose backend is on 127.0.0.1 is said to work on this computer only, and
+  only while its backend runs (R10 is where else it can go). **After**, the window says how many files went where,
+  which backend the site talks to, and what happened to the cloud functions, with a button to show the folder.
+- **Cloud functions** go to the backend through the NodeGX MCP server's own `deploy_cloud_functions`, one stdio call
+  (`initialize`, `tools/call`) to `node_modules/@nodegx/mcp`'s server bound to the project: the bundle is built and
+  pushed by the code the editor's Deploy button runs. The server writes nothing into the project (measured). A
+  backend that is not on this machine is said, not attempted.
+- **Found: the engine also publishes the backend's own files** — `nodegx.security.json` (the whole access policy,
+  which the runtime never reads) on every app with a backend, and `backend/` (the importer's
+  `triggers.imported.json`; a template's seed and fixtures). Filed in NodeGX as **P123-STU008-BACKENDPUBLIC**
+  (the fix is two default ignore rules; `digital-bricks-training` has its own `.noodlignore` for it since L183).
+  Until it is fixed and published, Publish names those files to the person and says a `.noodlignore` keeps them
+  out; it does not delete them behind the engine.
+- **The done-when, measured** (`npm run check:publish`, 27/27, plain Node and headless Chrome): the todo template's
+  copy, its backend started, published; the folder served by a plain `http` file server (nothing NodeGX in it) and
+  opened in a browser: the sign-in page; *Create account*; *Buy bread* added; the backend holds one `Task`,
+  *Buy bread*; *Sign out*, reload, *Sign in*: the todo is read back. A republish replaces only the last publish's
+  files; another app into that folder is refused. The importer's backend-workflow fixtures: four functions
+  deployed, a second publish finds all four `unchanged`, and one called over HTTP answers from its own Request node
+  (*Unauthenticated requests not accepted*, 500) where an unknown name gets 404. `check:app` 39/39 clicks Publish in
+  the real window (with its dialogs answered by the gate) and reads the site, the warning, and the remembered folder.
+- **Not in it:** a site under a sub-path (P123-STU015-BASEURL); a path-routed app's deep link needs the server to
+  answer every path with `index.html` (opening its root works on any server, which is all the gate's server does; most static hosts have a
+  setting for the fallback, and Publish does not say so yet); hosting anywhere but this machine (R10); Windows and Linux not run.
 
 Order: STU-002 first (it is what makes "local" feel alive, and STU-005 depends on it), then STU-003–005, then
 STU-006–007 when someone outside the team needs to run it, and STU-008 so that what they build can leave the machine.

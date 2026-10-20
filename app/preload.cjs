@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('studio', {
   importApp: () => ipcRenderer.invoke('studio:import'),
   forget: (dir) => ipcRenderer.invoke('studio:forget', dir),
   reveal: (dir) => ipcRenderer.invoke('studio:reveal', dir),
+  /** STU-008: publishes the open app as a site; the main process asks where and says what it did. */
+  publish: () => ipcRenderer.invoke('studio:publish'),
   /** The main process says what it is doing once the dialogs are answered ("Copying Todo list…"). */
   onBusy: (fn) => ipcRenderer.on('studio:busy', (_event, text) => fn(text))
 });

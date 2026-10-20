@@ -75,7 +75,8 @@ npm run check:timeline # 43 checks: Record / Stop and the run timeline, on fixtu
 npm run check:pagedata # 33 checks: page data written, saved and read back from disk; NodeGX's validator on it
 npm run check:reusable # 12 checks: a group made reusable, every node and wire accounted for; NodeGX's validator on it
 npm run check:import   # the converter on the example editor requests, a page of repeated searches and a template bundle (79 checks with the bundle)
-npm run check:app      # 34 checks: drives the desktop app — welcome screen, a template and its backend, reopen, an import, the recent list
+npm run check:app      # 39 checks: drives the desktop app — welcome screen, a template and its backend, reopen, Publish, an import, the recent list
+npm run check:publish  # 27 checks: Publish — the todo app's site served statically, sign in and a todo on its backend; the folder rules; cloud functions deployed
 npm run smoke -- /path/to/project   # the desktop app opens the project and the app draws (no path: the welcome screen)
 ```
 
