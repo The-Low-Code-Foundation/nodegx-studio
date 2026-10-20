@@ -15,6 +15,8 @@
  *   - the page-open workflow is one row, linked to its card; clicking it opens that card, clicking the query's row
  *     selects its element in Design;
  *   - then Record from now, a second task added: the Add button's card is a row, before the create request's row.
+ *   - step mode (STU-033), armed from that recording's Add task row: a third task added waits before each step, and
+ *     the app's own request log has no write until Next lets the record's creation run.
  *
  *   node editor/timeline-check.mjs [--shots]     PASS n/n and exit 0, or the failing lines and exit 1
  *   TIMELINE_DUMP=1 node editor/timeline-check.mjs   also prints every row of the page opening's recording
@@ -27,6 +29,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { browser } from './cdp.mjs';
 import { buildTimeline, msText, shotAt, stepValues } from './timeline.mjs';
+import { stepRule } from './stepper.mjs';
 import { nodegxRepo } from '../lib/nodegx.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -97,6 +100,33 @@ console.log('timeline: fixtures');
       "its outputs: what it sent after its signal and before the next signal into it, a signal once however many wires", io.outs);
     ok(shotAt([{ t: 10 }, { t: 20 }, { t: 30 }], 5) === -1 && shotAt([{ t: 10 }, { t: 20 }, { t: 30 }], 20) === 1 && shotAt([{ t: 10 }, { t: 20 }, { t: 30 }], 29.9) === 1 && shotAt([{ t: 10 }, { t: 20 }, { t: 30 }], 99) === 2,
       'the screen at a moment is the last copy taken at or before it, none before the first');
+  }
+  // STU-033: which signals step mode holds, the timeline's rule for a run's steps
+  {
+    const rule = stepRule({ node: 'btn', port: 'onClick', reach: new Set(['make', 'nav', 'toast']) });
+    const sig = (t, fromNode, fromPort, toNode) => ({ t, fromNode, fromPort, toNode, toPort: 'x' });
+    const a = rule.take(sig(5, 'btn', 'onClick', 'make')), stray = rule.take(sig(6, 'other', 'done', 'nav')), b = rule.take(sig(30, 'make', 'stored', 'nav'));
+    ok(a?.hold && a.step.n === 1 && stray === null && b?.hold && b.step.n === 2 && a.run === b.run,
+      "step mode holds the card's event's signal as step 1 and a signal on from a node in the run as step 2; a signal into a step from outside the run is not held", { a: a && a.step.n, stray, b: b && b.step.n });
+    const via = rule.take({ ...sig(32, 'make', 'stored', 'nav'), kind: 'value' });
+    ok(via === null, 'a value from a step is not a step (only the card\'s own event can arrive as a value)', via);
+    rule.free();
+    const c = rule.take(sig(31, 'make', 'stored', 'toast')), d = rule.take(sig(90, 'btn', 'onClick', 'make'));
+    ok(c && !c.hold && c.step.n === 3 && d?.hold && d.step.n === 1 && d.run !== c.run,
+      '"Run the rest": the rest of the run goes through, still counted; the next run pauses again from step 1', { c: c && { hold: c.hold, n: c.step.n }, d: d && { hold: d.hold, n: d.step.n } });
+  }
+  // a card's event through a component's inputs: true then false, values, as Component Inputs sends a signal on
+  {
+    const cmdCards = [{ node: 'in', port: 'do', name: 'Add the task', when: 'When What to do: do', reach: new Set(['js', 'make']) }];
+    const tr = [
+      { seq: 1, t: 10, kind: 'value', fromNode: 'in', fromPort: 'title', toNode: 'js', toPort: 'in-title', value: '"Milk"' },
+      { seq: 2, t: 10, kind: 'value', fromNode: 'in', fromPort: 'do', toNode: 'js', toPort: 'run', value: 'true' },
+      { seq: 3, t: 10, kind: 'value', fromNode: 'in', fromPort: 'do', toNode: 'js', toPort: 'run', value: 'false' },
+      { seq: 4, t: 11, kind: 'signal', fromNode: 'js', fromPort: 'out-go', toNode: 'make', toPort: 'store', value: '' }
+    ];
+    const cmdRuns = buildTimeline({ t0: 0, t1: 100, trace: tr, cards: cmdCards, label: (id) => id, pageNode: () => null, asker: () => null }).rows.filter((r) => r.lane === 'workflow');
+    ok(cmdRuns.length === 1 && !cmdRuns[0].minor && cmdRuns[0].steps?.map((x) => x.node).join() === 'js,make' && JSON.stringify(cmdRuns[0].steps[0].ins) === JSON.stringify([{ port: 'in-title', value: '"Milk"' }]),
+      "a card started by a signal into its component (a true out of Component Inputs) is a run with its steps, and the true and false are not among the step's inputs", cmdRuns);
   }
   const late = buildTimeline({ t0: 0, t1: 3000, log: [{ kind: 'request', method: 'POST', path: '/classes/Event', body: {}, t0: 2000, t1: 2100, status: 201 }], label, pageNode, asker });
   ok(late.from > 1900 && late.from < 2000 && late.rows[0].text === 'The app creates an Event', 'recorded from now, the axis starts at the first thing that happened; a word starting with a vowel takes "an"', { from: late.from, text: late.rows[0]?.text });
@@ -288,6 +318,65 @@ try {
   ok(atStep && drawnAt && atStep.fields.includes(SECOND) && !atStep.text.includes(SECOND) && drawnAt.text.includes(SECOND),
     'scrubbed to that step, the screen has the title typed in the field and not yet in the list; at the row where the list draws it, it is in the list', { atStep: atStep && { ...atStep, text: atStep.text.slice(0, 100) }, drawnAt: drawnAt && { at: drawnAt.at, has: drawnAt.text.includes(SECOND) } });
   if (shots && atStep) { await b.evaluate(`document.querySelector('#tlrows .tlstep[data-node=${JSON.stringify(fn)}]').click()`); await wait(600); await b.screenshot(join(here, '..', 'docs', 'look', 'stu-032-step.png')); }
+
+  // ---- STU-033: step mode. The second task's recording holds a run of the Add task command's card (a reusable the
+  // Todo page places, with no element of its own, so only the timeline reaches it); its row arms step mode. A third
+  // task added then pauses before each step. Graded against the app's own request log: the write is not made while
+  // its step waits, and it is made once Next lets it go
+  const cmd = files('Commands/Add task').nodes, cmdId = (l) => cmd.find((n) => n.label === l)?.id;
+  const what = cmd.find((n) => n.type === 'Component Inputs')?.id, jsStep = cmdId('Is there anything to write?'), makeStep = cmdId('Add the task'), histStep = cmdId('Write the history line');
+  const cmdRow = rows2.find((r) => r.lane === 'workflow' && r.link === `card:${what}.do`);
+  if (cmdRow) await b.evaluate(`[...document.querySelectorAll('#tlrows .tlrow')].find(r => r.dataset.link === ${JSON.stringify(cmdRow.link)}).querySelector('button[data-step]').click()`);
+  await wait(300);
+  const bar = () => b.evaluate(`JSON.stringify((() => { const s = document.getElementById('stepper'); return { shown: getComputedStyle(s).display !== 'none', title: document.getElementById('sttitle').textContent, tag: s.querySelector('.tag')?.offsetWidth > 0 ? s.querySelector('.tag').textContent : '', note: document.getElementById('stnote').textContent, next: !document.getElementById('stnext').disabled, steps: [...s.querySelectorAll('.ststep')].map(x => ({ n: Number(x.dataset.n), node: x.dataset.node, state: x.dataset.state, text: x.textContent, ins: x.querySelector('[data-io=in]')?.textContent ?? null, outs: x.querySelector('[data-io=out]')?.textContent ?? null })) }; })())`).then(JSON.parse);
+  const armed = await bar();
+  ok(cmdRow && armed.shown && armed.title === `Step mode · ${cmdRow.text}` && /not real timing/i.test(armed.tag) && !armed.next && armed.steps.length === 0 && !/places it/.test(armed.note),
+    "a recorded run's row arms step mode for its card: a bar over the tab names the card, says it is not real timing, and waits for the app", { cmdRow: cmdRow && { text: cmdRow.text, link: cmdRow.link }, what, armed, workflow: cmdRow ? undefined : rows2.filter((r) => r.lane === 'workflow').map((r) => `${r.link} ${r.text} | ${r.sub}`), loose: cmdRow ? undefined : JSON.parse(await b.evaluate(`JSON.stringify(__ob.timeline.rows.filter((r) => r.minor).map((r) => r.text).slice(0, 20))`)) });
+  const creates = () => b.evaluate(`${W}.__studioLog.filter(e => e.kind === 'request' && e.method === 'POST' && /\\/classes\\/Task$/.test(e.path) && !(e.body && e.body._method)).length`);
+  const heldNow = async (node) => { await b.until(`!!document.querySelector('#ststeps .ststep[data-state=held][data-node=${JSON.stringify(node)}]')`, 10000).catch(() => null); await wait(250); return bar(); };
+  const THIRD = 'Stepped through, one at a time', q3 = JSON.stringify(THIRD);
+  const made0 = await creates();
+  await typeInto(`[...${W}.document.querySelectorAll('input[type=text], input:not([type])')].find(i => i.offsetParent)`, THIRD);
+  await wait(300);
+  await b.evaluate(`[...${W}.document.querySelectorAll('button')].find(e => e.textContent.trim() === 'Add' && e.offsetParent).click()`);
+  const s1 = await heldNow(jsStep);
+  const h1 = s1.steps.find((x) => x.state === 'held');
+  ok(h1?.n === 1 && h1.node === jsStep && h1.ins?.includes(q3) && s1.next && (await creates()) === made0,
+    'the third task added: step 1 waits before it runs, showing the typed title it will read; no task is written', { held: h1, made: (await creates()) - made0 });
+  await b.clickSel('#stnext');
+  const s2 = await heldNow(makeStep);
+  const h2 = s2.steps.find((x) => x.state === 'held'), r1 = s2.steps.find((x) => x.n === 1);
+  const made2 = await creates();
+  ok(h2?.n === 2 && h2.ins?.includes(q3) && r1?.state === 'ran' && r1.outs?.includes(q3) && made2 === made0 && !(await b.evaluate(`${W}.document.body.innerText.includes(${q3})`)),
+    "Next: step 1 ran and sent the title on; step 2, the record's creation, waits with that title among what it will read, and the app has still written nothing", { held: h2, ran: r1, made: made2 - made0 });
+  await b.clickSel('#stnext');
+  const s3 = await heldNow(histStep);
+  const h3 = s3.steps.find((x) => x.state === 'held'), r2 = s3.steps.find((x) => x.n === 2);
+  const newId = JSON.parse(await b.evaluate(`JSON.stringify(${W}.Noodl.Navigation._noodlRuntime.context.getTraceEvents(0).filter(e => e.fromNode === ${JSON.stringify(makeStep)} && e.fromPort === 'id' && e.kind === 'value').map(e => e.value).at(-1) ?? null)`));
+  ok(h3?.n === 3 && (await creates()) === made0 + 1 && newId && h3.ins?.includes(newId) && r2?.outs?.includes(newId),
+    "Next: the task is written (one create in the app's log), and step 3 waits holding the new record's id, the id the runtime's trace has out of step 2", { held: h3, ran: r2, newId, made: (await creates()) - made0 });
+  if (shots) await b.screenshot(join(here, '..', 'docs', 'look', 'stu-033-step.png'));
+  await b.clickSel('#strest');
+  const listed = await b.until(`${W}.document.body.innerText.includes(${q3})`, 10000).catch(() => false);
+  const rest = await bar();
+  ok(listed && !rest.steps.some((x) => x.state === 'held') && !rest.next,
+    '"Run the rest": the run goes on without pausing and the task is in the list', { listed, rest: { note: rest.note, steps: rest.steps.map((x) => `${x.n} ${x.state}`) } });
+  await b.clickSel('#ststop'); await wait(300);
+  ok(!(await bar()).shown, 'Stop stepping takes the bar away');
+  // what was held reached its node whole: the signal's falling edge too, or the command's next run would never start
+  const madeBefore = await creates();
+  const after4 = await addTask('Added after stepping');
+  ok(after4 && (await creates()) === madeBefore + 1, 'with step mode off, the next task is added the ordinary way: the command stepped through still runs', { after4, made: (await creates()) - madeBefore });
+
+  // the Workflow tab's card arms it too, and puts the app in front, ready to use
+  const header = todo.find((n) => n.type === '/Todo/Header')?.id;
+  await b.clickSel('[data-tab=workflow]'); await wait(400);
+  await b.evaluate(`document.querySelector('#events .row[data-node=${JSON.stringify(header)}][data-port=signOut]')?.click()`); await wait(300);
+  await b.evaluate(`document.getElementById('stepthis')?.click()`); await wait(400);
+  const fromCard = { ...(await bar()), use: await b.evaluate(`document.getElementById('previewmode').checked`), designShown: await b.evaluate(`!document.getElementById('design').hidden`) };
+  ok(fromCard.shown && /Sign out|signOut|Header/i.test(fromCard.title) && fromCard.designShown && fromCard.use,
+    "a card's Step through in the Workflow tab arms it and goes to the app, with Use the app on", fromCard);
+  await b.clickSel('#ststop'); await wait(200);
 
   const problems = b.problems.filter((p) => !/Invalid connection|doesn't have a port|Failed to load resource|fonts\.g|^\[noodl\]/.test(p));
   ok(problems.length === 0, 'no exceptions in the editor page', problems.slice(0, 3));

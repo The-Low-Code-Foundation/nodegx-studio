@@ -172,6 +172,21 @@
   /* larger: over the tab, above the drawer, the drawer still there to scrub */
   main { position: relative; }
   .tlscreen.big { position: absolute; left: 0; right: 0; top: 0; bottom: 300px; width: auto; z-index: 30; border: 0; border-bottom: 1px solid var(--line); box-shadow: var(--shadow); }
+  /* ---- STU-033: step mode, a bar over every tab while one card pauses before each step ---- */
+  #stepper { flex: none; background: #faf5ff; border-bottom: 1px solid #e9d5ff; padding: 8px 14px; display: grid; gap: 6px; max-height: 240px; overflow: auto; }
+  #stepper[hidden] { display: none; }
+  #stepper .sthead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #stepper .sthead h4 { margin: 0; font-size: 13px; font-weight: 600; }
+  #stepper .sthead .tag { font-size: 11px; color: #7e22ce; background: #f3e8ff; border: 1px solid #e9d5ff; border-radius: 10px; padding: 1px 8px; white-space: nowrap; }
+  #stepper .sthead .grow { flex: 1; }
+  #stepper .stnote { color: var(--ink-2); font-size: 12px; }
+  #stepper .ststep { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: baseline; font-size: 12px; color: var(--ink-2); padding: 3px 6px; border-radius: var(--r); }
+  #stepper .ststep .n { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  #stepper .ststep.held { background: var(--panel); box-shadow: inset 2px 0 0 var(--lane-workflow); color: var(--ink); }
+  #stepper .ststep .state { color: var(--muted); margin-left: 8px; }
+  #stepper .ststep.held .state { color: #7e22ce; font-weight: 600; }
+  #stepper .ststep .io { display: block; color: var(--muted); font-family: var(--mono); font-size: 11px; white-space: pre-wrap; word-break: break-word; }
+  #stepper .ststep .io b { font-weight: 600; color: var(--ink-2); }
   section[hidden] { display: none; }
   aside { background: var(--panel); border-right: 1px solid var(--line); overflow: auto; display: flex; flex-direction: column; min-height: 0; }
   aside.right { border-right: 0; border-left: 1px solid var(--line); }
@@ -581,6 +596,12 @@
   </header>
 
   <main>
+    <section id="stepper" aria-label="Step mode" hidden>
+      <div class="sthead"><h4 id="sttitle">Step mode</h4><span class="tag" title="The app does not wait between steps when it runs for real; here each step waits for you, so values that would have come later are already there">Not real timing: each step waits for you</span><span class="grow"></span>
+        <button class="primary tiny" id="stnext" title="Let this step run, and pause before the next one">Next step</button><button class="quiet tiny" id="strest" title="Let this step and the rest of this run go without pausing; the next run pauses again">Run the rest</button><button class="quiet tiny" id="ststop" title="Turn step mode off; a step waiting runs now">Stop stepping</button></div>
+      <div class="stnote" id="stnote"></div>
+      <div id="ststeps"></div>
+    </section>
     <section class="tab" id="design">
       <aside>
         <div class="search"><svg class="i"><use href="#i-search"/></svg><input type="text" id="treesearch" placeholder="Search elements"></div>
@@ -668,7 +689,8 @@ import { extractReusable } from './reusable.mjs';
 import { readRule, rulesOf, withoutArm, withValue, withCondition, addArm, valueOf, literal, SHOWING } from './rules.mjs';
 import { TYPES, TYPE_WORDS, dictionaryType, applyPhrase } from './phrases.mjs';
 import { OPERATORS, createEdits, updateEdits, removeEdits, readItems, readFrom, readersOf, itemOfSource, sameAs, signature, describe, lastRun, queriesOnOpen, requestMatches } from './pagedata.mjs';
-import { LANES, buildTimeline, msText, shotAt } from './timeline.mjs';
+import { LANES, buildTimeline, msText, shotAt, stepValues } from './timeline.mjs';
+import { stepRule, installStepper } from './stepper.mjs';
 
 const $ = (id) => document.getElementById(id);
 const h = (tag, attrs = {}, ...kids) => {
@@ -1308,6 +1330,7 @@ const rectOf = (id) => elOf(id)?.getBoundingClientRect();
 let frameHooked = null;
 function hookFrame() {
   const w = preview.frame?.contentWindow;
+  if (stepper) armFrame();
   if (!w || frameHooked === w) return;
   frameHooked = w;
   w.addEventListener('scroll', () => draw(), true);
@@ -3233,7 +3256,10 @@ function renderWorkflow() {
   if (cardBack) wf.append(h('div', { class: 'cardnav' }, h('button', { class: 'quiet back', title: 'Back to the element in Design (Esc)', onclick: backFromCard }, '← ', labelOf(cardBack.node)),
     h('button', { class: 'quiet tiny', title: 'Every workflow on this page, listed', onclick: () => { cardBack = null; renderWorkflow(); } }, 'All workflows on this page')));
   wf.append(h('div', { class: 'event-card' }, h('div', { class: 'ic' }, icon('bolt')), h('div', { class: 'named' }, cardTitle(ev), h('small', {}, `${eventTitle(ev)} · ${typeName(byId[ev.node].type)}`)),
-    h('div', { style: 'margin-left:auto;display:flex;gap:6px' }, isRenaming(ev) ? null : h('button', { class: 'quiet tiny rename', title: 'Name this workflow yourself; an empty name gives it back to its steps', onclick: () => { renaming = `${ev.node}.${ev.port}`; renderWorkflow(); } }, 'Rename'), eventSteps(ev) ? null : h('button', { class: 'quiet', onclick: () => { const i = draftEvents.findIndex((d) => d.node === ev.node && d.port === ev.port); if (i >= 0) draftEvents.splice(i, 1); selEvent = null; renderWorkflow(); } }, 'Discard'))));
+    h('div', { style: 'margin-left:auto;display:flex;gap:6px' }, isRenaming(ev) ? null : h('button', { class: 'quiet tiny rename', title: 'Name this workflow yourself; an empty name gives it back to its steps', onclick: () => { renaming = `${ev.node}.${ev.port}`; renderWorkflow(); } }, 'Rename'),
+      eventSteps(ev) ? (stepper?.card.node === ev.node && stepper.card.port === ev.port && stepper.card.component === pageKey
+        ? h('button', { class: 'quiet tiny', id: 'stepthis', 'aria-pressed': 'true', title: 'Turn step mode off', onclick: () => disarmStepper() }, 'Stop stepping')
+        : h('button', { class: 'quiet tiny', id: 'stepthis', title: 'The next time this workflow runs in the app, pause before each step and show what it is about to read. A teaching aid: not real timing', onclick: () => armStepper({ component: pageKey, node: ev.node, port: ev.port, name: cardName(ev), when: eventTitle(ev), reach: new Set(reachOf(ev).map((n) => n.id)) }, { use: true }) }, 'Step through')) : null, eventSteps(ev) ? null : h('button', { class: 'quiet', onclick: () => { const i = draftEvents.findIndex((d) => d.node === ev.node && d.port === ev.port); if (i >= 0) draftEvents.splice(i, 1); selEvent = null; renderWorkflow(); } }, 'Discard'))));
   const lanes = lanesOf(ev);
   if (!lanes) renderChain(wf, chain(ev.node, ev.port), { node: ev.node, port: ev.port }, 1);
   else {
@@ -3780,7 +3806,8 @@ function stopRecording(note = '') {
   const ownerOf = (el) => { while (el && !owner.has(el)) el = el.parentElement; return el ? owner.get(el) : null; };
   try { screen = (w.__studioScreen || []).filter((s) => s.t >= r.t0 && s.t <= t1).map((s) => ({ t: s.t, node: ownerOf(s.el), added: s.added, removed: s.removed, text: s.text })); } catch { /* no probe */ }
   const { nodeOf, ...naming } = timelineNaming();
-  recording = { ...buildTimeline({ t0: r.t0, t1, fromOpen: r.fromOpen, trace, log, screen, cards: timelineCards(naming), ...naming }), page: pageKey, fromOpen: r.fromOpen, note, nodeOf, shots: shotsOf(w, r.t0, t1) };
+  const cards = timelineCards(naming);
+  recording = { ...buildTimeline({ t0: r.t0, t1, fromOpen: r.fromOpen, trace, log, screen, cards, ...naming }), page: pageKey, fromOpen: r.fromOpen, note, nodeOf, cards, shots: shotsOf(w, r.t0, t1) };
   tlAt = null; tlRunsOpen = new Set(); tlShown = -1;
   window.__ob.timeline = recording;
   renderRecButton(); renderTimeline();
@@ -3873,7 +3900,7 @@ function renderTimeline() {
       title: link ? (r.link.card ? 'Open this workflow' : r.link.item ? 'Open this page data' : 'Select this element') : undefined,
       // a screen row shows the screen once it has drawn: the playhead goes to its end
       onmouseenter: () => light(i, true), onmouseleave: () => light(i, false), onclick: () => { setPlayhead(r.lane === 'screen' ? r.end ?? r.t : r.t); followRow(r); } },
-    h('span', { class: 't' }, msText(r.t)), h('span', { class: 'ln', style: `--c: var(--lane-${r.lane})` }, laneName[r.lane]), h('div', { class: 'what' }, r.text, toggle, h('small', {}, r.sub)));
+    h('span', { class: 't' }, msText(r.t)), h('span', { class: 'ln', style: `--c: var(--lane-${r.lane})` }, laneName[r.lane]), h('div', { class: 'what' }, r.text, toggle, stepThrough(r), h('small', {}, r.sub)));
     rowEls.set(i, el); list.append(el); points.push({ t: r.t, el });
     if (open) for (const st of r.steps) {
       const s = h('div', { class: 'tlstep', 'data-t': Math.round(st.t), 'data-node': st.node, title: 'Show the screen as it was when this step ran', onclick: () => setPlayhead(st.t) },
@@ -3887,20 +3914,20 @@ function renderTimeline() {
 let tlRefs = null;
 /** A port's words for a node anywhere in the files (a step can be inside a reusable). */
 const tlPortWords = new Map();
-function tlPort(id, plug, port) {
+function tlPort(id, plug, port, nodeOf = recording?.nodeOf) {
   const k = `${id}|${plug}|${port}`;
-  if (!tlPortWords.has(k)) { let w = port; try { const n = recording?.nodeOf?.(id); if (n) w = portLabel(n, plug, port); } catch { /* the name it has */ } tlPortWords.set(k, w); }
+  if (!tlPortWords.has(k)) { let w = port; try { const n = nodeOf?.(id); if (n) w = portLabel(n, plug, port); } catch { /* the name it has */ } tlPortWords.set(k, w); }
   return tlPortWords.get(k);
 }
 /** What went into a step and what came out (the trace's previews), a line each. */
-function stepIo(st) {
+function stepIo(st, { nodeOf, only, none = 'nothing before Stop', times = true } = {}) {
   const cut = (v) => (v.length > 60 ? v.slice(0, 59) + '…' : v);
-  const ins = st.ins.slice(0, 6).map((x) => `${tlPort(st.node, 'input', x.port)} ${cut(x.value)}${x.set ? ' (set)' : ''}`);
+  const ins = st.ins.slice(0, 6).map((x) => `${tlPort(st.node, 'input', x.port, nodeOf)} ${cut(x.value)}${x.set ? ' (set)' : ''}`);
   if (st.ins.length > 6) ins.push(`+${st.ins.length - 6} more`);
-  const outs = st.outs.slice(0, 6).map((x) => (x.signal ? `${tlPort(st.node, 'output', x.port)} sent${x.t >= 1 ? ` after ${msText(x.t)}` : ''}` : `${tlPort(st.node, 'output', x.port)} ${cut(x.value)}`));
+  const outs = st.outs.slice(0, 6).map((x) => (x.signal ? `${tlPort(st.node, 'output', x.port, nodeOf)} sent${times && x.t >= 1 ? ` after ${msText(x.t)}` : ''}` : `${tlPort(st.node, 'output', x.port, nodeOf)} ${cut(x.value)}`));
   if (st.outs.length > 6) outs.push(`+${st.outs.length - 6} more`);
-  return [h('span', { class: 'io', 'data-io': 'in' }, h('b', {}, 'in '), ins.length ? ins.join(' · ') : 'nothing wired in, nothing set'),
-    h('span', { class: 'io', 'data-io': 'out' }, h('b', {}, 'out '), outs.length ? outs.join(' · ') : 'nothing before Stop')];
+  return [only === 'out' ? null : h('span', { class: 'io', 'data-io': 'in' }, h('b', {}, 'in '), ins.length ? ins.join(' · ') : 'nothing wired in, nothing set'),
+    only === 'in' ? null : h('span', { class: 'io', 'data-io': 'out' }, h('b', {}, 'out '), outs.length ? outs.join(' · ') : none)];
 }
 /** Move the playhead (ms from the recording's start; null: the end): the line, which rows are still to come, the screen then. */
 function setPlayhead(t) {
@@ -3978,6 +4005,117 @@ function fitShot() {
 }
 $('tlbig').onclick = () => { tlBig = !tlBig; renderShot(tlAt ?? recording?.length ?? 0); };
 addEventListener('resize', () => { if (recording?.shots && tlOpen) fitShot(); });
+
+/* ================= STU-033: step mode =================
+   One card's workflow pauses before each step the next time it runs in the app (./stepper.mjs holds the signal in the
+   app's frame). The bar over every tab says which step waits and what it will read, the values the trace saw arrive
+   at it so far; Next lets it run. A teaching aid, labelled as one: in the app as it runs nothing waits. */
+let stepper = null; // { card, naming, rule, run, steps: [{ n, signal, release, state: 'held' | 'ran' | 'free' }], took, note }
+const STEP_OWNER = 'nodegx-studio-step';
+function armStepper(card, { use = false } = {}) {
+  if (stepper) disarmStepper({ quiet: true });
+  const { nodeOf, label, settings } = timelineNaming();
+  stepper = { card, naming: { nodeOf, label, settings }, rule: stepRule(card), run: null, steps: [], note: '' };
+  armFrame();
+  if (use && card.component === pageKey) {
+    if (tab !== 'design') switchTab('design');
+    if (!$('previewmode').checked) { $('previewmode').checked = true; overlay.classList.add('preview'); draw(); }
+  }
+  renderStepper(); if (tab === 'workflow') renderWorkflow();
+  if (tlOpen && recording) renderTimeline();
+}
+function disarmStepper({ quiet = false } = {}) {
+  const s = stepper; if (!s) return;
+  stepper = null;
+  for (const st of s.steps) if (st.state === 'held') { st.state = 'ran'; st.release(); } // a step left waiting runs now, as it would have
+  try { const w = s.frame; if (w) { w.__studioStep = null; if (s.took) w.Noodl.Navigation._noodlRuntime.context.releaseTraceOwner(STEP_OWNER); } } catch { /* the frame is gone */ }
+  renderStepper(); if (tab === 'workflow') renderWorkflow();
+  if (tlOpen && recording) renderTimeline();
+  if (!quiet) toast('Step mode is off');
+}
+/** Step mode goes on in the app's frame (again after a rebuild: the steps held in the old copy went with it). */
+function armFrame() {
+  const w = preview.frame?.contentWindow; if (!stepper || !w) return;
+  if (stepper.frame && stepper.frame !== w && stepper.steps.length) { stepper.steps = []; stepper.run = null; stepper.rule = stepRule(stepper.card); stepper.note = 'The app was rebuilt, so the run that was stepping went with it.'; }
+  stepper.frame = w;
+  try {
+    const ctx = w.Noodl.Navigation._noodlRuntime.context;
+    // the hold reads where a signal came from off the trace's write; the in-page preview arms the trace at boot
+    if (!ctx.traceEnabled) { ctx.setTraceEnabled(true, STEP_OWNER); stepper.took = true; }
+  } catch { /* not started yet: hookFrame comes back */ }
+  const ok = installStepper(w, {
+    take: (sig) => {
+      const s = stepper; if (!s) return false;
+      const r = s.rule.take(sig); if (!r) return false;
+      if (r.run !== s.run) {
+        // the card ran again: what the last run left waiting runs now, and this run is the one shown
+        for (const st of s.steps) if (st.state === 'held') { st.state = 'ran'; st.release(); }
+        s.run = r.run; s.steps = []; s.note = '';
+      }
+      s.steps.push({ n: r.step.n, signal: sig, state: r.hold ? 'held' : 'free', release: () => {} });
+      if (!r.hold) setTimeout(renderStepper, 0);
+      return r.hold;
+    },
+    held: ({ signal, release }) => {
+      const st = stepper?.steps.find((x) => x.signal === signal); if (!st) return release();
+      st.release = release;
+      setTimeout(renderStepper, 0); // out of the runtime's update
+    }
+  });
+  if (!ok) stepper.note = 'The app is not running yet; step mode starts with it.';
+}
+function stepNext() {
+  const st = stepper?.steps.find((x) => x.state === 'held'); if (!st) return;
+  st.state = 'ran'; st.release();
+  renderStepper(); setTimeout(renderStepper, 600); // what it sent, once it has run
+}
+function stepRest() {
+  if (!stepper?.run) return;
+  stepper.rule.free();
+  for (const st of stepper.steps) if (st.state === 'held') { st.state = 'ran'; st.release(); }
+  renderStepper(); setTimeout(renderStepper, 600);
+}
+$('stnext').onclick = stepNext;
+$('strest').onclick = stepRest;
+$('ststop').onclick = () => disarmStepper();
+/** A timeline row of a card's run: step through that card the next time it runs. */
+function stepThrough(r) {
+  const c = r.link?.card; if (r.lane !== 'workflow' || r.minor || !c || rec) return null;
+  const card = recording?.cards?.find((x) => x.node === c.node && x.port === c.port && x.component === c.component); if (!card) return null;
+  const on = stepper?.card.node === card.node && stepper.card.port === card.port && stepper.card.component === card.component;
+  return h('button', { class: 'open', 'data-step': on ? 'on' : 'off', title: on ? 'Turn step mode off' : 'The next time this workflow runs, pause before each step and show what it is about to read. A teaching aid: not real timing',
+    onclick: (e) => { e.stopPropagation(); on ? disarmStepper() : armStepper({ ...card, page: recording.page }); } }, on ? 'Stop stepping' : 'Step through');
+}
+function renderStepper() {
+  const bar = $('stepper'), s = stepper;
+  bar.hidden = !s; window.__ob.stepper = s ? { card: s.card.name, steps: s.steps.map((x) => ({ n: x.n, node: x.signal.toNode, state: x.state })) } : null;
+  setTimeout(draw, 0); // the app moved down or up with the bar
+  if (!s) return;
+  const { label, nodeOf, settings } = s.naming;
+  const held = s.steps.find((x) => x.state === 'held');
+  $('sttitle').textContent = `Step mode · ${s.card.name}`;
+  $('stnext').disabled = !held; $('strest').disabled = !held;
+  let trace = [];
+  try { trace = s.frame.Noodl.Navigation._noodlRuntime.context.getTraceEvents(0) || []; } catch { /* the frame is gone */ }
+  const values = stepValues(trace);
+  // a card armed from a recording runs on the page recorded; one opened in its reusable runs on the reusable's own canvas
+  const inside = s.card.component !== pageKey && s.card.page !== pageKey ? ` (it is inside ${s.card.component}: use the app on a page that places it)` : '';
+  $('stnote').textContent = s.note || (!s.steps.length ? `Use the app: ${s.card.when}${inside}. The workflow pauses before each step and shows what that step will read.`
+    : held ? `Step ${held.n} waits for you. It has not run: what it shows is what it would read now.`
+    : s.run?.free ? 'The rest of this run goes without pausing; the next time the workflow runs, it pauses again.'
+    : `Step ${s.steps.at(-1).n} ran. The next step pauses here when its signal arrives (a step that asks the backend waits for the answer).`);
+  const list = $('ststeps'); list.innerHTML = '';
+  for (const st of s.steps) {
+    const id = st.signal.toNode, n = nodeOf(id);
+    const name = `${n ? typeName(n.type) : label(id)}${n?.label ? ` · ${n.label}` : ''}`;
+    // waiting: every value into it so far, which is what it reads when it runs; ran: what it sent from its signal on
+    const io = st.state === 'held' ? values({ ...st.signal, seq: Infinity }, settings(id)) : values(st.signal, settings(id));
+    list.append(h('div', { class: `ststep ${st.state}`, 'data-n': st.n, 'data-node': id, 'data-state': st.state },
+      h('span', { class: 'n' }, String(st.n)),
+      h('div', {}, name, h('span', { class: 'state' }, st.state === 'held' ? 'waits for you' : st.state === 'free' ? 'ran without a pause' : 'ran'),
+        ...stepIo({ node: id, ...io }, { nodeOf, only: st.state === 'held' ? 'in' : 'out', none: 'nothing sent yet', times: false }))));
+  }
+}
 
 /* ================= tabs, boot ================= */
 let tab = 'design';

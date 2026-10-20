@@ -92,7 +92,9 @@ export function buildTimeline({ t0, t1, fromOpen = false, trace = [], log = [], 
   // ---- workflows: a card's event starts a run; a signal into a node that card reaches, from one already in the run, is a step
   const cardBy = new Map(cards.map((c) => [`${c.node}.${c.port}`, c]));
   const runs = [], loose = [];
-  const signals = trace.filter((e) => e.kind === 'signal' && inside(e.t)).sort((a, b) => a.seq - b.seq);
+  // a signal into a component goes on out of its Component Inputs as two values, true then false (the runtime's
+  // componentinstance.ts): the true out of a card's event is that card's event (a command's "do")
+  const signals = trace.filter((e) => inside(e.t) && (e.kind === 'signal' || (e.kind === 'value' && e.value === 'true' && cardBy.has(`${e.fromNode}.${e.fromPort}`)))).sort((a, b) => a.seq - b.seq);
   for (const e of signals) {
     const card = cardBy.get(`${e.fromNode}.${e.fromPort}`);
     if (card) {
@@ -159,7 +161,8 @@ export function stepValues(trace, t1 = Infinity) {
   for (const e of [...trace].sort((a, b) => a.seq - b.seq)) { put(into, e.toNode, e); put(outOf, e.fromNode, e); }
   return (signal, settings = []) => {
     const ins = new Map();
-    for (const e of into.get(signal.toNode) || []) { if (e.seq >= signal.seq) break; if (e.kind === 'value') ins.set(e.toPort, e.value); }
+    // not the port the signal came in on: a signal through a component's inputs arrives there as true and false
+    for (const e of into.get(signal.toNode) || []) { if (e.seq >= signal.seq) break; if (e.kind === 'value' && e.toPort !== signal.toPort) ins.set(e.toPort, e.value); }
     const next = (into.get(signal.toNode) || []).find((e) => e.seq > signal.seq && e.kind === 'signal');
     const outs = new Map();
     for (const e of outOf.get(signal.toNode) || []) {
