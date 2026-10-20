@@ -1,9 +1,9 @@
 Continue NodeGX Studio (~/vscode_projects/nodegx-studio, public, GPL-3.0; plan of record: docs/SCOPE.md). Edit in
 this repo, not OpenNoodl. Gates run on Node 22 (`~/.nvm/versions/node/v22.22.0/bin`): `npm run check:rules` (20/20),
 `check:phrases` (85/85), `check:dictionary` (PASS 65 covered / 2 wrong filed / 22 missing / 5 none), `check:editor`
-(170/170), `check:timeline` (24/24, new in s10), `check:pagedata` (33/33), `check:reusable` (12/12), `check:import`
+(170/170), `check:timeline` (33/33 since s11), `check:pagedata` (33/33), `check:reusable` (12/12), `check:import`
 (79/79 with the template bundle: import/exports/template is present, gitignored), `check:app` (34/34). Read on
-2026-10-20 (s10) on the STU-031 tree: timeline, editor, app, rules, phrases, pagedata, reusable; import and dictionary
+2026-10-20 (s11) on the STU-032 tree: timeline, editor, app, rules, phrases, pagedata, reusable; import and dictionary
 last read in s9 (the importer is untouched since). 🔴 `check:app` and `check:editor` both load studio.html: run both
 after any studio.html change. Kit pieces and the phrasebook come from the NodeGX checkout at ../OpenNoodl
 (lib/nodegx.mjs). One heavy gate at a time (`nice -n 19`, take ~/vscode_projects/OpenNoodl-worktrees/HEAVY.lock with
@@ -11,40 +11,42 @@ mkdir), and WAIT for another session's jest/vitest first (`pgrep -fl "jest|vites
 jest). `check:editor` takes about 4 minutes, `check:timeline` about 1; `check:editor --shots` rewrites every
 docs/look/s2-*.png: restore the ones you did not mean to change (`git ls-files -m docs/look | grep -v <yours> | xargs
 git checkout --`). The server reads studio.html and probe.js on every request: do not edit them while a gate runs.
-Three untracked docs/look/s2-composer-slot.png, s2-composer-then-menu.png, s2-panel-group.png predate s10 and are
+🔴 Take the lock with mkdir and remove it only if YOU made it (s11 deleted a peer's lock with `mkdir … && …; rm -rf`,
+then put it back): a wrapper that waits and removes only its own is the safe shape. Three untracked docs/look/s2-composer-slot.png, s2-composer-then-menu.png, s2-panel-group.png predate s10 and are
 not its to commit.
 
-Built in s10 (2026-10-20): **STU-031, Record / Stop and the run timeline** (SCOPE.md "Done (STU-031)"). Record in the
-bar; a drawer under every tab with three lanes on one axis (page data = the probe's requests, each query named by the
-node whose `items` came out with the answer in the trace; workflows = the trace's signals made into runs of the
-page's and its reusables' cards; the screen = a MutationObserver the probe now starts with the frame,
-`window.__studioScreen`, each change given to the page element holding it); "Record the page opening" rebuilds and
-records from 0 ms. Rows link to the element, the card (a reusable's opens that reusable) or the page data item. New:
-editor/timeline.mjs (pure), editor/timeline-check.mjs (`TIMELINE_DUMP=1` prints every row), probe.js's screen
-witness, studio.html's `drawnElements` (a copy draws through its roots) and `timelineCards`. Mutants: no screen
-witness 22/24, copies draw nothing 23/24, the page's cards only 23/24. Pictures: docs/look/stu-031-timeline.png
-(the Todo page opening), stu-031-timeline-add.png (a task added, recorded from now).
+Built in s11 (2026-10-20): **STU-032, what went in and out of each step, and the screen as it was** (SCOPE.md
+"Done (STU-032)"). A workflow row's "Show the n steps" lists each step with **in** (last value into each wired input
+before its signal, then the file's settings) and **out** (what it sent until the next signal into it), off the trace
+(timeline.mjs `stepValues`). A playhead on the axis (drag, ← / →, Home / End, or click a row, mark or step) dims what
+is to come; the pane beside the rows (or Larger, over the tab) draws the probe's copy of the page at that moment in a
+script-less frame (probe.js `__studioShots`: the body without its scripts and `<noscript>`, at the next frame after a
+change, a 100 ms timer in a hidden window; fields' values put back). Measured: a picture is impossible in the page
+(SVG-on-canvas taints), a copy is 0.3 ms / 14 KB. Pictures: docs/look/stu-032-scrub.png, stu-032-step.png. Also
+s11: **the logo** (app/icon.svg, the NodeGX wire traced as an S, Richard picked "A") on the window, Dock, welcome,
+rail and tab; **ruling R9** (plugins are recreated by two Claude Code sessions, never run; STU-043 rewritten).
 
-Filed in NodeGX's ledger (OpenNoodl a93f0d2ed): P123-STU031-COPYBOX — kit: `preview.elementsOf(copyId)` is `[]` for a
-copy of a component. By the code, Design therefore draws no box for a selected copy and a click on one selects the
-group around it. Not looked at on screen: do that before fixing it in Studio (or wait for the kit fix, which would let
-`drawnElements` go).
+Filed in NodeGX's ledger (OpenNoodl 80bd3c778): P123-STU032-TEXTFLASH — runtime, low: a list's row is on screen for
+a frame or two holding its Text elements' "Text" before its values arrive (found by the copies; inferred from frame
+timing, not pixels). Still open from s10: P123-STU031-COPYBOX.
+
+Not graded: the copy being taken at the next frame rather than inside the observer (that mutant passes 33/33; the
+only template evidence, the "Text" flash, shows in both modes).
 
 Next buildable while Richard is away, in order:
-1. STU-032: inputs and outputs per step (the trace has every value with its ports; a step's inputs are the values
-   into it just before its signal), and screenshots per point with a scrubber ("scrubbing to a step shows the screen
-   as it was then"). The screen witness keeps elements, not pictures: screenshots need another source (a canvas
-   capture of the frame, or CDP from the desktop app). Measure the cost before choosing.
-2. STU-033: step mode for one card, marked as not real timing.
-3. Timeline gaps from s10 (SCOPE.md "Not built"): a recording that crosses pages (Sign in → Todo) names cards only for
-   the page shown at Stop; the text sample is the DOM as inserted ("TextTextTextLabel · 1 · …").
+1. STU-033: step mode for one card, marked as not real timing ("stepping through a two-step card shows each step's
+   values before it runs"). The step values (stepValues) and the copy pane are there to reuse.
+2. Timeline gaps (SCOPE.md "Not built"): a recording that crosses pages names cards only for the page shown at Stop;
+   the screen rows' text sample is the DOM as inserted ("TextTextTextLabel"); a copy has no canvas pixels or scroll
+   positions, and a style-only change takes no copy.
+3. STU-006 (runs without a NodeGX checkout), then STU-007 (packaged and signed, the icon is ready) — Richard asked
+   on 2026-10-20 how far a full working Studio is: roughly 8–12 sessions (M4's end, STU-006/007, a publish path
+   that has no task yet, then M5); a **Publish/deploy task is missing from SCOPE.md** — write it before STU-007.
 Still open from s9: a branch whose condition is a constant `false` says "Set the condition…"; a card's name and hover
 read only its first lane; port names a component gives without words show raw ("When pickList").
 
-Show Richard: docs/look/stu-031-timeline.png and stu-031-timeline-add.png (the timeline), and from s9
-s2-workflow-card.png (lanes), s2-workflow-index.png, s2-workflow-branch.png. Worth telling him from the recording:
-the Todo page draws nothing until "reads the signed-in user" answers (23 ms in one run, 326 ms in another), then
-draws empty, and Open tasks fills ~20 ms after the Task query answers; four of its requests come from JavaScript.
+Show Richard: docs/look/stu-032-scrub.png and stu-032-step.png (the scrubber, a step's values), the s10 timeline
+pictures, and from s9 s2-workflow-card.png, s2-workflow-index.png, s2-workflow-branch.png. Tell him the "Text" flash.
 
 Waiting on Richard: his second sitting on data (M2's remaining work); his real app export (STU-044's 22 missing
 operator names and STU-044-FORMATNUMBER's keys; STU-053's unread keys; the real app's 16 split elements for STU-024);
