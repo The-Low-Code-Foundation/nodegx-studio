@@ -1,64 +1,56 @@
 Continue NodeGX Studio (~/vscode_projects/nodegx-studio, public, GPL-3.0; plan of record: docs/SCOPE.md). Edit in
 this repo, not OpenNoodl. Gates run on Node 22 (`~/.nvm/versions/node/v22.22.0/bin`): `npm run check:vendor` (PASS,
-883 files), `check:rules` (20/20), `check:phrases` (85/85), `check:dictionary` (PASS 65 covered / 2 wrong filed / 22
-missing / 5 none), `check:editor` (170/170), `check:timeline` (43/43), `check:pagedata` (33/33), `check:reusable`
-(12/12), `check:import` (79/79 with the template bundle: import/exports/template is present, gitignored), `check:app`
-(34/34). ALL read on 2026-10-20 (s13) on the vendored kit with `@nodegx/preview` 0.2.3 (commit 6fe1484's tree). 🔴 `check:app` and `check:editor`
-both load studio.html: run both after any studio.html change. One heavy gate at a time (`nice -n 19`, take
+883 files), `check:rules` (20/20), `check:phrases` (85/85), `check:dictionary` (PASS 65 / 2 / 22 / 5), `check:editor`
+(170/170), `check:timeline` (43/43), `check:pagedata` (33/33), `check:reusable` (12/12), `check:import` (79/79 with the
+gitignored template bundle), `check:app` (45/45), `check:publish` (27/27, new in s14). check:editor, check:app and
+check:publish were read on 2026-10-20 (s14); the others are s13's numbers on the same kit. 🔴 `check:app` and
+`check:editor` both load studio.html: run both after any studio.html change. One heavy gate at a time (`nice -n 19`,
 ~/vscode_projects/OpenNoodl-worktrees/HEAVY.lock with mkdir, remove it only if YOU made it), and WAIT for another
-session's jest/vitest first (`pgrep -fl "jest|vitest"`). The safe shape is a wrapper that waits for both and traps
-its own lock (s13 wrote one: wait on pgrep, `until mkdir LOCK`, `trap 'rm -rf LOCK' EXIT`, then the gate).
-`check:editor` takes about 4 minutes, `check:timeline` about 1; `check:editor --shots` rewrites every docs/look/s2-*.png:
-restore the ones you did not mean to change. The server reads studio.html and probe.js on every request: do not edit
-them while a gate runs. Three untracked docs/look/s2-composer-slot.png, s2-composer-then-menu.png, s2-panel-group.png
-predate s10 and are not yours to commit.
+session's jest/vitest first. The safe shape is a wrapper: wait on `pgrep -f "jest|vitest"`, `until mkdir LOCK`,
+`trap 'rm -rf LOCK' EXIT`, then `nice -n 19 npm run --silent "$@"`. 🔴 npm eats a gate's own flags:
+`npm run check:app -- --shots`, not `npm run check:app --shots`. `--shots` rewrites docs/look/stu-003-*.png: put back
+the ones you did not mean to change. Three untracked docs/look/s2-composer-slot.png, s2-composer-then-menu.png,
+s2-panel-group.png predate s10 and are not yours to commit.
 
-🔴 **Since s13 the kit no longer comes from ../OpenNoodl** (STU-006, SCOPE.md "Done (STU-006)"). `lib/nodegx.mjs`
-names every piece: npm at exact pins (`@nodegx/preview` 0.2.3: the deploy runtime and in-page bundle; `@nodegx/mcp`
-0.2.2: the MCP server and the backend service) and the committed `vendor/` (templates, phrasebook, look.js, specs.js,
-backend.cjs, agent.cjs), built from NodeGX `6cba197ad` by `NODEGX_REPO=../OpenNoodl npm run
-vendor`, which refuses when a bundle's sources differ from that commit. `NODEGX_REPO=../OpenNoodl` before any command
-uses the checkout's pieces as built there (for a kit change you need now). A kit fix you want in Studio: commit it in
-NodeGX, then `npm run vendor`, then every gate, and commit vendor/ with a message naming the NodeGX commit.
+**The alpha (0.2) has a line now** (SCOPE.md "The alpha (0.2) — the line"): someone who is not Richard downloads
+Studio, opens or imports an app, changes it, and publishes it. Proposed by Claude in s14; Richard's answer was
+*"Rock out"*. Of its five items, s14 built three:
+1. **STU-008 Publish: done.** lib/publish.mjs, File → Publish… and the header's Publish. NodeGX's production deploy
+   engine into a folder Studio guards (`.nodegx-publish.json`), cloud functions through the MCP server's own
+   `deploy_cloud_functions` over stdio. Filed in NodeGX: **P123-STU008-BACKENDPUBLIC** (OpenNoodl 08bb41532): the
+   engine also publishes `nodegx.security.json` and `backend/`, and Publish names them to the person until the kit's
+   default ignore rules keep them out.
+2. **STU-007: macOS ad hoc, gated.** `npm run package` / `dist` (DMG 141 MB) / `dist:signed`. The whole desktop gate
+   runs on the package with `NODEGX_STUDIO_BINARY=…/NodeGX Studio.app/Contents/MacOS/NodeGX Studio npm run
+   check:app` (40/40 before STU-040's checks were added; not rerun on the package since). Gatekeeper rejects a
+   downloaded ad-hoc copy. `.github/workflows/package.yml` (macOS, Windows, Linux + smoke) is written and has never run.
+3. **STU-040: done.** The welcome screen's import guide (copy through the content-authoring skill's offline checks),
+   then the report in a drawer beside the app, and an Import report button in the header.
+4. Waits on NodeGX: an npm release carrying UNWIREDSIGNAL and BACKENDPUBLIC, then bump the pins and `npm run vendor`.
+5. Waits on Richard: pushing main (ahead of GitHub, now with the s14 commits too).
 
-Built in s13 (2026-10-20): **STU-006**, done-when met. A `git clone` into a scratch folder, every command run under
-`sandbox-exec` with OpenNoodl reads denied: `npm install`, smoke (welcome, 5 templates; a todo copy draws), `check:app`
-34/34, Connect Claude Code → the clone's own MCP server answers with 21 tools. **Found:** npm's `@nodegx/preview` 0.2.2
-(2026-10-15) carried P123-S2-VARIANTLOST (`check:editor` 169/170 on it); Studio built its own in-page bundle for an
-hour, then 0.2.3 was published the same afternoon with the fix (in its bundle and its `nodegx-deploy`): pinned, own
-bundle dropped, every gate and the fresh-clone run repeated green on it. Noted on the bug (OpenNoodl 1bc0b8a65, 0429a0b8e). Also written
-into SCOPE.md: **STU-008 Publish** (`nodegx-deploy` to a folder; the production engine npm ships) and ruling **R10**
-(where else a site and its backend go). **Done vs written:** measured on this Mac, the checkout hidden by a sandbox,
-not absent; not on Windows/Linux; the clone's Studio runs npm's 0.2.3 runtime, packed before UNWIREDSIGNAL's fix (3026899d4: its
-`codeSignals` marker is in the checkout's build, not in 0.2.3).
+Ask Richard (in plain words): his Apple Developer credentials for `dist:signed` (a Developer ID certificate in the
+keychain, then APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID); whether main can be pushed (then run the package
+workflow by hand once); whether the alpha's line is right; ruling R10. Show him docs/look/stu-003-import-guide.png and
+stu-003-import-report.png, then the earlier pictures (docs/look/stu-032-scrub.png, stu-032-step.png,
+s2-workflow-card.png, s2-workflow-index.png, s2-workflow-branch.png). Tell him about the "Text" flash
+(P123-STU032-TEXTFLASH).
 
-Next buildable while Richard is away, in order:
-1. STU-007 (packaged and signed; the icon is ready): electron-builder; `node_modules/@nodegx/mcp` must sit outside the
-   asar (`extraResources`) because Claude Code runs it with an external `node`; signing/notarising needs Richard's
-   Apple credentials, so build an unsigned package first and gate on it opening a project.
-2. STU-008 Publish to a folder (SCOPE row): npm's 0.2.3 `nodegx-deploy` (in node_modules) has VARIANTLOST's fix and
-   the production engine. Done-when: the todo copy published, served
-   statically, sign in, add a todo, the row is on the backend.
-3. Timeline gaps (SCOPE.md "Not built" under STU-031..033): cross-page recordings, raw record ports ("prop-title"),
-   "TextTextTextLabel" samples, copies without canvas pixels/scroll, an app that never goes quiet.
-Still open from s9: a constant-`false` branch says "Set the condition…"; a card's name and hover read only its first
-lane; port names without words show raw ("When pickList").
+Next buildable while Richard is away:
+1. Run the package gate again on a fresh `npm run package` (STU-040 is in it; the 40/40 was before).
+2. Publish's open edges (SCOPE "Done (STU-008)", Not in it): say that a path-routed app's deep links need the host's
+   index.html fallback; a site under a sub-path waits on P123-STU015-BASEURL.
+3. The import's Data-tab exports into the backend from Studio (`data-to-nodegx.mjs` writes the files and the
+   commands; nothing runs them).
+4. Timeline gaps (SCOPE "Not built" under STU-031..033), and s9's leftovers: a constant-`false` branch says "Set the
+   condition…"; a card's name and hover read only its first lane; port names without words show raw ("When pickList").
 
-Ask Richard (in plain words): `@nodegx/preview` 0.2.3 is out (Studio pins it); `@nodegx/mcp` is still 0.2.2 on npm
-(its `render_report` lacks VARIANTLOST's fix), and neither carries UNWIREDSIGNAL's runtime fix yet. When a newer
-release lands: bump the pin, `NODEGX_REPO=../OpenNoodl npm run vendor`, every gate.
-Ruling R10. Show him docs/look/stu-032-scrub.png and stu-032-step.png, the s10 timeline pictures, and from s9
-s2-workflow-card.png, s2-workflow-index.png, s2-workflow-branch.png. Tell him the "Text" flash (P123-STU032-TEXTFLASH).
+Waiting on Richard, unchanged from s13: how the one-run Record feels on his app; his second sitting on data; his real
+app export (STU-044's 22 missing operators, STU-053's unread keys, STU-024's 16 split elements); rulings R4, R5, R6,
+R10. Filed and open in NodeGX's ledger: P123-STU032-TEXTFLASH, P123-STU031-COPYBOX, P123-STU008-BACKENDPUBLIC.
 
-Waiting on Richard: how the one-run Record feels on his own app (the 1.5 s quiet and the 30 s timer hold are
-guesses); his second sitting on data (M2's remaining work); his real app export (STU-044's 22 missing operator names
-and STU-044-FORMATNUMBER's keys; STU-053's unread keys; the real app's 16 split elements for STU-024); pushing main
-(ahead of GitHub, unpushed until he says); rulings R4 (rejoin, STU-025), R5, R6, R10; the next npm release (above).
-Filed and open in NodeGX's ledger: P123-STU032-TEXTFLASH, P123-STU031-COPYBOX.
-
-Not to forget: a look's property list is long (73 on a Button); the look menu has no "1 inherited from Style" count; a
-chip from a record field (page data `prop-*`) has no type yet; a dropdown's value read through `chosen` is typed
-nothing; STU-014-INSTANCELAYOUT (445 static settings on copies reach nothing; wants Richard's look); row searches
-still asked once per row; 17 covered dictionary rows rest on the importer's own operator names; the unknown
-no-argument operator still falls back to a guessed field read (`stats.fieldReadsGuessed`). His worry from s7, under
-STU-052: people mixing composed phrases with typed JavaScript in one box; watch for it at a play test.
+Not to forget (from s13): a look's property list is long (73 on a Button); no "1 inherited from Style" count; a chip
+from a record field has no type yet; a dropdown's value read through `chosen` is typed nothing;
+STU-014-INSTANCELAYOUT (445 static settings on copies reach nothing); row searches still asked once per row; 17
+covered dictionary rows rest on the importer's own operator names; the unknown no-argument operator still falls back
+to a guessed field read. His worry from s7: people mixing composed phrases with typed JavaScript in one box.
