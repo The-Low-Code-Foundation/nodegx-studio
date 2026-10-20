@@ -40,7 +40,7 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 | The project's backend — started (or adopted) on open, stopped on close, shown in the status bar; a template that needs one gets one; Data's "Start a backend" for an app with none | works (2026-10-19) | `check:app` 34/34 |
 | Claude Code — "Connect Claude Code" in the header (and File) registers the NodeGX MCP server for the folder with the NodeGX editor's own writer and shows the command that starts a session there | works (2026-10-19) | `check:editor` 56/56 |
 | Page data — a search is a named item on the page (Design → Page data), read by any element as dynamic data; made or reused through one form, never twice; readers, last run and "N queries on open" counted off the app's own requests; a workflow refreshes an item | works (2026-10-19), R7 ruled | `check:pagedata` 26/26, `check:editor` 71/71 |
-| Workflows on their element (M3) — a ⚡ on every element with a workflow, on the canvas and in the element list; its steps in order on hover; its card full screen from the badge, Back (or Esc) to the element; a card named by its steps until someone renames it; the page's cards under their elements, filtered by what they change or what starts them, searched over their steps | STU-020, STU-021 (2026-10-19, s8), STU-023, STU-022 (2026-10-20, s9) work | `check:editor` 169/169 |
+| Workflows on their element (M3) — a ⚡ on every element with a workflow, on the canvas and in the element list; its steps in order on hover; its card full screen from the badge, Back (or Esc) to the element; a card named by its steps until someone renames it; the page's cards under their elements, filtered by what they change or what starts them, searched over their steps; one card per event — imported A / not A splits are one branch, overlapping ones lanes side by side | STU-020, STU-021 (2026-10-19, s8), STU-023, STU-022, STU-024 (2026-10-20, s9) work | `check:editor` 170/170, `check:import` 79/79 |
 
 [history/](history/) is how it started (NodeGX phase 123, working title "Open Bubble"): the brief, the look, the
 first play test and every ruling taken.
@@ -781,6 +781,33 @@ the runtime's own node library (a copy's signal inputs off its Component Inputs)
 once, in the page's order. The page sends a signed-out visitor to Sign in and Design follows the app, so the gate
 cuts that one wire from outside Studio for the section and puts it back. `check:editor` 169/169 (164 + 5).
 Mutant (a copy counts nothing inside it): 168/169, "Changes Task" fails.
+
+**Done (STU-024, 2026-10-20, s9), on a fixture: the real app's 16 split elements wait for its export.** One card per
+event, from both ends:
+
+- **The importer** merges *"Only when A"* and *"Only when not A"* on the same event into **one branch**: one
+  Condition labelled *"A?"* (Studio reads it as "If A"), the first workflow's steps on Yes, the second's on No.
+  Opposite means the compiled conditions are exactly `X` and `!(X)` (or `E` and `!E`); found on the way, *not
+  logged in* read the user's `id` while *logged in* read `authenticated`, so the commonest pair never compared —
+  it now reads `authenticated` too. Every other pair stays as it was: **two wires from the same signal**, which the
+  runtime runs both of, as Bubble did (one with no condition, the same condition twice, conditions that overlap).
+- **Studio** draws an event wired to more than one first step as **lanes side by side** ("Sign in's Click runs these
+  2 side by side: each one runs, in no set order"), each lane its own chain with its own Add an action, numbered
+  A1, A2 … B1; where the step said "+ 1 more wired from the same signal" the second lane was hidden. The todo
+  template's Sign in click is such a card: Log In → Go to the list, and beside it the branch that puts the old
+  error away. A branch shows its own name when it has one. Inside a lane, Yes and No stack.
+- **Not built:** a card's name and hover still read the first lane ("Sign in (+1 more) → Go to the list"). R4
+  (rejoin, STU-025) is untouched. More than two opposite-looking workflows: the first opposite pair merges, the
+  rest stay lanes.
+- **Seen, not fixed:** "Put the old error away" is a Condition whose condition is the constant `false`, used only
+  for its value; the branch card says "Set the condition…" as though it were empty.
+
+Gates: `check:import` (a fixture page: logged in / not logged in on one button → one Condition from the click,
+other page on Yes and third on No, labelled with "?"; logged in beside no condition → two wires, a Condition and a
+Navigate; logged in twice → two Conditions, both "Only when") 79/79 (74 + 5); mutant (no pair ever opposite)
+78/79. `check:editor` (the Sign in click: the file has two wires from its Click into signal inputs, and its card
+draws two lanes, the first Sign in → Go to the list, the second a branch) 170/170; mutant (never lanes) 169/170.
+`check:app` 34/34 (it loads studio.html), `check:dictionary` PASS 65 / 2 / 22 / 5.
 
 ---
 

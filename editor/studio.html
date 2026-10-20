@@ -361,6 +361,12 @@
   .step .acts { display: flex; gap: 4px; }
   .step .settings { grid-column: 1 / -1; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 4px; }
   .branches { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 0 0 0 0; }
+  .lanes { display: grid; gap: 14px; overflow-x: auto; }
+  .lane { border: 1px dashed var(--line-2); border-radius: var(--r-lg); padding: 8px 10px 10px; min-width: 0; }
+  .lane h4 { margin: 0 0 8px; font-size: 11px; font-weight: 600; color: var(--muted); }
+  .lanesnote { margin: 0 0 10px; }
+  .lane .branches { grid-template-columns: 1fr; }
+  .lane .addrow button { white-space: nowrap; }
   .branch { border: 1px dashed var(--line-2); border-radius: var(--r-lg); padding: 10px; background: rgba(255,255,255,.5); }
   .branch h4 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; display: flex; align-items: center; gap: 6px; }
   .branch.yes h4 { color: var(--branch-yes); } .branch.no h4 { color: var(--branch-no); }
@@ -1751,7 +1757,7 @@ function renderBubblePanel(right, node) {
   if (propTab === 'interaction') {
     const mine = events().filter((ev) => ev.node === node.id);
     add(section('Workflows', [
-      ...mine.map((ev) => h('div', { class: 'row wf', onclick: () => openCard(ev) }, icon('workflow'), cardName(ev), h('span', { class: 't' }, `When ${portLabel(byId[ev.node], 'output', ev.port)} · ${countSteps(chain(ev.node, ev.port))} steps`))),
+      ...mine.map((ev) => h('div', { class: 'row wf', onclick: () => openCard(ev) }, icon('workflow'), cardName(ev), h('span', { class: 't' }, `When ${portLabel(byId[ev.node], 'output', ev.port)} · ${eventSteps(ev)} steps`))),
       h('div', { class: 'hint' }, mine.length ? 'Open one to change its steps.' : 'No workflow starts at this element. Add one in Workflow.')]));
     add(section('Visibility', [has('visible') ? plain('visible') : null, has('mounted') ? plain('mounted') : null]));
     add(section('Options', [...['enabled', 'keepsFocus'].filter(has).map(plain), ...ports.filter((p) => p.name.startsWith('runOnChange-')).map((p) => (claimed.add(p.name), fieldFor(node, { ...p, displayName: `A change to ${(CONFIGURE_AS[p.name.slice('runOnChange-'.length)] || P[p.name.slice('runOnChange-'.length)]?.displayName || p.displayName).toLowerCase()} runs what it feeds` }, params[p.name], wiredIn[p.name])))]));
@@ -2891,6 +2897,14 @@ function events() {
 }
 const eventTitle = (ev) => `When ${labelOf(ev.node)}: ${portLabel(byId[ev.node], 'output', ev.port)}`;
 const countSteps = (steps) => steps.reduce((n, s) => n + 1 + (s.branches ? countSteps(s.branches.yes) + countSteps(s.branches.no) : 0), 0);
+/* ---- STU-024: an event wired to more than one first step runs them all, side by side (two Bubble workflows on one click whose
+   conditions overlap). Each is a lane: the chain from that one wire. One lane: null ---- */
+function lanesOf(ev) {
+  const steps = chain(ev.node, ev.port);
+  if (!steps[0]?.siblings.length) return null;
+  return [[{ ...steps[0], siblings: [] }, ...steps.slice(1)], ...steps[0].siblings.map((c) => chain(ev.node, ev.port, new Set(), c))];
+}
+const eventSteps = (ev) => countSteps((lanesOf(ev) ?? [chain(ev.node, ev.port)]).flat());
 
 /* ---- STU-020 / STU-021: an element's workflows, seen from Design — a ⚡ badge, its steps on hover, its card full screen ---- */
 // only an event that reaches a step is a workflow: Email's Text Changed wired into Log In's username is a value, not one
@@ -3079,15 +3093,17 @@ function renderEvents() {
   for (const id of [...byElement.keys()].sort((a, b) => (order.get(a) ?? Infinity) - (order.get(b) ?? Infinity))) {
     box.append(h('div', { class: 'evhead', 'data-node': id }, icon(glyphOf(byId[id].type)), labelOf(id)));
     for (const { ev } of byElement.get(id)) box.append(h('div', { class: 'row', 'data-node': ev.node, 'data-port': ev.port, 'aria-selected': selEvent && selEvent.node === ev.node && selEvent.port === ev.port, onclick: () => { selEvent = ev; renderWorkflow(); } },
-      h('span', {}, cardName(ev)), h('small', {}, `When ${portLabel(byId[ev.node], 'output', ev.port)} · ${countSteps(chain(ev.node, ev.port))} step(s)`)));
+      h('span', {}, cardName(ev)), h('small', {}, `When ${portLabel(byId[ev.node], 'output', ev.port)} · ${eventSteps(ev)} step(s)`)));
   }
 }
 /** The chain from a signal: follow the first wired target, then its Done, and so on; a Condition ends the chain with two of its own. */
-function chain(node, port, visited = new Set()) {
+function chain(node, port, visited = new Set(), only = null) {
   const steps = [];
   while (true) {
     // a reusable item's "shown" switch hangs off its top element's Did Mount / Will Unmount: part of the item, not a step (STU-014)
-    const outs = conns.filter((c) => c.fromId === node && c.fromProperty === port && byId[c.toId] && !byId[c.toId].metadata?.pageDataShown && isSignalPort(byId[c.toId], 'input', c.toProperty));
+    // `only`: a lane starts at that one wire (STU-024), the others being lanes of their own
+    const outs = only ? [only] : conns.filter((c) => c.fromId === node && c.fromProperty === port && byId[c.toId] && !byId[c.toId].metadata?.pageDataShown && isSignalPort(byId[c.toId], 'input', c.toProperty));
+    only = null;
     if (!outs.length) break;
     const next = outs[0];
     if (visited.has(next.toId)) break;
@@ -3123,8 +3139,15 @@ function renderWorkflow() {
   if (cardBack) wf.append(h('div', { class: 'cardnav' }, h('button', { class: 'quiet back', title: 'Back to the element in Design (Esc)', onclick: backFromCard }, '← ', labelOf(cardBack.node)),
     h('button', { class: 'quiet tiny', title: 'Every workflow on this page, listed', onclick: () => { cardBack = null; renderWorkflow(); } }, 'All workflows on this page')));
   wf.append(h('div', { class: 'event-card' }, h('div', { class: 'ic' }, icon('bolt')), h('div', { class: 'named' }, cardTitle(ev), h('small', {}, `${eventTitle(ev)} · ${typeName(byId[ev.node].type)}`)),
-    h('div', { style: 'margin-left:auto;display:flex;gap:6px' }, isRenaming(ev) ? null : h('button', { class: 'quiet tiny rename', title: 'Name this workflow yourself; an empty name gives it back to its steps', onclick: () => { renaming = `${ev.node}.${ev.port}`; renderWorkflow(); } }, 'Rename'), countSteps(chain(ev.node, ev.port)) ? null : h('button', { class: 'quiet', onclick: () => { const i = draftEvents.findIndex((d) => d.node === ev.node && d.port === ev.port); if (i >= 0) draftEvents.splice(i, 1); selEvent = null; renderWorkflow(); } }, 'Discard'))));
-  renderChain(wf, chain(ev.node, ev.port), { node: ev.node, port: ev.port }, 1);
+    h('div', { style: 'margin-left:auto;display:flex;gap:6px' }, isRenaming(ev) ? null : h('button', { class: 'quiet tiny rename', title: 'Name this workflow yourself; an empty name gives it back to its steps', onclick: () => { renaming = `${ev.node}.${ev.port}`; renderWorkflow(); } }, 'Rename'), eventSteps(ev) ? null : h('button', { class: 'quiet', onclick: () => { const i = draftEvents.findIndex((d) => d.node === ev.node && d.port === ev.port); if (i >= 0) draftEvents.splice(i, 1); selEvent = null; renderWorkflow(); } }, 'Discard'))));
+  const lanes = lanesOf(ev);
+  if (!lanes) renderChain(wf, chain(ev.node, ev.port), { node: ev.node, port: ev.port }, 1);
+  else {
+    wf.append(h('div', { class: 'hint lanesnote' }, `${labelOf(ev.node)}'s ${portLabel(byId[ev.node], 'output', ev.port)} runs these ${lanes.length} side by side: each one runs, in no set order.`));
+    const grid = h('div', { class: 'lanes', style: `grid-template-columns:repeat(${lanes.length}, minmax(260px, 1fr))` });
+    lanes.forEach((steps, i) => { const lane = h('div', { class: 'lane' }, h('h4', {}, `Lane ${i + 1}`)); renderChain(lane, steps, { node: ev.node, port: ev.port }, 1, `${String.fromCharCode(65 + i)}`); grid.append(lane); });
+    wf.append(grid);
+  }
   main.append(wf);
 }
 let stepCounter = 0;
@@ -3181,7 +3204,7 @@ function stepCard(s, n) {
   for (const p of ports) settings.append(fieldFor(node, p, params[p.name], wiredIn[p.name]));
   const card = h('div', { class: `step${isCond ? ' cond' : ''}` },
     h('div', { class: 'num' }, isCond ? icon('branch') : n),
-    h('h3', {}, isCond ? 'Branch' : typeName(node.type), h('span', {}, isCond ? 'if the condition holds, Yes; otherwise No' : node.label || '')),
+    h('h3', {}, isCond ? 'Branch' : typeName(node.type), h('span', { title: isCond ? 'If the condition holds, Yes runs; otherwise No' : null }, isCond ? (node.label || 'if the condition holds, Yes; otherwise No') : node.label || '')),
     h('div', { class: 'acts' },
       ports.length ? h('button', { class: 'quiet tiny', title: 'Settings', onclick: () => { const open = settings.style.display === 'none'; settings.style.display = open ? '' : 'none'; open ? openSteps.add(s.id) : openSteps.delete(s.id); } }, icon('settings')) : null,
       h('button', { class: 'quiet tiny danger', title: isCond ? 'Delete the branch and both chains' : 'Delete step', onclick: () => deleteStep(s) }, icon('trash'))));

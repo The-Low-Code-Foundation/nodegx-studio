@@ -240,6 +240,43 @@ const countBy = (text, re) => (text.match(re) || []).length;
   }
 }
 
+// ---------------------------------------------------------------- 1d2. STU-024: one card per event — "Only when A" and "Only when not A" on
+// one click are one branch; conditions that can both hold stay two lanes from the same signal, so both still run
+{
+  const base = path.join(tmp, 'editor requests', 'app.export.json');
+  if (exists(base)) {
+    const synth = readJson(base);
+    const user = (name) => ({ type: 'CurrentUser', next: { type: 'Message', name } });
+    const go = (id, page, extra = {}) => ({ 0: { id, type: 'ChangePage', properties: { element_id: page, ...extra } } });
+    const click = (id, el, condition, actions) => ({ id, type: 'ButtonClicked', properties: { element_id: el, ...(condition ? { condition } : {}) }, actions });
+    const btn = (id) => ({ id, type: 'Button', name: `Button ${id}`, properties: {} });
+    const blank = (id, name) => ({ type: 'Page', id, name, properties: { new_responsive: true, container_layout: 'column' }, elements: {} });
+    synth.pages = { spage: { type: 'Page', id: 'spage', name: 'index', properties: { new_responsive: true, container_layout: 'column' }, elements: { b1: btn('b1'), b2: btn('b2'), b3: btn('b3') },
+      workflows: {
+        w1: click('w1', 'b1', user('logged_in'), go('a1', 'opage')), w2: click('w2', 'b1', user('not_logged_in'), go('a2', 'tpage')),
+        w3: click('w3', 'b2', user('logged_in'), go('a3', 'opage')), w4: click('w4', 'b2', null, go('a4', 'tpage')),
+        w5: click('w5', 'b3', user('logged_in'), go('a5', 'opage')), w6: click('w6', 'b3', user('logged_in'), go('a6', 'tpage')) } },
+      opage: blank('opage', 'other'), tpage: blank('tpage', 'third') };
+    const out = path.join(tmp, 'stu024'); fs.mkdirSync(out); const exp = path.join(out, 'app.export.json'); fs.writeFileSync(exp, JSON.stringify(synth));
+    const c = run([path.join(here, 'app-to-nodegx.mjs'), exp, path.join(out, 'project')]);
+    if (check('STU-024: the page with split clicks converts', c.status === 0, (c.stderr || c.stdout).slice(-600))) {
+      const dir = path.join(out, 'project', 'components', 'Pages', 'index');
+      const nodes = readJson(path.join(dir, 'nodes.json')).nodes, conns = readJson(path.join(dir, 'connections.json')).connections;
+      const byId = new Map(nodes.map((n) => [n.id, n]));
+      const from = (id, port) => conns.filter((w) => w.fromId === id && w.fromProperty === port).map((w) => ({ node: byId.get(w.toId), port: w.toProperty }));
+      const navTo = (id, port) => from(id, port).filter((t) => t.node?.type === 'RouterNavigate' && t.port === 'navigate').map((t) => t.node.parameters?.target);
+      const el = (b) => nodes.find((n) => n.label === `Button ${b}`)?.id;
+      const b1 = from(el('b1'), 'onClick'), cond1 = b1[0]?.node;
+      check('STU-024: "Only when logged in" and "Only when not logged in" on one click are ONE branch from it: Yes goes to other, No to third', b1.length === 1 && cond1?.type === 'Condition' && b1[0].port === 'eval' && JSON.stringify(navTo(cond1.id, 'ontrue')) === '["/Pages/other"]' && JSON.stringify(navTo(cond1.id, 'onfalse')) === '["/Pages/third"]' && /\?$/.test(cond1.label), JSON.stringify({ wires: b1.map((t) => `${t.node?.type}.${t.port}`), label: cond1?.label, yes: cond1 && navTo(cond1.id, 'ontrue'), no: cond1 && navTo(cond1.id, 'onfalse') }));
+      const b2 = from(el('b2'), 'onClick');
+      check('STU-024: "Only when logged in" beside a workflow with no condition can both run: two lanes from the same click, the second a plain step', b2.length === 2 && b2.some((t) => t.node?.type === 'Condition' && t.port === 'eval') && b2.some((t) => t.node?.type === 'RouterNavigate' && t.port === 'navigate'), JSON.stringify(b2.map((t) => `${t.node?.type}.${t.port}`)));
+      const b3 = from(el('b3'), 'onClick');
+      check('STU-024: the same condition twice is not opposite: two lanes, each behind its own Only when', b3.length === 2 && b3.every((t) => t.node?.type === 'Condition' && /^Only when /.test(t.node.label)), JSON.stringify(b3.map((t) => t.node?.label)));
+      validateProject('STU-024 fixture', path.join(out, 'project'));
+    }
+  }
+}
+
 // ---------------------------------------------------------------- 1e. STU-014 (R8): a reusable's search asks while that copy is shown; a copy's
 // shown / hidden reaches its reusable; a visibility condition that restates the default changes nothing
 {
