@@ -1,25 +1,39 @@
 Continue NodeGX Studio (~/vscode_projects/nodegx-studio, public, GPL-3.0; plan of record: docs/SCOPE.md). Edit in
 this repo, not OpenNoodl. Gates run on Node 22 (`~/.nvm/versions/node/v22.22.0/bin`): `npm run check:rules` (20/20),
 `check:phrases` (85/85), `check:dictionary` (PASS 65 covered / 2 wrong filed / 22 missing / 5 none), `check:editor`
-(159/159), `check:pagedata` (33/33), `check:reusable` (12/12), `check:import` (74/74 with the template bundle:
-import/exports/template is present, gitignored), `check:app` (34/34). Read on 2026-10-19: editor, import and
-dictionary on the code at be15e66 / b8a21de (s7); rules, phrases, pagedata, reusable and app in s6 at 1334249, and
-none of them reads app-to-nodegx.mjs or studio.html, the only code changed since. Kit pieces and the phrasebook
-come from the NodeGX checkout at ../OpenNoodl (lib/nodegx.mjs). One heavy gate at a time (`nice -n 19`), and wait for
-another session's jest/vitest to finish first; `check:editor` takes about 4 minutes and `--shots` rewrites every
-docs/look/s2-*.png (restore the tracked ones after: `git ls-files -m docs/look | xargs git checkout --`). The server
-reads studio.html on every request: do not edit it while a gate runs (serve.mjs is read once at the gate's start).
+(170/170), `check:pagedata` (33/33), `check:reusable` (12/12), `check:import` (79/79 with the template bundle:
+import/exports/template is present, gitignored), `check:app` (34/34). Read on 2026-10-20 (s9) at dcf8b11: editor,
+import, app, dictionary. 🔴 `check:app` DOES load studio.html (s8's note said none but editor did): run it after any
+studio.html change. Kit pieces and the phrasebook come from the NodeGX checkout at ../OpenNoodl (lib/nodegx.mjs).
+One heavy gate at a time (`nice -n 19`, take ~/vscode_projects/OpenNoodl-worktrees/HEAVY.lock with mkdir), and WAIT
+for another session's jest/vitest first (`pgrep -fl "jest|vitest"`; s9 ran one trace beside a peer's jest by
+mistake). `check:editor` takes about 4 minutes; `--shots` rewrites every docs/look/s2-*.png: restore the ones you
+did not mean to change (`git ls-files -m docs/look | grep -v <yours> | xargs git checkout --`; s2-workflow-*.png are
+tracked now). The server reads studio.html on every request: do not edit it while a gate runs.
 
-Built in s8 (2026-10-19, de7892e): M3's first two, STU-020 and STU-021 (SCOPE.md). A ⚡ on every element with a
-workflow, on the canvas and in the element list; hover names each event's steps in order; a click opens that event's card
-alone, full screen; ← <element> or Esc returns to Design with it selected. `check:editor` 159/159 on de7892e; mutant
-(summary reversed) 158/159. Not mutant-tested: the "reaches a step" rule (no signal wired only into values on the gate's
-page). Fixed on the way: a draft event outlived its page and threw on a reusable's canvas. No pictures taken for Richard
-yet (`--shots` writes docs/look/s2-workflow-card.png, new).
+Built in s9 (2026-10-20), each with its gate, mutant and SCOPE.md "Done" paragraph:
+- STU-023 (4ac29ac): a card is named by its steps ("Sign in → Go to the list") until renamed; the name lives on the
+  element, `metadata.cardNames[port]`; Rename / double-click; empty = back to the steps.
+- STU-022 (d4a8d78): Workflow's list is the page's index — cards under their elements in tree order; filters "What it
+  does" (Goes to a page, Changes <type / state>, …; a component copy counts what is inside it) and "What starts it";
+  a search over steps and targets. Gate on the Todo page (62 cards; "Changes Task" = 15, todoSelected = 11), with the
+  page's sign-in redirect cut from outside for the section.
+- STU-024 (dcf8b11): one card per event. Importer: "Only when A" + "Only when not A" on one event → one Condition "A?"
+  (Yes = first, No = second); "not logged in" now reads `authenticated` like "logged in". Overlapping ones stay two
+  wires; Studio draws an event with more than one first step as lanes side by side (A1… B1…). Done on a fixture: the
+  real app's 16 split elements wait for its export.
+- STU-030 (ea71834): the trace measured (editor/trace-inventory.mjs, docs/look/stu-030-trace.json): on, cheap, one
+  clock with the probe and the screen; signals in order but every `cause` 0 (filed P123-STU030-SIGNALCAUSE in
+  OpenNoodl's ledger, 7da13f613); wired queries start/end to the ms; JS requests and drawing are not in it.
 
-Next buildable while Richard is away: STU-023 (names from steps; a renamed card keeps its name — decide where the name
-lives, e.g. the element's metadata per port), then STU-022 (the tree as the index, filters by effect / trigger, search
-over step names and targets), then STU-024 (importer merges split workflows; needs a fixture with overlapping lanes).
+Next buildable while Richard is away: STU-031 (Record / Stop and the timeline: three lanes on one axis — the trace's
+signals for workflows, the probe's requests matched to query nodes for page data, a MutationObserver for the screen;
+names from the files, not the trace dictionary). Then STU-032 (inputs/outputs per step, screenshots + scrubber).
+STU-025 waits on ruling R4. Show Richard docs/look/s2-workflow-card.png (lanes), s2-workflow-index.png, s2-workflow-branch.png.
+
+Seen, not fixed (s9): a branch whose condition is a constant `false` says "Set the condition…"; a card's name and
+hover read only its first lane; port names a component gives without words show raw ("When pickList"); the hover's
+"(+1 more)" is the second lane.
 
 Where it stood after s7 (2026-10-19, s7; main is ahead of GitHub, unpushed until Richard says). Built this session (SCOPE.md):
 - STU-053-DROPDOWNVALUE fixed: "Dropdown's value's name" looks the chosen record up among the dropdown's choices (one
