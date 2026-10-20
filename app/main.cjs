@@ -93,6 +93,7 @@ function windowFor() {
     show: !hidden,
     backgroundColor: '#eef0f3',
     title: 'NodeGX Studio',
+    icon: path.join(__dirname, 'icon.png'), // Windows and Linux; macOS takes the Dock's (below) until STU-007 packages one
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), backgroundThrottling: !hidden }
   });
   win.on('closed', () => (win = null));
@@ -283,6 +284,7 @@ function menu() {
 }
 
 app.whenReady().then(async () => {
+  if (process.platform === 'darwin' && !hidden) app.dock?.setIcon(path.join(__dirname, 'icon.png'));
   actions = await import(actionsUrl);
   handlers();
   menu();

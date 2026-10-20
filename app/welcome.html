@@ -3,6 +3,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NodeGX Studio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 1024 1024%27%3E%3Crect width=%271024%27 height=%271024%27 rx=%27229%27 fill=%27%230B0E12%27/%3E%3Cpath d=%27M642 287A150 150 0 1 0 512 512A150 150 0 1 1 382 737%27 fill=%27none%27 stroke=%27%232F8AFF%27 stroke-width=%2766%27 stroke-linecap=%27round%27/%3E%3Ccircle cx=%27642%27 cy=%27287%27 r=%2781%27 fill=%27%23EEF2F6%27/%3E%3Ccircle cx=%27382%27 cy=%27737%27 r=%2781%27 fill=%27%234DA3FF%27/%3E%3C/svg%3E">
 <!--
   STU-003 — the welcome screen: what the desktop app shows with no project open. Reopen the last project, pick another
   recent one, open a folder, start from one of NodeGX's templates, or import an app. Talks to the main process through
@@ -36,7 +37,7 @@
   @media (max-width: 900px) { main { grid-template-columns: 1fr; gap: 28px; padding: 24px 16px; } }
 
   .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
-  .logo { width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #3b82f6, #1f5eff); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 20px; flex: none; }
+  .logo { width: 40px; height: 40px; display: block; flex: none; }
   .brand h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -.01em; }
   .brand .ver { color: var(--muted); font-size: 12px; }
   .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 28px; }
@@ -80,12 +81,13 @@
   .spin { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; flex: none; margin-top: 2px; }
   @keyframes spin { to { transform: rotate(360deg); } }
   footer { grid-column: 1 / -1; color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
+  .logo svg { width: 100%; height: 100%; display: block; }
 </style>
 
 <main>
   <section aria-label="Your projects">
     <div class="brand">
-      <div class="logo" aria-hidden="true">S</div>
+      <div class="logo" aria-hidden="true"><svg viewBox="0 0 1024 1024" aria-hidden="true"><defs><linearGradient id="wlw" x1="642" y1="287" x2="382" y2="737" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#4DA3FF"/><stop offset="1" stop-color="#1570EF"/></linearGradient><radialGradient id="wlg" cx="0.5" cy="0.42" r="0.75"><stop offset="0" stop-color="#182231"/><stop offset="1" stop-color="#0B0E12"/></radialGradient></defs><rect width="1024" height="1024" rx="229" fill="url(#wlg)"/><rect x="6" y="6" width="1012" height="1012" rx="223" fill="none" stroke="#232A33" stroke-width="12"/><path d="M642 287A150 150 0 1 0 512 512A150 150 0 1 1 382 737" fill="none" stroke="url(#wlw)" stroke-width="66" stroke-linecap="round"/><circle cx="642" cy="287" r="81" fill="#EEF2F6"/><circle cx="382" cy="737" r="81" fill="#4DA3FF"/></svg></div>
       <div><h1>NodeGX Studio</h1><div class="ver" id="ver"></div></div>
     </div>
     <div class="actions">
