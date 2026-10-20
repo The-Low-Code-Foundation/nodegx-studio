@@ -26,30 +26,32 @@ timers. **Found:** a signal into a component goes on out of its Component Inputs
 command's run was invisible to the timeline; timeline.mjs now starts a card's run on a `true` out of its event.
 Picture: docs/look/stu-033-steps.png. Gates on the s12 tree: timeline 43/43, editor 170/170, app 34/34 (cdp.mjs gained
 `on` for protocol events: the gate holds a write 3 s with CDP Fetch). Mutants: a waiting request not holding the run
-41/43; the recording starting at the press 42/43.
+41/43; the recording starting at the press 42/43. **Done vs written:** driven end to end by the gate in headless
+Chrome on the todo template; Richard has seen the picture (*"It looks cool!"*), not used it himself in the desktop app.
+s12 also ran one timeline gate while a peer session's jest was running (noticed after): check `pgrep` first, every
+time.
 s11 before it: STU-032 (scrubber, step values, the screen as it was), the logo, ruling R9.
 
 Filed in NodeGX's ledger (OpenNoodl 80bd3c778): P123-STU032-TEXTFLASH. Still open from s10: P123-STU031-COPYBOX.
 Not filed: the Component Inputs signal-as-values is how the runtime has always forwarded a component's input; Studio
 reads around it, it is not a defect the app shows.
 
-Next buildable while Richard is away, in order:
-1. M4 is done (STU-030..033). Ask Richard how the primed Record feels on his own app (the 1.5 s quiet, the 30 s
-   timer hold are guesses). Gaps (SCOPE.md "Not built"): a recording that crosses pages names cards only for the page
-   shown at Stop; record ports read raw ("prop-title"); an app that signals on its own all the time never goes quiet.
-2. Timeline gaps (SCOPE.md "Not built"): a recording that crosses pages names cards only for the page shown at Stop;
-   the screen rows' text sample is the DOM as inserted ("TextTextTextLabel"); a copy has no canvas pixels or scroll
-   positions, and a style-only change takes no copy.
-3. STU-006 (runs without a NodeGX checkout), then STU-007 (packaged and signed, the icon is ready) — Richard asked
-   on 2026-10-20 how far a full working Studio is: roughly 8–12 sessions (M4's end, STU-006/007, a publish path
-   that has no task yet, then M5); a **Publish/deploy task is missing from SCOPE.md** — write it before STU-007.
+Next buildable while Richard is away, in order (M4 is done: STU-030..033):
+1. STU-006 (Studio runs without a NodeGX checkout), then write the missing **Publish/deploy task** into SCOPE.md, then
+   STU-007 (packaged and signed; the icon is ready). Richard asked on 2026-10-20 how far a full working Studio is:
+   roughly 8–12 sessions (STU-006/007, a publish path, then M5).
+2. Timeline gaps (SCOPE.md "Not built" under STU-031..033): a recording that crosses pages names cards only for the
+   page shown at Stop; record ports read raw ("prop-title"); the screen rows' text sample is the DOM as inserted
+   ("TextTextTextLabel"); a copy has no canvas pixels or scroll positions, and a style-only change takes no copy; an
+   app that signals on its own all the time never goes quiet (Stop ends it).
 Still open from s9: a branch whose condition is a constant `false` says "Set the condition…"; a card's name and hover
 read only its first lane; port names a component gives without words show raw ("When pickList").
 
-Show Richard: docs/look/stu-033-steps.png (a run gone through step by step), docs/look/stu-032-scrub.png and stu-032-step.png (the scrubber, a step's values), the s10 timeline
+Show Richard (stu-033-steps.png he has seen): docs/look/stu-032-scrub.png and stu-032-step.png (the scrubber, a step's values), the s10 timeline
 pictures, and from s9 s2-workflow-card.png, s2-workflow-index.png, s2-workflow-branch.png. Tell him the "Text" flash.
 
-Waiting on Richard: his second sitting on data (M2's remaining work); his real app export (STU-044's 22 missing
+Waiting on Richard: how the one-run Record feels on his own app (the 1.5 s quiet and the 30 s timer hold are
+guesses); his second sitting on data (M2's remaining work); his real app export (STU-044's 22 missing
 operator names and STU-044-FORMATNUMBER's keys; STU-053's unread keys; the real app's 16 split elements for STU-024);
 pushing main (ahead of GitHub, unpushed until he says); rulings R4 (rejoin, STU-025), R5, R6.
 
