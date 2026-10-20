@@ -11,6 +11,8 @@
  *
  *   node app/check.mjs            PASS n/n and exit 0, or the failing lines and exit 1
  *   node app/check.mjs --shots    also writes docs/look/stu-003-*.png
+ *   NODEGX_STUDIO_BINARY="dist/mac-arm64/NodeGX Studio.app/Contents/MacOS/NodeGX Studio" node app/check.mjs
+ *                                 the same gate on the packaged app (STU-007)
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -23,7 +25,10 @@ import { kit, studioRoot } from '../lib/nodegx.mjs';
 import { importApp } from './actions.mjs';
 
 const shots = process.argv.includes('--shots');
-const electron = createRequire(import.meta.url)('electron');
+// NODEGX_STUDIO_BINARY runs the gate on a packaged app (STU-007: npm run package) instead of the development one
+const packaged = process.env.NODEGX_STUDIO_BINARY || null;
+const electron = packaged ?? createRequire(import.meta.url)('electron');
+const appArgs = packaged ? [] : [studioRoot];
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const freePort = () => new Promise((ok) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => ok(p)); }); });
 const results = [];
@@ -64,7 +69,7 @@ async function start(picks = [], extra = []) {
   const port = await freePort();
   const env = { ...process.env, NODEGX_STUDIO_USER_DATA: userData, NODEGX_STUDIO_TEST_PICKS: JSON.stringify(picks) };
   delete env.ELECTRON_RUN_AS_NODE;
-  const proc = spawn(electron, [studioRoot, '--hidden', `--remote-debugging-port=${port}`, ...extra], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const proc = spawn(electron, [...appArgs, '--hidden', `--remote-debugging-port=${port}`, ...extra], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';
   proc.stdout.on('data', (d) => (log += d));
   proc.stderr.on('data', (d) => (log += d));
@@ -111,6 +116,10 @@ try {
     ok(!existsSync(join(todos, '.mcp.json')) && !existsSync(join(todos, 'CLAUDE.md')), 'no editor-written agent files with another machine\'s paths');
     ok(JSON.stringify(recentDirs()) === JSON.stringify([todos]), 'the recent list on disk names it', recentDirs());
     ok(serversOf().length === 1, 'one editor server runs for it', serversOf());
+    if (packaged) {
+      const cmd = serversOf().map((pid) => execFileSync('ps', ['-o', 'command=', '-p', pid], { encoding: 'utf8' }).trim())[0] ?? '';
+      ok(cmd.includes('.app/Contents/Resources/app/editor/serve.mjs') && !cmd.includes(`${studioRoot}/editor`), 'the editor server is the packaged app\'s own, not the source tree\'s', cmd.slice(-160));
+    }
 
     console.log('2b. its backend (STU-004)');
     const bound = bindingOf(todos);
@@ -216,7 +225,7 @@ try {
     const env = { ...process.env, NODEGX_STUDIO_USER_DATA: userData };
     delete env.ELECTRON_RUN_AS_NODE;
     let out = '';
-    const code = await new Promise((r) => { const p = spawn(electron, [studioRoot, '--smoke'], { env }); p.stdout.on('data', (d) => (out += d)); p.on('exit', r); });
+    const code = await new Promise((r) => { const p = spawn(electron, [...appArgs, '--smoke'], { env }); p.stdout.on('data', (d) => (out += d)); p.on('exit', r); });
     ok(code === 0 && /smoke: ready welcome · 2 recent/.test(out), 'npm run smoke with no project draws the welcome screen and exits 0', { code, out: out.trim().split('\n')[0] });
   }
 } catch (err) {

@@ -66,6 +66,20 @@ NODEGX_REPO=../NodeGX npm start          # or any gate
 NODEGX_REPO=../NodeGX npm run vendor     # rebuild vendor/ from that checkout's HEAD (refuses uncommitted sources)
 ```
 
+## Packaging
+
+```bash
+npm run package        # the unpacked app in dist/ (macOS: signed ad hoc)
+npm run dist           # installers in dist/: a DMG and a zip on macOS, NSIS on Windows, an AppImage on Linux
+npm run dist:signed    # macOS signed with the Developer ID in your keychain, notarised when APPLE_ID,
+                       # APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID are set
+NODEGX_STUDIO_BINARY="dist/mac-arm64/NodeGX Studio.app/Contents/MacOS/NodeGX Studio" npm run check:app
+                       # the desktop gate on the package instead of the source tree
+```
+
+An ad-hoc build that has been downloaded is stopped by Gatekeeper: open it once from System Settings → Privacy &
+Security → Open Anyway.
+
 ## Gates
 
 ```bash

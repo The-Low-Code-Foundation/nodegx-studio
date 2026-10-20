@@ -24,13 +24,72 @@
     "check:publish": "node app/publish-check.mjs",
     "smoke": "node app/launch.mjs --smoke",
     "check:dictionary": "node import/dictionary-check.mjs",
-    "check:phrases": "node editor/phrases-check.mjs"
+    "check:phrases": "node editor/phrases-check.mjs",
+    "package": "electron-builder --dir -c.mac.identity=-",
+    "dist": "electron-builder -c.mac.identity=-",
+    "dist:signed": "electron-builder"
   },
   "dependencies": {
     "@nodegx/mcp": "0.2.2",
     "@nodegx/preview": "0.2.3"
   },
   "devDependencies": {
-    "electron": "43.2.0"
+    "electron": "43.2.0",
+    "electron-builder": "26.15.3"
+  },
+  "productName": "NodeGX Studio",
+  "build": {
+    "appId": "io.nodegx.studio",
+    "productName": "NodeGX Studio",
+    "copyright": "GPL-3.0-only. The Low-Code Foundation and NodeGX contributors.",
+    "directories": {
+      "output": "dist"
+    },
+    "asar": false,
+    "npmRebuild": false,
+    "files": [
+      "app/**",
+      "editor/**",
+      "lib/**",
+      "import/*.mjs",
+      "vendor/**",
+      "package.json",
+      "LICENSE",
+      "!**/*check.mjs",
+      "!**/.DS_Store"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "app/icon.png",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Allow the app you are building to use the microphone while Studio shows it?",
+        "NSCameraUsageDescription": "Allow the app you are building to use the camera while Studio shows it?"
+      }
+    },
+    "win": {
+      "icon": "app/icon.png",
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "icon": "app/icon.png",
+      "category": "Development",
+      "target": [
+        "AppImage"
+      ],
+      "executableName": "nodegx-studio"
+    }
+  },
+  "author": {
+    "name": "The Low-Code Foundation",
+    "url": "https://nodegx.io"
   }
 }

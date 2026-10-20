@@ -10,3 +10,5 @@ import/exports/
 .kit/
 # a vendor build in progress (scripts/vendor.mjs)
 vendor.tmp-*/
+# electron-builder output (npm run package / npm run dist)
+dist/

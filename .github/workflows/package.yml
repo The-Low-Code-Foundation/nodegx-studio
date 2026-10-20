@@ -1,0 +1,62 @@
+# STU-007 — Studio packaged on the three systems, each package opened before it is kept.
+#
+# Unsigned on every system for now: macOS is signed ad hoc (Gatekeeper asks a person who downloads it to open it from
+# System Settings), Windows is unsigned (SmartScreen asks the same). `npm run dist:signed` with a Developer ID in the
+# keychain and APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID set is the signed, notarised macOS build; it
+# needs Richard's Apple credentials as this repository's secrets first.
+#
+# Each job builds, then runs the unpacked app with --smoke twice — the welcome screen, and a copy of the todo
+# template — and fails unless both report ready.
+name: package
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            bin: dist/mac-arm64/NodeGX Studio.app/Contents/MacOS/NodeGX Studio
+          - os: windows-latest
+            bin: dist/win-unpacked/NodeGX Studio.exe
+          - os: ubuntu-latest
+            bin: dist/linux-unpacked/nodegx-studio
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run check:vendor
+      - run: npm run dist
+      - name: open the package (welcome, then a copy of the todo template)
+        env:
+          ELECTRON_DISABLE_SANDBOX: '1' # a CI runner's Chromium sandbox cannot start; a person's machine keeps it
+          NODEGX_STUDIO_USER_DATA: ${{ runner.temp }}/studio-user-data
+          NODEGX_BACKENDS_DIR: ${{ runner.temp }}/studio-backends
+        run: |
+          run() { if [ "$RUNNER_OS" = Linux ]; then xvfb-run -a "$@"; else "$@"; fi; }
+          out=$(run "${{ matrix.bin }}" --smoke) || { echo "$out"; exit 1; }
+          echo "$out"; echo "$out" | grep -q '^smoke: ready welcome'
+          cp -R vendor/templates/todo-list "$RUNNER_TEMP/todo"
+          out=$(run "${{ matrix.bin }}" "$RUNNER_TEMP/todo" --smoke) || { echo "$out"; exit 1; }
+          echo "$out"; echo "$out" | grep -q '^smoke: ready todo'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nodegx-studio-${{ matrix.os }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
+            dist/*.AppImage
+          if-no-files-found: error

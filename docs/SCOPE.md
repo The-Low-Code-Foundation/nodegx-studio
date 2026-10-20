@@ -37,7 +37,7 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 | Styles — global styles as NodeGX variants | works | `check:editor` |
 | Bubble importer — pages, elements, styles, workflows, expressions, option sets, reusables, custom states, data types, privacy rules → `nodegx.security.json`, backend workflows → cloud functions, Data-tab rows | spike, measured on a real 17-page app (0 validation errors); its searches arrive as page data (STU-013), a reusable's while that copy is shown (STU-014); its workflow conditions test only when the workflow runs (STU-013-NAVLOOP) | `check:import` 50/50 |
 | Run timeline (M4) — Record / Stop, page data, workflows and the screen on one axis, each row linked to its element, card or item; each step's values in and out; a scrubber with the screen as it was at the playhead; one run per Record, stopping by itself when it is over, its steps gone through one by one | STU-031 (2026-10-20, s10), STU-032 (s11), STU-033 (s12) work | `check:timeline` 43/43 |
-| Desktop app — Electron window, a welcome screen (recent projects, NodeGX's templates, Import an app), File → Open Recent, a smoke mode | first cut (2026-10-19) | `check:app` 34/34, `smoke` |
+| Desktop app — Electron window, a welcome screen (recent projects, NodeGX's templates, Import an app), File → Open Recent, a smoke mode; packaged for macOS as a DMG and a zip, signed ad hoc (STU-007's first cut) | first cut (2026-10-19), package (2026-10-20, s14) | `check:app` 39/39, 40/40 on the package, `smoke` |
 | The project's backend — started (or adopted) on open, stopped on close, shown in the status bar; a template that needs one gets one; Data's "Start a backend" for an app with none | works (2026-10-19) | `check:app` 34/34 |
 | Claude Code — "Connect Claude Code" in the header (and File) registers the NodeGX MCP server for the folder with the NodeGX editor's own writer and shows the command that starts a session there | works (2026-10-19) | `check:editor` 56/56 |
 | Publish — File → Publish… and the header's Publish write the app as a static site with NodeGX's own deploy (npm's production engine), into a new folder or the one this app went to last; its cloud functions go to its backend through NodeGX's `deploy_cloud_functions`; the window says where the site is, what it talks to, and that a backend on 127.0.0.1 works on this computer only | works (2026-10-20, s14) | `check:publish` 27/27, `check:app` 39/39 |
@@ -53,7 +53,7 @@ Studio, opens or imports an app, changes it, and publishes it.** What that needs
 | | what | state |
 |---|---|---|
 | 1 | **STU-008 Publish** to a folder | done (s14) |
-| 2 | **STU-007 a downloadable build**: unsigned first, then signed and notarised on Richard's Apple credentials; Windows and Linux | open |
+| 2 | **STU-007 a downloadable build**: unsigned first, then signed and notarised on Richard's Apple credentials; Windows and Linux | macOS ad hoc built and gated (s14); signing waits on Richard's credentials; Windows / Linux written into CI, not run |
 | 3 | **STU-040 Import an App…** with the report shown in the app (the welcome screen's import works; the report is a file in the project) | open |
 | 4 | **A NodeGX npm release** carrying P112-OWN020-UNWIREDSIGNAL and P123-STU008-BACKENDPUBLIC, then Studio's pins bumped and `npm run vendor` at that commit | waits on NodeGX |
 | 5 | **main pushed** | waits on Richard |
@@ -498,6 +498,36 @@ Claude Code registers `node_modules/@nodegx/mcp/dist/noodl-mcp.cjs`.
   rather than absent; not on Windows or Linux. `check:editor` and `check:timeline` ran in the main clone on the same
   vendored files (same hashes), not in the scratch clone. STU-007 must put `node_modules/@nodegx/mcp` outside the
   asar archive (`extraResources`): Claude Code runs that file with an external `node`.
+
+**STU-007, first cut (2026-10-20, s14): an ad-hoc macOS package, gated; signing and the other two systems not yet.**
+`npm run package` (the unpacked app) and `npm run dist` (a DMG and a zip) run electron-builder 26.15.3, the version the
+NodeGX editor builds with; the config is `build` in package.json.
+- **No asar archive** (`asar: false`): Claude Code runs the bundled MCP server
+  (`Contents/Resources/app/node_modules/@nodegx/mcp/dist/noodl-mcp.cjs`) with an outside `node`, which cannot read
+  inside one, and the editor server, the importer, the deploy engine and the backend are all spawned from files.
+  **No native rebuild** (`npmRebuild: false`): the only native code is `fsevents`, so the package is the exact tree that
+  works in development.
+- **Signed ad hoc with the hardened runtime** and the NodeGX editor's entitlements (`build/entitlements.mac.plist`,
+  plus library validation off, which an ad-hoc signature needs). `npm run dist:signed` drops the ad-hoc identity, so
+  electron-builder takes a Developer ID from the keychain (or `CSC_LINK`) and notarises when `APPLE_ID`,
+  `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` are set. **Not run: it needs Richard's Apple credentials.**
+- **Measured (arm64, this Mac):** the DMG is 141 MB and the zip 143 MB (the app is 378 MB: 275 MB is Electron's framework,
+  73 MB is `@nodegx/mcp` and `@nodegx/preview`). Copied out of the mounted DMG: `codesign --verify --deep --strict`
+  passes, and `--smoke` reaches *ready welcome · 0 recent · 5 templates* and *ready todo pages=2 visual=13*.
+  `NODEGX_STUDIO_BINARY=<the packaged binary> npm run check:app` runs the whole desktop gate on the package: **40/40**
+  (39, plus the editor server's command line being the `.app`'s own `Contents/Resources/app/editor/serve.mjs`).
+  Connect Claude Code through the package's own `lib/agent.mjs` writes a `.mcp.json` naming the `.app`'s MCP server,
+  and that server, started as the registration says, answers `tools/list` with 21 tools.
+- **Found: Gatekeeper rejects it once downloaded.** A copy carrying `com.apple.quarantine` (as a browser download
+  does) gets `spctl -a -t exec` → *rejected*. A tester has to open it from System Settings → Privacy & Security →
+  Open Anyway. A notarised build is what makes it open with a double-click. (The quarantined copy was assessed,
+  not launched.)
+- **Written, not run: `.github/workflows/package.yml`** builds on macOS 14, Windows and Ubuntu, opens each unpacked
+  app with `--smoke` (the welcome screen, then a copy of the todo template; `xvfb-run` on Linux) and keeps the
+  installers as artifacts. It runs on `workflow_dispatch` and on `v*` tags, once main is on GitHub. Studio has never
+  been started on Windows or Linux.
+- **Not in it:** an Intel (x64) or universal macOS build; auto-update; NodeGX's release workflow (the scope says
+  "on NodeGX's release workflow"; this repository has its own instead, since Studio is released from here).
 
 **Done (STU-008, 2026-10-20, s14).** File → **Publish…** (enabled with a project open) and a **Publish** button at the
 right of the header (the desktop app only: in a browser, `npm run serve`, there is no main process to ask) run one flow
