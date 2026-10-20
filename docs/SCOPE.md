@@ -40,7 +40,7 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 | The project's backend — started (or adopted) on open, stopped on close, shown in the status bar; a template that needs one gets one; Data's "Start a backend" for an app with none | works (2026-10-19) | `check:app` 34/34 |
 | Claude Code — "Connect Claude Code" in the header (and File) registers the NodeGX MCP server for the folder with the NodeGX editor's own writer and shows the command that starts a session there | works (2026-10-19) | `check:editor` 56/56 |
 | Page data — a search is a named item on the page (Design → Page data), read by any element as dynamic data; made or reused through one form, never twice; readers, last run and "N queries on open" counted off the app's own requests; a workflow refreshes an item | works (2026-10-19), R7 ruled | `check:pagedata` 26/26, `check:editor` 71/71 |
-| Workflows on their element (M3) — a ⚡ on every element with a workflow, on the canvas and in the element list; its steps in order on hover; its card full screen from the badge, Back (or Esc) to the element; a card named by its steps until someone renames it | STU-020, STU-021 (2026-10-19, s8), STU-023 (2026-10-20, s9) work | `check:editor` 164/164 |
+| Workflows on their element (M3) — a ⚡ on every element with a workflow, on the canvas and in the element list; its steps in order on hover; its card full screen from the badge, Back (or Esc) to the element; a card named by its steps until someone renames it; the page's cards under their elements, filtered by what they change or what starts them, searched over their steps | STU-020, STU-021 (2026-10-19, s8), STU-023, STU-022 (2026-10-20, s9) work | `check:editor` 169/169 |
 
 [history/](history/) is how it started (NodeGX phase 123, working title "Open Bubble"): the brief, the look, the
 first play test and every ruling taken.
@@ -756,6 +756,31 @@ card" is in the head, the list row and on disk on the element; after a branch an
 emptied, it reads "Branch" again and leaves the file; the Sign in click, never named, reads "Sign in → Go to the
 list", its card's own steps. `check:editor` 164/164 (159 + 5). Mutant (the given name ignored): 162/164, both rename
 checks fail.
+
+**Done (STU-022, 2026-10-20, s9).** Workflow's list is the page's **index**: every card under its element, the
+elements in the order the element list draws them (logic after), each card by its name with its event under it
+(*"When Click · 2 step(s)"*). Above it, a search over **step names and what they change** and two filters:
+
+- **What it does:** *Goes to a page*, *Signs in, up or out*, *Changes <data type>*, *Changes <state or variable>*,
+  *Runs <backend function>*, *Refreshes <page data>*, each with how many cards do it, only those the page has.
+- **What starts it:** *When the page opens* (the page's Did Mount), *When an element appears*, *On a click*, *On
+  typing, Enter or a change*, *A reusable's own event*, *From logic*, *Other events*.
+- The heading says *"11 of 62 workflows"* while a filter or search is on; nothing left offers *Show them all*.
+- **What a card does** is everything its signal reaches: its steps, both sides of a branch, a second wire from the
+  same signal, what a step's own signals go on to (a refresh ends it, as on the card). **A copy of a component
+  does what the nodes inside it do**, its own copies too: on the todo template every record write is inside a
+  Command, so "Changes Task" reads Add task → Write history → its writes. This over-counts on purpose: a write
+  inside the component counts whichever of its inputs the card fires.
+- **Not read:** a write made in JavaScript (a Function node's own `fetch`) changes nothing as far as the filter
+  knows. Port names a component gives without words show as they are ("When pickList").
+
+Gate (`check:editor`, on the todo template's Todo page, 62 cards): "Changes Task" lists exactly the 15 cards whose
+signal reaches a Task write, and "Changes todoSelected" exactly the 11 that set it, both read off the files and
+the runtime's own node library (a copy's signal inputs off its Component Inputs), not off Studio; the heading says
+"11 of 62 workflows"; a search for "Go to sign in" lists the one card that reaches it; 18 element headers, each
+once, in the page's order. The page sends a signed-out visitor to Sign in and Design follows the app, so the gate
+cuts that one wire from outside Studio for the section and puts it back. `check:editor` 169/169 (164 + 5).
+Mutant (a copy counts nothing inside it): 168/169, "Changes Task" fails.
 
 ---
 

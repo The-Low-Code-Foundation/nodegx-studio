@@ -276,9 +276,10 @@ try {
   }
   console.log('check: Workflow');
   await b.clickSel('[data-tab=workflow]'); await wait(300);
-  const events = await b.evaluate('[...document.querySelectorAll("#events .row")].map(r => r.querySelector("small").textContent)');
-  ok(events.some((e) => /^When Sign in: /.test(e)) && events.some((e) => /^When Create account: /.test(e)), 'the sign-in page lists its button events', events);
-  await b.evaluate(`[...document.querySelectorAll("#events .row")].find(r => r.querySelector("small").textContent.startsWith("When Sign in: ")).click()`); await wait(300);
+  const evRow = (id, port = 'Click') => `[...document.querySelectorAll('#events .row[data-node=${JSON.stringify(id)}]')].find(r => r.querySelector('small').textContent.startsWith(${JSON.stringify('When ' + port)}))`;
+  const events = JSON.parse(await b.evaluate('JSON.stringify([...document.querySelectorAll("#events .row")].map(r => r.dataset.node))'));
+  ok(events.includes(signInBtn) && events.includes(createBtn), 'the sign-in page lists its button events', events);
+  await b.evaluate(`${evRow(signInBtn)}.click()`); await wait(300);
   const steps = await b.evaluate('[...document.querySelectorAll("#steps .step h3")].map(r => r.firstChild.textContent)');
   ok(steps.length >= 1 && /Log In/i.test(steps[0]), 'the Sign in click\'s first step is the Log In action', steps);
   await b.clickSel('#steps .step .acts button'); await wait(200);
@@ -787,7 +788,7 @@ try {
     ok(/exactly what notes asks/.test(toastText) && byName('titled')?.parameters?.visualFilter?.conditions?.length === 1 && queries().length === 3, 'removing its condition would make it ask what notes asks: refused, and the file keeps the condition', toastText);
     // Workflow: a step refreshes an item; it never writes a query of its own
     await b.clickSel('[data-tab=workflow]'); await wait(300);
-    await b.evaluate(`[...document.querySelectorAll("#events .row")].find(r => r.querySelector("small").textContent.startsWith("When Sign in: Click")).click()`); await wait(300);
+    await b.evaluate(`${evRow(signInBtn)}.click()`); await wait(300);
     const addRows = await b.evaluate(`document.querySelectorAll('#steps .addrow').length`);
     await clickText('#steps .addrow button', 'Add an action');
     await b.until(`document.querySelectorAll('.menu .item').length > 0`, 4000);
@@ -1029,6 +1030,66 @@ try {
     n0 = await shows();
     await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Pages/Sign in'; s.dispatchEvent(new Event('change')); })()`);
     await rebuilt(n0); await wait(600);
+  }
+  console.log('check: the workflows index (STU-022)');
+  {
+    // the Todo page: 18 Set Variable steps over 5 names, and Command copies whose record writes are inside their component
+    const TODO = 'Pages/Todo';
+    // Todo sends a signed-out visitor to Sign in and Design follows the app there (s3); this copy's "Signed in?" No wire is cut
+    // from outside Studio for the section, and put back after ("Go to sign in" is still reached from Sign out)
+    const todoWires = join(project, 'components', TODO, 'connections.json'), keptWires = readFileSync(todoWires, 'utf8');
+    const outsideWrite = (text) => { writeFileSync(todoWires + '.tmp-check', text); renameSync(todoWires + '.tmp-check', todoWires); };
+    {
+      const tn = onDisk(`components/${TODO}/nodes.json`).nodes, nav = tn.find((n) => n.label === 'Go to sign in')?.id, gate = tn.find((n) => n.label === 'Signed in?')?.id;
+      const cj = JSON.parse(keptWires); cj.connections = cj.connections.filter((w) => !(w.fromId === gate && w.fromProperty === 'onfalse' && w.toId === nav));
+      outsideWrite(JSON.stringify(cj, null, 2));
+      await b.until(`__ob.store.readComponent(${JSON.stringify(TODO)}).files.connections.connections.length === ${cj.connections.length}`, 5000).catch(() => {}); await wait(300);
+    }
+    let n0 = await shows();
+    await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = ${JSON.stringify(TODO)}; s.dispatchEvent(new Event('change')); })()`);
+    await rebuilt(n0).catch(() => {}); await wait(600);
+    await b.clickSel('[data-tab=workflow]'); await wait(500);
+    const onPage = await page();
+    // the truth, off the files and the runtime's own node library (not Studio's reading): every node a listed card's signal
+    // reaches through signal inputs; a copy of a component writes what any node inside it writes
+    const lib = JSON.parse(await b.evaluate(`JSON.stringify(Object.fromEntries(__ob.preview.nodeLibrary.nodetypes.map(t => [t.name, [...(t.ports || []), ...(t.dynamicports || []).flatMap(d => d.ports || [])].filter(p => p.plug !== 'output' && (p.type === 'signal' || p.type?.name === 'signal')).map(p => p.name)])))`));
+    const files = (key) => ({ nodes: onDisk(`components/${key}/nodes.json`).nodes, connections: onDisk(`components/${key}/connections.json`).connections });
+    const signalIn = (type, port) => (type.startsWith('/') ? files(type.slice(1)).nodes.some((n) => n.type === 'Component Inputs' && (n.ports || []).some((p) => p.name === port && p.type === 'signal')) : (lib[type] || []).includes(port));
+    const todo = files(TODO), nodeOf = new Map(todo.nodes.map((n) => [n.id, n]));
+    const reach = (node, port) => { const seen = new Set([node]), out = [], q = [[node, port]]; while (q.length) { const [f, fp] = q.shift(); for (const w of todo.connections) { if (w.fromId !== f || (fp && w.fromProperty !== fp)) continue; const t = nodeOf.get(w.toId); if (!t || seen.has(t.id) || !signalIn(t.type, w.toProperty)) continue; seen.add(t.id); out.push(t); q.push([t.id, null]); } } return out; };
+    const writes = (n, coll, seen = new Set()) => { if (/^(New|Set|Delete)DbModelProperties$/.test(n.type)) return n.parameters?.collectionName === coll; if (!n.type.startsWith('/') || seen.has(n.type)) return false; seen.add(n.type); return files(n.type.slice(1)).nodes.some((x) => writes(x, coll, seen)); };
+    const listed = async () => JSON.parse(await b.evaluate(`JSON.stringify([...document.querySelectorAll('#events .row')].map(r => r.dataset.node + '|' + r.dataset.port).sort())`));
+    const rows = await listed();
+    const truth = (pred) => rows.filter((k) => { const [id, port] = k.split('|'); return reach(id, port).some(pred); }).sort();
+    const pick = async (id, value) => { await b.evaluate(`(() => { const s = document.getElementById(${JSON.stringify(id)}); s.value = ${JSON.stringify(value)}; s.dispatchEvent(new Event('change')); })()`); await wait(300); };
+    const diff = (want, got) => ({ want: want.length, got: got.length, missing: want.filter((x) => !got.includes(x)).slice(0, 4), extra: got.filter((x) => !want.includes(x)).slice(0, 4) });
+    const task = truth((n) => writes(n, 'Task'));
+    await pick('wfeffect', 'data:Task');
+    const gotTask = await listed();
+    ok(onPage === TODO && task.length > 0 && task.length < rows.length && JSON.stringify(gotTask) === JSON.stringify(task), 'STU-022: "Changes Task" lists exactly the cards with a step that writes Task, a Command copy counting what is inside it', { page: onPage, rows: rows.length, ...diff(task, gotTask) });
+    const chosen = truth((n) => n.type === 'Set Variable' && n.parameters?.name === 'todoSelected');
+    await pick('wfeffect', 'state:todoSelected');
+    const gotChosen = await listed();
+    ok(chosen.length > 0 && chosen.length < rows.length && JSON.stringify(gotChosen) === JSON.stringify(chosen), 'STU-022: "Changes todoSelected" lists exactly the cards with a step setting it', diff(chosen, gotChosen));
+    const counted = await b.evaluate(`document.getElementById('wfcount').textContent`);
+    ok(counted === `${chosen.length} of ${rows.length} workflows`, 'STU-022: the list says how many of the page\'s workflows the filter leaves', counted);
+    await pick('wfeffect', '');
+    await b.evaluate(`(() => { const i = document.getElementById('wfsearch'); i.value = 'Go to sign in'; i.dispatchEvent(new Event('input')); })()`); await wait(300);
+    const out = truth((n) => n.label === 'Go to sign in');
+    const gotOut = await listed();
+    ok(out.length > 0 && JSON.stringify(gotOut) === JSON.stringify(out), 'STU-022: a search for a step\'s name ("Go to sign in") lists the cards that reach that step', diff(out, gotOut));
+    await b.evaluate(`(() => { const i = document.getElementById('wfsearch'); i.value = ''; i.dispatchEvent(new Event('input')); })()`); await wait(200);
+    // grouped by element, in the order the element list draws them: the headers' order is the page's visual order
+    const heads = JSON.parse(await b.evaluate(`JSON.stringify([...document.querySelectorAll('#events .evhead')].map(e => e.dataset.node))`));
+    const visual = JSON.parse(await b.evaluate(`JSON.stringify(__ob.visualIds ?? null)`));
+    const inOrder = visual ? heads.filter((id) => visual.includes(id)).every((id, i, a) => i === 0 || visual.indexOf(a[i - 1]) < visual.indexOf(id)) : null;
+    ok(heads.length > 1 && new Set(heads).size === heads.length && inOrder !== false, 'STU-022: the cards sit under their element, each element once, in the page\'s order', { heads: heads.length, inOrder });
+    await shot('workflow-index');
+    outsideWrite(keptWires);
+    await b.until(`__ob.store.readComponent(${JSON.stringify(TODO)}).files.connections.connections.length === ${JSON.parse(keptWires).connections.length}`, 5000).catch(() => {}); await wait(600);
+    n0 = await shows();
+    await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Pages/Sign in'; s.dispatchEvent(new Event('change')); })()`);
+    await rebuilt(n0).catch(() => {}); await wait(600);
   }
   ok((await status()).startsWith('App on screen'), 'after every edit the app still validates and draws', await status());
   const problems = b.problems.filter((p) => !/Invalid connection|doesn't have a port|Failed to load resource|fonts\.g|^\[noodl\]/.test(p)); // `[noodl]` lines are the app's own runtime (a Navigate with no target yet), not the editor

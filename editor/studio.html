@@ -334,6 +334,11 @@
   .menu.renamereusable > input { margin: 4px 8px; width: calc(100% - 16px); }
   .menu.renamereusable .foot { display: flex; justify-content: flex-end; padding: 4px 8px 0; }
   .events .row small { color: var(--muted); font-size: 11px; }
+  .wffilters { display: flex; gap: 6px; padding: 4px 12px 2px; }
+  .wffilters select { flex: 1; min-width: 0; font-size: 12px; }
+  .wffilters select.on { border-color: var(--accent); color: var(--accent-ink); }
+  .events .evhead { display: flex; align-items: center; gap: 6px; padding: 10px 8px 2px; font-size: 11px; font-weight: 600; color: var(--muted); border-top: 1px solid var(--line); margin-top: 4px; }
+  .events .evhead:first-child { border-top: 0; margin-top: 0; }
   .events .row[aria-selected=true] small { color: var(--accent-ink); opacity: .75; }
   #steps { overflow: auto; padding: 24px 28px; }
   .wf { max-width: 860px; }
@@ -517,7 +522,9 @@
 
     <section class="tab" id="workflow" hidden>
       <aside>
-        <h3 class="sec">Workflows on this page <button class="tiny primary" id="newevent"><svg class="i"><use href="#i-plus"/></svg>New</button></h3>
+        <div class="search"><svg class="i"><use href="#i-search"/></svg><input type="text" id="wfsearch" placeholder="Search steps and what they change"></div>
+        <div class="wffilters"><select id="wfeffect" aria-label="What it does"></select><select id="wftrigger" aria-label="What starts it"></select></div>
+        <h3 class="sec"><span id="wfcount">Workflows on this page</span> <button class="tiny primary" id="newevent"><svg class="i"><use href="#i-plus"/></svg>New</button></h3>
         <div class="events list" id="events"></div>
       </aside>
       <div id="steps"><div class="empty">Pick a workflow on the left.</div></div>
@@ -883,7 +890,7 @@ function writeJsonFile(path, value) { snapshot(); files.write(path, JSON.stringi
 
 /* ================= the real app ================= */
 const preview = await NodegxPreview.mountPreview($('app'), { runtimeBase: '/runtime/' });
-window.__ob = { preview, get store() { return store; }, get files() { return files; }, ports: (id) => editablePorts(byId[id]) };
+window.__ob = { preview, get store() { return store; }, get files() { return files; }, get visualIds() { return visualIds; }, ports: (id) => editablePorts(byId[id]) };
 let lib, libIndex = new Map();
 let lastShow = null;
 let rebuildTimer;
@@ -2975,12 +2982,105 @@ function backFromCard() {
   switchTab('design');
   if (back && back.page === pageKey && byId[back.node]) { select(back.node); elOf(back.node)?.scrollIntoView({ block: 'nearest' }); }
 }
+/* ---- STU-022: the element tree is the index. Every card on the page under its element, in the tree's order (logic after),
+   filtered by what it does (goes to a page, changes Task, …) and by what starts it, searched over its steps and their targets ---- */
+// every node a card's signal reaches: its steps, both sides of a branch, a second wire from the same signal, what a step's
+// own signals go on to; a page data item ends it (a refresh), as in the card
+function reachOf(ev) {
+  const out = [], seen = new Set([ev.node]), queue = [[ev.node, ev.port]];
+  while (queue.length) {
+    const [node, port] = queue.shift();
+    for (const c of conns) {
+      if (c.fromId !== node || (port ? c.fromProperty !== port : !isSignalPort(byId[node], 'output', c.fromProperty))) continue;
+      const to = byId[c.toId];
+      if (!to || seen.has(c.toId) || to.metadata?.pageDataShown || !isSignalPort(to, 'input', c.toProperty)) continue;
+      seen.add(c.toId); out.push(to);
+      if (!isPageDataNode(to)) queue.push([c.toId, null]);
+    }
+  }
+  return out;
+}
+const WRITES = new Set(['NewDbModelProperties', 'SetDbModelProperties', 'DeleteDbModelProperties']);
+/** What one node changes or does; a copy of a component does what the nodes inside it do (its own copies too, once each). */
+function nodeEffects(n, seen) {
+  const p = n.parameters || {};
+  if (WRITES.has(n.type)) return p.collectionName ? [{ kind: 'data', target: p.collectionName }] : [];
+  if (n.type === 'Set Variable') return p.name ? [{ kind: 'state', target: p.name }] : [];
+  if (n.type === 'RouterNavigate' || n.type === 'Navigate To Path') return [{ kind: 'nav', target: p.target ? String(p.target).split('/').pop() : String(p.path ?? '') }];
+  if (/^net\.noodl\.user\.(LogIn|LogOut|SignUp)$/.test(n.type)) return [{ kind: 'user' }];
+  if (n.type === 'CloudFunction2' && p.function) return [{ kind: 'backend', target: p.function }];
+  if (n.type.startsWith('/')) {
+    const key = n.type.slice(1);
+    if (seen.has(key)) return []; seen.add(key);
+    let inside; try { inside = store.readComponent(key).files.nodes.nodes; } catch { return []; }
+    return inside.flatMap((x) => nodeEffects(x, seen));
+  }
+  return [];
+}
+const effectKey = (e) => (e.kind === 'nav' || e.kind === 'user' ? e.kind : `${e.kind}:${e.target}`);
+const EFFECT_GROUPS = [['nav', null], ['user', null], ['data', 'Changes data'], ['state', 'Changes a state or variable'], ['backend', 'Runs on the backend'], ['refresh', 'Refreshes page data']];
+function effectLabel(key) {
+  if (key === 'nav') return 'Goes to a page';
+  if (key === 'user') return 'Signs in, up or out';
+  const [kind, ...rest] = key.split(':'); const target = rest.join(':');
+  return { data: `Changes ${target}`, state: `Changes ${target}`, backend: `Runs ${target}`, refresh: `Refreshes ${target}` }[kind] ?? key;
+}
+const TRIGGERS = [['open', 'When the page opens'], ['shown', 'When an element appears'], ['click', 'On a click'], ['change', 'On typing, Enter or a change'], ['reusable', "A reusable's own event"], ['logic', 'From logic'], ['other', 'Other events']];
+function triggerKind(ev) {
+  const n = byId[ev.node];
+  if (/^did ?mount$/i.test(ev.port)) return ev.node === pageRootId() || n.type === 'Page' ? 'open' : 'shown';
+  if (/click|press|tap/i.test(ev.port)) return 'click';
+  if (/change|enter|submit/i.test(ev.port)) return 'change';
+  if (n.type.startsWith('/')) return 'reusable';
+  return isVisualType(n.type) ? 'other' : 'logic';
+}
+function workflowIndex() {
+  return events().map((ev) => {
+    const reached = reachOf(ev);
+    const effects = reached.flatMap((n) => (isPageDataNode(n) ? [{ kind: 'refresh', target: itemById(n.id)?.name ?? labelOf(n.id) }] : nodeEffects(n, new Set())));
+    const words = [cardName(ev), eventTitle(ev), eventSummary(ev), ...reached.flatMap((n) => [n.label || '', typeName(n.type)]), ...effects.map((e) => e.target || '')];
+    return { ev, keys: new Set(effects.map(effectKey)), trigger: triggerKind(ev), text: words.join('\n').toLowerCase() };
+  });
+}
+const wfFilter = { q: '', effect: '', trigger: '' };
+function fillWfFilters(all) {
+  const count = (pred) => all.filter(pred).length;
+  const eff = $('wfeffect'), trg = $('wftrigger');
+  const keys = new Set(all.flatMap((c) => [...c.keys])); if (wfFilter.effect) keys.add(wfFilter.effect);
+  eff.innerHTML = ''; eff.append(h('option', { value: '' }, 'Any effect'));
+  for (const [kind, title] of EFFECT_GROUPS) {
+    const mine = [...keys].filter((k) => k === kind || k.startsWith(kind + ':')).sort((a, b) => effectLabel(a).localeCompare(effectLabel(b)));
+    if (!mine.length) continue;
+    const into = title ? h('optgroup', { label: title }) : eff;
+    for (const k of mine) into.append(h('option', { value: k }, `${effectLabel(k)} (${count((c) => c.keys.has(k))})`));
+    if (title) eff.append(into);
+  }
+  eff.value = wfFilter.effect; eff.classList.toggle('on', !!wfFilter.effect);
+  trg.innerHTML = ''; trg.append(h('option', { value: '' }, 'Any trigger'));
+  for (const [k, label] of TRIGGERS) { const n = count((c) => c.trigger === k); if (n || wfFilter.trigger === k) trg.append(h('option', { value: k }, `${label} (${n})`)); }
+  trg.value = wfFilter.trigger; trg.classList.toggle('on', !!wfFilter.trigger);
+}
+$('wfsearch').oninput = (e) => { wfFilter.q = e.target.value.trim(); renderEvents(); };
+$('wfeffect').onchange = (e) => { wfFilter.effect = e.target.value; renderEvents(); };
+$('wftrigger').onchange = (e) => { wfFilter.trigger = e.target.value; renderEvents(); };
 function renderEvents() {
   const box = $('events'); box.innerHTML = '';
-  const list = events();
-  if (!list.length) box.append(h('div', { class: 'hint' }, 'No workflows on this page yet. New picks an element and one of its events.'));
-  for (const ev of list) box.append(h('div', { class: 'row', 'data-node': ev.node, 'data-port': ev.port, 'aria-selected': selEvent && selEvent.node === ev.node && selEvent.port === ev.port, onclick: () => { selEvent = ev; renderWorkflow(); } },
-    h('span', {}, cardName(ev)), h('small', {}, `${eventTitle(ev)} · ${isVisualType(byId[ev.node].type) ? 'element' : 'logic'} · ${countSteps(chain(ev.node, ev.port))} step(s)`)));
+  const all = workflowIndex();
+  fillWfFilters(all);
+  const q = wfFilter.q.toLowerCase();
+  const shown = all.filter((c) => (!wfFilter.effect || c.keys.has(wfFilter.effect)) && (!wfFilter.trigger || c.trigger === wfFilter.trigger) && (!q || c.text.includes(q)));
+  const filtered = !!(q || wfFilter.effect || wfFilter.trigger);
+  $('wfcount').textContent = filtered ? `${shown.length} of ${all.length} workflows` : 'Workflows on this page';
+  if (!all.length) return box.append(h('div', { class: 'hint' }, 'No workflows on this page yet. New picks an element and one of its events.'));
+  if (!shown.length) return box.append(h('div', { class: 'hint' }, 'No workflow on this page does that. ', h('button', { class: 'quiet tiny', onclick: () => { Object.assign(wfFilter, { q: '', effect: '', trigger: '' }); $('wfsearch').value = ''; renderEvents(); } }, 'Show them all')));
+  const order = new Map(visualIds.map((id, i) => [id, i]));
+  const byElement = new Map();
+  for (const c of shown) { if (!byElement.has(c.ev.node)) byElement.set(c.ev.node, []); byElement.get(c.ev.node).push(c); }
+  for (const id of [...byElement.keys()].sort((a, b) => (order.get(a) ?? Infinity) - (order.get(b) ?? Infinity))) {
+    box.append(h('div', { class: 'evhead', 'data-node': id }, icon(glyphOf(byId[id].type)), labelOf(id)));
+    for (const { ev } of byElement.get(id)) box.append(h('div', { class: 'row', 'data-node': ev.node, 'data-port': ev.port, 'aria-selected': selEvent && selEvent.node === ev.node && selEvent.port === ev.port, onclick: () => { selEvent = ev; renderWorkflow(); } },
+      h('span', {}, cardName(ev)), h('small', {}, `When ${portLabel(byId[ev.node], 'output', ev.port)} · ${countSteps(chain(ev.node, ev.port))} step(s)`)));
+  }
 }
 /** The chain from a signal: follow the first wired target, then its Done, and so on; a Condition ends the chain with two of its own. */
 function chain(node, port, visited = new Set()) {
