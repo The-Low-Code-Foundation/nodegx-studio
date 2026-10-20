@@ -53,7 +53,7 @@ Studio, opens or imports an app, changes it, and publishes it.** What that needs
 | | what | state |
 |---|---|---|
 | 1 | **STU-008 Publish** to a folder | done (s14) |
-| 2 | **STU-007 a downloadable build**: signed and notarised with NodeGX's Developer ID; Windows and Linux | signed locally with the Developer ID and gated 46/46 (s14); notarising waits on the five secrets being visible to this repository; Windows / Linux in CI, first run pending |
+| 2 | **STU-007 a downloadable build**: signed and notarised with NodeGX's Developer ID; Windows and Linux | signed locally with the Developer ID and gated 46/46 (s14); notarising waits on the five secrets being visible to this repository; Windows / Linux built and smoke-opened in CI |
 | 3 | **STU-040 Import an App…** with the report shown in the app | done (s14) |
 | 4 | **A NodeGX npm release** carrying P112-OWN020-UNWIREDSIGNAL and P123-STU008-BACKENDPUBLIC, then Studio's pins bumped and `npm run vendor` at that commit | waits on NodeGX |
 | 5 | **main pushed** | waits on Richard |
@@ -530,10 +530,14 @@ NodeGX editor builds with; the config is `build` in package.json.
   does) gets `spctl -a -t exec` → *rejected*. A tester has to open it from System Settings → Privacy & Security →
   Open Anyway. A notarised build is what makes it open with a double-click. (The quarantined copy was assessed,
   not launched.)
-- **Written, not run: `.github/workflows/package.yml`** builds on macOS 14, Windows and Ubuntu, opens each unpacked
-  app with `--smoke` (the welcome screen, then a copy of the todo template; `xvfb-run` on Linux) and keeps the
-  installers as artifacts. It runs on `workflow_dispatch` and on `v*` tags, once main is on GitHub. Studio has never
-  been started on Windows or Linux.
+- **`.github/workflows/package.yml`, green on all three (run 39446021051, 2026-10-20):** it builds on macOS 14, Windows
+  and Ubuntu, opens each unpacked app with `--smoke` (the welcome screen, then a copy of the todo template; `xvfb-run`
+  on Linux) and keeps the installers as artifacts; `workflow_dispatch` and `v*` tags. All three print *ready welcome ·
+  0 recent · 5 templates* and *ready todo pages=2 visual=30*. That is Studio's first start on Windows and Linux, and
+  it is a smoke, not the desktop gate. The first run (39445060768) failed three ways, all fixed: electron-builder
+  tried to publish a GitHub release (`--publish never` now), and Windows' checkout turned `vendor/` into CRLF so
+  `check:vendor` failed every file (`.gitattributes`: `vendor/** -text`). Not explained yet: the same smoke on this Mac
+  reads *visual=13* for a fresh copy. The macOS job had no signing secrets, so it was ad hoc.
 - **Not in it:** an Intel (x64) or universal macOS build; auto-update; NodeGX's release workflow (the scope says
   "on NodeGX's release workflow"; this repository has its own instead, since Studio is released from here).
 
