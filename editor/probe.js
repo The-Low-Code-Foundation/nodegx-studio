@@ -5,7 +5,7 @@
  * each page data item last ran — counted off the requests the app really made, never off the nodes that could make
  * them. Nothing here changes a request or its answer.
  *
- *   window.__studioLog = [{ kind: 'request', method, url, path, body, t0, t1, status, rows } | { kind: 'nav', path, t }]
+ *   window.__studioLog = [{ kind: 'request', method, url, path, body, t0, t1, status, rows, fetch? } | { kind: 'nav', path, t }]
  */
 (function () {
   var log = (window.__studioLog = []);
@@ -37,6 +37,45 @@
     }
     return send.apply(this, arguments);
   };
+  // the same for fetch (a script's own call): one entry, its start and its answer (a run is not over while one waits)
+  if (window.fetch) {
+    var fetch0 = window.fetch;
+    window.fetch = function (input, init) {
+      var method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase(), url = String((input && input.url) || input);
+      var e = { kind: 'request', method: method, url: url, page: here(), t0: performance.now(), fetch: true };
+      try { e.path = new URL(url, location.href).pathname; } catch (_) { e.path = url; }
+      try { e.body = init && typeof init.body === 'string' ? JSON.parse(init.body) : undefined; } catch (_) { e.body = undefined; }
+      log.push(e);
+      var p = fetch0.apply(this, arguments);
+      p.then(function (r) { e.t1 = performance.now(); e.status = r.status; }, function () { e.t1 = performance.now(); e.status = 0; });
+      return p;
+    };
+  }
+
+  /*
+   * The page's timers (a recording of one run, ./runwatch.mjs): every setTimeout still waiting, when it was made, and
+   * whether it is the run's: made within 50 ms of a signal (the run watch writes `__studioLastSignal`), or from inside
+   * the callback of a timer that was. A timer longer than 10 s is never the run's (a clock).
+   *
+   *   window.__studioTimers = { pending: Map<id, { t, ms, run }> }
+   */
+  var timers = (window.__studioTimers = { pending: new Map() });
+  var inRun = false;
+  var setT = window.setTimeout, clearT = window.clearTimeout;
+  window.setTimeout = function (fn, ms) {
+    var t = performance.now(), wait = Number(ms) || 0;
+    var run = wait <= 10000 && (inRun || (window.__studioLastSignal !== undefined && t - window.__studioLastSignal <= 50));
+    var args = Array.prototype.slice.call(arguments, 2), id;
+    var cb = function () {
+      timers.pending.delete(id);
+      var was = inRun; inRun = run;
+      try { return typeof fn === 'function' ? fn.apply(this, args) : (0, eval)(String(fn)); } finally { inRun = was; }
+    };
+    id = setT.call(window, cb, ms);
+    timers.pending.set(id, { t: t, ms: wait, run: run });
+    return id;
+  };
+  window.clearTimeout = function (id) { timers.pending.delete(id); return clearT.call(window, id); };
 
   /*
    * The screen (STU-031): every change to the app's document from the frame's first moment, so a recording of the

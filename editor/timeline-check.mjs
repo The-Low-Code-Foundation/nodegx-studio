@@ -15,8 +15,9 @@
  *   - the page-open workflow is one row, linked to its card; clicking it opens that card, clicking the query's row
  *     selects its element in Design;
  *   - then Record from now, a second task added: the Add button's card is a row, before the create request's row.
- *   - step mode (STU-033), armed from that recording's Add task row: a third task added waits before each step, and
- *     the app's own request log has no write until Next lets the record's creation run.
+ *   - Record waits for the app and stops by itself once the run is over (STU-033); the steps of every run are marks
+ *     on the Workflows lane, and ▶ / ← go through them one at a time with their in and out; a write whose answer is
+ *     held 3 s at the network keeps the recording open until it comes.
  *
  *   node editor/timeline-check.mjs [--shots]     PASS n/n and exit 0, or the failing lines and exit 1
  *   TIMELINE_DUMP=1 node editor/timeline-check.mjs   also prints every row of the page opening's recording
@@ -29,7 +30,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { browser } from './cdp.mjs';
 import { buildTimeline, msText, shotAt, stepValues } from './timeline.mjs';
-import { stepRule } from './stepper.mjs';
+import { runOver, lastActivity, QUIET_MS } from './runwatch.mjs';
 import { nodegxRepo } from '../lib/nodegx.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -101,19 +102,18 @@ console.log('timeline: fixtures');
     ok(shotAt([{ t: 10 }, { t: 20 }, { t: 30 }], 5) === -1 && shotAt([{ t: 10 }, { t: 20 }, { t: 30 }], 20) === 1 && shotAt([{ t: 10 }, { t: 20 }, { t: 30 }], 29.9) === 1 && shotAt([{ t: 10 }, { t: 20 }, { t: 30 }], 99) === 2,
       'the screen at a moment is the last copy taken at or before it, none before the first');
   }
-  // STU-033: which signals step mode holds, the timeline's rule for a run's steps
+  // STU-033: when a recorded run is over
   {
-    const rule = stepRule({ node: 'btn', port: 'onClick', reach: new Set(['make', 'nav', 'toast']) });
-    const sig = (t, fromNode, fromPort, toNode) => ({ t, fromNode, fromPort, toNode, toPort: 'x' });
-    const a = rule.take(sig(5, 'btn', 'onClick', 'make')), stray = rule.take(sig(6, 'other', 'done', 'nav')), b = rule.take(sig(30, 'make', 'stored', 'nav'));
-    ok(a?.hold && a.step.n === 1 && stray === null && b?.hold && b.step.n === 2 && a.run === b.run,
-      "step mode holds the card's event's signal as step 1 and a signal on from a node in the run as step 2; a signal into a step from outside the run is not held", { a: a && a.step.n, stray, b: b && b.step.n });
-    const via = rule.take({ ...sig(32, 'make', 'stored', 'nav'), kind: 'value' });
-    ok(via === null, 'a value from a step is not a step (only the card\'s own event can arrive as a value)', via);
-    rule.free();
-    const c = rule.take(sig(31, 'make', 'stored', 'toast')), d = rule.take(sig(90, 'btn', 'onClick', 'make'));
-    ok(c && !c.hold && c.step.n === 3 && d?.hold && d.step.n === 1 && d.run !== c.run,
-      '"Run the rest": the rest of the run goes through, still counted; the next run pauses again from step 1', { c: c && { hold: c.hold, n: c.step.n }, d: d && { hold: d.hold, n: d.step.n } });
+    const req = (t0, t1) => ({ kind: 'request', t0, t1 });
+    const v1 = runOver({ now: 20000, t0: 100, last: 120, requests: [req(110)] });
+    const v2 = runOver({ now: 20000, t0: 100, last: 120, requests: [req(50)] });
+    ok(!v1.done && /answer from the backend/.test(v1.waiting) && v2.done,
+      'a run is not over while a request it made waits for its answer, however long; a request from before the run does not hold it', { v1, v2 });
+    const v3 = runOver({ now: 120 + QUIET_MS - 1, t0: 100, last: 120 }), v4 = runOver({ now: 120 + QUIET_MS, t0: 100, last: 120 });
+    ok(!v3.done && v4.done && v3.waiting === null, `quiet for ${QUIET_MS} ms with nothing waiting, the run is over (a Did Mount a moment after a click is the same run)`, { v3, v4 });
+    const v5 = runOver({ now: 5000, t0: 100, last: 120, timers: 1 }), v6 = runOver({ now: 40000, t0: 100, last: 120, timers: 1 });
+    ok(!v5.done && v5.waiting === 'a timer' && v6.done, 'a timer the run set holds it open, for 30 s at most', { v5, v6 });
+    ok(lastActivity(100, 120, [req(110, 3000), req(50, 9000)]) === 3000, "an answer is the run's last activity when it comes after its last signal (an answer to a request from before the run is not)");
   }
   // a card's event through a component's inputs: true then false, values, as Component Inputs sends a signal on
   {
@@ -198,14 +198,13 @@ try {
 
   // ---- Record the page opening, Stop
   await b.clickSel('#recbtn'); await wait(300);
-  ok(/^Stop/.test(await recState()) && !(await b.evaluate(`document.getElementById('timeline').hidden`)), 'Record starts a recording and opens the timeline under the page');
+  ok(/^Waiting for the app/.test(await recState()) && !(await b.evaluate(`document.getElementById('timeline').hidden`)) && !(await b.evaluate('!!__ob.timeline')), 'Record waits for the app (nothing recorded yet) and opens the timeline under the page', await recState());
   n0 = await shows();
   await b.clickSel('#tlopen');
   await rebuilt(n0);
-  await b.until(`/^Stop/.test(document.getElementById('recbtn').textContent)`, 10000);
-  await wait(4000); // the Todo page's queries and the lists drawn from them
-  await b.clickSel('#recbtn'); await wait(500);
-  ok(/^Record/.test(await recState()), 'Stop ends it', await recState());
+  // no Stop: the opening's queries answered and its lists drawn, it stops by itself
+  const stoppedItself = await b.until(`/^Record/.test(document.getElementById('recbtn').textContent) && !!__ob.timeline`, 20000);
+  ok(stoppedItself, 'the page opening is recorded and the recording stops by itself once the page has finished opening', await recState());
   const rows = await rowsNow();
 
   // the witnesses, read from the frame: the probe's requests, the runtime's trace, the document
@@ -289,13 +288,18 @@ try {
     await b.clickSel('[data-tab=design]'); await wait(400);
   }
 
-  // ---- Record from now: a second task added
-  await b.clickSel('#recbtn'); await wait(300);
+  // ---- Record from now: a second task added. Record waits for the app; the click starts it; it stops by itself
+  await b.clickSel('#recbtn'); await wait(800);
+  const primed = { state: await recState(), same: await b.evaluate('__ob.timeline.fromOpen === true') };
   const SECOND = 'Second task, recorded';
   const added = await addTask(SECOND);
-  await wait(1500);
-  await b.clickSel('#recbtn'); await wait(500);
+  const clickT = await b.evaluate(`${W}.performance.now()`);
+  const ended = await b.until(`/^Record/.test(document.getElementById('recbtn').textContent) && __ob.timeline.fromOpen === false`, 20000);
+  const endedAt = await b.evaluate(`${W}.performance.now()`);
   const rows2 = await rowsNow();
+  const tl2 = JSON.parse(await b.evaluate('JSON.stringify({ length: __ob.timeline.length, first: __ob.timeline.rows[0]?.t, lanes: __ob.timeline.rows.map((r) => r.lane) })'));
+  ok(/^Waiting for the app/.test(primed.state) && primed.same && ended && tl2.first !== undefined && tl2.first < 5 && tl2.length >= QUIET_MS && endedAt - clickT < 8000,
+    "Record waits through 0.8 s of nothing (the last recording stays); the click's first signal starts the recording at 0 ms, and it stops by itself once the run is over", { primed, ended, tl2: { ...tl2, lanes: undefined }, after: Math.round(endedAt - clickT) });
   // the Add button is inside the task list: its card is the reusable's, shown here as the list's
   const addBtn = files('Todo/Task list').nodes.find((n) => n.type === 'net.noodl.controls.button' && n.label === 'Add')?.id;
   const addRow = rows2.find((r) => r.lane === 'workflow' && r.link?.startsWith(`card:${addBtn}.`));
@@ -307,11 +311,11 @@ try {
   // ---- STU-032: the Add card's step, with what went in and what came out, and the screen when it ran
   const fn = files('Todo/Task list').nodes.find((n) => n.label === 'The title, if one was typed')?.id;
   const sent = JSON.parse(await b.evaluate(`JSON.stringify(${W}.Noodl.Navigation._noodlRuntime.context.getTraceEvents(0).filter(e => e.fromNode === ${JSON.stringify(fn)} && e.kind === 'value').map(e => e.fromPort + ' ' + e.value))`));
-  if (addRow) await b.evaluate(`[...document.querySelectorAll('#tlrows .tlrow')].find(r => r.dataset.link === ${JSON.stringify(addRow.link)}).querySelector('button.open').click()`);
-  await wait(300);
-  const step = JSON.parse(await b.evaluate(`JSON.stringify((() => { const s = document.querySelector('#tlrows .tlstep[data-node=${JSON.stringify(fn)}]'); return s && { t: Number(s.dataset.t), text: s.querySelector('.what').firstChild.textContent, ins: s.querySelector('[data-io=in]').textContent, outs: s.querySelector('[data-io=out]').textContent }; })())`));
+  const detail = () => b.evaluate(`JSON.stringify((() => { const d = document.getElementById('tldetail'), s = document.querySelector('#tlrows .tlstep.now'); return { node: s?.dataset.node ?? null, head: d.querySelector('.dh')?.textContent ?? '', name: d.querySelector('.dname')?.textContent ?? '', ins: d.querySelector('[data-io=in]')?.textContent ?? null, outs: d.querySelector('[data-io=out]')?.textContent ?? null, then: d.querySelector('[data-io=then]')?.textContent ?? null }; })())`).then(JSON.parse);
+  await b.evaluate(`document.querySelector('#tlrows .tlstep[data-node=${JSON.stringify(fn)}]')?.click()`); await wait(300);
+  const step = await detail();
   const q2 = JSON.stringify(SECOND);
-  ok(fn && step && step.ins.includes(q2) && step.outs.includes(q2) && sent.some((v) => v.startsWith('out-text ') && v.includes(q2)) && /sent/.test(step.outs),
+  ok(fn && step.node === fn && step.ins?.includes(q2) && step.outs?.includes(q2) && sent.some((v) => v.startsWith('out-text ') && v.includes(q2)) && /sent/.test(step.outs),
     "the Add card's step shows the typed title going in and coming out, and its signal sent on (the runtime's own trace has that value out of that node)", { fn, step, sent });
   const atStep = step && await (async () => { await b.evaluate(`document.querySelector('#tlrows .tlstep[data-node=${JSON.stringify(fn)}]').click()`); await wait(300); await loaded(await b.evaluate(`document.getElementById('tlsframe').dataset.shot`)); return replay(); })();
   const drawnAt = drawn && await atRow(`[...document.querySelectorAll('#tlrows .tlrow')].find(r => r.dataset.lane === 'screen' && r.querySelector('small').textContent.includes(${q2}))`);
@@ -319,66 +323,51 @@ try {
     'scrubbed to that step, the screen has the title typed in the field and not yet in the list; at the row where the list draws it, it is in the list', { atStep: atStep && { ...atStep, text: atStep.text.slice(0, 100) }, drawnAt: drawnAt && { at: drawnAt.at, has: drawnAt.text.includes(SECOND) } });
   if (shots && atStep) { await b.evaluate(`document.querySelector('#tlrows .tlstep[data-node=${JSON.stringify(fn)}]').click()`); await wait(600); await b.screenshot(join(here, '..', 'docs', 'look', 'stu-032-step.png')); }
 
-  // ---- STU-033: step mode. The second task's recording holds a run of the Add task command's card (a reusable the
-  // Todo page places, with no element of its own, so only the timeline reaches it); its row arms step mode. A third
-  // task added then pauses before each step. Graded against the app's own request log: the write is not made while
-  // its step waits, and it is made once Next lets it go
+  // ---- STU-033: the steps on the waterfall, gone through one at a time. The second task's recording holds a run of
+  // the Add task command (a reusable the Todo page places; its "do" arrives as a value out of Component Inputs)
   const cmd = files('Commands/Add task').nodes, cmdId = (l) => cmd.find((n) => n.label === l)?.id;
   const what = cmd.find((n) => n.type === 'Component Inputs')?.id, jsStep = cmdId('Is there anything to write?'), makeStep = cmdId('Add the task'), histStep = cmdId('Write the history line');
-  const cmdRow = rows2.find((r) => r.lane === 'workflow' && r.link === `card:${what}.do`);
-  if (cmdRow) await b.evaluate(`[...document.querySelectorAll('#tlrows .tlrow')].find(r => r.dataset.link === ${JSON.stringify(cmdRow.link)}).querySelector('button[data-step]').click()`);
-  await wait(300);
-  // step mode is the timeline's drawer while it is on: its header the card and the buttons, its rows the steps
-  const bar = () => b.evaluate(`JSON.stringify((() => { const s = document.getElementById('stepper'), tag = document.querySelector('#sthead .tag'); return { shown: getComputedStyle(s).display !== 'none' && !document.getElementById('timeline').hidden, recording: getComputedStyle(document.getElementById('tlbody')).display !== 'none', title: document.getElementById('sttitle').textContent, tag: tag?.offsetWidth > 0 ? tag.textContent : '', note: document.getElementById('stnote').textContent, next: !document.getElementById('stnext').disabled, steps: [...s.querySelectorAll('.tlstep')].map(x => ({ n: Number(x.dataset.n), node: x.dataset.node, state: x.dataset.state, text: x.textContent, ins: x.querySelector('[data-io=in]')?.textContent ?? null, outs: x.querySelector('[data-io=out]')?.textContent ?? null })) }; })())`).then(JSON.parse);
-  const armed = await bar();
-  ok(cmdRow && armed.shown && !armed.recording && armed.title === cmdRow.text && /not real timing/i.test(armed.tag) && !armed.next && armed.steps.length === 0 && !/places it/.test(armed.note),
-    "a recorded run's row arms step mode for its card: the drawer turns to it, names the card, says it is not real timing, and waits for the app", { cmdRow: cmdRow && { text: cmdRow.text, link: cmdRow.link }, what, armed, workflow: cmdRow ? undefined : rows2.filter((r) => r.lane === 'workflow').map((r) => `${r.link} ${r.text} | ${r.sub}`), loose: cmdRow ? undefined : JSON.parse(await b.evaluate(`JSON.stringify(__ob.timeline.rows.filter((r) => r.minor).map((r) => r.text).slice(0, 20))`)) });
-  const creates = () => b.evaluate(`${W}.__studioLog.filter(e => e.kind === 'request' && e.method === 'POST' && /\\/classes\\/Task$/.test(e.path) && !(e.body && e.body._method)).length`);
-  const heldNow = async (node) => { await b.until(`!!document.querySelector('#ststeps .tlstep[data-state=held][data-node=${JSON.stringify(node)}]')`, 10000).catch(() => null); await wait(250); return bar(); };
-  const THIRD = 'Stepped through, one at a time', q3 = JSON.stringify(THIRD);
-  const made0 = await creates();
-  await typeInto(`[...${W}.document.querySelectorAll('input[type=text], input:not([type])')].find(i => i.offsetParent)`, THIRD);
-  await wait(300);
-  await b.evaluate(`[...${W}.document.querySelectorAll('button')].find(e => e.textContent.trim() === 'Add' && e.offsetParent).click()`);
-  const s1 = await heldNow(jsStep);
-  const h1 = s1.steps.find((x) => x.state === 'held');
-  ok(h1?.n === 1 && h1.node === jsStep && h1.ins?.includes(q3) && s1.next && (await creates()) === made0,
-    'the third task added: step 1 waits before it runs, showing the typed title it will read; no task is written', { held: h1, made: (await creates()) - made0 });
-  await b.clickSel('#stnext');
-  const s2 = await heldNow(makeStep);
-  const h2 = s2.steps.find((x) => x.state === 'held'), r1 = s2.steps.find((x) => x.n === 1);
-  const made2 = await creates();
-  ok(h2?.n === 2 && h2.ins?.includes(q3) && r1?.state === 'ran' && r1.outs?.includes(q3) && made2 === made0 && !(await b.evaluate(`${W}.document.body.innerText.includes(${q3})`)),
-    "Next: step 1 ran and sent the title on; step 2, the record's creation, waits with that title among what it will read, and the app has still written nothing", { held: h2, ran: r1, made: made2 - made0 });
-  await b.clickSel('#stnext');
-  const s3 = await heldNow(histStep);
-  const h3 = s3.steps.find((x) => x.state === 'held'), r2 = s3.steps.find((x) => x.n === 2);
-  const newId = JSON.parse(await b.evaluate(`JSON.stringify(${W}.Noodl.Navigation._noodlRuntime.context.getTraceEvents(0).filter(e => e.fromNode === ${JSON.stringify(makeStep)} && e.fromPort === 'id' && e.kind === 'value').map(e => e.value).at(-1) ?? null)`));
-  ok(h3?.n === 3 && (await creates()) === made0 + 1 && newId && h3.ins?.includes(newId) && r2?.outs?.includes(newId),
-    "Next: the task is written (one create in the app's log), and step 3 waits holding the new record's id, the id the runtime's trace has out of step 2", { held: h3, ran: r2, newId, made: (await creates()) - made0 });
-  if (shots) await b.screenshot(join(here, '..', 'docs', 'look', 'stu-033-step.png'));
-  await b.clickSel('#strest');
-  const listed = await b.until(`${W}.document.body.innerText.includes(${q3})`, 10000).catch(() => false);
-  const rest = await bar();
-  ok(listed && !rest.steps.some((x) => x.state === 'held') && !rest.next,
-    '"Run the rest": the run goes on without pausing and the task is in the list', { listed, rest: { note: rest.note, steps: rest.steps.map((x) => `${x.n} ${x.state}`) } });
-  await b.clickSel('#ststop'); await wait(300);
-  const stopped = await bar();
-  ok(!stopped.shown && stopped.recording && (await b.evaluate(`document.querySelectorAll('#tlrows .tlrow').length`)) > 0, 'Stop stepping gives the drawer back to the recording', stopped);
-  // what was held reached its node whole: the signal's falling edge too, or the command's next run would never start
-  const madeBefore = await creates();
-  const after4 = await addTask('Added after stepping');
-  ok(after4 && (await creates()) === madeBefore + 1, 'with step mode off, the next task is added the ordinary way: the command stepped through still runs', { after4, made: (await creates()) - madeBefore });
+  const lane = JSON.parse(await b.evaluate(`JSON.stringify({ marks: document.querySelectorAll('#tlaxis .track[data-lane=workflow] .mark.step').length, steps: __ob.timeline.rows.filter((r) => !r.minor).reduce((n, r) => n + (r.steps?.length || 0), 0), lines: document.querySelectorAll('#tlrows .tlstep').length, cmd: __ob.timeline.rows.find((r) => r.link?.card?.node === ${JSON.stringify(what)})?.steps?.map((x) => x.node) ?? null })`));
+  ok(lane.steps > 0 && lane.marks === lane.steps && lane.lines === lane.steps && lane.cmd?.join() === [jsStep, makeStep, histStep].join() && true,
+    "every step of every run is a mark on the Workflows lane and a line under its run; the Add task command's run is there with its three steps (a card started through its component's inputs)", lane);
+  // its run's mark on the lane puts the playhead on it; ▶ goes step by step, each step's in and out beside it
+  const cmdK = await b.evaluate(`document.querySelector('#tlrows .tlrow[data-link=${JSON.stringify(`card:${what}.do`)}]')?.dataset.k ?? null`);
+  if (cmdK !== null) await b.evaluate(`document.querySelector('#tlaxis .mark[data-k="${cmdK}"]').click()`);
+  await wait(200);
+  const seen = [];
+  for (let i = 0; i < 3; i++) { await b.clickSel('#tlnext'); await wait(250); seen.push(await detail()); }
+  const newId = JSON.parse(await b.evaluate(`JSON.stringify(${W}.Noodl.Navigation._noodlRuntime.context.getTraceEvents(0).filter(e => e.fromNode === ${JSON.stringify(makeStep)} && e.fromPort === 'id' && e.kind === 'value').map(e => e.value)) `));
+  const [d1, d2, d3] = seen;
+  ok(cmdK !== null && d1.node === jsStep && /^Step 1 of 3/.test(d1.head) && d1.ins?.includes(q2) && d2.node === makeStep && /^Step 2 of 3/.test(d2.head) && d2.ins?.includes(q2) && /creates a Task/.test(d2.then ?? '') && d3.node === histStep && newId.some((id) => d3.ins?.includes(id) && d2.outs?.includes(id)),
+    "▶ from the run goes through its steps one at a time: step 1 reads the typed title, step 2 (the record's creation) reads it too and is followed by the create request, step 3 reads the new record's id that step 2 sent", { cmdK, seen, newId });
+  await b.evaluate(`document.getElementById('timeline').focus()`);
+  await b.key('ArrowLeft', 'ArrowLeft', 37); await wait(250);
+  const back = await detail();
+  if (shots) { await b.clickSel('#tlnext'); await wait(400); await b.screenshot(join(here, '..', 'docs', 'look', 'stu-033-steps.png')); await b.key('ArrowLeft', 'ArrowLeft', 37); await wait(200); }
+  ok(back.node === makeStep && /^Step 2 of 3/.test(back.head), '← goes back one step', back);
 
-  // the Workflow tab's card arms it too, and puts the app in front, ready to use
-  const header = todo.find((n) => n.type === '/Todo/Header')?.id;
-  await b.clickSel('[data-tab=workflow]'); await wait(400);
-  await b.evaluate(`document.querySelector('#events .row[data-node=${JSON.stringify(header)}][data-port=signOut]')?.click()`); await wait(300);
-  await b.evaluate(`document.getElementById('stepthis')?.click()`); await wait(400);
-  const fromCard = { ...(await bar()), use: await b.evaluate(`document.getElementById('previewmode').checked`), designShown: await b.evaluate(`!document.getElementById('design').hidden`) };
-  ok(fromCard.shown && /Sign out|signOut|Header/i.test(fromCard.title) && fromCard.designShown && fromCard.use,
-    "a card's Step through in the Workflow tab arms it and goes to the app, with Use the app on", fromCard);
-  await b.clickSel('#ststop'); await wait(200);
+  // a slow answer: the backend's reply to the next task's write is held 3 s at the network; the recording waits for it
+  await b.send('Fetch.enable', { patterns: [{ urlPattern: '*/classes/Task*', requestStage: 'Request' }] });
+  let heldWrites = 0;
+  const unhook = b.on((m) => {
+    if (m.method !== 'Fetch.requestPaused') return;
+    const r = m.params.request, write = r.method === 'POST' && !/"_method"/.test(r.postData || '');
+    if (write) heldWrites++;
+    setTimeout(() => b.send('Fetch.continueRequest', { requestId: m.params.requestId }).catch(() => {}), write ? 3000 : 0);
+  });
+  await b.clickSel('#recbtn'); await wait(300);
+  const SLOW = 'Waited for the backend';
+  const slowAdded = await (async () => { await typeInto(`[...${W}.document.querySelectorAll('input[type=text], input:not([type])')].find(i => i.offsetParent)`, SLOW); await wait(300); return b.evaluate(`(() => { const btn = [...${W}.document.querySelectorAll('button')].find(e => e.textContent.trim() === 'Add' && e.offsetParent); if (!btn) return false; btn.click(); return true; })()`); })();
+  await wait(2200);
+  const midway = await recState();
+  await b.until(`/^Record/.test(document.getElementById('recbtn').textContent)`, 20000);
+  unhook(); await b.send('Fetch.disable');
+  const rows3 = await rowsNow();
+  const slowCreate = rows3.find((r) => r.lane === 'data' && r.text === 'The app creates a Task');
+  const slowDrawn = rows3.find((r) => r.lane === 'screen' && r.sub.includes(SLOW));
+  const len3 = await b.evaluate('__ob.timeline.length');
+  ok(slowAdded && heldWrites === 1 && /waiting for an answer from the backend/.test(midway) && slowCreate && slowCreate.end - slowCreate.t >= 2900 && slowDrawn && slowDrawn.t >= slowCreate.end && len3 >= slowCreate.end + QUIET_MS - 50,
+    'a write whose answer takes 3 s: the recording says it is waiting for the answer, does not stop before it, and holds the list drawing the task after it', { heldWrites, midway, slowCreate, slowDrawn: slowDrawn && { t: slowDrawn.t, sub: slowDrawn.sub.slice(0, 80) }, len3 });
 
   const problems = b.problems.filter((p) => !/Invalid connection|doesn't have a port|Failed to load resource|fonts\.g|^\[noodl\]/.test(p));
   ok(problems.length === 0, 'no exceptions in the editor page', problems.slice(0, 3));

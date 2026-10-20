@@ -36,7 +36,7 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 | Live with outside edits — a file changed by Claude Code (MCP), VS Code or `git pull` is drawn without a reload; a clash with Studio's own edit asks | works (2026-10-19) | `check:editor` 46/46 |
 | Styles — global styles as NodeGX variants | works | `check:editor` |
 | Bubble importer — pages, elements, styles, workflows, expressions, option sets, reusables, custom states, data types, privacy rules → `nodegx.security.json`, backend workflows → cloud functions, Data-tab rows | spike, measured on a real 17-page app (0 validation errors); its searches arrive as page data (STU-013), a reusable's while that copy is shown (STU-014); its workflow conditions test only when the workflow runs (STU-013-NAVLOOP) | `check:import` 50/50 |
-| Run timeline (M4) — Record / Stop, page data, workflows and the screen on one axis, each row linked to its element, card or item; each step's values in and out; a scrubber with the screen as it was at the playhead; step mode for one card, labelled as not real timing | STU-031 (2026-10-20, s10), STU-032 (s11), STU-033 (s12) work | `check:timeline` 45/45 |
+| Run timeline (M4) — Record / Stop, page data, workflows and the screen on one axis, each row linked to its element, card or item; each step's values in and out; a scrubber with the screen as it was at the playhead; one run per Record, stopping by itself when it is over, its steps gone through one by one | STU-031 (2026-10-20, s10), STU-032 (s11), STU-033 (s12) work | `check:timeline` 43/43 |
 | Desktop app — Electron window, a welcome screen (recent projects, NodeGX's templates, Import an app), File → Open Recent, a smoke mode | first cut (2026-10-19) | `check:app` 34/34, `smoke` |
 | The project's backend — started (or adopted) on open, stopped on close, shown in the status bar; a template that needs one gets one; Data's "Start a backend" for an app with none | works (2026-10-19) | `check:app` 34/34 |
 | Claude Code — "Connect Claude Code" in the header (and File) registers the NodeGX MCP server for the folder with the NodeGX editor's own writer and shows the command that starts a session there | works (2026-10-19) | `check:editor` 56/56 |
@@ -828,8 +828,8 @@ seconds?*
   plays the screen back alongside the steps.
 - Every row links to its element, card or data item. Named page data (M2) and one card per event (M3) are what make
   the timeline readable.
-- A **step mode** for one card stays available ("pause before each step"), labelled for what it is: a teaching aid,
-  not real timing.
+- ~~A **step mode** for one card ("pause before each step")~~ — ruled out 2026-10-20 (STU-033): a recorded run gone
+  through step by step instead.
 
 **In NodeGX.** The NodeGX editor already has a trace channel (OBS-002, `TraceSession`): the runtime buffers trace
 events while recording and the editor pulls them. In Studio the runtime runs in the same window, so the timeline
@@ -841,7 +841,7 @@ query start/end and element draws, to measure).
 | STU-030 | **Measure the trace buffer** in the in-page preview: which events, with what timing, at what cost. Write down what is missing for the three lanes. | a written inventory with a recording of the todo template's open |
 | STU-031 | **Record / Stop and the timeline** with the three lanes, rows linked to their element / card / item. | recording the todo template's open shows its query's start and end and the list drawing after it |
 | STU-032 | **Inputs and outputs** per step, and **screenshots** per point with a scrubber. | scrubbing to a step shows the screen as it was then |
-| STU-033 | **Step mode** for one card, marked as not real timing. | stepping through a two-step card shows each step's values before it runs |
+| STU-033 | ~~**Step mode** for one card, marked as not real timing~~ — ruled 2026-10-20: **one run per Record**, stopping by itself when it is over, and its **steps gone through one by one** on the waterfall. | a recorded click's steps are marks on the lane; → goes through them with each one's in and out; a slow answer keeps the recording open |
 
 **Done (STU-030, 2026-10-20, s9): the inventory.** Measured with `editor/trace-inventory.mjs` (the todo template, a
 backend, Studio in headless Chrome; three runs: the app's open to Sign in, Create account → the Todo page opens, a
@@ -973,7 +973,7 @@ Mutants: no screen witness 22/24; copies draw nothing 23/24; the page's cards on
   `[hidden]` rule taken out 32/33; the column unclamped (the tree before the fix) 32/33.
 - **Not built / limits.** A copy has no canvas pixels and no scroll positions; a change made only to a style (the
   observer watches elements and text, never styles) takes no copy of its own. The styles are those at Stop, which
-  only matters for a page that removes a style while it runs. Step mode is STU-033, below.
+  only matters for a page that removes a style while it runs. Going through a run step by step is STU-033, below.
 
 Gate: `npm run check:timeline` 33/33 (24 + 9). On fixtures: a run carries its steps on the recording's clock; a
 step's inputs are the last value into each wired input before its signal (not one after it), then its settings where
@@ -989,60 +989,60 @@ Mutants: the pane shows the last copy whatever the playhead 31/33; a step's inpu
 signal 31/33 (the fixture and the Add step; that run also failed the drag check, whose "nine tenths of the axis" can
 fall after every row: it now lets go between two rows); the fields' values not put back 32/33; the copy taken inside the observer 33/33 (not graded, above).
 
-**Done (STU-033, 2026-10-20, s12): step mode.** [look/stu-033-step.png](look/stu-033-step.png) is a third task added
-with the Add task command stepped through: steps 1 and 2 ran, step 3 waits holding the new record's id.
+**Done (STU-033, 2026-10-20, s12): one run at a time, its steps gone through one by one.** Ruled by Richard the same
+day, after seeing live step mode: *"Scrub only"*, and Record *"primes for ONE click or ONE signal. The first signal
+that's fired triggers recording, but when all the signals are extinguished (i.e. the action has completed) then the
+recording auto stops and the user reviews … make sure that if a signal has fired and for example an API call hasn't
+come back yet, or a script is still running some process, that it can't time out until that process has finished, so
+you see the full end to end."* He liked the lanes (*"the waterfall network thing"*) and asked that the steps and the
+waterfall be one thing: *"scrubbing back and forwards between the steps rather than doing them one by one, as long as
+I can view the in out data and what happened from each step."* [look/stu-033-steps.png](look/stu-033-steps.png):
+the Add task command's step 2 at the playhead.
 
-- **Two ways in.** A card in the Workflow tab has **Step through** (beside Rename); it goes to Design with "Use the
-  app" on. A recorded run's row in the timeline has **Step through** too, and that is the only way in for a card in
-  a component with no element of its own (a command such as Add task, which the page picker does not list).
-- **In the timeline's drawer.** While step mode is on, the drawer under every tab is step mode: its header names the
-  card, says **"Not real timing"**, and has **Next step**, **Run the rest** and **Stop stepping**; its rows are the
-  steps, drawn as the timeline draws a run's steps (the step's number where a recording has its time). The first
-  build put this in a bar over the tabs: Richard, seeing it, *"quite busy … taking space away from the bottom part, or
-  they could be merged?"* It was a second copy of the drawer's step lines, and it pushed the app down. Stop stepping
-  gives the drawer back to the recording; Record turns step mode off (a recording is the app in real time); a step
-  that waits opens the drawer if it was closed. The next time the card runs in the app,
-  each step waits before it runs: the drawer lists the steps of the run, each one that ran with its **out** (what it
-  sent), and the one waiting with its **in**: every value that has come into it so far, which is what it reads when
-  it is let go, and the settings in the files where nothing is wired, marked "(set)". Run the rest lets the run go
-  on without pausing (its steps are still listed, "ran without a pause"); the card's next run pauses again. Stop
-  stepping lets a waiting step run.
-- **How (editor/stepper.mjs).** Nothing in the runtime pauses. A signal reaches its node through one method,
-  `Node.prototype._setPulseFromConnection(port, seq)`, just after the trace has written it down under the same `seq`.
-  In the app's frame Studio wraps both: the trace's write says where the signal came from, and a signal that is a
-  step of the card is kept instead of handed over. Next hands it over with the original method; the node runs on the
-  runtime's next update. Which signal is a step is the timeline's rule: the card's event starts a run, a signal into
-  a node the card reaches from a node already in the run is its next step. A rebuild of the app drops a waiting run
-  with the copy of the app it was in, and says so.
-- **Found: a signal into a component goes on as two values.** Inside a component, its Component Inputs node sends a
-  signal on as `true` then `false` through `sendValue`, not as a signal (the runtime's `componentinstance.ts`:
-  the input's setter calls `flagOutputDirty`). So every card started by a component's input signal — the todo
-  template's 19 commands, each a "do" — was invisible to the timeline (STU-031): its event was a value, and its
-  steps were "a signal no workflow on this page starts". A `true` out of a card's event now starts that card's run
-  (timeline.mjs), the `true` and `false` are not among a step's inputs, and step mode holds the `true` with the
-  `false` kept behind it. Without the `false`, the command's `run` stays `true` and its next run never starts.
-- **Why "not real timing".** While a step waits, values keep arriving, and other workflows keep running (a page data
-  refresh can land before the step runs). The step reads what it holds when it is let go, which the app as it runs
-  might not have given it. The bar shows no times for what a step sent: they would count the wait.
+- **Record waits for the app** ("Waiting for the app…", the last recording kept until then). The first signal that
+  crosses a wire starts the recording, at that signal. It **stops by itself** once the run is over
+  (editor/runwatch.mjs): quiet for 1.5 s (a Did Mount a moment after a click is the same run), and nothing it started
+  still working: a request made since it began and not answered (XHR, and now `fetch`, both in the probe's log), a
+  page `setTimeout` of at most 10 s made within 50 ms of a signal of the run or from inside such a timer's callback
+  (a script's `await sleep`), a Timer node the run started (one that repeats for ever is not counted). While it waits
+  the button says so: *"Stop · 2.09 s · waiting for an answer from the backend"*. A timer holds a run open for 30 s at
+  most (one that re-arms itself for ever would hold it for ever); a request holds it until it is answered; Stop ends
+  it sooner. "Record the page opening" stops by itself the same way. A script busy computing blocks the page and the
+  watch with it, so a run never ends in the middle of one.
+- **The steps on the waterfall.** A run is a pale bar on the Workflows lane and each of its steps a mark on it; every
+  step is also a line under its run (no "Show the steps" any more). The playhead is on one line at a time: **← / →**
+  (or ◀ ▶ beside the screen) go line by line, the steps of one click included, though they share a millisecond.
+- **The line in full**, above the screen as it was: a step's **In** (each wired input's last value before its signal,
+  then its settings, "(set)"), **Out** (what it sent, a signal with how long after), and **Then**: what happened on the
+  other lanes from it until the run's next step (the create request after "Add the task", what the screen drew); a
+  row's words.
+- **Found on the way: a signal into a component goes on as two values.** Its Component Inputs node sends a signal on
+  as `true` then `false` through `sendValue` (the runtime's `componentinstance.ts`), so every card started by a
+  component's input signal (the todo template's 19 commands, each a "do") was invisible to the timeline: its steps
+  were "a signal no workflow on this page starts". A `true` out of a card's event now starts that card's run, and the
+  `true` and `false` are not among a step's inputs.
+- **Live step mode was built first and taken out** (s12): a hold in the app's frame on `_setPulseFromConnection` and a
+  bar over the tabs, then the drawer. Richard found the bar *"quite busy"* and then preferred scrubbing a real run;
+  pausing the app is not real timing, and a recording is.
 
-Gate: `npm run check:timeline` 45/45 (33 + 12). On fixtures: the card's event is step 1 and a signal on from a node
-in the run is step 2, a signal into a step from outside the run is not held, a value from a step is not a step, Run
-the rest lets the run through still counted and the next run pauses from step 1; a card started through its
-component's inputs is a run with its steps, the `true` and `false` not among their inputs. On the todo template, with
-step mode armed from the second recording's Add task row: the drawer turns to it, names the card and says it is not real timing; a
-third task added, step 1 waits showing the typed title and no task is written; Next, step 1 ran and sent the title on
-and step 2 (the record's creation) waits with that title among what it will read, and the app's request log still has
-no write; Next, the log has the one write and step 3 waits holding the new record's id, the id the runtime's trace has
-out of step 2; Run the rest, the task is in the list; Stop stepping gives the drawer back to the recording, and the next task is added
-the ordinary way. The Workflow tab's Step through on the Header's Sign out card arms it and goes to the app, Use the
-app on. Mutants: the signal not held (handed over and also kept) 42/44, measured before the last check was added;
-the `false` not kept behind the `true` 44/45 (the next ordinary Add writes nothing).
+Gate: `npm run check:timeline` 43/43. On fixtures: a request made in the run and not answered holds it however long,
+one from before the run does not; quiet for 1.5 s with nothing waiting it is over; a timer holds it for 30 s at most;
+an answer after the last signal is the run's last activity; a card started through its component's inputs is a run.
+On the todo template: Record waits (nothing recorded, the timeline open), the page opening records and stops by itself;
+Record from now waits through 0.8 s of nothing, the click's first signal starts the recording at under 5 ms, and it
+stops by itself; every step of every run is a mark on the Workflows lane and a line (18 of each), the Add task
+command's run has its three steps; from its mark, ▶ three times goes step 1 (reads the typed title), step 2 (reads it,
+then the create request), step 3 (reads the new record's id that step 2 sent); ← goes back one; a write whose answer
+is held 3 s at the network (CDP `Fetch`) keeps the recording open, the button saying it waits for the answer, and the
+list drawing the task after it is in the recording.
+Mutants: a request still waiting does not hold the run 41/43 (the fixture and the 3 s write); the recording starts
+when Record is pressed, not at the app's first signal, 42/43. Seen in the picture, not graded: the first layout put
+the step's details above the screen in one column and squeezed the copy to a thumbnail; they are now side by side.
 
-- **Not built / limits.** A step that is a copy of a reusable is one step: step mode does not go inside it. A run
-  started while the last one waits lets the waiting step go and shows the new run (a list's rows each running the
-  card are shown one run at a time). A record's fields are named by their ports ("prop-title"), as in the timeline's
-  steps. Timers and requests are not held, only signals into the card's steps.
-
+- **Not built / limits.** A step that is a copy of a reusable is one step (its inside is that reusable's own run, a row
+  of its own when it has a card). A record's fields are named by their ports ("prop-title"). A request the app made
+  before Record and still waiting does not hold the run. An app that sends a signal on its own all the time (a
+  repeating timer wired to a step) never goes quiet: Stop ends it.
 ---
 
 ## M5 — The importer as a product

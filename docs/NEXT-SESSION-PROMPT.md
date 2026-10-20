@@ -1,7 +1,7 @@
 Continue NodeGX Studio (~/vscode_projects/nodegx-studio, public, GPL-3.0; plan of record: docs/SCOPE.md). Edit in
 this repo, not OpenNoodl. Gates run on Node 22 (`~/.nvm/versions/node/v22.22.0/bin`): `npm run check:rules` (20/20),
 `check:phrases` (85/85), `check:dictionary` (PASS 65 covered / 2 wrong filed / 22 missing / 5 none), `check:editor`
-(170/170), `check:timeline` (45/45 since s12), `check:pagedata` (33/33), `check:reusable` (12/12), `check:import`
+(170/170), `check:timeline` (43/43 since s12), `check:pagedata` (33/33), `check:reusable` (12/12), `check:import`
 (79/79 with the template bundle: import/exports/template is present, gitignored), `check:app` (34/34). Read on
 2026-10-20 (s12) on the STU-033 tree: timeline, editor, app (rules, phrases, pagedata, reusable in s11); import and dictionary
 last read in s9 (the importer is untouched since). 🔴 `check:app` and `check:editor` both load studio.html: run both
@@ -15,15 +15,18 @@ git checkout --`). The server reads studio.html and probe.js on every request: d
 then put it back): a wrapper that waits and removes only its own is the safe shape. Three untracked docs/look/s2-composer-slot.png, s2-composer-then-menu.png, s2-panel-group.png predate s10 and are
 not its to commit.
 
-Built in s12 (2026-10-20): **STU-033, step mode** (SCOPE.md "Done (STU-033)"). **Step through** on a card in the
-Workflow tab, or on a recorded run's row in the timeline (the only way in for a command such as Add task: the page
-picker lists no component without elements). Step mode is the timeline's drawer while it is on (Richard
-found a bar over the tabs too busy): "Not real timing", Next step / Run the rest / Stop stepping; each step that ran shows its out, the one waiting its in (every value into it so
-far). editor/stepper.mjs wraps `_setPulseFromConnection` / `_setValueFromConnection` and the context's
-`traceEdgeSend` in the app's frame. **Found:** a signal into a component goes on out of its Component Inputs as two
-VALUES (true, false), so every command's run was invisible to the timeline; timeline.mjs now starts a card's run on a
-`true` out of its event. Picture: docs/look/stu-033-step.png. Gates on the s12 tree: timeline 45/45, editor 170/170,
-app 34/34. Mutants: signal not held 42/44 (before the last check), false not kept behind the true 44/45.
+Built in s12 (2026-10-20): **STU-033, ruled by Richard mid-session** (SCOPE.md "Done (STU-033)"). Live step mode
+(pausing the app before each step) was built, shown, and taken out: he found it busy and asked for **scrub only**, with
+**Record primed for ONE run**: it waits for the app's first signal, records from it, and stops by itself once the run
+is over (editor/runwatch.mjs: quiet 1.5 s and no request it made still unanswered, no short timer it set still to fire;
+a timer holds it 30 s at most, a request for ever; Stop ends it sooner). The steps are marks on the Workflows lane and
+lines under their run; ← / → (or ◀ ▶) go line by line; the line at the playhead in full beside the screen as it was:
+In, Out, Then (what happened on the other lanes until the next step). The probe now logs `fetch` and the page's short
+timers. **Found:** a signal into a component goes on out of its Component Inputs as two VALUES (true, false), so every
+command's run was invisible to the timeline; timeline.mjs now starts a card's run on a `true` out of its event.
+Picture: docs/look/stu-033-steps.png. Gates on the s12 tree: timeline 43/43, editor 170/170, app 34/34 (cdp.mjs gained
+`on` for protocol events: the gate holds a write 3 s with CDP Fetch). Mutants: a waiting request not holding the run
+41/43; the recording starting at the press 42/43.
 s11 before it: STU-032 (scrubber, step values, the screen as it was), the logo, ruling R9.
 
 Filed in NodeGX's ledger (OpenNoodl 80bd3c778): P123-STU032-TEXTFLASH. Still open from s10: P123-STU031-COPYBOX.
@@ -31,9 +34,9 @@ Not filed: the Component Inputs signal-as-values is how the runtime has always f
 reads around it, it is not a defect the app shows.
 
 Next buildable while Richard is away, in order:
-1. M4 is done (STU-030..033). Timeline / step mode gaps (SCOPE.md "Not built"): a recording that crosses pages names
-   cards only for the page shown at Stop; step mode does not go inside a reusable's copy; record ports read raw
-   ("prop-title").
+1. M4 is done (STU-030..033). Ask Richard how the primed Record feels on his own app (the 1.5 s quiet, the 30 s
+   timer hold are guesses). Gaps (SCOPE.md "Not built"): a recording that crosses pages names cards only for the page
+   shown at Stop; record ports read raw ("prop-title"); an app that signals on its own all the time never goes quiet.
 2. Timeline gaps (SCOPE.md "Not built"): a recording that crosses pages names cards only for the page shown at Stop;
    the screen rows' text sample is the DOM as inserted ("TextTextTextLabel"); a copy has no canvas pixels or scroll
    positions, and a style-only change takes no copy.
@@ -43,7 +46,7 @@ Next buildable while Richard is away, in order:
 Still open from s9: a branch whose condition is a constant `false` says "Set the condition…"; a card's name and hover
 read only its first lane; port names a component gives without words show raw ("When pickList").
 
-Show Richard: docs/look/stu-033-step.png (step mode, step 3 waiting), docs/look/stu-032-scrub.png and stu-032-step.png (the scrubber, a step's values), the s10 timeline
+Show Richard: docs/look/stu-033-steps.png (a run gone through step by step), docs/look/stu-032-scrub.png and stu-032-step.png (the scrubber, a step's values), the s10 timeline
 pictures, and from s9 s2-workflow-card.png, s2-workflow-index.png, s2-workflow-branch.png. Tell him the "Text" flash.
 
 Waiting on Richard: his second sitting on data (M2's remaining work); his real app export (STU-044's 22 missing

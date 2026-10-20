@@ -68,6 +68,8 @@ export async function attach({ port, width, height, onClose } = {}) {
   const mouse = (type, x, y, extra = {}) => send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1, ...extra });
   const b = {
     send, evaluate, problems,
+    /** Every protocol event, as it arrives (Fetch.requestPaused and the like); returns the way to stop listening. */
+    on: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     goto: (url) => send('Page.navigate', { url }),
     waitTitle: async (pred, ms = 40000) => { const t = Date.now(); let title = ''; while (Date.now() - t < ms) { title = await evaluate('document.title').catch(() => ''); if (pred(title)) return title; await wait(200); } throw new Error(`title stayed "${title}"`); },
     until: async (expr, ms = 8000) => { const t = Date.now(); let v = await evaluate(expr); while (!v && Date.now() - t < ms) { await wait(120); v = await evaluate(expr); } return v; },

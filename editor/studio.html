@@ -151,15 +151,13 @@
   .tlaxis .play::before { content: ''; position: absolute; top: -3px; left: -4px; width: 10px; height: 6px; border-radius: 2px; background: var(--ink); }
   .tlrow.later, .tlstep.later { opacity: .45; }
   .tlrow.now { box-shadow: inset 2px 0 0 var(--ink); }
-  .tlrow .open { border: 0; background: none; padding: 0 2px; margin-left: 8px; color: var(--accent-ink); font-size: 11px; cursor: pointer; }
-  .tlrow .open:hover { color: var(--ink); }
   .tlstep { display: grid; grid-template-columns: 64px 96px 1fr; gap: 8px; align-items: baseline; padding: 1px 6px; border-radius: var(--r); color: var(--ink-2); font-size: 12px; cursor: pointer; }
   .tlstep:hover, .tlstep.now { background: var(--panel-2); color: var(--ink); }
   .tlstep .t { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
   .tlstep .what { min-width: 0; padding-left: 14px; border-left: 2px solid var(--lane-workflow); }
   .tlstep .io { display: block; color: var(--muted); font-family: var(--mono); font-size: 11px; white-space: pre-wrap; word-break: break-word; }
   .tlstep .io b { font-weight: 600; color: var(--ink-2); }
-  .tlscreen { width: 380px; border-left: 1px solid var(--line); display: grid; grid-template-rows: auto 1fr; grid-template-columns: minmax(0, 1fr); min-height: 0; background: var(--panel-2); }
+  .tlscreen { width: 700px; border-left: 1px solid var(--line); display: grid; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: 290px minmax(0, 1fr); min-height: 0; background: var(--panel-2); }
   .tlscreen[hidden] { display: none; }
   .tlscreen .tlshead { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 12px; }
   .tlscreen .tlshead b { font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -172,16 +170,27 @@
   /* larger: over the tab, above the drawer, the drawer still there to scrub */
   main { position: relative; }
   .tlscreen.big { position: absolute; left: 0; right: 0; top: 0; bottom: 300px; width: auto; z-index: 30; border: 0; border-bottom: 1px solid var(--line); box-shadow: var(--shadow); }
-  /* ---- STU-033: step mode, in the timeline's drawer: its header holds the card and the buttons, its rows the steps ---- */
-  #sthead .tag { font-size: 11px; color: #7e22ce; background: #f3e8ff; border: 1px solid #e9d5ff; border-radius: 10px; padding: 1px 8px; white-space: nowrap; flex: none; }
-  #sthead button { flex: none; }
-  #stepper { overflow: auto; min-height: 0; padding: 6px 6px 10px; }
-  #stepper[hidden], #sthead[hidden], #tlhead[hidden], #tlbody[hidden] { display: none; }
-  #stepper .stnote { color: var(--ink-2); font-size: 12px; padding: 2px 6px 6px; }
-  #stepper .tlstep { cursor: default; }
-  #stepper .tlstep .state { font-size: 11px; color: var(--muted); white-space: nowrap; }
-  #stepper .tlstep.held { background: var(--panel-2); color: var(--ink); }
-  #stepper .tlstep.held .state { color: #7e22ce; font-weight: 600; }
+  /* ---- STU-033: one run at a time; its steps on the waterfall; the line at the playhead in full */
+  header #recbtn.primed { background: #fff7ed; border-color: #fdba74; color: #c2410c; }
+  header #recbtn.primed .dot { animation: recpulse 1s ease-in-out infinite; }
+  .tlaxis .mark.run { opacity: .3; }
+  .tlaxis .mark.step { width: 3px; min-width: 3px; margin-left: -1px; opacity: 1; z-index: 1; }
+  .tlaxis .mark.sel { opacity: 1; outline: 2px solid var(--ink); outline-offset: 1px; z-index: 2; }
+  .tlstep { cursor: pointer; }
+  .tlstep .ln { font-size: 11px; color: var(--lane-workflow); white-space: nowrap; }
+  .tlstep .what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tlstep.now { box-shadow: inset 2px 0 0 var(--ink); }
+  .tlscreen .tlshead #tlprev, .tlscreen .tlshead #tlnext { padding: 0 6px; }
+  /* the line in full beside the screen as it was, each the drawer's height */
+  .tlscreen .tlshead { grid-column: 1 / -1; }
+  .tldetail { padding: 0 10px 10px; font-size: 12px; color: var(--ink-2); min-height: 0; overflow: auto; display: grid; gap: 6px; align-content: start; }
+  .tlscreen .tlsbox { margin-left: 0; }
+  .tldetail .dh b { font-weight: 600; color: var(--ink); } .tldetail .dh span, .tldetail .dsub, .tldetail .none, .tldetail .quiet { color: var(--muted); }
+  .tldetail .dname { color: var(--ink); }
+  .tldetail .io { display: grid; grid-template-columns: 1fr; font-family: var(--mono); font-size: 11px; word-break: break-word; }
+  .tldetail .io b { font-family: Inter, -apple-system, "Segoe UI", system-ui, sans-serif; font-size: 11px; font-weight: 600; color: var(--ink-2); }
+  .tldetail .io > div { padding-left: 10px; }
+  #timeline:focus { outline: none; }
   section[hidden] { display: none; }
   aside { background: var(--panel); border-right: 1px solid var(--line); overflow: auto; display: flex; flex-direction: column; min-height: 0; }
   aside.right { border-right: 0; border-left: 1px solid var(--line); }
@@ -647,11 +656,7 @@
       <aside class="right" id="styleprops"><div class="empty">The style's properties appear here.</div></aside>
     </section>
 
-    <section id="timeline" aria-label="Run timeline" hidden>
-      <div class="tlhead" id="sthead" hidden>
-        <h4>Step mode</h4><span class="note" id="sttitle"></span><span class="tag" title="The app does not wait between steps when it runs for real; here each step waits for you, so values that would have come later are already there">Not real timing</span><span class="grow"></span>
-        <button class="primary tiny" id="stnext" title="Let this step run, and pause before the next one">Next step</button><button class="quiet tiny" id="strest" title="Let this step and the rest of this run go without pausing; the next run pauses again">Run the rest</button><button class="quiet tiny" id="ststop" title="Turn step mode off; a step waiting runs now, and the drawer shows the recording again">Stop stepping</button>
-      </div>
+    <section id="timeline" aria-label="Run timeline" tabindex="-1" hidden>
       <div class="tlhead" id="tlhead">
         <h4>Run timeline</h4><span class="note" id="tlnote"></span><span class="grow"></span>
         <label id="tlall-l" hidden><input type="checkbox" id="tlall"><span id="tlall-t">Every signal</span></label>
@@ -664,11 +669,11 @@
           <div class="tlrows" id="tlrows"></div>
         </div>
         <div class="tlscreen" id="tlscreen" aria-label="The screen as it was" hidden>
-          <div class="tlshead"><b id="tlsat"></b><span class="note" id="tlsnote"></span><button class="quiet tiny" id="tlbig" title="Show the screen as it was over the tab, larger">Larger</button></div>
+          <div class="tlshead"><button class="quiet tiny" id="tlprev" title="The line before (←)" aria-label="The line before">◀</button><button class="quiet tiny" id="tlnext" title="The next line, step by step (→)" aria-label="The next line">▶</button><b id="tlsat"></b><span class="note" id="tlsnote"></span><button class="quiet tiny" id="tlbig" title="Show the screen as it was over the tab, larger">Larger</button></div>
+          <div class="tldetail" id="tldetail"></div>
           <div class="tlsbox" id="tlsbox"><iframe id="tlsframe" sandbox="allow-same-origin" title="The app's screen at the playhead, as it was" tabindex="-1"></iframe><div class="none" id="tlsnone" hidden></div></div>
         </div>
       </div>
-      <div id="stepper" aria-label="Step mode" hidden><div class="stnote" id="stnote"></div><div id="ststeps"></div></div>
     </section>
   </main>
 </div>
@@ -684,7 +689,7 @@ import { readRule, rulesOf, withoutArm, withValue, withCondition, addArm, valueO
 import { TYPES, TYPE_WORDS, dictionaryType, applyPhrase } from './phrases.mjs';
 import { OPERATORS, createEdits, updateEdits, removeEdits, readItems, readFrom, readersOf, itemOfSource, sameAs, signature, describe, lastRun, queriesOnOpen, requestMatches } from './pagedata.mjs';
 import { LANES, buildTimeline, msText, shotAt, stepValues } from './timeline.mjs';
-import { stepRule, installStepper } from './stepper.mjs';
+import { runOver, lastActivity, watchSignals, runtimeTimers, runTimers } from './runwatch.mjs';
 
 const $ = (id) => document.getElementById(id);
 const h = (tag, attrs = {}, ...kids) => {
@@ -1324,7 +1329,6 @@ const rectOf = (id) => elOf(id)?.getBoundingClientRect();
 let frameHooked = null;
 function hookFrame() {
   const w = preview.frame?.contentWindow;
-  if (stepper) armFrame();
   if (!w || frameHooked === w) return;
   frameHooked = w;
   w.addEventListener('scroll', () => draw(), true);
@@ -3250,10 +3254,7 @@ function renderWorkflow() {
   if (cardBack) wf.append(h('div', { class: 'cardnav' }, h('button', { class: 'quiet back', title: 'Back to the element in Design (Esc)', onclick: backFromCard }, '← ', labelOf(cardBack.node)),
     h('button', { class: 'quiet tiny', title: 'Every workflow on this page, listed', onclick: () => { cardBack = null; renderWorkflow(); } }, 'All workflows on this page')));
   wf.append(h('div', { class: 'event-card' }, h('div', { class: 'ic' }, icon('bolt')), h('div', { class: 'named' }, cardTitle(ev), h('small', {}, `${eventTitle(ev)} · ${typeName(byId[ev.node].type)}`)),
-    h('div', { style: 'margin-left:auto;display:flex;gap:6px' }, isRenaming(ev) ? null : h('button', { class: 'quiet tiny rename', title: 'Name this workflow yourself; an empty name gives it back to its steps', onclick: () => { renaming = `${ev.node}.${ev.port}`; renderWorkflow(); } }, 'Rename'),
-      eventSteps(ev) ? (stepper?.card.node === ev.node && stepper.card.port === ev.port && stepper.card.component === pageKey
-        ? h('button', { class: 'quiet tiny', id: 'stepthis', 'aria-pressed': 'true', title: 'Turn step mode off', onclick: () => disarmStepper() }, 'Stop stepping')
-        : h('button', { class: 'quiet tiny', id: 'stepthis', title: 'The next time this workflow runs in the app, pause before each step and show what it is about to read. A teaching aid: not real timing', onclick: () => armStepper({ component: pageKey, node: ev.node, port: ev.port, name: cardName(ev), when: eventTitle(ev), reach: new Set(reachOf(ev).map((n) => n.id)) }, { use: true }) }, 'Step through')) : null, eventSteps(ev) ? null : h('button', { class: 'quiet', onclick: () => { const i = draftEvents.findIndex((d) => d.node === ev.node && d.port === ev.port); if (i >= 0) draftEvents.splice(i, 1); selEvent = null; renderWorkflow(); } }, 'Discard'))));
+    h('div', { style: 'margin-left:auto;display:flex;gap:6px' }, isRenaming(ev) ? null : h('button', { class: 'quiet tiny rename', title: 'Name this workflow yourself; an empty name gives it back to its steps', onclick: () => { renaming = `${ev.node}.${ev.port}`; renderWorkflow(); } }, 'Rename'), eventSteps(ev) ? null : h('button', { class: 'quiet', onclick: () => { const i = draftEvents.findIndex((d) => d.node === ev.node && d.port === ev.port); if (i >= 0) draftEvents.splice(i, 1); selEvent = null; renderWorkflow(); } }, 'Discard'))));
   const lanes = lanesOf(ev);
   if (!lanes) renderChain(wf, chain(ev.node, ev.port), { node: ev.node, port: ev.port }, 1);
   else {
@@ -3686,36 +3687,65 @@ function renderStyles() {
 }
 
 /* ================= STU-031: Record / Stop and the run timeline =================
-   Nothing is paused: Record marks a moment on the app frame's clock, Stop reads what three witnesses wrote down since —
-   the runtime's trace (armed by the in-page preview at boot), the probe's requests and the probe's screen changes
-   (./probe.js) — and ./timeline.mjs makes them rows. "Record the page opening" opens a fresh copy of the app (a
-   rebuild) and records from its first millisecond, when all three witnesses were already writing. */
-let rec = null;        // while recording: { frame, t0, fromOpen }; while the app restarts for one: { pendingOpen: true }
+   Nothing is paused: the recording is read off what three witnesses wrote down — the runtime's trace (armed by the
+   in-page preview at boot), the probe's requests and the probe's screen changes (./probe.js) — and ./timeline.mjs
+   makes them rows. Record records ONE run (Richard, 2026-10-20, ./runwatch.mjs): it waits for the app's next signal,
+   records from it, and stops by itself once the run is over — quiet for a moment, with no request it made still
+   waiting for its answer and no timer it set still to fire. Stop ends it sooner. "Record the page opening" opens a
+   fresh copy of the app (a rebuild) and records from its first millisecond until that is over too. */
+let rec = null;        // waiting for the run: { frame, primed: true, before }; recording: { frame, t0, fromOpen, last, before, waiting }; the app restarting for one: { pendingOpen: true }
 let recording = null;  // the last recording, read into rows
 let tlOpen = false, tlTimer = null, tlAll = false;
 let tlAt = null;              // the playhead, ms from the recording's start; null: at the end
-let tlRunsOpen = new Set();   // the workflow rows whose steps are shown, by their time and card
+let tlSel = -1;               // the line the playhead is on: a row or a step
 let tlShown = -1, tlBig = false;
 const frameNow = (frame) => { try { return frame.contentWindow.performance.now(); } catch { return NaN; } };
 function renderRecButton() {
-  const b = $('recbtn'); b.innerHTML = ''; b.classList.toggle('on', !!rec);
+  const b = $('recbtn'); b.innerHTML = ''; b.classList.toggle('on', !!rec); b.classList.toggle('primed', !!rec?.primed);
   if (!rec) b.append(h('i', { class: 'dot' }), 'Record');
   else if (rec.pendingOpen) b.append(h('i', { class: 'sq' }), 'Opening the app…');
-  else { const ms = frameNow(rec.frame) - rec.t0; b.append(h('i', { class: 'sq' }), `Stop · ${Number.isFinite(ms) ? msText(ms) : ''}`); }
-  b.title = rec ? 'Stop recording and read what happened' : 'Record what the app does — the page data it asks for, the workflows that run, what the screen draws — then Stop and read it on one time axis';
+  else if (rec.primed) b.append(h('i', { class: 'dot' }), 'Waiting for the app…');
+  else { const ms = frameNow(rec.frame) - rec.t0; b.append(h('i', { class: 'sq' }), `Stop · ${Number.isFinite(ms) ? msText(ms) : ''}${rec.waiting ? ` · waiting for ${rec.waiting}` : ''}`); }
+  b.title = !rec ? 'Record one run of the app: it starts at the next thing the app does (a click, a page opening) and stops by itself when that has finished'
+    : rec.primed ? 'Use the app: the recording starts at its next signal. Press to cancel'
+    : 'Stops by itself once the run has finished; press to stop now';
 }
 function startRecording({ fromOpen = false } = {}) {
   if (rec) return;
-  if (stepper) { disarmStepper({ quiet: true }); toast('Step mode is off: a recording is the app in real time'); }
   tlOpen = true;
   if (fromOpen) { rec = { pendingOpen: true }; renderRecButton(); renderTimeline(); rebuild(0); return; }
   if (!preview.frame) return toast('The app is not on screen, so there is nothing to record.');
-  beginRecording(false);
+  const w = preview.frame.contentWindow;
+  rec = { frame: preview.frame, primed: true, fromOpen: false, before: runtimeTimers(w) };
+  if (!watchSignals(w, onRunSignal)) { rec = null; renderRecButton(); return toast('The app has not started yet, so there is nothing to record.'); }
+  clearInterval(tlTimer); tlTimer = setInterval(tickRecording, 150);
+  renderRecButton(); renderTimeline();
 }
 function beginRecording(fromOpen) {
-  rec = { frame: preview.frame, t0: fromOpen ? 0 : frameNow(preview.frame), fromOpen };
-  clearInterval(tlTimer); tlTimer = setInterval(renderRecButton, 200);
+  const w = preview.frame.contentWindow;
+  rec = { frame: preview.frame, t0: fromOpen ? 0 : frameNow(preview.frame), fromOpen, last: frameNow(preview.frame), before: runtimeTimers(w) };
+  watchSignals(w, onRunSignal);
+  clearInterval(tlTimer); tlTimer = setInterval(tickRecording, 150);
   renderRecButton(); renderTimeline();
+}
+/** A signal in the app (called inside the runtime's update: only notes the time). The first one starts the run. */
+function onRunSignal(t) {
+  if (!rec || rec.pendingOpen) return;
+  if (rec.primed) { rec.primed = false; rec.t0 = t - 1; setTimeout(() => { renderRecButton(); renderTimeline(); }, 0); }
+  rec.last = t;
+}
+/** Is the run over? Read off the frame every 150 ms: its requests, its timers, its last signal (./runwatch.mjs). */
+function tickRecording() {
+  if (!rec || rec.pendingOpen) return;
+  const w = rec.frame?.contentWindow;
+  if (!w) return stopRecording();
+  if (!rec.primed) {
+    let log = []; try { log = w.__studioLog || []; } catch { /* no probe */ }
+    const v = runOver({ now: w.performance.now(), t0: rec.t0, last: lastActivity(rec.t0, rec.last, log), requests: log, timers: runTimers(w, rec.t0, rec.before) });
+    rec.waiting = v.waiting;
+    if (v.done) return stopRecording();
+  }
+  renderRecButton();
 }
 /** The page's names for the trace's ids: a node anywhere in the files, and the element on this page that holds it. */
 function timelineNaming() {
@@ -3787,7 +3817,9 @@ function timelineCards({ label }) {
 }
 function stopRecording(note = '') {
   const r = rec; rec = null; clearInterval(tlTimer);
-  if (!r || r.pendingOpen) { renderRecButton(); renderTimeline(); return; }
+  try { if (r?.frame?.contentWindow) r.frame.contentWindow.__studioWatch = null; } catch { /* gone */ }
+  // cancelled before the app did anything: the last recording stays
+  if (!r || r.pendingOpen || r.primed) { renderRecButton(); renderTimeline(); return; }
   const w = r.frame?.contentWindow;
   if (!w) { recording = null; renderRecButton(); renderTimeline(); return toast('The app was replaced before Stop, so the recording is gone.'); }
   const t1 = w.performance.now();
@@ -3803,7 +3835,7 @@ function stopRecording(note = '') {
   const { nodeOf, ...naming } = timelineNaming();
   const cards = timelineCards(naming);
   recording = { ...buildTimeline({ t0: r.t0, t1, fromOpen: r.fromOpen, trace, log, screen, cards, ...naming }), page: pageKey, fromOpen: r.fromOpen, note, nodeOf, cards, shots: shotsOf(w, r.t0, t1) };
-  tlAt = null; tlRunsOpen = new Set(); tlShown = -1;
+  tlAt = null; tlSel = -1; tlShown = -1;
   window.__ob.timeline = recording;
   renderRecButton(); renderTimeline();
 }
@@ -3823,9 +3855,9 @@ function shotsOf(w, t0, t1) {
   let base = ''; try { base = w.location.href; } catch { /* gone */ }
   return { list, head, base };
 }
-$('recbtn').onclick = () => (rec && !rec.pendingOpen ? stopRecording() : startRecording());
+$('recbtn').onclick = () => (!rec ? startRecording() : rec.pendingOpen ? undefined : stopRecording());
 // pressed while recording: that recording is dropped, the page opening is what was asked for
-$('tlopen').onclick = () => { if (rec?.pendingOpen) return; if (rec) { rec = null; clearInterval(tlTimer); } startRecording({ fromOpen: true }); };
+$('tlopen').onclick = () => { if (rec?.pendingOpen) return; if (rec) { try { rec.frame.contentWindow.__studioWatch = null; } catch { /* gone */ } rec = null; clearInterval(tlTimer); } startRecording({ fromOpen: true }); };
 $('tlclose').onclick = () => { tlOpen = false; renderTimeline(); };
 $('tlall').onchange = (e) => { tlAll = e.target.checked; renderTimeline(); };
 function followRow(row) {
@@ -3846,21 +3878,20 @@ function renderTimeline() {
   box.hidden = !tlOpen; document.body.classList.toggle('tl', tlOpen);
   setTimeout(draw, 0); // the frame's size changed with the drawer
   if (!tlOpen) return;
-  const stepping = !!stepper;
-  $('sthead').hidden = !stepping; $('stepper').hidden = !stepping; $('tlhead').hidden = stepping; $('tlbody').hidden = stepping;
-  if (stepping) return renderStepper();
   const axis = $('tlaxis'), list = $('tlrows'); axis.innerHTML = ''; list.innerHTML = '';
   $('tlopen').disabled = !!rec?.pendingOpen;
   tlRefs = null; $('tlscreen').hidden = true;
   $('tlall-l').hidden = !recording?.loose || !!rec;
   if (rec) {
-    $('tlnote').textContent = rec.pendingOpen ? 'Opening a fresh copy of the app…' : rec.fromOpen ? 'Recording from the app opening' : 'Recording';
-    list.append(h('div', { class: 'hint' }, rec.pendingOpen ? 'The app is starting; everything it does from its first millisecond is being written down.' : `Use the app${$('previewmode').checked || tab !== 'design' ? '' : ' (turn on “Use the app” to click through it)'}, then press Stop in the bar above.`));
+    $('tlnote').textContent = rec.pendingOpen ? 'Opening a fresh copy of the app…' : rec.primed ? 'Waiting for the app' : rec.fromOpen ? 'Recording from the app opening' : 'Recording';
+    list.append(h('div', { class: 'hint' }, rec.pendingOpen ? 'The app is starting; everything it does from its first millisecond is being written down.'
+      : rec.primed ? `Use the app${$('previewmode').checked || tab !== 'design' ? '' : ' (turn on “Use the app” to click through it)'}: the recording starts at the next thing it does, a click or a page opening, and stops by itself when that has finished.`
+      : 'Recording this run. It stops by itself once the app has been quiet for a moment and nothing it started is still waiting: an answer from the backend, a timer.'));
     return;
   }
   if (!recording) {
     $('tlnote').textContent = '';
-    list.append(h('div', { class: 'hint' }, 'Press Record, use the app, press Stop: the page data it asked for, the workflows that ran and what the screen drew, in the order they happened, on one time axis. Nothing is paused while it records. Or record the page opening: a fresh copy of the app, from its first millisecond.'));
+    list.append(h('div', { class: 'hint' }, 'Press Record, then use the app: one run is recorded, from the next thing the app does until it has finished — the page data it asked for, each workflow step with what went in and out, and what the screen drew, on one time axis. Or record the page opening: a fresh copy of the app, from its first millisecond.'));
     return;
   }
   const shown = recording.rows.filter((r) => tlAll || !r.minor);
@@ -3870,44 +3901,50 @@ function renderTimeline() {
   $('tlall-t').textContent = `Every signal (+${recording.loose} that no workflow here starts)`;
   $('tlall').checked = tlAll;
   const pct = (t) => `${Math.max(0, Math.min(100, (t / (span - from)) * 100)).toFixed(3)}%`;
-  const rowEls = new Map(), markEls = new Map();
-  const light = (i, on) => { rowEls.get(i)?.classList.toggle('hl', on); markEls.get(i)?.classList.toggle('hl', on); };
+  // one line per row and one per step of a run, in order: the playhead is on one line at a time, ← / → go line by line
+  // (steps of one click share a millisecond: by time they could not be told apart)
+  const points = [], markOf = new Map();
+  const light = (k, on) => { points[k]?.el.classList.toggle('hl', on); markOf.get(k)?.classList.toggle('hl', on); };
+  const laneName = Object.fromEntries(LANES);
+  shown.forEach((r) => {
+    const link = r.link?.card ? `card:${r.link.card.node}.${r.link.card.port}` : r.link?.item ? `item:${r.link.item}` : r.link?.node ? `node:${r.link.node}` : undefined;
+    const k = points.length;
+    // a screen row shows the screen once it has drawn: the playhead goes to its end
+    const at = r.lane === 'screen' ? r.end ?? r.t : r.t;
+    const el = h('div', { class: `tlrow${r.minor ? ' minor' : ''}`, 'data-lane': r.lane, 'data-t': Math.round(r.t), 'data-end': r.end !== undefined ? Math.round(r.end) : undefined, 'data-link': link, 'data-k': k,
+      title: link ? (r.link.card ? 'Open this workflow' : r.link.item ? 'Open this page data' : 'Select this element') : undefined,
+      onmouseenter: () => light(k, true), onmouseleave: () => light(k, false), onclick: () => { setPlayhead(at, k); followRow(r); } },
+    h('span', { class: 't' }, msText(r.t)), h('span', { class: 'ln', style: `--c: var(--lane-${r.lane})` }, laneName[r.lane]), h('div', { class: 'what' }, r.text, h('small', {}, r.sub)));
+    points.push({ t: r.t, at, el, row: r });
+    (r.steps || []).forEach((st, n) => {
+      const sk = points.length;
+      const s = h('div', { class: 'tlstep', 'data-t': Math.round(st.t), 'data-node': st.node, 'data-k': sk, title: 'What went into this step and what came out, and the screen when it ran',
+        onmouseenter: () => light(sk, true), onmouseleave: () => light(sk, false), onclick: () => setPlayhead(st.t, sk) },
+      h('span', { class: 't' }, msText(st.t)), h('span', { class: 'ln' }, `step ${n + 1}`), h('div', { class: 'what' }, `${st.name} · ${tlPort(st.node, 'input', st.port)}`));
+      points.push({ t: st.t, at: st.t, el: s, row: r, step: st, n: n + 1 });
+    });
+  });
+  // the lanes: a run is a pale bar, each of its steps a mark on it (the waterfall is the steps, side by side in time)
   for (const [lane, name] of LANES) {
     const track = h('div', { class: 'track', 'data-lane': lane });
-    shown.forEach((r, i) => {
-      if (r.lane !== lane) return;
-      const m = h('div', { class: `mark ${lane}${r.minor ? ' minor' : ''}`, style: `left:${pct(r.t - from)};width:${r.end !== undefined ? `calc(${pct(r.end - r.t)})` : '3px'}`, title: `${msText(r.t)} · ${r.text}`,
-        onmouseenter: () => light(i, true), onmouseleave: () => light(i, false),
-        onclick: () => { setPlayhead(r.t); const el = rowEls.get(i); el?.scrollIntoView({ block: 'nearest' }); el?.classList.remove('flash'); void el?.offsetWidth; el?.classList.add('flash'); } });
-      markEls.set(i, m); track.append(m);
+    points.forEach((p, k) => {
+      if (p.row.lane !== lane) return;
+      const r = p.row, step = !!p.step;
+      const m = h('div', { class: `mark ${lane}${r.minor ? ' minor' : ''}${r.steps?.length && !step ? ' run' : ''}${step ? ' step' : ''}`, 'data-k': k,
+        style: step ? `left:${pct(p.t - from)}` : `left:${pct(r.t - from)};width:${r.end !== undefined ? `calc(${pct(r.end - r.t)})` : '3px'}`, title: step ? `${msText(p.t)} · step ${p.n}: ${p.step.name}` : `${msText(r.t)} · ${r.text}`,
+        onmouseenter: () => light(k, true), onmouseleave: () => light(k, false),
+        onclick: () => { setPlayhead(p.at, k); const el = p.el; el.scrollIntoView({ block: 'nearest' }); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); } });
+      markOf.set(k, m); track.append(m);
     });
     axis.append(h('div', { class: 'tlane' }, h('span', {}, name), track));
   }
   axis.append(h('div', { class: 'ticks' }, ...[0, 0.25, 0.5, 0.75, 1].map((f) => h('span', { style: `left:${f * 100}%` }, msText(from + (span - from) * f)))));
-  // the playhead: drag anywhere on the axis, or step from row to row with the arrow keys (STU-032)
+  // the playhead: drag anywhere on the axis, or go line by line with the arrow keys (STU-032, STU-033)
   const play = h('div', { class: 'play', id: 'tlplay' });
   axis.append(h('div', { style: 'position:absolute;left:112px;right:12px;top:0;bottom:0;pointer-events:none' }, play));
-  const laneName = Object.fromEntries(LANES);
-  const points = [];
-  shown.forEach((r, i) => {
-    const link = r.link?.card ? `card:${r.link.card.node}.${r.link.card.port}` : r.link?.item ? `item:${r.link.item}` : r.link?.node ? `node:${r.link.node}` : undefined;
-    const key = `${Math.round(r.t)}:${r.text}`, open = tlRunsOpen.has(key);
-    const toggle = r.steps?.length ? h('button', { class: 'open', 'data-steps': r.steps.length, title: open ? 'Hide what went in and out of each step' : 'Show each step with what went in and what came out',
-      onclick: (e) => { e.stopPropagation(); open ? tlRunsOpen.delete(key) : tlRunsOpen.add(key); renderTimeline(); } }, open ? 'Hide the steps' : `Show the ${r.steps.length === 1 ? 'step' : `${r.steps.length} steps`}`) : null;
-    const el = h('div', { class: `tlrow${r.minor ? ' minor' : ''}`, 'data-lane': r.lane, 'data-t': Math.round(r.t), 'data-end': r.end !== undefined ? Math.round(r.end) : undefined, 'data-link': link,
-      title: link ? (r.link.card ? 'Open this workflow' : r.link.item ? 'Open this page data' : 'Select this element') : undefined,
-      // a screen row shows the screen once it has drawn: the playhead goes to its end
-      onmouseenter: () => light(i, true), onmouseleave: () => light(i, false), onclick: () => { setPlayhead(r.lane === 'screen' ? r.end ?? r.t : r.t); followRow(r); } },
-    h('span', { class: 't' }, msText(r.t)), h('span', { class: 'ln', style: `--c: var(--lane-${r.lane})` }, laneName[r.lane]), h('div', { class: 'what' }, r.text, toggle, stepThrough(r), h('small', {}, r.sub)));
-    rowEls.set(i, el); list.append(el); points.push({ t: r.t, el });
-    if (open) for (const st of r.steps) {
-      const s = h('div', { class: 'tlstep', 'data-t': Math.round(st.t), 'data-node': st.node, title: 'Show the screen as it was when this step ran', onclick: () => setPlayhead(st.t) },
-        h('span', { class: 't' }, msText(st.t)), h('span'), h('div', { class: 'what' }, `${st.name} · ${tlPort(st.node, 'input', st.port)}`, ...stepIo(st)));
-      list.append(s); points.push({ t: st.t, el: s });
-    }
-  });
-  tlRefs = { from, span, play, points, axis };
-  setPlayhead(tlAt);
+  for (const p of points) list.append(p.el);
+  tlRefs = { from, span, play, points, axis, markOf };
+  setPlayhead(tlAt, tlSel);
 }
 let tlRefs = null;
 /** A port's words for a node anywhere in the files (a step can be inside a reusable). */
@@ -3917,27 +3954,58 @@ function tlPort(id, plug, port, nodeOf = recording?.nodeOf) {
   if (!tlPortWords.has(k)) { let w = port; try { const n = nodeOf?.(id); if (n) w = portLabel(n, plug, port); } catch { /* the name it has */ } tlPortWords.set(k, w); }
   return tlPortWords.get(k);
 }
-/** What went into a step and what came out (the trace's previews), a line each. */
-function stepIo(st, { nodeOf, only, none = 'nothing before Stop', times = true } = {}) {
-  const cut = (v) => (v.length > 60 ? v.slice(0, 59) + '…' : v);
-  const ins = st.ins.slice(0, 6).map((x) => `${tlPort(st.node, 'input', x.port, nodeOf)} ${cut(x.value)}${x.set ? ' (set)' : ''}`);
-  if (st.ins.length > 6) ins.push(`+${st.ins.length - 6} more`);
-  const outs = st.outs.slice(0, 6).map((x) => (x.signal ? `${tlPort(st.node, 'output', x.port, nodeOf)} sent${times && x.t >= 1 ? ` after ${msText(x.t)}` : ''}` : `${tlPort(st.node, 'output', x.port, nodeOf)} ${cut(x.value)}`));
-  if (st.outs.length > 6) outs.push(`+${st.outs.length - 6} more`);
-  return [only === 'out' ? null : h('span', { class: 'io', 'data-io': 'in' }, h('b', {}, 'in '), ins.length ? ins.join(' · ') : 'nothing wired in, nothing set'),
-    only === 'in' ? null : h('span', { class: 'io', 'data-io': 'out' }, h('b', {}, 'out '), outs.length ? outs.join(' · ') : none)];
-}
-/** Move the playhead (ms from the recording's start; null: the end): the line, which rows are still to come, the screen then. */
-function setPlayhead(t) {
+/**
+ * Move the playhead (ms from the recording's start; null: the end) and say which line it is on (`k`; left out: the
+ * last line at or before it, as when dragging): which lines are still to come, that line's details, the screen then.
+ */
+function setPlayhead(t, k) {
   if (!recording || !tlRefs) return;
-  const { from, span, play, points } = tlRefs;
+  const { from, span, play, points, markOf } = tlRefs;
   tlAt = t === null || t === undefined ? null : Math.max(0, Math.min(recording.length, t));
   const at = tlAt ?? recording.length;
   play.style.left = `${Math.max(0, Math.min(100, ((at - from) / (span - from)) * 100)).toFixed(3)}%`;
-  let now = null;
-  for (const p of points) { const later = p.t > at + 0.5; p.el.classList.toggle('later', later); p.el.classList.remove('now'); if (!later) now = p; }
-  now?.el.classList.add('now');
+  if (k === undefined || k < 0 || k >= points.length) { k = -1; points.forEach((p, i) => { if (p.t <= at + 0.5) k = i; }); }
+  tlSel = k;
+  points.forEach((p, i) => { p.el.classList.toggle('later', i > k && p.t > at + 0.5); p.el.classList.toggle('now', i === k); markOf.get(i)?.classList.toggle('sel', i === k); });
+  renderDetail(points[k]);
   renderShot(at);
+}
+/** One line on from the playhead's, or one back. */
+function stepLine(by) {
+  if (!tlRefs) return;
+  const k = Math.max(0, Math.min(tlRefs.points.length - 1, tlSel + by)), p = tlRefs.points[k];
+  if (!p) return;
+  setPlayhead(p.at, k);
+  p.el.scrollIntoView({ block: 'nearest' });
+}
+/**
+ * The line the playhead is on, in full: a step's inputs and outputs a line each, and what happened from it until the
+ * run's next step (the page data it asked for, what the screen drew); a row's words.
+ */
+function renderDetail(p) {
+  const box = $('tldetail'); box.innerHTML = '';
+  $('tlprev').disabled = !p || tlSel <= 0; $('tlnext').disabled = !tlRefs || tlSel >= tlRefs.points.length - 1;
+  if (!p) { box.append(h('div', { class: 'none' }, 'Pick a row or a step, or press ← / → to go through them one by one.')); return; }
+  if (!p.step) {
+    const r = p.row;
+    box.append(h('div', { class: 'dh' }, h('b', {}, r.text), h('span', {}, ` · ${msText(r.t)}`)), h('div', { class: 'dsub' }, r.sub));
+    if (r.steps?.length) box.append(h('div', { class: 'dsub' }, `→ goes through its ${r.steps.length === 1 ? 'step' : `${r.steps.length} steps`}, one at a time.`));
+    return;
+  }
+  const { row, step: st, n } = p;
+  const cut = (v) => (v.length > 120 ? v.slice(0, 119) + '…' : v);
+  box.append(h('div', { class: 'dh' }, h('b', {}, `Step ${n} of ${row.steps.length}`), h('span', {}, ` · ${msText(st.t)} · ${row.text}`)),
+    h('div', { class: 'dname' }, `${st.name} · ${tlPort(st.node, 'input', st.port)}`));
+  const io = (dir, list, none, line) => h('div', { class: 'io', 'data-io': dir }, h('b', {}, dir === 'in' ? 'In' : 'Out'), ...(list.length ? list.map((x) => h('div', {}, line(x))) : [h('div', { class: 'quiet' }, none)]));
+  box.append(io('in', st.ins, 'nothing wired in, nothing set', (x) => `${tlPort(st.node, 'input', x.port)} ${cut(x.value)}${x.set ? ' (set)' : ''}`),
+    io('out', st.outs, 'nothing before the recording ended', (x) => (x.signal ? `${tlPort(st.node, 'output', x.port)} sent${x.t >= 1 ? ` after ${msText(x.t)}` : ''}` : `${tlPort(st.node, 'output', x.port)} ${cut(x.value)}`)));
+  // what happened from this step until the next step of its run (or the run's end), on the other lanes
+  const until = row.steps[n] ? row.steps[n].t : Math.max(row.end ?? st.t, st.t) + 1e9;
+  const then = recording.rows.filter((r) => r.lane !== 'workflow' && r.t >= st.t && r.t < until && r.t >= row.t);
+  if (row.steps[n] && row.steps[n].t === st.t) return; // the next step ran in the same millisecond: nothing came between
+  box.append(h('div', { class: 'io', 'data-io': 'then' }, h('b', {}, row.steps[n] ? 'Then, before the next step' : 'Then'),
+    ...(then.length ? then.slice(0, 6).map((r) => h('div', {}, `${msText(r.t)} ${r.text}${r.lane === 'data' ? ` · ${r.sub.split(' · ').slice(1).join(' · ')}` : ''}`)) : [h('div', { class: 'quiet' }, 'nothing on the page data or the screen')]),
+    then.length > 6 ? h('div', { class: 'quiet' }, `+${then.length - 6} more`) : null));
 }
 function scrubFrom(e) {
   const track = tlRefs?.axis.querySelector('.track'); if (!track) return;
@@ -3950,26 +4018,27 @@ $('tlaxis').addEventListener('pointerdown', (e) => {
   const move = (m) => scrubFrom(m), up = () => { $('tlaxis').removeEventListener('pointermove', move); $('tlaxis').removeEventListener('pointerup', up); $('tlaxis').removeEventListener('pointercancel', up); };
   $('tlaxis').addEventListener('pointermove', move); $('tlaxis').addEventListener('pointerup', up); $('tlaxis').addEventListener('pointercancel', up);
 });
-$('tlaxis').addEventListener('keydown', (e) => {
-  if (!tlRefs) return;
-  const ts = [...new Set(tlRefs.points.map((p) => p.t))].sort((a, b) => a - b), at = tlAt ?? recording.length;
-  let t;
-  if (e.key === 'ArrowRight') t = ts.find((x) => x > at + 0.5);
-  else if (e.key === 'ArrowLeft') t = ts.findLast((x) => x < at - 0.5) ?? 0;
-  else if (e.key === 'Home') t = 0;
-  else if (e.key === 'End') t = null;
+// ← / → anywhere in the drawer: one line at a time, the steps of a run included; Home and End
+$('timeline').addEventListener('keydown', (e) => {
+  if (!tlRefs || e.target.matches('input, select, textarea')) return;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') stepLine(1);
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') stepLine(-1);
+  else if (e.key === 'Home') setPlayhead(0, 0);
+  else if (e.key === 'End') setPlayhead(null);
   else return;
   e.preventDefault();
-  if (t !== undefined) setPlayhead(t);
-  tlRefs.points.find((p) => p.el.classList.contains('now'))?.el.scrollIntoView({ block: 'nearest' });
 });
+// a click in the drawer gives it the arrow keys
+$('timeline').addEventListener('pointerdown', (e) => { if (!e.target.closest('button, input, select, #tlaxis')) $('timeline').focus({ preventScroll: true }); });
+$('tlprev').onclick = () => stepLine(-1);
+$('tlnext').onclick = () => stepLine(1);
 /**
  * The screen as it was at `at` (STU-032): the probe's last copy of the page at or before it, drawn in a frame that runs
  * no script (the copy's own scripts stay text), with the page's styles, its fields holding what they held.
  */
 function renderShot(at) {
-  const pane = $('tlscreen'), shots = recording?.shots;
-  pane.hidden = !tlOpen || !shots || !!rec;
+  const pane = $('tlscreen'), shots = recording?.shots ?? { list: [] };
+  pane.hidden = !tlOpen || !recording || !!rec;
   pane.classList.toggle('big', tlBig && !pane.hidden);
   $('tlbig').textContent = tlBig ? 'Smaller' : 'Larger';
   if (pane.hidden) return;
@@ -4003,117 +4072,6 @@ function fitShot() {
 }
 $('tlbig').onclick = () => { tlBig = !tlBig; renderShot(tlAt ?? recording?.length ?? 0); };
 addEventListener('resize', () => { if (recording?.shots && tlOpen) fitShot(); });
-
-/* ================= STU-033: step mode =================
-   One card's workflow pauses before each step the next time it runs in the app (./stepper.mjs holds the signal in the
-   app's frame). While it is on, the timeline's drawer is step mode: which step waits and what it will read, the values the trace saw arrive
-   at it so far; Next lets it run. A teaching aid, labelled as one: in the app as it runs nothing waits. */
-let stepper = null; // { card, naming, rule, run, steps: [{ n, signal, release, state: 'held' | 'ran' | 'free' }], took, note }
-const STEP_OWNER = 'nodegx-studio-step';
-function armStepper(card, { use = false } = {}) {
-  if (stepper) disarmStepper({ quiet: true });
-  const { nodeOf, label, settings } = timelineNaming();
-  stepper = { card, naming: { nodeOf, label, settings }, rule: stepRule(card), run: null, steps: [], note: '' };
-  armFrame();
-  if (use && card.component === pageKey) {
-    if (tab !== 'design') switchTab('design');
-    if (!$('previewmode').checked) { $('previewmode').checked = true; overlay.classList.add('preview'); draw(); }
-  }
-  tlOpen = true; renderTimeline(); if (tab === 'workflow') renderWorkflow();
-}
-function disarmStepper({ quiet = false } = {}) {
-  const s = stepper; if (!s) return;
-  stepper = null;
-  for (const st of s.steps) if (st.state === 'held') { st.state = 'ran'; st.release(); } // a step left waiting runs now, as it would have
-  try { const w = s.frame; if (w) { w.__studioStep = null; if (s.took) w.Noodl.Navigation._noodlRuntime.context.releaseTraceOwner(STEP_OWNER); } } catch { /* the frame is gone */ }
-  window.__ob.stepper = null;
-  renderTimeline(); if (tab === 'workflow') renderWorkflow();
-  if (!quiet) toast('Step mode is off');
-}
-/** Step mode goes on in the app's frame (again after a rebuild: the steps held in the old copy went with it). */
-function armFrame() {
-  const w = preview.frame?.contentWindow; if (!stepper || !w) return;
-  if (stepper.frame && stepper.frame !== w && stepper.steps.length) { stepper.steps = []; stepper.run = null; stepper.rule = stepRule(stepper.card); stepper.note = 'The app was rebuilt, so the run that was stepping went with it.'; }
-  stepper.frame = w;
-  try {
-    const ctx = w.Noodl.Navigation._noodlRuntime.context;
-    // the hold reads where a signal came from off the trace's write; the in-page preview arms the trace at boot
-    if (!ctx.traceEnabled) { ctx.setTraceEnabled(true, STEP_OWNER); stepper.took = true; }
-  } catch { /* not started yet: hookFrame comes back */ }
-  const ok = installStepper(w, {
-    take: (sig) => {
-      const s = stepper; if (!s) return false;
-      const r = s.rule.take(sig); if (!r) return false;
-      if (r.run !== s.run) {
-        // the card ran again: what the last run left waiting runs now, and this run is the one shown
-        for (const st of s.steps) if (st.state === 'held') { st.state = 'ran'; st.release(); }
-        s.run = r.run; s.steps = []; s.note = '';
-      }
-      s.steps.push({ n: r.step.n, signal: sig, state: r.hold ? 'held' : 'free', release: () => {} });
-      if (!r.hold) setTimeout(renderStepper, 0);
-      return r.hold;
-    },
-    held: ({ signal, release }) => {
-      const st = stepper?.steps.find((x) => x.signal === signal); if (!st) return release();
-      st.release = release;
-      setTimeout(renderStepper, 0); // out of the runtime's update
-    }
-  });
-  if (!ok) stepper.note = 'The app is not running yet; step mode starts with it.';
-}
-function stepNext() {
-  const st = stepper?.steps.find((x) => x.state === 'held'); if (!st) return;
-  st.state = 'ran'; st.release();
-  renderStepper(); setTimeout(renderStepper, 600); // what it sent, once it has run
-}
-function stepRest() {
-  if (!stepper?.run) return;
-  stepper.rule.free();
-  for (const st of stepper.steps) if (st.state === 'held') { st.state = 'ran'; st.release(); }
-  renderStepper(); setTimeout(renderStepper, 600);
-}
-$('stnext').onclick = stepNext;
-$('strest').onclick = stepRest;
-$('ststop').onclick = () => disarmStepper();
-/** A timeline row of a card's run: step through that card the next time it runs. */
-function stepThrough(r) {
-  const c = r.link?.card; if (r.lane !== 'workflow' || r.minor || !c || rec) return null;
-  const card = recording?.cards?.find((x) => x.node === c.node && x.port === c.port && x.component === c.component); if (!card) return null;
-  const on = stepper?.card.node === card.node && stepper.card.port === card.port && stepper.card.component === card.component;
-  return h('button', { class: 'open', 'data-step': on ? 'on' : 'off', title: on ? 'Turn step mode off' : 'The next time this workflow runs, pause before each step and show what it is about to read. A teaching aid: not real timing',
-    onclick: (e) => { e.stopPropagation(); on ? disarmStepper() : armStepper({ ...card, page: recording.page }); } }, on ? 'Stop stepping' : 'Step through');
-}
-function renderStepper() {
-  const s = stepper;
-  window.__ob.stepper = s ? { card: s.card.name, steps: s.steps.map((x) => ({ n: x.n, node: x.signal.toNode, state: x.state })) } : null;
-  if (!s) return;
-  // a step that waits is never out of sight: the drawer opens on it, even if it was closed
-  if (!tlOpen || $('stepper').hidden) { tlOpen = true; return renderTimeline(); }
-  const { label, nodeOf, settings } = s.naming;
-  const held = s.steps.find((x) => x.state === 'held');
-  $('sttitle').textContent = s.card.name;
-  $('stnext').disabled = !held; $('strest').disabled = !held;
-  let trace = [];
-  try { trace = s.frame.Noodl.Navigation._noodlRuntime.context.getTraceEvents(0) || []; } catch { /* the frame is gone */ }
-  const values = stepValues(trace);
-  // a card armed from a recording runs on the page recorded; one opened in its reusable runs on the reusable's own canvas
-  const inside = s.card.component !== pageKey && s.card.page !== pageKey ? ` (it is inside ${s.card.component}: use the app on a page that places it)` : '';
-  $('stnote').textContent = s.note || (!s.steps.length ? `Use the app: ${s.card.when}${inside}. The workflow pauses before each step and shows what that step will read.`
-    : held ? `Step ${held.n} waits for you. It has not run: what it shows is what it would read now.`
-    : s.run?.free ? 'The rest of this run goes without pausing; the next time the workflow runs, it pauses again.'
-    : `Step ${s.steps.at(-1).n} ran. The next step pauses here when its signal arrives (a step that asks the backend waits for the answer).`);
-  const list = $('ststeps'); list.innerHTML = '';
-  for (const st of s.steps) {
-    const id = st.signal.toNode, n = nodeOf(id);
-    const name = `${n ? typeName(n.type) : label(id)}${n?.label ? ` · ${n.label}` : ''}`;
-    // waiting: every value into it so far, which is what it reads when it runs; ran: what it sent from its signal on
-    const io = st.state === 'held' ? values({ ...st.signal, seq: Infinity }, settings(id)) : values(st.signal, settings(id));
-    // the drawer's own step lines (STU-032), the step's number where a recording has its time
-    list.append(h('div', { class: `tlstep ${st.state}`, 'data-n': st.n, 'data-node': id, 'data-state': st.state },
-      h('span', { class: 't' }, `Step ${st.n}`), h('span', { class: 'state' }, st.state === 'held' ? 'waits for you' : st.state === 'free' ? 'ran, no pause' : 'ran'),
-      h('div', { class: 'what' }, name, ...stepIo({ node: id, ...io }, { nodeOf, only: st.state === 'held' ? 'in' : 'out', none: 'nothing sent yet', times: false }))));
-  }
-}
 
 /* ================= tabs, boot ================= */
 let tab = 'design';
