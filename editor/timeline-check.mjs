@@ -328,12 +328,13 @@ try {
   const cmdRow = rows2.find((r) => r.lane === 'workflow' && r.link === `card:${what}.do`);
   if (cmdRow) await b.evaluate(`[...document.querySelectorAll('#tlrows .tlrow')].find(r => r.dataset.link === ${JSON.stringify(cmdRow.link)}).querySelector('button[data-step]').click()`);
   await wait(300);
-  const bar = () => b.evaluate(`JSON.stringify((() => { const s = document.getElementById('stepper'); return { shown: getComputedStyle(s).display !== 'none', title: document.getElementById('sttitle').textContent, tag: s.querySelector('.tag')?.offsetWidth > 0 ? s.querySelector('.tag').textContent : '', note: document.getElementById('stnote').textContent, next: !document.getElementById('stnext').disabled, steps: [...s.querySelectorAll('.ststep')].map(x => ({ n: Number(x.dataset.n), node: x.dataset.node, state: x.dataset.state, text: x.textContent, ins: x.querySelector('[data-io=in]')?.textContent ?? null, outs: x.querySelector('[data-io=out]')?.textContent ?? null })) }; })())`).then(JSON.parse);
+  // step mode is the timeline's drawer while it is on: its header the card and the buttons, its rows the steps
+  const bar = () => b.evaluate(`JSON.stringify((() => { const s = document.getElementById('stepper'), tag = document.querySelector('#sthead .tag'); return { shown: getComputedStyle(s).display !== 'none' && !document.getElementById('timeline').hidden, recording: getComputedStyle(document.getElementById('tlbody')).display !== 'none', title: document.getElementById('sttitle').textContent, tag: tag?.offsetWidth > 0 ? tag.textContent : '', note: document.getElementById('stnote').textContent, next: !document.getElementById('stnext').disabled, steps: [...s.querySelectorAll('.tlstep')].map(x => ({ n: Number(x.dataset.n), node: x.dataset.node, state: x.dataset.state, text: x.textContent, ins: x.querySelector('[data-io=in]')?.textContent ?? null, outs: x.querySelector('[data-io=out]')?.textContent ?? null })) }; })())`).then(JSON.parse);
   const armed = await bar();
-  ok(cmdRow && armed.shown && armed.title === `Step mode · ${cmdRow.text}` && /not real timing/i.test(armed.tag) && !armed.next && armed.steps.length === 0 && !/places it/.test(armed.note),
-    "a recorded run's row arms step mode for its card: a bar over the tab names the card, says it is not real timing, and waits for the app", { cmdRow: cmdRow && { text: cmdRow.text, link: cmdRow.link }, what, armed, workflow: cmdRow ? undefined : rows2.filter((r) => r.lane === 'workflow').map((r) => `${r.link} ${r.text} | ${r.sub}`), loose: cmdRow ? undefined : JSON.parse(await b.evaluate(`JSON.stringify(__ob.timeline.rows.filter((r) => r.minor).map((r) => r.text).slice(0, 20))`)) });
+  ok(cmdRow && armed.shown && !armed.recording && armed.title === cmdRow.text && /not real timing/i.test(armed.tag) && !armed.next && armed.steps.length === 0 && !/places it/.test(armed.note),
+    "a recorded run's row arms step mode for its card: the drawer turns to it, names the card, says it is not real timing, and waits for the app", { cmdRow: cmdRow && { text: cmdRow.text, link: cmdRow.link }, what, armed, workflow: cmdRow ? undefined : rows2.filter((r) => r.lane === 'workflow').map((r) => `${r.link} ${r.text} | ${r.sub}`), loose: cmdRow ? undefined : JSON.parse(await b.evaluate(`JSON.stringify(__ob.timeline.rows.filter((r) => r.minor).map((r) => r.text).slice(0, 20))`)) });
   const creates = () => b.evaluate(`${W}.__studioLog.filter(e => e.kind === 'request' && e.method === 'POST' && /\\/classes\\/Task$/.test(e.path) && !(e.body && e.body._method)).length`);
-  const heldNow = async (node) => { await b.until(`!!document.querySelector('#ststeps .ststep[data-state=held][data-node=${JSON.stringify(node)}]')`, 10000).catch(() => null); await wait(250); return bar(); };
+  const heldNow = async (node) => { await b.until(`!!document.querySelector('#ststeps .tlstep[data-state=held][data-node=${JSON.stringify(node)}]')`, 10000).catch(() => null); await wait(250); return bar(); };
   const THIRD = 'Stepped through, one at a time', q3 = JSON.stringify(THIRD);
   const made0 = await creates();
   await typeInto(`[...${W}.document.querySelectorAll('input[type=text], input:not([type])')].find(i => i.offsetParent)`, THIRD);
@@ -362,7 +363,8 @@ try {
   ok(listed && !rest.steps.some((x) => x.state === 'held') && !rest.next,
     '"Run the rest": the run goes on without pausing and the task is in the list', { listed, rest: { note: rest.note, steps: rest.steps.map((x) => `${x.n} ${x.state}`) } });
   await b.clickSel('#ststop'); await wait(300);
-  ok(!(await bar()).shown, 'Stop stepping takes the bar away');
+  const stopped = await bar();
+  ok(!stopped.shown && stopped.recording && (await b.evaluate(`document.querySelectorAll('#tlrows .tlrow').length`)) > 0, 'Stop stepping gives the drawer back to the recording', stopped);
   // what was held reached its node whole: the signal's falling edge too, or the command's next run would never start
   const madeBefore = await creates();
   const after4 = await addTask('Added after stepping');

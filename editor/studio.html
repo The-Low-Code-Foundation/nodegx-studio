@@ -172,21 +172,16 @@
   /* larger: over the tab, above the drawer, the drawer still there to scrub */
   main { position: relative; }
   .tlscreen.big { position: absolute; left: 0; right: 0; top: 0; bottom: 300px; width: auto; z-index: 30; border: 0; border-bottom: 1px solid var(--line); box-shadow: var(--shadow); }
-  /* ---- STU-033: step mode, a bar over every tab while one card pauses before each step ---- */
-  #stepper { flex: none; background: #faf5ff; border-bottom: 1px solid #e9d5ff; padding: 8px 14px; display: grid; gap: 6px; max-height: 240px; overflow: auto; }
-  #stepper[hidden] { display: none; }
-  #stepper .sthead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  #stepper .sthead h4 { margin: 0; font-size: 13px; font-weight: 600; }
-  #stepper .sthead .tag { font-size: 11px; color: #7e22ce; background: #f3e8ff; border: 1px solid #e9d5ff; border-radius: 10px; padding: 1px 8px; white-space: nowrap; }
-  #stepper .sthead .grow { flex: 1; }
-  #stepper .stnote { color: var(--ink-2); font-size: 12px; }
-  #stepper .ststep { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: baseline; font-size: 12px; color: var(--ink-2); padding: 3px 6px; border-radius: var(--r); }
-  #stepper .ststep .n { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
-  #stepper .ststep.held { background: var(--panel); box-shadow: inset 2px 0 0 var(--lane-workflow); color: var(--ink); }
-  #stepper .ststep .state { color: var(--muted); margin-left: 8px; }
-  #stepper .ststep.held .state { color: #7e22ce; font-weight: 600; }
-  #stepper .ststep .io { display: block; color: var(--muted); font-family: var(--mono); font-size: 11px; white-space: pre-wrap; word-break: break-word; }
-  #stepper .ststep .io b { font-weight: 600; color: var(--ink-2); }
+  /* ---- STU-033: step mode, in the timeline's drawer: its header holds the card and the buttons, its rows the steps ---- */
+  #sthead .tag { font-size: 11px; color: #7e22ce; background: #f3e8ff; border: 1px solid #e9d5ff; border-radius: 10px; padding: 1px 8px; white-space: nowrap; flex: none; }
+  #sthead button { flex: none; }
+  #stepper { overflow: auto; min-height: 0; padding: 6px 6px 10px; }
+  #stepper[hidden], #sthead[hidden], #tlhead[hidden], #tlbody[hidden] { display: none; }
+  #stepper .stnote { color: var(--ink-2); font-size: 12px; padding: 2px 6px 6px; }
+  #stepper .tlstep { cursor: default; }
+  #stepper .tlstep .state { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  #stepper .tlstep.held { background: var(--panel-2); color: var(--ink); }
+  #stepper .tlstep.held .state { color: #7e22ce; font-weight: 600; }
   section[hidden] { display: none; }
   aside { background: var(--panel); border-right: 1px solid var(--line); overflow: auto; display: flex; flex-direction: column; min-height: 0; }
   aside.right { border-right: 0; border-left: 1px solid var(--line); }
@@ -596,12 +591,6 @@
   </header>
 
   <main>
-    <section id="stepper" aria-label="Step mode" hidden>
-      <div class="sthead"><h4 id="sttitle">Step mode</h4><span class="tag" title="The app does not wait between steps when it runs for real; here each step waits for you, so values that would have come later are already there">Not real timing: each step waits for you</span><span class="grow"></span>
-        <button class="primary tiny" id="stnext" title="Let this step run, and pause before the next one">Next step</button><button class="quiet tiny" id="strest" title="Let this step and the rest of this run go without pausing; the next run pauses again">Run the rest</button><button class="quiet tiny" id="ststop" title="Turn step mode off; a step waiting runs now">Stop stepping</button></div>
-      <div class="stnote" id="stnote"></div>
-      <div id="ststeps"></div>
-    </section>
     <section class="tab" id="design">
       <aside>
         <div class="search"><svg class="i"><use href="#i-search"/></svg><input type="text" id="treesearch" placeholder="Search elements"></div>
@@ -659,13 +648,17 @@
     </section>
 
     <section id="timeline" aria-label="Run timeline" hidden>
-      <div class="tlhead">
+      <div class="tlhead" id="sthead" hidden>
+        <h4>Step mode</h4><span class="note" id="sttitle"></span><span class="tag" title="The app does not wait between steps when it runs for real; here each step waits for you, so values that would have come later are already there">Not real timing</span><span class="grow"></span>
+        <button class="primary tiny" id="stnext" title="Let this step run, and pause before the next one">Next step</button><button class="quiet tiny" id="strest" title="Let this step and the rest of this run go without pausing; the next run pauses again">Run the rest</button><button class="quiet tiny" id="ststop" title="Turn step mode off; a step waiting runs now, and the drawer shows the recording again">Stop stepping</button>
+      </div>
+      <div class="tlhead" id="tlhead">
         <h4>Run timeline</h4><span class="note" id="tlnote"></span><span class="grow"></span>
         <label id="tlall-l" hidden><input type="checkbox" id="tlall"><span id="tlall-t">Every signal</span></label>
         <button class="quiet tiny" id="tlopen" title="Open a fresh copy of the app and record from its first millisecond">Record the page opening</button>
         <button class="quiet tiny" id="tlclose" title="Close the timeline (the recording is kept)" aria-label="Close the timeline"><svg class="i"><use href="#i-x"/></svg></button>
       </div>
-      <div class="tlbody">
+      <div class="tlbody" id="tlbody">
         <div class="tlmain">
           <div class="tlaxis" id="tlaxis" tabindex="0" aria-label="Scrub through the recording: drag, or use the arrow keys to go from one row to the next"></div>
           <div class="tlrows" id="tlrows"></div>
@@ -675,6 +668,7 @@
           <div class="tlsbox" id="tlsbox"><iframe id="tlsframe" sandbox="allow-same-origin" title="The app's screen at the playhead, as it was" tabindex="-1"></iframe><div class="none" id="tlsnone" hidden></div></div>
         </div>
       </div>
+      <div id="stepper" aria-label="Step mode" hidden><div class="stnote" id="stnote"></div><div id="ststeps"></div></div>
     </section>
   </main>
 </div>
@@ -3712,6 +3706,7 @@ function renderRecButton() {
 }
 function startRecording({ fromOpen = false } = {}) {
   if (rec) return;
+  if (stepper) { disarmStepper({ quiet: true }); toast('Step mode is off: a recording is the app in real time'); }
   tlOpen = true;
   if (fromOpen) { rec = { pendingOpen: true }; renderRecButton(); renderTimeline(); rebuild(0); return; }
   if (!preview.frame) return toast('The app is not on screen, so there is nothing to record.');
@@ -3851,6 +3846,9 @@ function renderTimeline() {
   box.hidden = !tlOpen; document.body.classList.toggle('tl', tlOpen);
   setTimeout(draw, 0); // the frame's size changed with the drawer
   if (!tlOpen) return;
+  const stepping = !!stepper;
+  $('sthead').hidden = !stepping; $('stepper').hidden = !stepping; $('tlhead').hidden = stepping; $('tlbody').hidden = stepping;
+  if (stepping) return renderStepper();
   const axis = $('tlaxis'), list = $('tlrows'); axis.innerHTML = ''; list.innerHTML = '';
   $('tlopen').disabled = !!rec?.pendingOpen;
   tlRefs = null; $('tlscreen').hidden = true;
@@ -4008,7 +4006,7 @@ addEventListener('resize', () => { if (recording?.shots && tlOpen) fitShot(); })
 
 /* ================= STU-033: step mode =================
    One card's workflow pauses before each step the next time it runs in the app (./stepper.mjs holds the signal in the
-   app's frame). The bar over every tab says which step waits and what it will read, the values the trace saw arrive
+   app's frame). While it is on, the timeline's drawer is step mode: which step waits and what it will read, the values the trace saw arrive
    at it so far; Next lets it run. A teaching aid, labelled as one: in the app as it runs nothing waits. */
 let stepper = null; // { card, naming, rule, run, steps: [{ n, signal, release, state: 'held' | 'ran' | 'free' }], took, note }
 const STEP_OWNER = 'nodegx-studio-step';
@@ -4021,16 +4019,15 @@ function armStepper(card, { use = false } = {}) {
     if (tab !== 'design') switchTab('design');
     if (!$('previewmode').checked) { $('previewmode').checked = true; overlay.classList.add('preview'); draw(); }
   }
-  renderStepper(); if (tab === 'workflow') renderWorkflow();
-  if (tlOpen && recording) renderTimeline();
+  tlOpen = true; renderTimeline(); if (tab === 'workflow') renderWorkflow();
 }
 function disarmStepper({ quiet = false } = {}) {
   const s = stepper; if (!s) return;
   stepper = null;
   for (const st of s.steps) if (st.state === 'held') { st.state = 'ran'; st.release(); } // a step left waiting runs now, as it would have
   try { const w = s.frame; if (w) { w.__studioStep = null; if (s.took) w.Noodl.Navigation._noodlRuntime.context.releaseTraceOwner(STEP_OWNER); } } catch { /* the frame is gone */ }
-  renderStepper(); if (tab === 'workflow') renderWorkflow();
-  if (tlOpen && recording) renderTimeline();
+  window.__ob.stepper = null;
+  renderTimeline(); if (tab === 'workflow') renderWorkflow();
   if (!quiet) toast('Step mode is off');
 }
 /** Step mode goes on in the app's frame (again after a rebuild: the steps held in the old copy went with it). */
@@ -4087,13 +4084,14 @@ function stepThrough(r) {
     onclick: (e) => { e.stopPropagation(); on ? disarmStepper() : armStepper({ ...card, page: recording.page }); } }, on ? 'Stop stepping' : 'Step through');
 }
 function renderStepper() {
-  const bar = $('stepper'), s = stepper;
-  bar.hidden = !s; window.__ob.stepper = s ? { card: s.card.name, steps: s.steps.map((x) => ({ n: x.n, node: x.signal.toNode, state: x.state })) } : null;
-  setTimeout(draw, 0); // the app moved down or up with the bar
+  const s = stepper;
+  window.__ob.stepper = s ? { card: s.card.name, steps: s.steps.map((x) => ({ n: x.n, node: x.signal.toNode, state: x.state })) } : null;
   if (!s) return;
+  // a step that waits is never out of sight: the drawer opens on it, even if it was closed
+  if (!tlOpen || $('stepper').hidden) { tlOpen = true; return renderTimeline(); }
   const { label, nodeOf, settings } = s.naming;
   const held = s.steps.find((x) => x.state === 'held');
-  $('sttitle').textContent = `Step mode · ${s.card.name}`;
+  $('sttitle').textContent = s.card.name;
   $('stnext').disabled = !held; $('strest').disabled = !held;
   let trace = [];
   try { trace = s.frame.Noodl.Navigation._noodlRuntime.context.getTraceEvents(0) || []; } catch { /* the frame is gone */ }
@@ -4110,10 +4108,10 @@ function renderStepper() {
     const name = `${n ? typeName(n.type) : label(id)}${n?.label ? ` · ${n.label}` : ''}`;
     // waiting: every value into it so far, which is what it reads when it runs; ran: what it sent from its signal on
     const io = st.state === 'held' ? values({ ...st.signal, seq: Infinity }, settings(id)) : values(st.signal, settings(id));
-    list.append(h('div', { class: `ststep ${st.state}`, 'data-n': st.n, 'data-node': id, 'data-state': st.state },
-      h('span', { class: 'n' }, String(st.n)),
-      h('div', {}, name, h('span', { class: 'state' }, st.state === 'held' ? 'waits for you' : st.state === 'free' ? 'ran without a pause' : 'ran'),
-        ...stepIo({ node: id, ...io }, { nodeOf, only: st.state === 'held' ? 'in' : 'out', none: 'nothing sent yet', times: false }))));
+    // the drawer's own step lines (STU-032), the step's number where a recording has its time
+    list.append(h('div', { class: `tlstep ${st.state}`, 'data-n': st.n, 'data-node': id, 'data-state': st.state },
+      h('span', { class: 't' }, `Step ${st.n}`), h('span', { class: 'state' }, st.state === 'held' ? 'waits for you' : st.state === 'free' ? 'ran, no pause' : 'ran'),
+      h('div', { class: 'what' }, name, ...stepIo({ node: id, ...io }, { nodeOf, only: st.state === 'held' ? 'in' : 'out', none: 'nothing sent yet', times: false }))));
   }
 }
 

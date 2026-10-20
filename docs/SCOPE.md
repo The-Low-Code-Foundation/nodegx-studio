@@ -995,8 +995,13 @@ with the Add task command stepped through: steps 1 and 2 ran, step 3 waits holdi
 - **Two ways in.** A card in the Workflow tab has **Step through** (beside Rename); it goes to Design with "Use the
   app" on. A recorded run's row in the timeline has **Step through** too, and that is the only way in for a card in
   a component with no element of its own (a command such as Add task, which the page picker does not list).
-- **The bar.** While step mode is on, a bar over every tab names the card, says **"Not real timing: each step waits
-  for you"**, and has **Next step**, **Run the rest** and **Stop stepping**. The next time the card runs in the app,
+- **In the timeline's drawer.** While step mode is on, the drawer under every tab is step mode: its header names the
+  card, says **"Not real timing"**, and has **Next step**, **Run the rest** and **Stop stepping**; its rows are the
+  steps, drawn as the timeline draws a run's steps (the step's number where a recording has its time). The first
+  build put this in a bar over the tabs: Richard, seeing it, *"quite busy … taking space away from the bottom part, or
+  they could be merged?"* It was a second copy of the drawer's step lines, and it pushed the app down. Stop stepping
+  gives the drawer back to the recording; Record turns step mode off (a recording is the app in real time); a step
+  that waits opens the drawer if it was closed. The next time the card runs in the app,
   each step waits before it runs: the bar lists the steps of the run, each one that ran with its **out** (what it
   sent), and the one waiting with its **in**: every value that has come into it so far, which is what it reads when
   it is let go, and the settings in the files where nothing is wired, marked "(set)". Run the rest lets the run go
@@ -1024,11 +1029,11 @@ Gate: `npm run check:timeline` 45/45 (33 + 12). On fixtures: the card's event is
 in the run is step 2, a signal into a step from outside the run is not held, a value from a step is not a step, Run
 the rest lets the run through still counted and the next run pauses from step 1; a card started through its
 component's inputs is a run with its steps, the `true` and `false` not among their inputs. On the todo template, with
-step mode armed from the second recording's Add task row: the bar names the card and says it is not real timing; a
+step mode armed from the second recording's Add task row: the drawer turns to it, names the card and says it is not real timing; a
 third task added, step 1 waits showing the typed title and no task is written; Next, step 1 ran and sent the title on
 and step 2 (the record's creation) waits with that title among what it will read, and the app's request log still has
 no write; Next, the log has the one write and step 3 waits holding the new record's id, the id the runtime's trace has
-out of step 2; Run the rest, the task is in the list; Stop stepping takes the bar away, and the next task is added
+out of step 2; Run the rest, the task is in the list; Stop stepping gives the drawer back to the recording, and the next task is added
 the ordinary way. The Workflow tab's Step through on the Header's Sign out card arms it and goes to the app, Use the
 app on. Mutants: the signal not held (handed over and also kept) 42/44, measured before the last check was added;
 the `false` not kept behind the `true` 44/45 (the next ordinary Add writes nothing).
