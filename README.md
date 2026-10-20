@@ -71,10 +71,10 @@ NODEGX_REPO=../NodeGX npm run vendor     # rebuild vendor/ from that checkout's 
 ```bash
 npm run check:vendor   # vendor/ is what NODEGX.json names, and every kit piece is there
 npm run check:editor   # 170 checks: drives the editor headless against a copy of NodeGX's todo template
-npm run check:timeline # 24 checks: Record / Stop and the run timeline, on fixtures and on the todo template's opening
+npm run check:timeline # 43 checks: Record / Stop and the run timeline, on fixtures and on the todo template's opening
 npm run check:pagedata # 33 checks: page data written, saved and read back from disk; NodeGX's validator on it
 npm run check:reusable # 12 checks: a group made reusable, every node and wire accounted for; NodeGX's validator on it
-npm run check:import   # the converter on the example editor requests and a page of repeated searches (50 checks; 58 with a template bundle)
+npm run check:import   # the converter on the example editor requests, a page of repeated searches and a template bundle (79 checks with the bundle)
 npm run check:app      # 34 checks: drives the desktop app — welcome screen, a template and its backend, reopen, an import, the recent list
 npm run smoke -- /path/to/project   # the desktop app opens the project and the app draws (no path: the welcome screen)
 ```
