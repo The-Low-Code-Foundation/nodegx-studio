@@ -154,6 +154,7 @@ try {
     await b.clickSel('#reopen');
     ok(/^ready My todos /.test(await editorReady(b)), 'Reopen opens it in the editor');
     ok((await backendUp(b))?.phase === 'running', 'its backend is started again');
+    ok(await b.evaluate(`document.querySelector('#reportpill').hidden && !document.querySelector('#reportpanel')`), 'a project with no import report shows no report and no button for one');
     const note = await openRows(b, 'Task');
     ok(/^1 row\(s\)/.test(note || '') && (await backendRows(todos, 'Task')).length === 1, 'the row added before the quit is there', note);
 
@@ -193,8 +194,19 @@ try {
     for (const f of ['backend-workflows/example-c5r6j filled.json', 'option-sets/example-dxr78ubfdtfq6tbmec.json', 'database-schema/example-privacy-rule-entpawjzehwq0tbk.json']) cpSync(join(studioRoot, 'import', f), join(inDir, f.split('/').pop()));
     await b.clickSel('#status button'); // dismiss the refusal
     await b.clickSel('#import');
+    ok(await b.until(`document.querySelector('#importguide').open && !!document.querySelector('#import-file') && !!document.querySelector('#import-folder')`, 5000), 'Import an app… first says what to bring: an export file, or a folder of page files (STU-040)');
+    await shot(b, 'import-guide');
+    await b.clickSel('#import-folder');
     const t = await editorReady(b);
-    ok(/^ready Imported /.test(t), 'Import an app… ends with the new project open in the editor', t);
+    ok(/^ready Imported /.test(t), 'the folder chosen there ends with the new project open in the editor', t);
+    const report = await b.until(`document.querySelector('#reportpanel h1')?.textContent`, 10000);
+    ok(/import report/i.test(report || '') && (await b.evaluate(`document.querySelectorAll('#reportpanel table').length`)) >= 3, 'with the import report open beside it, its tables drawn as tables', report);
+    ok(await b.evaluate(`!document.querySelector('#reportpill').hidden`), 'and an Import report button in the header');
+    await shot(b, 'import-report');
+    await b.clickSel('#reportclose');
+    ok(await b.until(`!document.querySelector('#reportpanel')`, 3000), 'Close puts it away');
+    await b.clickSel('#reportpill');
+    ok(await b.until(`!!document.querySelector('#reportpanel h1')`, 5000), 'and the header button brings it back');
     const pj = existsSync(join(imported, 'nodegx.project.json')) ? readJson(join(imported, 'nodegx.project.json')) : {};
     ok(pj.metadata?.imported?.by === 'nodegx-studio' && pj.name === 'Imported' && pj.metadata.imported.appId === 'backend-only' && existsSync(join(imported, 'docs/IMPORT-REPORT.md')), 'the folder holds the importer\'s project, named as the person named it, and its report', { name: pj.name, appId: pj.metadata?.imported?.appId });
     ok(JSON.stringify(recentDirs()) === JSON.stringify([imported, todos]), 'the recent list is newest first', recentDirs());

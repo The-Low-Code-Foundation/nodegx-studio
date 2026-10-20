@@ -9,7 +9,8 @@ contextBridge.exposeInMainWorld('studio', {
   open: (dir) => ipcRenderer.invoke('studio:open', dir),
   openFolder: () => ipcRenderer.invoke('studio:open-folder'),
   newFromTemplate: (slug) => ipcRenderer.invoke('studio:new', slug),
-  importApp: () => ipcRenderer.invoke('studio:import'),
+  /** `kind`: 'file' (an export) or 'folder' (the app's page files), as the guide offers them. */
+  importApp: (kind) => ipcRenderer.invoke('studio:import', kind),
   forget: (dir) => ipcRenderer.invoke('studio:forget', dir),
   reveal: (dir) => ipcRenderer.invoke('studio:reveal', dir),
   /** STU-008: publishes the open app as a site; the main process asks where and says what it did. */

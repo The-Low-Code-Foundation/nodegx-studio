@@ -303,6 +303,12 @@ const server = http.createServer(async (req, res) => {
       writeFileSync(file, await readBody(req));
       return json(200, { path: rel });
     }
+    if (url.pathname === '/api/doc') { // STU-040: one Markdown file of the project's docs/ folder, read only (the import report)
+      const rel = url.searchParams.get('path') ?? '';
+      if (!/^docs\/[\w .-]+\.md$/.test(rel)) return json(400, { error: 'only a .md file directly in docs/' });
+      const at = join(projectDir, ...rel.split('/'));
+      return existsSync(at) ? send(200, readFileSync(at, 'utf8'), 'text/markdown; charset=utf-8') : json(404, { error: `${rel} is not in the project` });
+    }
     if (url.pathname === '/api/agent') return json(200, await agent.stateOf(projectDir));
     if (url.pathname === '/api/agent-connect' && req.method === 'POST') {
       // Studio's own writes, known before they land, so the watcher does not hand them back to the page as an outside edit

@@ -116,7 +116,8 @@ function windowFor() {
   return win;
 }
 
-async function open(projectDir) {
+/** Opens a project in the window. `report`: an import just made it, so its report opens beside it (STU-040). */
+async function open(projectDir, { report = false } = {}) {
   let url;
   try {
     url = await startServer(projectDir);
@@ -132,7 +133,7 @@ async function open(projectDir) {
   menu();
   const w = windowFor();
   w.setTitle(`${path.basename(projectDir)} — NodeGX Studio`);
-  await w.loadURL(url).catch(loadCut);
+  await w.loadURL(report ? `${url}?report=import` : url).catch(loadCut);
 }
 
 /** A load that the next one replaces, or that quitting cuts off (the smoke run quits as soon as the page has drawn,
@@ -176,14 +177,10 @@ async function chooseProject() {
 const chooseDestination = (title, name, buttonLabel) =>
   pick('save', { title, message: 'Name the new project. Its folder is made for it.', defaultPath: path.join(app.getPath('documents'), name), buttonLabel, nameFieldLabel: 'Project:' });
 
-/** The importer's source: an export file, or a folder of the app's run-mode bundles. One dialog takes either on macOS only. */
-async function chooseImportSource() {
-  const file = { name: 'App export', extensions: ['json', 'bubble'] };
-  const message = 'An app export (.json), or a folder holding your app’s run-mode bundles and editor requests';
-  if (testPicks || process.platform === 'darwin') return pick('open', { title: 'Import an app', message, properties: ['openFile', 'openDirectory'], filters: [file] });
-  const { response } = await dialog.showMessageBox(win, { type: 'question', message: 'What are you importing from?', buttons: ['An export file', 'A folder of bundles', 'Cancel'], cancelId: 2 });
-  if (response === 2) return null;
-  return pick('open', response === 0 ? { title: 'Import an app', properties: ['openFile'], filters: [file] } : { title: 'Import an app', properties: ['openDirectory'] });
+/** The importer's source, as the welcome screen's guide asked for it (STU-040): an export file, or a folder of the app's page files. */
+function chooseImportSource(kind) {
+  if (kind === 'folder') return pick('open', { title: 'Import an app from a folder', message: 'The folder holding the dynamic.js file of each page', properties: ['openDirectory'] });
+  return pick('open', { title: 'Import an app from an export file', properties: ['openFile'], filters: [{ name: 'App export', extensions: ['json', 'bubble'] }] });
 }
 
 /** Each handler answers `{ error }` when nothing happened; a project opens after the answer, because opening it replaces the page that asked. */
@@ -239,15 +236,15 @@ function handlers() {
   ipcMain.handle('studio:reveal', asking((dir) => shell.showItemInFolder(dir)));
 }
 
-/** Import an App…: the source, the new folder, the importer, then the project. Its report is `docs/IMPORT-REPORT.md` inside it. */
-async function importFlow() {
-  const source = await chooseImportSource();
+/** Import an App…: the source, the new folder, the importer, then the project with its report (`docs/IMPORT-REPORT.md`) open beside it. */
+async function importFlow(kind = 'file') {
+  const source = await chooseImportSource(kind);
   if (!source) return { cancelled: true };
   const dest = await chooseDestination('Import into a new NodeGX project', path.basename(source).replace(/\.(json|bubble)$/i, '').replace(/\.export$/i, '') || 'Imported app', 'Import');
   if (!dest) return { cancelled: true };
   busy('Importing — a large app takes a minute…');
   const { dir } = await actions.importApp(source, dest);
-  later(() => open(dir));
+  later(() => open(dir, { report: true }));
 }
 
 /* ---------------------------------------------------------------- STU-008: Publish */
@@ -354,10 +351,8 @@ function menu() {
           submenu: recent.length ? recent.map((p) => ({ label: `${p.name} — ${p.dir.replace(app.getPath('home'), '~')}`, click: () => open(p.dir) })) : [{ label: 'No recent projects', enabled: false }]
         },
         { label: 'New from a Template…', click: () => welcome() },
-        {
-          label: 'Import an App…',
-          click: () => importFlow().catch((err) => dialog.showErrorBox('The import did not finish', err.message))
-        },
+        // the welcome screen's guide says what to bring before any dialog opens
+        { label: 'Import an App…', click: () => welcome().then(() => win?.webContents.executeJavaScript('window.openImportGuide?.()')) },
         { type: 'separator' },
         { label: 'Show Project Folder', enabled: !!server, click: () => server && shell.openPath(server.spawnargs[2]) },
         { label: 'Publish…', enabled: !!server, click: () => win?.webContents.executeJavaScript('window.__ob?.publish?.()') },

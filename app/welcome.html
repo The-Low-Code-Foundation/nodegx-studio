@@ -82,6 +82,19 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   footer { grid-column: 1 / -1; color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
   .logo svg { width: 100%; height: 100%; display: block; }
+
+  /* STU-040: what to bring before the import's dialogs open */
+  #importguide { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow); padding: 20px 22px; background: var(--panel); color: var(--ink); }
+  #importguide::backdrop { background: rgba(17, 24, 39, .35); }
+  #importguide h2 { margin: 0 0 6px; font-size: 17px; font-weight: 600; text-transform: none; letter-spacing: normal; color: var(--ink); }
+  #importguide .lead { color: var(--ink-2); margin: 0 0 14px; }
+  #importguide .way { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 12px 14px; margin-bottom: 10px; display: grid; gap: 6px; }
+  #importguide .way h3 { margin: 0; font-size: 14px; }
+  #importguide .way p { margin: 0; color: var(--ink-2); line-height: 1.5; }
+  #importguide .way button { justify-self: start; margin-top: 4px; }
+  #importguide code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: var(--panel-2); padding: 0 3px; border-radius: 3px; }
+  #importguide .note { color: var(--muted); font-size: 12px; margin: 10px 0 0; line-height: 1.5; }
+  #importguide .foot { display: flex; justify-content: flex-end; margin-top: 12px; }
 </style>
 
 <main>
@@ -108,6 +121,23 @@
   <footer>Every project is a folder on this computer. Studio, Claude Code and VS Code all edit the same files.</footer>
 </main>
 <div id="status" role="status" aria-live="polite"></div>
+<dialog id="importguide" aria-labelledby="ig-head">
+  <h2 id="ig-head">Import an app</h2>
+  <p class="lead">Studio makes a NodeGX project from an app built on the Bubble™ platform. Bring one of these two.</p>
+  <div class="way">
+    <h3>An export file</h3>
+    <p>If your plan lets you export your app, choose the file the export gives you.</p>
+    <button id="import-file" class="primary">Choose the File…</button>
+  </div>
+  <div class="way">
+    <h3>Your app’s page files</h3>
+    <p>Each page of your app sends its design and workflows to the browser in a file called <code>dynamic.js</code>. Open a page of your app in Chrome. Open DevTools and find <code>dynamic.js</code> in its Network tab. Save it with the page’s name in front, such as <code>index.dynamic.js</code>. Sign in first if the page needs it. Save one for each page and keep them all in one folder.</p>
+    <p>To bring your backend workflows too, open your app in the Bubble editor and find the request called <code>c5r6j</code> in the Network tab. Save its response in the same folder as <code>c5r6j.json</code>.</p>
+    <button id="import-folder" class="primary">Choose the Folder…</button>
+  </div>
+  <p class="note">Some of these files contain your app’s API keys, so keep the folder on this computer. When the import finishes, a report opens beside the app with what was converted and what wasn’t.</p>
+  <div class="foot"><button id="import-close">Cancel</button></div>
+</dialog>
 
 <script>
 const $ = (sel) => document.querySelector(sel);
@@ -221,7 +251,12 @@ function render() {
 }
 
 $('#open-folder').onclick = () => act(() => studio.openFolder());
-$('#import').onclick = () => act(() => studio.importApp());
+// STU-040: the guide first; the dialogs open from its two buttons
+const guide = $('#importguide');
+window.openImportGuide = () => { if (!guide.open) guide.showModal(); };
+$('#import').onclick = window.openImportGuide;
+$('#import-close').onclick = () => guide.close();
+for (const kind of ['file', 'folder']) $(`#import-${kind}`).onclick = () => { guide.close(); act(() => studio.importApp(kind)); };
 
 (async () => {
   data = await studio.welcome();

@@ -96,6 +96,26 @@
   header .status.bad::before { background: var(--danger); }
   header .status.backend { border: 0; background: none; padding: 0 0 0 14px; border-left: 1px solid var(--line); border-radius: 0; cursor: pointer; }
   header .status.backend.off::before { background: var(--line-2); }
+  /* the pills keep their words; the long status line beside them is what gives way when the header is short of room */
+  header .status.backend { flex: none; }
+  /* ---- STU-040: the import report, beside the app ---- */
+  #reportpanel { position: fixed; top: 44px; right: 0; bottom: 0; width: min(640px, calc(100vw - 48px)); background: var(--panel); border-left: 1px solid var(--line); box-shadow: var(--shadow); z-index: 40; display: flex; flex-direction: column; }
+  #reportpanel .rhead { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  #reportpanel .rhead h3 { margin: 0; font-size: 14px; font-weight: 600; }
+  #reportpanel .rhead .where { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+  #reportpanel .rhead button { margin-left: auto; }
+  #reportpanel .rbody { overflow: auto; padding: 4px 18px 24px; line-height: 1.55; color: var(--ink-2); }
+  #reportpanel .rbody h1 { font-size: 17px; color: var(--ink); margin: 14px 0 8px; }
+  #reportpanel .rbody h2 { font-size: 14px; color: var(--ink); margin: 20px 0 6px; }
+  #reportpanel .rbody h3, #reportpanel .rbody h4 { font-size: 13px; color: var(--ink); margin: 16px 0 4px; }
+  #reportpanel .rbody p, #reportpanel .rbody ul, #reportpanel .rbody ol { margin: 6px 0; }
+  #reportpanel .rbody code { font-family: var(--mono); font-size: 12px; background: var(--panel-2); padding: 0 3px; border-radius: 3px; }
+  #reportpanel .rbody pre { background: var(--panel-2); padding: 8px 10px; border-radius: var(--r); overflow: auto; font-family: var(--mono); font-size: 12px; }
+  #reportpanel .rbody .twrap { overflow-x: auto; margin: 6px 0; }
+  #reportpanel .rbody table { border-collapse: collapse; font-size: 12px; }
+  #reportpanel .rbody th, #reportpanel .rbody td { border: 1px solid var(--line); padding: 3px 7px; text-align: left; vertical-align: top; }
+  #reportpanel .rbody th { background: var(--panel-2); color: var(--ink); font-weight: 600; }
+  #reportpanel .rbody blockquote { margin: 6px 0; padding-left: 10px; border-left: 3px solid var(--line-2); }
   .menu.agent { width: 420px; padding: 14px; display: grid; gap: 10px; font-size: 13px; line-height: 1.5; }
   .agent h4 { margin: 0; font-size: 14px; font-weight: 600; }
   .agent p { margin: 0; color: var(--ink-2); }
@@ -597,6 +617,7 @@
     <div class="status" id="status">starting…</div>
     <button class="status backend" id="backendpill" title="The app's backend">…</button>
     <button class="status backend off" id="agentpill" title="Claude Code and this app">Claude Code</button>
+    <button class="status backend" id="reportpill" hidden title="What the import converted, and what it could not">Import report</button>
     <button class="primary" id="publishbtn" hidden title="Publish the app as a site, written by NodeGX's own deploy">Publish</button>
   </header>
 
@@ -4129,6 +4150,81 @@ async function publishApp() {
 $('publishbtn').hidden = !window.studio?.publish;
 $('publishbtn').onclick = publishApp;
 window.__ob.publish = publishApp;
+
+/* STU-040: the import report (docs/IMPORT-REPORT.md, written by the importer) beside the app. Opened by itself right
+   after an import (the desktop app loads the page with ?report=import), and from the header while the file is there. */
+const REPORT = 'docs/IMPORT-REPORT.md';
+/** Enough Markdown for the report — headings, tables, lists, code, quotes, paragraphs — built with h(), never as HTML. */
+function inlineMd(text) {
+  const out = [];
+  const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*)|\[([^\]]+)\]\([^)]*\)/g;
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    out.push(m[1] ? h('code', {}, m[1].slice(1, -1)) : m[2] ? h('strong', {}, m[2].slice(2, -2)) : m[3] ? h('em', {}, m[3].slice(1, -1)) : m[4]);
+    last = re.lastIndex;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+function markdown(text) {
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  const out = [];
+  const cells = (row) => row.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+  for (let i = 0; i < lines.length; ) {
+    const line = lines[i];
+    if (!line.trim()) { i++; continue; }
+    if (line.startsWith('```')) {
+      const code = [];
+      for (i++; i < lines.length && !lines[i].startsWith('```'); i++) code.push(lines[i]);
+      i++; out.push(h('pre', {}, code.join('\n'))); continue;
+    }
+    const head = line.match(/^(#{1,4})\s+(.*)$/);
+    if (head) { out.push(h('h' + head[1].length, {}, inlineMd(head[2]))); i++; continue; }
+    if (line.trim().startsWith('|')) {
+      const rows = [];
+      for (; i < lines.length && lines[i].trim().startsWith('|'); i++) rows.push(lines[i]);
+      const body = rows.filter((r) => !/^\s*\|?[\s:|-]+\|?\s*$/.test(r) || !r.includes('-'));
+      const [first, ...rest] = body;
+      out.push(h('div', { class: 'twrap' }, h('table', {}, h('thead', {}, h('tr', {}, cells(first).map((c) => h('th', {}, inlineMd(c))))), h('tbody', {}, rest.map((r) => h('tr', {}, cells(r).map((c) => h('td', {}, inlineMd(c)))))))));
+      continue;
+    }
+    const item = /^\s*([-*]|\d+\.)\s+/;
+    if (item.test(line)) {
+      const ordered = /^\s*\d+\./.test(line);
+      const items = [];
+      for (; i < lines.length && item.test(lines[i]); i++) items.push(h('li', {}, inlineMd(lines[i].replace(item, ''))));
+      out.push(h(ordered ? 'ol' : 'ul', {}, items)); continue;
+    }
+    if (line.startsWith('>')) {
+      const quote = [];
+      for (; i < lines.length && lines[i].startsWith('>'); i++) quote.push(lines[i].replace(/^>\s?/, ''));
+      out.push(h('blockquote', {}, inlineMd(quote.join(' ')))); continue;
+    }
+    const para = [];
+    for (; i < lines.length && lines[i].trim() && !/^(#{1,4}\s|```|\s*\||>|\s*([-*]|\d+\.)\s)/.test(lines[i]); i++) para.push(lines[i].trim());
+    out.push(h('p', {}, inlineMd(para.join(' '))));
+  }
+  return out;
+}
+const hasReport = () => typeof opened.files[REPORT] === 'string';
+function closeReport() { $('reportpanel')?.remove(); }
+async function openReport() {
+  closeMenu();
+  closeReport();
+  const r = await fetch(`/api/doc?path=${encodeURIComponent(REPORT)}`);
+  if (!r.ok) { toast('This project has no import report.'); return null; }
+  const panel = h('aside', { id: 'reportpanel', 'aria-label': 'Import report' },
+    h('div', { class: 'rhead' }, h('h3', {}, 'Import report'), h('span', { class: 'where' }, REPORT), h('button', { id: 'reportclose', onclick: closeReport, title: 'Close (Esc)' }, 'Close')),
+    h('div', { class: 'rbody' }, markdown(await r.text())));
+  document.body.append(panel);
+  return panel;
+}
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('reportpanel') && !document.querySelector('.menu')) closeReport(); });
+$('reportpill').hidden = !hasReport();
+$('reportpill').onclick = () => ($('reportpanel') ? closeReport() : openReport());
+window.__ob.openReport = openReport;
+if (new URLSearchParams(location.search).get('report') === 'import' && hasReport()) await openReport();
 loadAgent();
 document.title = `ready ${opened.name} pages=${pageKeys().length} visual=${visualIds.length}`;
 </script>

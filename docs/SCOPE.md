@@ -54,7 +54,7 @@ Studio, opens or imports an app, changes it, and publishes it.** What that needs
 |---|---|---|
 | 1 | **STU-008 Publish** to a folder | done (s14) |
 | 2 | **STU-007 a downloadable build**: unsigned first, then signed and notarised on Richard's Apple credentials; Windows and Linux | macOS ad hoc built and gated (s14); signing waits on Richard's credentials; Windows / Linux written into CI, not run |
-| 3 | **STU-040 Import an App…** with the report shown in the app (the welcome screen's import works; the report is a file in the project) | open |
+| 3 | **STU-040 Import an App…** with the report shown in the app | done (s14) |
 | 4 | **A NodeGX npm release** carrying P112-OWN020-UNWIREDSIGNAL and P123-STU008-BACKENDPUBLIC, then Studio's pins bumped and `npm run vendor` at that commit | waits on NodeGX |
 | 5 | **main pushed** | waits on Richard |
 
@@ -1188,6 +1188,25 @@ the step's details above the screen in one column and squeezed the copy to a thu
 | STU-044 | **The importer's expressions graded against the dictionary.** Its compiler has 125 operators of its own, written without the community dictionary; by name only 37 of the dictionary's 94 match (an undercount: the dictionary uses Bubble's display names, ":count", "<", the importer the internal ones, `count`, `less_than`), weakest on Date 2/15, Date Range 0/11 and Integer range 3/11. Compile each phrasebook row's Bubble example through the importer and compare with the phrasebook's executed answer. | a gate prints covered / wrong / missing per data type, and every wrong one is fixed or filed |
 | STU-053 | **The Bubble elements NodeGX has no node of its own for.** A floating group, a popup, a group focus, a repeating group's cell grid, a dropdown's dynamic choices, an input's formats: each converted to what Bubble draws, or said in the report. | each converts to what Bubble draws or has a line in the report, graded on a fixture and on the template |
 | STU-043 | **Plugins, recreated (R9).** No shim and none of a plugin's own code in an imported app. The importer lists each plugin the app uses (its elements, actions and states, where each is used, the settings the app gives it) and writes a brief for it; from the brief, Claude Code (through Studio's "Connect Claude Code") recreates it in NodeGX in two separate sessions: one reads the plugin's code and writes down what it does, the other builds from that description alone. | one real plugin element in an imported app is replaced by a NodeGX component built by a session that never saw the plugin's code |
+
+**Done (STU-040, 2026-10-20, s14).** The welcome screen's **Import an app…** (and File → Import an App…, which goes to
+the welcome screen first) opens a guide before any dialog: **an export file**, or **your app's page files**, each with
+its own button and its own dialog (the old one dialog for either is gone, so Windows and Linux ask the same way as
+macOS). The guide says how to save each page's `dynamic.js` with the page's name in front (the bundler reads only
+`*dynamic.js`, and Chrome saves every one as plain `dynamic.js`), how to add the editor's `c5r6j` for backend
+workflows (*"consistently called c5r6j"* on Richard's apps; unmeasured on anyone else's), and that the files can hold
+the app's API keys. Its words went through the content-authoring skill and its offline checks (written, closer,
+contract, opener: clean after two fragments were rewritten). The import then opens the project with
+**docs/IMPORT-REPORT.md beside the app**: a drawer under the header (`?report=import` on the page's URL), drawn by a
+small Markdown reader (headings, tables, lists, code, quotes) built with elements, never as HTML, through a read-only
+`/api/doc` that serves only a `.md` directly in `docs/`. An **Import report** button in the header brings it back
+while the file is there. The header's pills now keep their words and the status line is what shortens.
+`check:app` **45/45**: the guide opens with its two ways; the folder way ends in the editor with the report open, its
+tables drawn as tables; Close and the header button; a project with no report shows neither. `check:editor` 170/170
+(one run before that stopped at its 38th check on *Unexpected end of JSON input* and passed on a straight rerun;
+not explained). Pictures: `docs/look/stu-003-import-guide.png`, `stu-003-import-report.png`.
+- **Not in it:** the Data tab's exports (`data-to-nodegx.mjs` writes the backend's import files and a list of
+  commands; nothing runs them from Studio yet); a link from a finding in the report to the element it names.
 
 **STU-044, built (s5): `npm run check:dictionary` (`import/dictionary-check.mjs`, cases in `import/dictionary.mjs`).**
 The dictionary names an operator as Bubble's editor shows it (":count"); an app stores the internal name (`count`). The
