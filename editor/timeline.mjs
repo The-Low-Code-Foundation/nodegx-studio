@@ -17,9 +17,16 @@
  * Names come from the files (the caller's `label`), not from the trace's dictionary, which forgets a page's nodes once
  * the app leaves it.
  *
+ * Each run of a card carries its steps (STU-032), each with what went in and what came out, off the trace: a step's
+ * inputs are the last value that arrived on each of its wired inputs before its signal did (from any time, Record or
+ * not: a value set at boot is still what the step reads), beside the settings the files give it; its outputs are
+ * what it sent from its signal until the next signal into it. The trace holds a bounded preview of each value, not
+ * the value.
+ *
  * Pure: the recording and the caller's naming in, rows out. A row is
- *   { lane: 'data' | 'workflow' | 'screen', t, end?, text, sub, link: { node } | { card: { node, port } } | { item } | null, minor? }
- * with `t` and `end` in ms from the recording's start.
+ *   { lane: 'data' | 'workflow' | 'screen', t, end?, text, sub, link: { node } | { card: { node, port } } | { item } | null, minor?, steps? }
+ * with `t` and `end` in ms from the recording's start; a step is
+ *   { node, name, port, t, ins: [{ port, value, set? }], outs: [{ port, value?, signal?, t }] }
  */
 
 export const LANES = [['data', 'Page data'], ['workflow', 'Workflows'], ['screen', 'The screen']];
@@ -62,8 +69,9 @@ export const msText = (ms) => (ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 100
  * @param {(id: string) => string | null} r.pageNode  the page element holding a node (itself, or the copy it is inside), or null
  * @param {(collection: string, request: object, trace: object[]) => ({ name: string, link: object | null } | null)} r.asker
  *        the query that made a request (with a `note` when that is a guess), or null when no query node could have
+ * @param {(id: string) => [string, unknown][]} [r.settings]  a node's settings in the files, [port, value]
  */
-export function buildTimeline({ t0, t1, fromOpen = false, trace = [], log = [], screen = [], cards = [], label, pageNode, asker }) {
+export function buildTimeline({ t0, t1, fromOpen = false, trace = [], log = [], screen = [], cards = [], label, pageNode, asker, settings = () => [] }) {
   const rows = [];
   const at = (t) => Math.max(0, t - t0);
   const inside = (t) => t >= t0 && t <= t1;
@@ -90,18 +98,20 @@ export function buildTimeline({ t0, t1, fromOpen = false, trace = [], log = [], 
     if (card) {
       // one event wired to two first steps sends two signals in the same millisecond: lanes of one run (STU-024)
       const last = runs.findLast((r) => r.card === card);
-      if (last && e.t - last.t < 1) { last.steps.add(e.toNode); last.nodes.add(e.toNode); last.end = Math.max(last.end, e.t); continue; }
-      runs.push({ card, t: e.t, end: e.t, steps: new Set([e.toNode]), nodes: new Set([card.node, e.toNode]) });
+      if (last && e.t - last.t < 1) { last.steps.add(e.toNode); last.nodes.add(e.toNode); last.signals.push(e); last.end = Math.max(last.end, e.t); continue; }
+      runs.push({ card, t: e.t, end: e.t, steps: new Set([e.toNode]), nodes: new Set([card.node, e.toNode]), signals: [e] });
       continue;
     }
     const run = runs.findLast((r) => r.card.reach.has(e.toNode) && r.nodes.has(e.fromNode));
-    if (run) { run.steps.add(e.toNode); run.nodes.add(e.toNode); run.end = e.t; continue; }
+    if (run) { run.steps.add(e.toNode); run.nodes.add(e.toNode); run.signals.push(e); run.end = e.t; continue; }
     loose.push(e);
   }
+  const values = stepValues(trace, t1);
   for (const r of runs) {
     const n = r.steps.size;
+    const steps = r.signals.map((e) => ({ node: e.toNode, name: label(e.toNode), port: e.toPort, t: at(e.t), ...values(e, settings(e.toNode)) }));
     rows.push({ lane: 'workflow', t: at(r.t), end: at(r.end), text: r.card.name, sub: `${r.card.when} · ${n} step${n === 1 ? '' : 's'} ran${r.end > r.t ? ` over ${msText(r.end - r.t)}` : ''}`,
-      link: { card: { node: r.card.node, port: r.card.port, component: r.card.component } } });
+      link: { card: { node: r.card.node, port: r.card.port, component: r.card.component } }, steps });
   }
   for (const e of loose) {
     const to = pageNode(e.toNode), from = pageNode(e.fromNode);
@@ -135,4 +145,39 @@ export function buildTimeline({ t0, t1, fromOpen = false, trace = [], log = [], 
   const first = rows.length ? rows[0].t : 0;
   const from = !fromOpen && first > 200 ? Math.max(0, first - (span - first) * 0.04) : 0;
   return { rows, length: t1 - t0, from, span, loose: loose.length, runs: runs.length };
+}
+
+/**
+ * What went into a step and what came out of it, off the trace. `values(signal, settings)` for the signal that ran
+ * the step: { ins, outs }. Ins: per wired input, the last value into it before the signal (seq order); then the
+ * settings in the files for the inputs nothing wired into. Outs: per output, what the node sent after the signal and
+ * before the next signal into it (or Stop), a value's last preview and a signal's first time, in the order sent.
+ */
+export function stepValues(trace, t1 = Infinity) {
+  const into = new Map(), outOf = new Map();
+  const put = (m, k, e) => { let l = m.get(k); if (!l) m.set(k, (l = [])); l.push(e); };
+  for (const e of [...trace].sort((a, b) => a.seq - b.seq)) { put(into, e.toNode, e); put(outOf, e.fromNode, e); }
+  return (signal, settings = []) => {
+    const ins = new Map();
+    for (const e of into.get(signal.toNode) || []) { if (e.seq >= signal.seq) break; if (e.kind === 'value') ins.set(e.toPort, e.value); }
+    const next = (into.get(signal.toNode) || []).find((e) => e.seq > signal.seq && e.kind === 'signal');
+    const outs = new Map();
+    for (const e of outOf.get(signal.toNode) || []) {
+      if (e.seq <= signal.seq) continue;
+      if ((next && e.seq >= next.seq) || e.t > t1) break;
+      const o = outs.get(e.fromPort);
+      if (e.kind === 'signal') { if (!o) outs.set(e.fromPort, { port: e.fromPort, signal: true, t: e.t - signal.t }); }
+      else if (!o || !o.signal) outs.set(e.fromPort, { port: e.fromPort, value: e.value, t: e.t - signal.t });
+    }
+    const wired = [...ins].map(([port, value]) => ({ port, value }));
+    const set = settings.filter(([port]) => !ins.has(port) && port !== signal.toPort).map(([port, value]) => ({ port, value: JSON.stringify(value) ?? String(value), set: true }));
+    return { ins: [...wired, ...set], outs: [...outs.values()] };
+  };
+}
+
+/** The copy of the screen showing at `t` (the frame's clock): the last one taken at or before it, or null. */
+export function shotAt(shots, t) {
+  let lo = 0, hi = shots.length - 1, hit = -1;
+  while (lo <= hi) { const mid = (lo + hi) >> 1; if (shots[mid].t <= t) { hit = mid; lo = mid + 1; } else hi = mid - 1; }
+  return hit;
 }

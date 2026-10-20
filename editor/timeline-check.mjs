@@ -26,7 +26,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { browser } from './cdp.mjs';
-import { buildTimeline } from './timeline.mjs';
+import { buildTimeline, msText, shotAt, stepValues } from './timeline.mjs';
 import { nodegxRepo } from '../lib/nodegx.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -76,6 +76,28 @@ console.log('timeline: fixtures');
   ok(sc.some((r) => r.node === 'list' && r.t === 100 && /empty/.test(r.sub)) && sc.some((r) => r.text === 'The page draws' && r.link === null) && sc.some((r) => r.text === 'The app goes to /todo'), 'a later change to the same element is its own row, a change outside every element is the page, a move is a row', sc.map((r) => `${r.t} ${r.text} ${r.sub}`));
   ok(tl.rows.every((r, i, a) => i === 0 || a[i - 1].t <= r.t), 'the rows are in the order things happened', tl.rows.map((r) => r.t));
   ok(tl.length === 200 && tl.span >= 100 && tl.span < 110 && tl.from === 0, 'the axis runs to the last thing that happened, not to Stop', { length: tl.length, span: tl.span, from: tl.from });
+  ok(runs[0]?.steps?.map((x) => `${x.name}.${x.port}@${x.t}`).join('|') === 'Create a record.store@10|Go to the list.navigate@40', "a run carries its steps, each the node a signal ran, on the recording's clock", runs[0]?.steps);
+  // STU-032: a step's inputs and outputs, off the trace
+  {
+    const tr = [
+      { seq: 1, t: 1, kind: 'value', fromNode: 'input', fromPort: 'text', toNode: 'make', toPort: 'title', value: '"Milk"' },
+      { seq: 2, t: 2, kind: 'value', fromNode: 'input', fromPort: 'text', toNode: 'make', toPort: 'title', value: '"Buy milk"' },
+      { seq: 3, t: 5, kind: 'signal', fromNode: 'btn', fromPort: 'onClick', toNode: 'make', toPort: 'store', value: '' },
+      { seq: 4, t: 6, kind: 'value', fromNode: 'make', fromPort: 'id', toNode: 'list', toPort: 'id', value: '"a1"' },
+      { seq: 5, t: 7, kind: 'value', fromNode: 'input', fromPort: 'text', toNode: 'make', toPort: 'title', value: '"later"' },
+      { seq: 6, t: 25, kind: 'signal', fromNode: 'make', fromPort: 'stored', toNode: 'nav', toPort: 'go', value: '' },
+      { seq: 7, t: 25, kind: 'signal', fromNode: 'make', fromPort: 'stored', toNode: 'toast', toPort: 'show', value: '' },
+      { seq: 8, t: 40, kind: 'signal', fromNode: 'btn', fromPort: 'onClick', toNode: 'make', toPort: 'store', value: '' },
+      { seq: 9, t: 41, kind: 'value', fromNode: 'make', fromPort: 'id', toNode: 'list', toPort: 'id', value: '"b2"' }
+    ];
+    const io = stepValues(tr)(tr[2], [['collection', 'Task'], ['title', 'unused: wired'], ['store', true]]);
+    ok(JSON.stringify(io.ins) === JSON.stringify([{ port: 'title', value: '"Buy milk"' }, { port: 'collection', value: '"Task"', set: true }]),
+      "a step's inputs: the last value into each wired input before its signal (not one after), then its settings where nothing is wired", io.ins);
+    ok(JSON.stringify(io.outs) === JSON.stringify([{ port: 'id', value: '"a1"', t: 1 }, { port: 'stored', signal: true, t: 20 }]),
+      "its outputs: what it sent after its signal and before the next signal into it, a signal once however many wires", io.outs);
+    ok(shotAt([{ t: 10 }, { t: 20 }, { t: 30 }], 5) === -1 && shotAt([{ t: 10 }, { t: 20 }, { t: 30 }], 20) === 1 && shotAt([{ t: 10 }, { t: 20 }, { t: 30 }], 29.9) === 1 && shotAt([{ t: 10 }, { t: 20 }, { t: 30 }], 99) === 2,
+      'the screen at a moment is the last copy taken at or before it, none before the first');
+  }
   const late = buildTimeline({ t0: 0, t1: 3000, log: [{ kind: 'request', method: 'POST', path: '/classes/Event', body: {}, t0: 2000, t1: 2100, status: 201 }], label, pageNode, asker });
   ok(late.from > 1900 && late.from < 2000 && late.rows[0].text === 'The app creates an Event', 'recorded from now, the axis starts at the first thing that happened; a word starting with a vowel takes "an"', { from: late.from, text: late.rows[0]?.text });
 }
@@ -187,6 +209,41 @@ try {
   ok(opens.length && openRow, "the page's own workflow on open is a row, linked to its card", { opens: opens.map((c) => c.fromProperty), openRow });
   ok(rows.length && rows.every((r, i) => i === 0 || rows[i - 1].t <= r.t), 'the rows are in time order', rows.slice(0, 6).map((r) => r.t));
   if (shots) await b.screenshot(join(here, '..', 'docs', 'look', 'stu-031-timeline.png'));
+
+  // ---- STU-032: the screen as it was. A row clicked moves the playhead to it; the pane draws the probe's copy of
+  // the page then. Graded against what the rows say happened (the list draws the task after the query's answer) and
+  // against the app itself (at the end the copy says what the app says now)
+  const replay = () => b.evaluate(`JSON.stringify((() => { const f = document.getElementById('tlsframe'), d = f.contentDocument; return { pane: !document.getElementById('tlscreen').hidden, at: document.getElementById('tlsat').textContent, note: document.getElementById('tlsnote').textContent, shot: f.dataset.shot, shown: !f.hidden, none: !document.getElementById('tlsnone').hidden, text: f.hidden || !d?.body ? '' : d.body.innerText, fields: f.hidden || !d?.body ? [] : [...d.body.querySelectorAll('input')].map(i => i.value), scripts: f.hidden || !d?.body ? 0 : d.body.querySelectorAll('script').length, ran: !!(f.contentWindow && f.contentWindow.Noodl), seen: { copy: getComputedStyle(f).display !== 'none', none: getComputedStyle(document.getElementById('tlsnone')).display !== 'none', big: (() => { const r = document.getElementById('tlbig').getBoundingClientRect(), p = document.getElementById('tlscreen').getBoundingClientRect(); return r.width > 30 && r.right <= p.right + 0.5; })() } }; })())`).then(JSON.parse);
+  const loaded = async (shot) => { if (shot === '-1' || shot === undefined || shot === null) return; await b.until(`document.getElementById('tlsframe').dataset.shot === ${JSON.stringify(String(shot))} && document.getElementById('tlsframe').contentDocument?.readyState === 'complete' && document.getElementById('tlsframe').contentDocument.body?.innerText.length > 0`, 8000); await wait(150); };
+  const atRow = async (sel) => { await b.evaluate(`${sel}.click()`); await wait(300); const shot = await b.evaluate(`document.getElementById('tlsframe').dataset.shot`); await loaded(shot); return replay(); };
+  const nShots = await b.evaluate(`__ob.timeline.shots?.list.length || 0`);
+  const end = await replay();
+  const live = await b.evaluate(`${W}.document.body.innerText`);
+  ok(nShots >= 2 && end.pane && end.shown && end.text.includes(TITLE) && end.seen.copy && !end.seen.none && end.seen.big && end.text.replace(/\s+/g, ' ').trim() === live.replace(/\s+/g, ' ').trim() && !end.ran,
+    'the screen as it was: at the end of the recording the copy says what the app says now, drawn without running the app, on screen with nothing over it and its Larger button whole', { nShots, end: { ...end, text: end.text.slice(0, 120) }, live: live.slice(0, 120) });
+  const before = dataRow && await atRow(`[...document.querySelectorAll('#tlrows .tlrow')].find(r => r.dataset.lane === 'data' && Number(r.dataset.t) === ${dataRow.t})`);
+  const after = listRow && await atRow(`[...document.querySelectorAll('#tlrows .tlrow')].find(r => r.dataset.lane === 'screen' && Number(r.dataset.t) === ${listRow.t} && r.querySelector('small').textContent.includes(${JSON.stringify(TITLE)}))`);
+  ok(before && after && !before.text.includes(TITLE) && before.at === `The screen at ${msText(dataRow.t)}` && after.text.includes(TITLE) && after.at === `The screen at ${msText(listRow.end ?? listRow.t)}` && !after.text.includes('enable JavaScript') && after.scripts === 0,
+    "scrubbed to the Task query's start the list has no task on screen; to the row where the list draws it, it does (with its values, and none of the page's scripts or its no-JavaScript notice)", { before: before && { ...before, text: before.text.slice(0, 160) }, after: after && { ...after, text: after.text.slice(0, 160) } });
+  // dragging on the axis moves the playhead to where it is let go, and the screen with it
+  // pressed on the time labels under the lanes, so the press is never on a row's mark
+  const track = JSON.parse(await b.evaluate(`JSON.stringify(document.querySelector('#tlaxis .track').getBoundingClientRect())`));
+  const ticks = JSON.parse(await b.evaluate(`JSON.stringify(document.querySelector('#tlaxis .ticks').getBoundingClientRect())`));
+  // let go halfway between two rows in the middle of the recording, so some rows are before it and some after
+  const aim = JSON.parse(await b.evaluate(`JSON.stringify((() => { const tl = __ob.timeline, ts = [...new Set(tl.rows.filter((r) => !r.minor).map((r) => Math.round(r.t)))].sort((a, b) => a - b), k = Math.floor(ts.length / 2) - 1, t = (ts[k] + ts[k + 1]) / 2; return { t, f: (t - tl.from) / (tl.span - tl.from) }; })())`));
+  const y = ticks.y + ticks.height / 2, x0 = track.x + 4, x1 = track.x + track.width * aim.f;
+  await b.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: x0, y, button: 'left', clickCount: 1 });
+  for (let k = 1; k <= 5; k++) await b.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x0 + ((x1 - x0) * k) / 5, y, button: 'left', buttons: 1 });
+  await b.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: x1, y, button: 'left', clickCount: 1 });
+  await wait(400);
+  const dragged = JSON.parse(await b.evaluate(`JSON.stringify({ at: document.getElementById('tlsat').textContent, want: ${aim.t}, later: document.querySelectorAll('#tlrows .tlrow.later').length, rows: document.querySelectorAll('#tlrows .tlrow').length, left: document.getElementById('tlplay').style.left })`));
+  const ms = Number(/at ([\d.]+) (m?s)/.exec(dragged.at)?.[1]) * (/ s$/.test(dragged.at) ? 1000 : 1);
+  ok(Math.abs(ms - dragged.want) <= Math.max(3, dragged.want * 0.03) && Math.abs(parseFloat(dragged.left) - aim.f * 100) < 1 && dragged.later > 0 && dragged.later < dragged.rows,
+    'dragging the playhead along the axis shows the screen at the moment it is let go, the rows after it marked as still to come', { ...dragged, aim });
+  if (shots) {
+    if (after) await atRow(`[...document.querySelectorAll('#tlrows .tlrow')].find(r => r.dataset.lane === 'screen' && Number(r.dataset.t) === ${listRow.t} && r.querySelector('small').textContent.includes(${JSON.stringify(TITLE)}))`);
+    await b.screenshot(join(here, '..', 'docs', 'look', 'stu-032-scrub.png'));
+  }
   if (process.env.TIMELINE_DUMP) console.log(rows.map((r) => `    ${String(r.t).padStart(5)} ${r.lane.padEnd(8)} ${r.text} | ${r.sub}`).join('\n'));
 
   // the links: the query's row selects its element in Design; the workflow's row opens its card
@@ -216,6 +273,21 @@ try {
   const drawn = rows2.find((r) => r.lane === 'screen' && r.sub.includes(SECOND));
   ok(added && addRow && create && addRow.t <= create.t && drawn && rows2.every((r) => r.t >= 0) && !rows2.some((r) => r.text === 'The app opens'), "recorded from now: the Add button's card, then the create request, and the new task drawn; nothing from before Record", { addBtn, addRow, create, drawn: !!drawn, rows: rows2.length, workflow: JSON.parse(await b.evaluate(`JSON.stringify(__ob.timeline.rows.filter((r) => r.lane === 'workflow').map((r) => r.t.toFixed(0) + ' ' + r.text + ' | ' + r.sub))`)) });
   if (shots) await b.screenshot(join(here, '..', 'docs', 'look', 'stu-031-timeline-add.png'));
+
+  // ---- STU-032: the Add card's step, with what went in and what came out, and the screen when it ran
+  const fn = files('Todo/Task list').nodes.find((n) => n.label === 'The title, if one was typed')?.id;
+  const sent = JSON.parse(await b.evaluate(`JSON.stringify(${W}.Noodl.Navigation._noodlRuntime.context.getTraceEvents(0).filter(e => e.fromNode === ${JSON.stringify(fn)} && e.kind === 'value').map(e => e.fromPort + ' ' + e.value))`));
+  if (addRow) await b.evaluate(`[...document.querySelectorAll('#tlrows .tlrow')].find(r => r.dataset.link === ${JSON.stringify(addRow.link)}).querySelector('button.open').click()`);
+  await wait(300);
+  const step = JSON.parse(await b.evaluate(`JSON.stringify((() => { const s = document.querySelector('#tlrows .tlstep[data-node=${JSON.stringify(fn)}]'); return s && { t: Number(s.dataset.t), text: s.querySelector('.what').firstChild.textContent, ins: s.querySelector('[data-io=in]').textContent, outs: s.querySelector('[data-io=out]').textContent }; })())`));
+  const q2 = JSON.stringify(SECOND);
+  ok(fn && step && step.ins.includes(q2) && step.outs.includes(q2) && sent.some((v) => v.startsWith('out-text ') && v.includes(q2)) && /sent/.test(step.outs),
+    "the Add card's step shows the typed title going in and coming out, and its signal sent on (the runtime's own trace has that value out of that node)", { fn, step, sent });
+  const atStep = step && await (async () => { await b.evaluate(`document.querySelector('#tlrows .tlstep[data-node=${JSON.stringify(fn)}]').click()`); await wait(300); await loaded(await b.evaluate(`document.getElementById('tlsframe').dataset.shot`)); return replay(); })();
+  const drawnAt = drawn && await atRow(`[...document.querySelectorAll('#tlrows .tlrow')].find(r => r.dataset.lane === 'screen' && r.querySelector('small').textContent.includes(${q2}))`);
+  ok(atStep && drawnAt && atStep.fields.includes(SECOND) && !atStep.text.includes(SECOND) && drawnAt.text.includes(SECOND),
+    'scrubbed to that step, the screen has the title typed in the field and not yet in the list; at the row where the list draws it, it is in the list', { atStep: atStep && { ...atStep, text: atStep.text.slice(0, 100) }, drawnAt: drawnAt && { at: drawnAt.at, has: drawnAt.text.includes(SECOND) } });
+  if (shots && atStep) { await b.evaluate(`document.querySelector('#tlrows .tlstep[data-node=${JSON.stringify(fn)}]').click()`); await wait(600); await b.screenshot(join(here, '..', 'docs', 'look', 'stu-032-step.png')); }
 
   const problems = b.problems.filter((p) => !/Invalid connection|doesn't have a port|Failed to load resource|fonts\.g|^\[noodl\]/.test(p));
   ok(problems.length === 0, 'no exceptions in the editor page', problems.slice(0, 3));

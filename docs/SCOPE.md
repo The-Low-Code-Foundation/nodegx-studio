@@ -36,6 +36,7 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 | Live with outside edits — a file changed by Claude Code (MCP), VS Code or `git pull` is drawn without a reload; a clash with Studio's own edit asks | works (2026-10-19) | `check:editor` 46/46 |
 | Styles — global styles as NodeGX variants | works | `check:editor` |
 | Bubble importer — pages, elements, styles, workflows, expressions, option sets, reusables, custom states, data types, privacy rules → `nodegx.security.json`, backend workflows → cloud functions, Data-tab rows | spike, measured on a real 17-page app (0 validation errors); its searches arrive as page data (STU-013), a reusable's while that copy is shown (STU-014); its workflow conditions test only when the workflow runs (STU-013-NAVLOOP) | `check:import` 50/50 |
+| Run timeline (M4) — Record / Stop, page data, workflows and the screen on one axis, each row linked to its element, card or item; each step's values in and out; a scrubber with the screen as it was at the playhead | STU-031 (2026-10-20, s10), STU-032 (s11) work | `check:timeline` 33/33 |
 | Desktop app — Electron window, a welcome screen (recent projects, NodeGX's templates, Import an app), File → Open Recent, a smoke mode | first cut (2026-10-19) | `check:app` 34/34, `smoke` |
 | The project's backend — started (or adopted) on open, stopped on close, shown in the status bar; a template that needs one gets one; Data's "Start a backend" for an app with none | works (2026-10-19) | `check:app` 34/34 |
 | Claude Code — "Connect Claude Code" in the header (and File) registers the NodeGX MCP server for the folder with the NodeGX editor's own writer and shows the command that starts a session there | works (2026-10-19) | `check:editor` 56/56 |
@@ -929,6 +930,64 @@ now, a second task: the Add button's card, then the create request, then the tas
 Mutants: no screen witness 22/24; copies draw nothing 23/24; the page's cards only 23/24. `check:editor` 170/170,
 `check:app` 34/34 (both load studio.html), `check:rules` 20/20, `check:phrases` 85/85, `check:pagedata` 33/33,
 `check:reusable` 12/12; `check:import` and `check:dictionary` not run (the importer is untouched).
+
+**Done (STU-032, 2026-10-20, s11): what went in and out of each step, and the screen as it was.**
+[look/stu-032-scrub.png](look/stu-032-scrub.png) is the Todo page opening scrubbed to where Open tasks draws its task;
+[look/stu-032-step.png](look/stu-032-step.png) is the Add card's step open, the screen as it was when it ran.
+
+- **Each step, in and out.** A workflow row has **Show the n steps**; each step is a line under it: its time, the
+  node and the input its signal arrived on, then **in** (the last value that came into each wired input before the
+  signal, from any time, Record or not: a value set at boot is still what the step reads; then the settings the
+  files give it where nothing is wired, marked "(set)", not its script and not its run-on-change boxes) and **out**
+  (what it sent from its signal until the next signal into it, or Stop: a value's last preview, a signal once with
+  how long after). The Add button's step reads *in text "Second task, recorded" · out text "Second task, recorded" ·
+  go sent*. The values are the trace's previews (200 characters at most), never the values themselves.
+- **The scrubber.** A playhead on the axis: drag it anywhere on the axis, use ← / → (row to row, steps included),
+  Home and End, or click a row, a mark or a step. Rows after the playhead are dimmed, the row at it is marked. A
+  screen row's click shows the screen once it has drawn (the playhead goes to its end); every other row's, its start.
+- **The screen as it was**, in a pane beside the rows (or **Larger**, over the tab): the probe's copy of the page
+  for the playhead's moment, drawn in a frame that runs no script, with the page's styles, its address (so pictures
+  and fonts load) and what the fields held. Before the first copy: "Nothing drawn yet".
+- **Why a copy, not a picture (measured).** In the page, a picture of its own HTML is not possible: Chrome taints a
+  canvas that draws HTML through SVG (`toDataURL` throws). CDP screenshots exist only in the desktop app and the
+  gate. A copy of the body costs about 0.3 ms: the Todo page opening, 5 copies, 40 KB, 1.4 ms in all; a task added,
+  3 copies, 30 KB; plus the page's styles, 43 KB once per recording. The first measurement was 851 KB a copy: 836 KB
+  of it was one inline script (the runtime's module bootstrap) in `<body>`, so the copy leaves out the page's scripts
+  and its `<noscript>` notice (which, drawn without scripts, showed "You need to enable JavaScript").
+- **When the copy is taken.** At the next frame after a change (`requestAnimationFrame`), the moment the browser
+  paints: what a frame shows is what was on the screen. A hidden window paints no frames, so a 100 ms timer stands
+  in. A copy carries the time its change began, so a screen row and its copy agree. Typing changes no element, so a
+  field's input takes a copy at once. The newest are kept, up to 40 million characters (about 2,800 copies of the
+  Todo page). The gate does not tell this from a copy taken inside the observer: that mutant passes 33/33.
+- **Found by the copies: the list's row flashes "Text".** Open tasks inserts its row at 830 ms holding three Text
+  elements reading their default "Text", and its values arrive at 853 ms, a frame later: the copy at the next frame
+  holds "Text / Text / Text / Label". A person sees the placeholder for a frame or two each time a list draws a row.
+  Filed as P123-STU032-TEXTFLASH (runtime, low; NodeGX 80bd3c778), measured by the frame-time copy, not in pixels.
+  (A check that no copy holds "Text" was written first, on the guess that the placeholder never reached a frame;
+  it failed in both modes, which is how the flash was found.) A screen row's click therefore shows the row's end.
+- **Seen in the picture, not by the gate (then graded):** the first build drew "Nothing drawn yet" over a copy that
+  was there (the note's `display: grid` beat its `hidden`), ran "Hide the steps" into the row's words, and cut the
+  Larger button to an "L" and the copy's right edge (the pane's one grid column took its header's width, 413 px in a
+  380 px pane, measured in the browser). The gate read the `hidden` attribute, not what is on screen; it now reads the
+  computed display of the copy and the note, and that the Larger button is whole inside the pane. Mutants: the note's
+  `[hidden]` rule taken out 32/33; the column unclamped (the tree before the fix) 32/33.
+- **Not built / limits.** A copy has no canvas pixels and no scroll positions; a change made only to a style (the
+  observer watches elements and text, never styles) takes no copy of its own. The styles are those at Stop, which
+  only matters for a page that removes a style while it runs. Step mode is STU-033.
+
+Gate: `npm run check:timeline` 33/33 (24 + 9). On fixtures: a run carries its steps on the recording's clock; a
+step's inputs are the last value into each wired input before its signal (not one after it), then its settings where
+nothing is wired; its outputs are what it sent before the next signal into it, a signal once however many wires; the
+screen at a moment is the last copy at or before it. On the todo template: at the end of the page opening the copy
+says what the app says now (its text, read off the live frame), and no script ran in it; scrubbed to the Task
+query's start the list has no task on screen, to the row where the list draws it the task is there, with its values
+and without the page's scripts or the no-JavaScript notice; dragging the playhead and letting go between two rows shows
+the screen at that moment and dims the rows after it; recorded from now, the Add card's step shows the typed title going
+in and coming out and its signal sent on (the runtime's trace has that value out of that node), and scrubbed to that
+step the field holds the title and the list does not yet; at the row where the list draws it, it does.
+Mutants: the pane shows the last copy whatever the playhead 31/33; a step's inputs read values that came after its
+signal 31/33 (the fixture and the Add step; that run also failed the drag check, whose "nine tenths of the axis" can
+fall after every row: it now lets go between two rows); the fields' values not put back 32/33; the copy taken inside the observer 33/33 (not graded, above).
 
 ---
 

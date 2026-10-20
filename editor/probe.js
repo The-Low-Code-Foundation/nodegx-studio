@@ -47,6 +47,52 @@
    *   window.__studioScreen = [{ t, el, added, removed, text }]
    */
   var screen = (window.__studioScreen = []);
+
+  /*
+   * The screen as it was (STU-032): when the screen is next painted after a change, the page's body as HTML, with
+   * what the fields hold (a typed value is a property, not in the HTML) and the frame's size, so the timeline's
+   * scrubber can show it again. A copy, not a picture: Chrome will not let a page turn its own HTML into pixels (a
+   * canvas that draws it through SVG is tainted), and drawn again with the page's styles a copy is the page as it
+   * was, minus a canvas's pixels and where things were scrolled. Taken at the next frame, the moment the browser
+   * paints, not inside the observer: what a frame shows is what was on the screen (a list inserted holding "Text" that
+   * gets its values two frames later was on screen holding "Text", and its copy says so). A hidden window paints no
+   * frames, so a timer stands in. Each copy carries the time its change began.
+   * Without the page's scripts and its "enable JavaScript" notice: on the todo template those are 836 KB of an 851 KB
+   * body, the app's own drawing 14 KB. Typing changes no element, so a field's input takes one too, at once. The
+   * newest only, up to a budget of characters.
+   *
+   *   window.__studioShots = [{ t, html, w, h, values }]   window.__studioShotCost = { n, chars, ms, dropped }
+   */
+  var shots = (window.__studioShots = []);
+  var cost = (window.__studioShotCost = { n: 0, chars: 0, ms: 0, dropped: 0 });
+  var BUDGET = 40e6, held = 0, lastHtml = null;
+  // a batch's copy carries the batch's own millisecond, so the screen row and the copy it shows have the same time
+  var shoot = function (at) {
+    if (!document.body) return;
+    var s = typeof at === 'number' ? at : performance.now(), started = performance.now(), html = copyOf(document.body), fields = document.body.querySelectorAll('input, textarea, select'), values = [];
+    for (var i = 0; i < fields.length; i++) values.push(fields[i].type === 'checkbox' || fields[i].type === 'radio' ? fields[i].checked : fields[i].value);
+    var v = JSON.stringify(values);
+    var last = shots[shots.length - 1];
+    if (last && html === lastHtml && v === last.v) { cost.ms += performance.now() - started; return; }
+    // the same HTML as the last one is kept once: a shot that only changes a field's value points at it
+    shots.push({ t: s, html: html === lastHtml ? last.html : html, w: innerWidth, h: innerHeight, values: values, v: v });
+    if (html !== lastHtml) { held += html.length; cost.chars += html.length; }
+    lastHtml = html;
+    cost.n++; cost.ms += performance.now() - started;
+    while (held > BUDGET && shots.length > 1) { var gone = shots.shift(); if (gone.html !== shots[0].html) held -= gone.html.length; cost.dropped++; }
+  };
+  var copyOf = function (body) {
+    var shell = body.cloneNode(false).outerHTML, parts = '';
+    for (var c = body.firstElementChild; c; c = c.nextElementSibling) if (!/^(SCRIPT|NOSCRIPT)$/.test(c.tagName)) parts += c.outerHTML;
+    return shell.slice(0, shell.lastIndexOf('</body>')) + parts + '</body>';
+  };
+  var pending = null;
+  var take = function () { if (!pending) return; var t = pending.t; cancelAnimationFrame(pending.frame); clearTimeout(pending.timer); pending = null; shoot(t); };
+  var soon = function (t) { if (!pending) pending = { t: t, frame: requestAnimationFrame(take), timer: setTimeout(take, 100) }; };
+  // a copy waiting for its frame is taken first, so the copies stay in time order
+  var typed = function () { take(); shoot(); };
+  addEventListener('input', typed, true);
+  addEventListener('change', typed, true);
   // the deploy page's own scripts, styles and "enable JavaScript" notice are written into the frame too: not drawing
   var unseen = /^(SCRIPT|STYLE|NOSCRIPT|LINK|META|TEMPLATE)$/;
   var seen = function (node) { return !(node.nodeType === 1 && unseen.test(node.tagName)); };
@@ -65,5 +111,6 @@
       }
     }
     if (screen.length > 6000) screen.splice(0, 1000);
+    if (document.readyState !== 'loading') soon(t);
   }).observe(document.documentElement, { subtree: true, childList: true, characterData: true });
 })();
