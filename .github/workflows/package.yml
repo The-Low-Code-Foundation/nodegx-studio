@@ -1,9 +1,10 @@
 # STU-007 — Studio packaged on the three systems, each package opened before it is kept.
 #
-# Unsigned on every system for now: macOS is signed ad hoc (Gatekeeper asks a person who downloads it to open it from
-# System Settings), Windows is unsigned (SmartScreen asks the same). `npm run dist:signed` with a Developer ID in the
-# keychain and APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID set is the signed, notarised macOS build; it
-# needs Richard's Apple credentials as this repository's secrets first.
+# macOS is signed with NodeGX's own Developer ID and notarised when this repository can see the five secrets NodeGX's
+# release uses (CSC_LINK, CSC_KEY_PASSWORD, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID; RELEASE-PROCESS.md
+# in NodeGX says what each is). Without them it is signed ad hoc, and Gatekeeper asks a person who downloads it to
+# open it from System Settings. Windows and Linux are unsigned, and the Apple secrets never reach them:
+# electron-builder falls back from WIN_CSC_LINK to CSC_LINK and would hand the Apple certificate to signtool.
 #
 # Each job builds, then runs the unpacked app with --smoke twice — the welcome screen, and a copy of the todo
 # template — and fails unless both report ready.
@@ -38,7 +39,25 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check:vendor
-      - run: npm run dist
+      - name: build (macOS signed and notarised when the secrets are there, ad hoc otherwise)
+        if: runner.os == 'macOS'
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # an absent secret arrives as an empty string, which electron-builder reads as a certificate path (NodeGX v0.1.0)
+          for v in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do [ -n "${!v}" ] || unset "$v"; done
+          if [ -n "${CSC_LINK:-}" ]; then npm run dist:signed; else echo "no signing secrets: an ad-hoc build"; npm run dist; fi
+          if [ -n "${CSC_LINK:-}" ] && [ -n "${APPLE_ID:-}" ]; then
+            spctl -a -vv -t exec "dist/mac-arm64/NodeGX Studio.app" 2>&1 | tee /dev/stderr | grep -q 'source=Notarized Developer ID'
+            xcrun stapler validate "dist/mac-arm64/NodeGX Studio.app"
+          fi
+      - name: build
+        if: runner.os != 'macOS'
+        run: npm run dist
       - name: open the package (welcome, then a copy of the todo template)
         env:
           ELECTRON_DISABLE_SANDBOX: '1' # a CI runner's Chromium sandbox cannot start; a person's machine keeps it

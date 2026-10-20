@@ -47,13 +47,13 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 
 ## The alpha (0.2) — the line
 
-Written 2026-10-20 (s14): proposed by Claude, and Richard's answer was *"Rock out"*. **Someone who is not Richard downloads
+Written 2026-10-20 (s14): proposed by Claude; Richard's answer was *"Rock out"*, and asked whether the line is right, *"Yep"*. **Someone who is not Richard downloads
 Studio, opens or imports an app, changes it, and publishes it.** What that needs, in order:
 
 | | what | state |
 |---|---|---|
 | 1 | **STU-008 Publish** to a folder | done (s14) |
-| 2 | **STU-007 a downloadable build**: unsigned first, then signed and notarised on Richard's Apple credentials; Windows and Linux | macOS ad hoc built and gated (s14); signing waits on Richard's credentials; Windows / Linux written into CI, not run |
+| 2 | **STU-007 a downloadable build**: signed and notarised with NodeGX's Developer ID; Windows and Linux | signed locally with the Developer ID and gated 46/46 (s14); notarising waits on the five secrets being visible to this repository; Windows / Linux in CI, first run pending |
 | 3 | **STU-040 Import an App…** with the report shown in the app | done (s14) |
 | 4 | **A NodeGX npm release** carrying P112-OWN020-UNWIREDSIGNAL and P123-STU008-BACKENDPUBLIC, then Studio's pins bumped and `npm run vendor` at that commit | waits on NodeGX |
 | 5 | **main pushed** | waits on Richard |
@@ -507,6 +507,14 @@ NodeGX editor builds with; the config is `build` in package.json.
   inside one, and the editor server, the importer, the deploy engine and the backend are all spawned from files.
   **No native rebuild** (`npmRebuild: false`): the only native code is `fsevents`, so the package is the exact tree that
   works in development.
+- **Signed with NodeGX's own Developer ID (s14, after Richard asked *"Can you not use the same ones we use for NodeGX
+  signing?"*):** the certificate, *Developer ID Application: Osborne Solutions (Y35J975HXR)*, is in this Mac's keychain.
+  `CSC_NAME="Osborne Solutions (Y35J975HXR)" npm run dist:signed -- --dir` signs with it (hardened runtime,
+  `codesign --verify --deep --strict` passes), and the desktop gate on that build is **46/46**. It is not notarised:
+  the Apple ID, app-specific password and team id are repository secrets on NodeGX, which GitHub never gives back, and
+  they are not on this machine. `package.yml` uses the same five secret names, gives them to the macOS job only, drops
+  the empty ones as NodeGX's build does, and checks `spctl` says *Notarized Developer ID* when they are there. They
+  must be set on this repository, or moved to the organisation and shared with it.
 - **Signed ad hoc with the hardened runtime** and the NodeGX editor's entitlements (`build/entitlements.mac.plist`,
   plus library validation off, which an ad-hoc signature needs). `npm run dist:signed` drops the ad-hoc identity, so
   electron-builder takes a Developer ID from the keychain (or `CSC_LINK`) and notarises when `APPLE_ID`,
@@ -1285,7 +1293,7 @@ they are): 69/73, the four that grade them.
 | R4 | After a branch, can both sides rejoin into one next step? | phase 123 |
 | R5 | Can a custom state live inside a reusable? | phase 123 |
 | R6 | Where do option sets live — one component each, or one file? | phase 123 |
-| R10 | Where can a published app go besides a folder (GitHub Pages, Netlify, the person's own server), and where does its backend live when it is not this machine? STU-008 publishes to a folder against the bound backend until this is ruled. | STU-008, 2026-10-20 |
+| R10 | Where can a published app go besides a folder (GitHub Pages, Netlify, the person's own server), and where does its backend live when it is not this machine? STU-008 publishes to a folder against the bound backend until this is ruled. **Leaning (Richard, 2026-10-20):** *"Dunno yet, something like a Linux VM with SSH would be an obvious start no?"* What NodeGX has for that, read the same day: the Docker Compose self-host (`packages/nodegx-backend/deploy/`, `docs/runtime/SELF-HOSTING.md`; run on the box itself, no SSH step; P112-OWN024-DEPLOYNOSHARP open on its image), the training template's SSH runbook (`templates/digital-bricks-training/hosting/`, live on nexus-1, hardcoded to that box), and the general SSH deploy specced as phase 89 *A box of your own* (BOX-002–006, from DEP-004–006), not started. A deployed site's backend address is built into it at export (SELF-HOSTING.md), so the site and its API on one origin is the usual shape. By principle 5 the SSH deploy is NodeGX's to build (phase 89), and Studio's Publish then offers it as a second target. | STU-008, 2026-10-20 |
 
 **Taken.** R7 (Richard, 2026-10-19): page data is an ordinary Query Records node at the page root, named by
 `metadata.pageData`. No new file, nothing new in the format: the NodeGX editor, the MCP server and the runtime read
