@@ -358,6 +358,7 @@ Electron's own Node; `npm run smoke -- <dir>` opens a project headless and exits
 | STU-005 | **Work with Claude Code.** "Connect Claude Code" writes the project's `.mcp.json` entry for the NodeGX MCP server (the same writer the NodeGX editor uses, never a second one) and shows the one command to start a session in the folder. | from a fresh project, the button then `claude` in the folder lists the NodeGX tools |
 | STU-006 | **Runs without a NodeGX checkout.** A build step copies the kit pieces Studio uses (deploy runtime, in-page preview, look and specs modules, backend, MCP server) into `vendor/` at pinned NodeGX versions; `lib/nodegx.mjs` prefers `vendor/`. | a fresh clone + `npm install` + `npm start` works on a machine with no OpenNoodl folder |
 | STU-007 | **Packaged and signed.** electron-builder for macOS (signed, notarised), Windows and Linux, on NodeGX's release workflow. | a downloadable build opens a project on all three |
+| STU-008 | **Publish.** File → **Publish…** writes the app as a static site with NodeGX's own deploy — `@nodegx/preview`'s `nodegx-deploy`, the `deployToFolder` the NodeGX editor's *Deploy to Folder* runs, with the production engine npm ships (1.7 MB; a checkout's development engine is refused) — to a folder the person picks, and deploys the app's cloud functions to its backend when it has any (NodeGX's `deploy_cloud_functions`). The window then says where the site is and which backend it talks to; an app bound to a backend on 127.0.0.1 works on this machine only, and says so before it is published. Where else a site and its backend can go is R10. A site under a sub-path waits on P123-STU015-BASEURL. | the todo template's copy published to a folder, served by any static server and opened in a browser: sign in, add a todo, and the row is on the backend |
 
 **Done (STU-002, 2026-10-19).** `serve.mjs` watches the project folder and keeps every file as Studio last read or
 wrote it, so Studio's own saves are recognised by their content and dropped; anything else goes to the page over
@@ -436,7 +437,7 @@ NodeGX editor does (`backfillProjectAgentConfig`), only on the button — the sh
 this session failed in Workflow ("Add a branch" picked the card's *Did Mount* event), not reproduced; noted, not chased.
 
 Order: STU-002 first (it is what makes "local" feel alive, and STU-005 depends on it), then STU-003–005, then
-STU-006–007 when someone outside the team needs to run it.
+STU-006–007 when someone outside the team needs to run it, and STU-008 so that what they build can leave the machine.
 
 ---
 
@@ -1133,6 +1134,7 @@ they are): 69/73, the four that grade them.
 | R4 | After a branch, can both sides rejoin into one next step? | phase 123 |
 | R5 | Can a custom state live inside a reusable? | phase 123 |
 | R6 | Where do option sets live — one component each, or one file? | phase 123 |
+| R10 | Where can a published app go besides a folder (GitHub Pages, Netlify, the person's own server), and where does its backend live when it is not this machine? STU-008 publishes to a folder against the bound backend until this is ruled. | STU-008, 2026-10-20 |
 
 **Taken.** R7 (Richard, 2026-10-19): page data is an ordinary Query Records node at the page root, named by
 `metadata.pageData`. No new file, nothing new in the format: the NodeGX editor, the MCP server and the runtime read

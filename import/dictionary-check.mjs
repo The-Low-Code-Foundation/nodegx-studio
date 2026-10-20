@@ -11,12 +11,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { nodegxRepo } from '../lib/nodegx.mjs';
+import { kit } from '../lib/nodegx.mjs';
 import { cases as casesFor } from './dictionary.mjs';
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 const require = createRequire(import.meta.url);
-const { SAMPLE, rows } = require(path.join(nodegxRepo, 'scripts/bubble-phrasebook/rows.js'));
+const { SAMPLE, rows } = require(kit.phrasebook);
 const showCases = process.argv.includes('--cases');
 
 // Wrong rows that stay wrong, each with why. Empty is the goal; a row here is reported, not hidden.

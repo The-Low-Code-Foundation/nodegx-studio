@@ -4,7 +4,7 @@
  * place, under the card's parent at the card's index), every wire is accounted for (inside the reusable, kept on the
  * page, or a crossing one carried by exactly one page wire to the copy and one reusable wire from its port), page data
  * stays on the page, and NodeGX's own validator (validate_project through the MCP server, skipped by name when
- * packages/noodl-mcp/dist is not built) finds no new error. Whether the app then works through the copy is
+ * the server is not there) finds no new error. Whether the app then works through the copy is
  * `check:editor`'s: it signs in wrongly through the copy and reads the error the page's logic shows.
  *
  *   node editor/reusable-check.mjs      PASS n/n and exit 0, or the failing lines and exit 1
@@ -14,7 +14,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, write
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { extractReusable } from './reusable.mjs';
-import { nodegxRepo } from '../lib/nodegx.mjs';
+import { kit } from '../lib/nodegx.mjs';
 
 const results = [];
 const ok = (cond, what, detail) => { results.push(!!cond); console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${what}${!cond && detail !== undefined ? ' — ' + JSON.stringify(detail).slice(0, 400) : ''}`); };
@@ -22,14 +22,14 @@ const skip = (what, why) => console.log(`  skip ${what} — ${why}`);
 
 const tmp = mkdtempSync(join(tmpdir(), 'nodegx-studio-reusable-'));
 const project = join(tmp, 'todo-list');
-cpSync(join(nodegxRepo, 'templates/todo-list'), project, { recursive: true });
+cpSync(join(kit.templates, 'todo-list'), project, { recursive: true });
 const pageDir = join(project, 'components/Pages/Sign in');
 const read = (dir) => ({ nodes: JSON.parse(readFileSync(join(dir, 'nodes.json'), 'utf8')), connections: JSON.parse(readFileSync(join(dir, 'connections.json'), 'utf8')) });
 const wkey = (w) => [w.fromId, w.fromProperty, w.toId, w.toProperty].join(' ');
 
-const mcpBuilt = existsSync(join(nodegxRepo, 'packages/noodl-mcp/dist/noodl-mcp.cjs'));
+const mcpBuilt = existsSync(kit.mcpServer);
 async function validate() {
-  const proc = spawn(process.execPath, [join(nodegxRepo, 'packages/noodl-mcp/bin/noodl-mcp.js'), project], { stdio: ['pipe', 'pipe', 'pipe'] });
+  const proc = spawn(process.execPath, [kit.mcpServer, project], { stdio: ['pipe', 'pipe', 'pipe'] });
   let buf = ''; const waiting = new Map(); let seq = 0;
   proc.stdout.on('data', (d) => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { const line = buf.slice(0, i); buf = buf.slice(i + 1); try { const m = JSON.parse(line); if (m.id && waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); } } catch { /* a log line */ } } });
   const call = (method, params) => new Promise((done) => { const id = ++seq; waiting.set(id, done); proc.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n'); });
@@ -122,7 +122,7 @@ try {
     writeFileSync(join(dir, 'connections.json'), JSON.stringify({ ...r.component.connections, componentId: cid, connections: [...r.component.connections.connections, { fromId: card.id, fromProperty: 'onClick', toId: 'no-such-node', toProperty: 'x' }] }, null, 2));
     const broken = (await validate()).filter((d) => d.severity === 'error' && !was.has(dkey(d)));
     ok(broken.some((d) => /Sign-in card/.test(d.location?.component || '')), 'and the control: a wire to a missing node inside the reusable is an error it reports there', broken.map((d) => `${d.code} ${d.location?.component}`));
-  } else skip('validate_project', 'packages/noodl-mcp/dist is not built');
+  } else skip('validate_project', `no NodeGX MCP server at ${kit.mcpServer}`);
 } catch (err) {
   ok(false, 'the gate ran to the end', err.stack);
 } finally {

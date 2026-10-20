@@ -20,7 +20,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { browser } from './cdp.mjs';
-import { nodegxRepo } from '../lib/nodegx.mjs';
+import { kit } from '../lib/nodegx.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const outPath = process.argv[2];
@@ -34,12 +34,12 @@ const lineFrom = (proc, pattern, ms = 30000) => new Promise((ok, no) => {
 
 const tmp = mkdtempSync(join(tmpdir(), 'nodegx-studio-trace-'));
 const project = join(tmp, 'todo-list');
-cpSync(join(nodegxRepo, 'templates/todo-list'), project, { recursive: true });
+cpSync(join(kit.templates, 'todo-list'), project, { recursive: true });
 const children = [];
 let b;
 try {
   const backendPort = await freePort();
-  const backend = spawn(process.execPath, [join(nodegxRepo, 'packages/nodegx-backend/bin/nodegx-backend.js'), 'serve', '--data-dir', join(tmp, 'backend'), '--port', String(backendPort), '--token', 'nodegx-studio-trace', '--backend-id', 'nodegx_studio_trace', '--backend-name', 'NodeGX Studio trace', '--ephemeral'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const backend = spawn(process.execPath, [kit.backendCli, 'serve', '--data-dir', join(tmp, 'backend'), '--port', String(backendPort), '--token', 'nodegx-studio-trace', '--backend-id', 'nodegx_studio_trace', '--backend-name', 'NodeGX Studio trace', '--ephemeral'], { stdio: ['ignore', 'pipe', 'pipe'] });
   children.push(backend);
   await lineFrom(backend, /NODEGX_BACKEND_READY/);
   const pjPath = join(project, 'nodegx.project.json');

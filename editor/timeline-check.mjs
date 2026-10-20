@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 import { browser } from './cdp.mjs';
 import { buildTimeline, msText, shotAt, stepValues } from './timeline.mjs';
 import { runOver, lastActivity, QUIET_MS } from './runwatch.mjs';
-import { nodegxRepo } from '../lib/nodegx.mjs';
+import { kit } from '../lib/nodegx.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const shots = process.argv.includes('--shots');
@@ -141,13 +141,13 @@ const lineFrom = (proc, pattern, ms = 30000) => new Promise((res, rej) => {
 });
 const tmp = mkdtempSync(join(tmpdir(), 'nodegx-studio-timeline-'));
 const project = join(tmp, 'todo-list');
-cpSync(join(nodegxRepo, 'templates/todo-list'), project, { recursive: true });
+cpSync(join(kit.templates, 'todo-list'), project, { recursive: true });
 const children = [];
 let b;
 try {
   console.log('timeline: the todo template');
   const backendPort = await freePort();
-  const backend = spawn(process.execPath, [join(nodegxRepo, 'packages/nodegx-backend/bin/nodegx-backend.js'), 'serve', '--data-dir', join(tmp, 'backend'), '--port', String(backendPort), '--token', 'nodegx-studio-timeline', '--backend-id', 'nodegx_studio_timeline', '--backend-name', 'NodeGX Studio timeline', '--ephemeral'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const backend = spawn(process.execPath, [kit.backendCli, 'serve', '--data-dir', join(tmp, 'backend'), '--port', String(backendPort), '--token', 'nodegx-studio-timeline', '--backend-id', 'nodegx_studio_timeline', '--backend-name', 'NodeGX Studio timeline', '--ephemeral'], { stdio: ['ignore', 'pipe', 'pipe'] });
   children.push(backend);
   await lineFrom(backend, /NODEGX_BACKEND_READY/);
   const pjPath = join(project, 'nodegx.project.json');

@@ -11,7 +11,9 @@
   "scripts": {
     "start": "node app/launch.mjs",
     "serve": "node editor/serve.mjs",
-    "check": "node editor/rules-check.mjs && node editor/phrases-check.mjs && node editor/pagedata-check.mjs && node editor/reusable-check.mjs && node editor/check.mjs && node editor/timeline-check.mjs && node import/check.mjs && node import/dictionary-check.mjs && node app/check.mjs",
+    "vendor": "node scripts/vendor.mjs",
+    "check:vendor": "node scripts/vendor.mjs --check",
+    "check": "node scripts/vendor.mjs --check && node editor/rules-check.mjs && node editor/phrases-check.mjs && node editor/pagedata-check.mjs && node editor/reusable-check.mjs && node editor/check.mjs && node editor/timeline-check.mjs && node import/check.mjs && node import/dictionary-check.mjs && node app/check.mjs",
     "check:editor": "node editor/check.mjs",
     "check:pagedata": "node editor/pagedata-check.mjs",
     "check:timeline": "node editor/timeline-check.mjs",
@@ -22,6 +24,10 @@
     "smoke": "node app/launch.mjs --smoke",
     "check:dictionary": "node import/dictionary-check.mjs",
     "check:phrases": "node editor/phrases-check.mjs"
+  },
+  "dependencies": {
+    "@nodegx/mcp": "0.2.2",
+    "@nodegx/preview": "0.2.2"
   },
   "devDependencies": {
     "electron": "43.2.0"

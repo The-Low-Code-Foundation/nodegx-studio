@@ -1,5 +1,5 @@
 /**
- * NodeGX Studio — the editor's gate. Copies the repo's todo-list template, starts an ephemeral backend for the copy, serves
+ * NodeGX Studio — the editor's gate. Copies NodeGX's todo-list template, starts an ephemeral backend for the copy, serves
  * the editor on it and drives every tab in headless Chrome over CDP: select, type, resize, reorder, add, delete,
  * undo (Design); the spacing guide; a custom state; a composed expression that runs in the app; the event list, a
  * step's settings, an added action, a branch with a No chain and a Yes chain (Workflow); a new type, a field, a row,
@@ -21,12 +21,11 @@ import { fileURLToPath } from 'node:url';
 import { browser } from './cdp.mjs';
 import { applyEdit } from './edits.mjs';
 import { createEdits, readItems } from './pagedata.mjs';
-import { nodegxRepo } from '../lib/nodegx.mjs';
+import { kit } from '../lib/nodegx.mjs';
 import { createRequire } from 'node:module';
 import { TYPES, phrasesFor } from './phrases.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const repo = nodegxRepo;
 const shots = process.argv.includes('--shots');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const freePort = () => new Promise((ok) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => ok(p)); }); });
@@ -38,7 +37,7 @@ const lineFrom = (proc, pattern, ms = 30000) => new Promise((ok, no) => {
 
 const tmp = mkdtempSync(join(tmpdir(), 'nodegx-studio-check-'));
 const project = join(tmp, 'todo-list');
-cpSync(join(repo, 'templates/todo-list'), project, { recursive: true });
+cpSync(join(kit.templates, 'todo-list'), project, { recursive: true });
 {
   // written as the importer writes a reusable (no visualRoots: STU-015's picker once missed every imported one)
   // STU-014 (R8): a reusable with its own item, placed nowhere yet (its copies arrive at the end, as an outside edit). Its
@@ -76,7 +75,7 @@ const ok = (cond, what, detail) => { results.push({ cond: !!cond, what, detail }
 let b;
 try {
   const backendPort = await freePort();
-  const backend = spawn(process.execPath, [join(repo, 'packages/nodegx-backend/bin/nodegx-backend.js'), 'serve', '--data-dir', join(tmp, 'backend'), '--port', String(backendPort), '--token', 'nodegx-studio-check', '--backend-id', 'nodegx_studio_check', '--backend-name', 'NodeGX Studio check', '--ephemeral'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const backend = spawn(process.execPath, [kit.backendCli, 'serve', '--data-dir', join(tmp, 'backend'), '--port', String(backendPort), '--token', 'nodegx-studio-check', '--backend-id', 'nodegx_studio_check', '--backend-name', 'NodeGX Studio check', '--ephemeral'], { stdio: ['ignore', 'pipe', 'pipe'] });
   children.push(backend);
   await lineFrom(backend, /NODEGX_BACKEND_READY/);
   const pjPath = join(project, 'nodegx.project.json');
@@ -229,7 +228,7 @@ try {
   console.log("check: the composer's follow-ups (STU-052)");
   {
     // the title's Text is now [the card's state] + " world": open it again, click the chip, and ask what can follow it
-    const { rows } = createRequire(import.meta.url)(join(repo, 'scripts/bubble-phrasebook/rows.js'));
+    const { rows } = createRequire(import.meta.url)(kit.phrasebook);
     const openOnTitle = async () => {
       await select(title1);
       const fields = await b.evaluate(`[...document.querySelectorAll('#right .field')].map(f => f.querySelector('label')?.textContent)`);
@@ -651,8 +650,8 @@ try {
     await b.until('__ob.agent && __ob.agent.state === "connected"', 15000);
     const mcp = existsSync(MCP) ? JSON.parse(readFileSync(MCP, 'utf8')) : {};
     const reg = mcp.mcpServers?.[NAME];
-    const bundle = join(repo, 'packages/noodl-mcp/dist/noodl-mcp.cjs');
-    ok(reg?.type === 'stdio' && reg.args?.[0] === bundle && reg.args?.[1] === project && reg.args?.[2] === '--allow-writes' && Object.keys(mcp.mcpServers).length === 1, 'the button writes .mcp.json registering the checkout\'s NodeGX MCP server for this folder as nodegx-<folder>', reg);
+    const bundle = kit.mcpServer;
+    ok(reg?.type === 'stdio' && reg.args?.[0] === bundle && reg.args?.[1] === project && reg.args?.[2] === '--allow-writes' && Object.keys(mcp.mcpServers).length === 1, 'the button writes .mcp.json registering Studio\'s NodeGX MCP server for this folder as nodegx-<folder>', reg);
     const claudeMd = existsSync(join(project, 'CLAUDE.md')) ? readFileSync(join(project, 'CLAUDE.md'), 'utf8') : '';
     ok(claudeMd.startsWith('# todo-list') && claudeMd.includes(`\`${NAME}\` MCP server`) && existsSync(join(project, 'AGENTS.md')) && /^\.mcp\.json$/m.test(readFileSync(join(project, '.gitignore'), 'utf8')), 'and the NodeGX editor\'s CLAUDE.md and AGENTS.md, with .mcp.json in .gitignore');
     const shown = await b.evaluate('document.getElementById("agentcmd")?.textContent');

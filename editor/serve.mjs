@@ -4,11 +4,13 @@
  *   node serve.mjs <project-dir> [--port n]
  *
  *   /                      studio.html
- *   /runtime/*             the deploy runtime (`packages/noodl-editor/src/external/deploy/`, `npm run build:editor:_viewer`)
- *   /preview.js            `@nodegx/preview`'s in-page build (`npm --prefix packages/noodl-preview run build`)
- *   /look.js, /specs.js    `@nodegx/canvas-look` and `@nodegx/node-spec` as ES modules (Orbit's `real/build.sh` builds them)
- *   GET  /phrasebook.json  STU-052: the composer's follow-ups by type (phrases.mjs over the NodeGX checkout's
- *                          scripts/bubble-phrasebook/rows.js, the community's Bubble→Noodl dictionary as executed)
+ *   /runtime/*             the deploy runtime (`@nodegx/preview`'s dist/external/deploy/)
+ *   /preview.js            `@nodegx/preview`'s in-page build
+ *   /look.js, /specs.js    `@nodegx/canvas-look` and `@nodegx/node-spec` as ES modules (vendor/)
+ *   GET  /phrasebook.json  STU-052: the composer's follow-ups by type (phrases.mjs over NodeGX's
+ *                          scripts/bubble-phrasebook/rows.js, vendor/phrasebook/, the community's Bubble→Noodl dictionary as executed)
+ *
+ * Every kit piece is where lib/nodegx.mjs says (STU-006: vendor/ and node_modules/, or the checkout NODEGX_REPO names).
  *   GET  /api/project      every text file of the project folder as one path → text map, plus the folder's name
  *   POST /api/save         { files: { path: text }, removed: [path], bases: { path: text | null }, force? } — written under
  *                          the project folder, nothing else. `bases` is each file as the page last had it: when the disk
@@ -40,14 +42,13 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, wat
 import http from 'node:http';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { nodegxRepo } from '../lib/nodegx.mjs';
+import { kit } from '../lib/nodegx.mjs';
 import * as backends from '../lib/backend.mjs';
 import * as agent from '../lib/agent.mjs';
 import { createRequire } from 'node:module';
 import { TYPES, phrasesFor } from './phrases.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const repo = nodegxRepo;
 const flag = (name) => {
   const at = process.argv.indexOf(name);
   return at === -1 ? undefined : process.argv[at + 1];
@@ -57,17 +58,16 @@ if (!existsSync(join(projectDir, 'nodegx.project.json'))) {
   console.error(`serve: ${projectDir} has no nodegx.project.json`);
   process.exit(2);
 }
-const runtimeDir = flag('--runtime') ?? join(repo, 'packages/noodl-editor/src/external/deploy');
-const bundle = join(repo, 'packages/noodl-preview/dist/browser/noodl-preview-in-page.js');
-const orbit = join(repo, 'dev-docs/tasks/phase-112-your-own-nodegx/prototype/real');
+const runtimeDir = flag('--runtime') ?? kit.runtimeDir;
+const bundle = kit.previewBundle;
 for (const [what, at] of [
   ['the deploy runtime', join(runtimeDir, 'noodl.deploy.js')],
   ['the in-page preview bundle', bundle],
-  ['the look module (run prototype/real/build.sh)', join(orbit, 'look.js')],
-  ['the specs module (run prototype/real/build.sh)', join(orbit, 'specs.js')]
+  ['the look module', kit.look],
+  ['the specs module', kit.specs]
 ]) {
   if (!existsSync(at)) {
-    console.error(`serve: no ${what} at ${at}`);
+    console.error(`serve: no ${what} at ${at} (the kit is read from ${kit.from})`);
     process.exit(2);
   }
 }
@@ -225,10 +225,10 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/') return send(200, readFileSync(join(here, 'studio.html')), types['.html']);
     if (url.pathname === '/preview.js') return send(200, readFileSync(bundle), types['.js']);
     if (url.pathname === '/phrasebook.json') { // read on the first ask (require caches it): a phrasebook edit shows after a restart
-      try { const { rows } = createRequire(import.meta.url)(join(nodegxRepo, 'scripts/bubble-phrasebook/rows.js')); return json(200, Object.fromEntries(TYPES.map((t) => [t, phrasesFor(rows, t)]))); }
-      catch (err) { return json(404, { error: `no phrasebook in the NodeGX checkout: ${err.message}` }); }
+      try { const { rows } = createRequire(import.meta.url)(kit.phrasebook); return json(200, Object.fromEntries(TYPES.map((t) => [t, phrasesFor(rows, t)]))); }
+      catch (err) { return json(404, { error: `no phrasebook at ${kit.phrasebook}: ${err.message}` }); }
     }
-    if (url.pathname === '/look.js' || url.pathname === '/specs.js') return send(200, readFileSync(join(orbit, url.pathname.slice(1))), types['.js']);
+    if (url.pathname === '/look.js' || url.pathname === '/specs.js') return send(200, readFileSync(url.pathname === '/look.js' ? kit.look : kit.specs), types['.js']);
     // the app's frame gets Studio's probe first in its head (what it asks the backend, which page it is on): STU-011
     if (url.pathname === '/runtime/index.html') {
       const probe = `<script>${readFileSync(join(here, 'probe.js'), 'utf8')}</script>`;

@@ -4,7 +4,7 @@
  * item with a condition whose value comes from the page, an update (list → first, renamed, a condition dropped) and a
  * removal; readers are counted off the wires (a Text, and a composed Expression counting as its element); an identical
  * question is found whatever the order of its conditions. Then NodeGX's own validator (validate_project through the
- * MCP server, skipped by name when packages/noodl-mcp/dist is not built) must say nothing about the item's nodes and
+ * MCP server, skipped by name when it is not there) must say nothing about the item's nodes and
  * nothing new about the page. It cannot grade the value wires: Query Records takes ANY wired input name (the runtime keeps
  * an unknown one as a setting; the spec's `discover` ends in `GENERIC_SETTING`), so a wire to `qp-nope` validates clean
  * (measured). The wires are this gate's own round-trip; whether the app then asks the backend the right question is
@@ -19,7 +19,7 @@ import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { applyEdit } from './edits.mjs';
 import { createEdits, normalise, readFrom, readItems, readersOf, removeEdits, sameAs, signature, updateEdits, describe } from './pagedata.mjs';
-import { nodegxRepo } from '../lib/nodegx.mjs';
+import { kit } from '../lib/nodegx.mjs';
 
 const results = [];
 const ok = (cond, what, detail) => { results.push(!!cond); console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${what}${!cond && detail !== undefined ? ' — ' + JSON.stringify(detail).slice(0, 400) : ''}`); };
@@ -27,7 +27,7 @@ const skip = (what, why) => console.log(`  skip ${what} — ${why}`);
 
 const tmp = mkdtempSync(join(tmpdir(), 'nodegx-studio-pagedata-'));
 const project = join(tmp, 'todo-list');
-cpSync(join(nodegxRepo, 'templates/todo-list'), project, { recursive: true });
+cpSync(join(kit.templates, 'todo-list'), project, { recursive: true });
 const dir = join(project, 'components/Pages/Todo');
 const component = 'Pages/Todo';
 const readDisk = () => ({ nodes: JSON.parse(readFileSync(join(dir, 'nodes.json'), 'utf8')), connections: JSON.parse(readFileSync(join(dir, 'connections.json'), 'utf8')) });
@@ -39,9 +39,9 @@ const graph = () => { const f = readDisk(); return { nodes: f.nodes.nodes, conns
 const comparable = (i) => normalise({ ...i, where: i.where.map(({ port, ...c }) => c) });
 
 /* ---------------- validate_project, before anything is written ---------------- */
-const mcpBuilt = existsSync(join(nodegxRepo, 'packages/noodl-mcp/dist/noodl-mcp.cjs'));
+const mcpBuilt = existsSync(kit.mcpServer);
 async function validate() {
-  const proc = spawn(process.execPath, [join(nodegxRepo, 'packages/noodl-mcp/bin/noodl-mcp.js'), project], { stdio: ['pipe', 'pipe', 'pipe'] });
+  const proc = spawn(process.execPath, [kit.mcpServer, project], { stdio: ['pipe', 'pipe', 'pipe'] });
   let buf = ''; const waiting = new Map(); let seq = 0;
   proc.stdout.on('data', (d) => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { const line = buf.slice(0, i); buf = buf.slice(i + 1); try { const m = JSON.parse(line); if (m.id && waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); } } catch { /* a log line */ } } });
   const call = (method, params) => new Promise((done) => { const id = ++seq; waiting.set(id, done); proc.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n'); });
@@ -167,7 +167,7 @@ try {
     const was = new Set(before.map(key));
     const fresh = after.filter((d) => d.severity === 'error' && !was.has(key(d)));
     ok(fresh.length === 0, 'and no new error anywhere in the project', fresh.map((d) => `${d.code}: ${d.message}`));
-  } else skip('validate_project', 'packages/noodl-mcp/dist is not built');
+  } else skip('validate_project', `no NodeGX MCP server at ${kit.mcpServer}`);
 
   console.log('check: removal');
   for (const i of items()) gesture(removeEdits(i, { component }));

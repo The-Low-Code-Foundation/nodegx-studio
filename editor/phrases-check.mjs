@@ -8,11 +8,11 @@
  */
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { nodegxRepo } from '../lib/nodegx.mjs';
+import { kit } from '../lib/nodegx.mjs';
 import { TYPES, dictionaryType, phrasesFor, applyPhrase } from './phrases.mjs';
 
 const require = createRequire(import.meta.url);
-const { rows } = require(path.join(nodegxRepo, 'scripts/bubble-phrasebook/rows.js'));
+const { rows } = require(kit.phrasebook);
 const results = [];
 const ok = (cond, what, detail) => { results.push(!!cond); console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${what}${!cond && detail !== undefined ? ' — ' + String(detail).slice(0, 300) : ''}`); };
 const MATH = ['min', 'max', 'round', 'floor', 'ceil', 'abs', 'random', 'sqrt', 'pow'];

@@ -1,0 +1,427 @@
+{
+  "$schema": "https://opennoodl.dev/schemas/connections-v2.json",
+  "componentId": "f32b0e20-1bb3-548d-8c39-998c2388375a",
+  "version": 1,
+  "connections": [
+    {
+      "fromId": "dfIn",
+      "fromProperty": "listTaskId",
+      "toId": "dfTaskFromList",
+      "toProperty": "value"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "listClose",
+      "toId": "dfTaskFromList",
+      "toProperty": "do"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "listTaskTitle",
+      "toId": "dfSubjectFromList",
+      "toProperty": "value"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "listClose",
+      "toId": "dfSubjectFromList",
+      "toProperty": "do"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "listClose",
+      "toId": "dfMode",
+      "toProperty": "to-close"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "detailTaskId",
+      "toId": "dfTaskFromDetail",
+      "toProperty": "value"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "detailClose",
+      "toId": "dfTaskFromDetail",
+      "toProperty": "do"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "detailReopen",
+      "toId": "dfTaskFromDetail",
+      "toProperty": "do"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "detailTaskTitle",
+      "toId": "dfSubjectFromDetail",
+      "toProperty": "value"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "detailClose",
+      "toId": "dfSubjectFromDetail",
+      "toProperty": "do"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "detailReopen",
+      "toId": "dfSubjectFromDetail",
+      "toProperty": "do"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "detailClose",
+      "toId": "dfMode",
+      "toProperty": "to-close"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "detailReopen",
+      "toId": "dfMode",
+      "toProperty": "to-reopen"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "actionId",
+      "toId": "dfActionSet",
+      "toProperty": "value"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "tick",
+      "toId": "dfActionSet",
+      "toProperty": "do"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "untick",
+      "toId": "dfActionSet",
+      "toProperty": "do"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "actionTitle",
+      "toId": "dfSubjectFromAction",
+      "toProperty": "value"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "tick",
+      "toId": "dfSubjectFromAction",
+      "toProperty": "do"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "untick",
+      "toId": "dfSubjectFromAction",
+      "toProperty": "do"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "tick",
+      "toId": "dfMode",
+      "toProperty": "to-tick"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "untick",
+      "toId": "dfMode",
+      "toProperty": "to-untick"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "todayTaskId",
+      "toId": "dfTaskFromToday",
+      "toProperty": "value"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "todayClose",
+      "toId": "dfTaskFromToday",
+      "toProperty": "do"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "todayTaskTitle",
+      "toId": "dfSubjectFromToday",
+      "toProperty": "value"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "todayClose",
+      "toId": "dfSubjectFromToday",
+      "toProperty": "do"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "todayClose",
+      "toId": "dfMode",
+      "toProperty": "to-close"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "occurrenceId",
+      "toId": "dfOccurrenceSet",
+      "toProperty": "value"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "check",
+      "toId": "dfOccurrenceSet",
+      "toProperty": "do"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "occurrenceTitle",
+      "toId": "dfSubjectFromOccurrence",
+      "toProperty": "value"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "check",
+      "toId": "dfSubjectFromOccurrence",
+      "toProperty": "do"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "check",
+      "toId": "dfMode",
+      "toProperty": "to-check"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "detailStop",
+      "toId": "dfTaskFromDetail",
+      "toProperty": "do"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "routineTitle",
+      "toId": "dfSubjectFromRoutine",
+      "toProperty": "value"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "detailStop",
+      "toId": "dfSubjectFromRoutine",
+      "toProperty": "do"
+    },
+    {
+      "fromId": "dfIn",
+      "fromProperty": "detailStop",
+      "toId": "dfMode",
+      "toProperty": "to-stop"
+    },
+    {
+      "fromId": "dfMode",
+      "fromProperty": "open",
+      "toId": "dfDialog",
+      "toProperty": "open"
+    },
+    {
+      "fromId": "dfMode",
+      "fromProperty": "heading",
+      "toId": "dfDialog",
+      "toProperty": "heading"
+    },
+    {
+      "fromId": "dfMode",
+      "fromProperty": "help",
+      "toId": "dfDialog",
+      "toProperty": "help"
+    },
+    {
+      "fromId": "dfMode",
+      "fromProperty": "ok",
+      "toId": "dfDialog",
+      "toProperty": "okLabel"
+    },
+    {
+      "fromId": "dfMode",
+      "fromProperty": "optional",
+      "toId": "dfDialog",
+      "toProperty": "optional"
+    },
+    {
+      "fromId": "dfSubject",
+      "fromProperty": "value",
+      "toId": "dfDialog",
+      "toProperty": "subject"
+    },
+    {
+      "fromId": "dfDialog",
+      "fromProperty": "cancel",
+      "toId": "dfMode",
+      "toProperty": "to-none"
+    },
+    {
+      "fromId": "dfMode",
+      "fromProperty": "at-close",
+      "toId": "dfIfClose",
+      "toProperty": "condition"
+    },
+    {
+      "fromId": "dfMode",
+      "fromProperty": "at-reopen",
+      "toId": "dfIfReopen",
+      "toProperty": "condition"
+    },
+    {
+      "fromId": "dfMode",
+      "fromProperty": "at-tick",
+      "toId": "dfIfTick",
+      "toProperty": "condition"
+    },
+    {
+      "fromId": "dfMode",
+      "fromProperty": "at-untick",
+      "toId": "dfIfUntick",
+      "toProperty": "condition"
+    },
+    {
+      "fromId": "dfMode",
+      "fromProperty": "at-check",
+      "toId": "dfIfCheck",
+      "toProperty": "condition"
+    },
+    {
+      "fromId": "dfMode",
+      "fromProperty": "at-stop",
+      "toId": "dfIfStop",
+      "toProperty": "condition"
+    },
+    {
+      "fromId": "dfDialog",
+      "fromProperty": "confirm",
+      "toId": "dfIfClose",
+      "toProperty": "eval"
+    },
+    {
+      "fromId": "dfIfClose",
+      "fromProperty": "ontrue",
+      "toId": "dfMode",
+      "toProperty": "to-none"
+    },
+    {
+      "fromId": "dfDialog",
+      "fromProperty": "confirm",
+      "toId": "dfIfReopen",
+      "toProperty": "eval"
+    },
+    {
+      "fromId": "dfIfReopen",
+      "fromProperty": "ontrue",
+      "toId": "dfMode",
+      "toProperty": "to-none"
+    },
+    {
+      "fromId": "dfDialog",
+      "fromProperty": "confirm",
+      "toId": "dfIfTick",
+      "toProperty": "eval"
+    },
+    {
+      "fromId": "dfIfTick",
+      "fromProperty": "ontrue",
+      "toId": "dfMode",
+      "toProperty": "to-none"
+    },
+    {
+      "fromId": "dfDialog",
+      "fromProperty": "confirm",
+      "toId": "dfIfUntick",
+      "toProperty": "eval"
+    },
+    {
+      "fromId": "dfIfUntick",
+      "fromProperty": "ontrue",
+      "toId": "dfMode",
+      "toProperty": "to-none"
+    },
+    {
+      "fromId": "dfDialog",
+      "fromProperty": "confirm",
+      "toId": "dfIfCheck",
+      "toProperty": "eval"
+    },
+    {
+      "fromId": "dfIfCheck",
+      "fromProperty": "ontrue",
+      "toId": "dfMode",
+      "toProperty": "to-none"
+    },
+    {
+      "fromId": "dfDialog",
+      "fromProperty": "confirm",
+      "toId": "dfIfStop",
+      "toProperty": "eval"
+    },
+    {
+      "fromId": "dfIfStop",
+      "fromProperty": "ontrue",
+      "toId": "dfMode",
+      "toProperty": "to-none"
+    },
+    {
+      "fromId": "dfIfClose",
+      "fromProperty": "ontrue",
+      "toId": "dfOut",
+      "toProperty": "confirmClose"
+    },
+    {
+      "fromId": "dfIfReopen",
+      "fromProperty": "ontrue",
+      "toId": "dfOut",
+      "toProperty": "confirmReopen"
+    },
+    {
+      "fromId": "dfIfTick",
+      "fromProperty": "ontrue",
+      "toId": "dfOut",
+      "toProperty": "confirmTick"
+    },
+    {
+      "fromId": "dfIfUntick",
+      "fromProperty": "ontrue",
+      "toId": "dfOut",
+      "toProperty": "confirmUntick"
+    },
+    {
+      "fromId": "dfIfCheck",
+      "fromProperty": "ontrue",
+      "toId": "dfOut",
+      "toProperty": "confirmCheck"
+    },
+    {
+      "fromId": "dfIfStop",
+      "fromProperty": "ontrue",
+      "toId": "dfOut",
+      "toProperty": "confirmStop"
+    },
+    {
+      "fromId": "dfOccurrence",
+      "fromProperty": "value",
+      "toId": "dfOut",
+      "toProperty": "dialogOccurrenceId"
+    },
+    {
+      "fromId": "dfTask",
+      "fromProperty": "value",
+      "toId": "dfOut",
+      "toProperty": "dialogTaskId"
+    },
+    {
+      "fromId": "dfAction",
+      "fromProperty": "value",
+      "toId": "dfOut",
+      "toProperty": "dialogActionId"
+    },
+    {
+      "fromId": "dfDialog",
+      "fromProperty": "note",
+      "toId": "dfOut",
+      "toProperty": "note"
+    }
+  ]
+}

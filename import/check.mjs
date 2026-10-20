@@ -4,18 +4,18 @@
 // run-mode bundle (gitignored; IMPORT.md §7 says how to fetch it), Richard's template too. Asserts what each session
 // paid for: P123-S5-NOHOME (rootNodeId), P123-S5B-DISABLEDSTEP (no Log In in someApiWorkflow), §10 (four cloud
 // components, two triggers), §12 (three collections), s6 (nodegx.security.json valid, the rules derived). Prints
-// PASS n/n or FAIL and exits 1. The backend's own validator is used when packages/nodegx-backend/dist is built, and
-// validate_project through the MCP when packages/noodl-mcp/dist is; each is skipped by name when it is not.
+// PASS n/n or FAIL and exits 1. The backend's own validator is used (lib/backend.mjs's kit), and validate_project
+// through the MCP server when it is there (lib/nodegx.mjs); that one is skipped by name when it is not.
 //   node import/check.mjs
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { nodegxRepo } from '../lib/nodegx.mjs';
+import { kit } from '../lib/nodegx.mjs';
+import { kit as backendKit } from '../lib/backend.mjs';
 
 const here = path.dirname(new URL(import.meta.url).pathname);
-const repo = nodegxRepo;
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'import-check-'));
 const checks = [];
 const check = (name, ok, detail) => { checks.push({ name, ok: !!ok }); console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${!ok && detail ? ' — ' + detail : ''}`); return !!ok; };
@@ -24,9 +24,8 @@ const run = (args, timeoutMs = 300000) => spawnSync(process.execPath, args, { en
 const readJson = (p) => JSON.parse(fs.readFileSync(p, 'utf8'));
 const exists = (p) => fs.existsSync(p);
 const require = createRequire(import.meta.url);
-const backendDist = path.join(repo, 'packages/nodegx-backend/dist/index.js');
-const validateSecurity = exists(backendDist) ? require(backendDist).validateSecurityConfig : null;
-const mcpBuilt = exists(path.join(repo, 'packages/noodl-mcp/dist/noodl-mcp.cjs'));
+const validateSecurity = (await backendKit()).validateSecurityConfig;
+const mcpBuilt = exists(kit.mcpServer);
 
 function convert(name, inDir) {
   const out = path.join(tmp, name); const exp = path.join(out, 'app.export.json'); const project = path.join(out, 'project');
@@ -37,7 +36,7 @@ function convert(name, inDir) {
   return { project, report: fs.readFileSync(path.join(project, 'docs', 'IMPORT-REPORT.md'), 'utf8'), out: c.stdout };
 }
 function validateProject(name, project) {
-  if (!mcpBuilt) return skip(`${name}: validate_project`, 'packages/noodl-mcp/dist is not built');
+  if (!mcpBuilt) return skip(`${name}: validate_project`, `no NodeGX MCP server at ${kit.mcpServer}`);
   const v = run([path.join(here, 'validate-project.mjs'), project], 240000);
   const m = /summary: (\{.*\})/.exec(v.stdout || '');
   const summary = m ? JSON.parse(m[1]) : null;
@@ -68,7 +67,7 @@ const countBy = (text, re) => (text.match(re) || []).length;
     const sec = exists(secPath) ? readJson(secPath) : null;
     check('s6: nodegx.security.json is written', !!sec);
     if (sec) {
-      if (validateSecurity) { const errs = validateSecurity(sec); check("s6: the backend's validateSecurityConfig accepts it", errs.length === 0, errs.join('; ')); } else skip('s6: validateSecurityConfig', 'packages/nodegx-backend/dist is not built');
+      { const errs = validateSecurity(sec); check("s6: the backend's validateSecurityConfig accepts it", errs.length === 0, errs.join('; ')); }
       check('s6: no system collection carries rules', !Object.keys(sec.collections).some((k) => k.startsWith('_')), Object.keys(sec.collections).join(','));
       const sd = sec.collections.someDataType;
       check('s6: someDataType reads public ("everyone" views and finds), writes nobody (no page writes it)', sd && sd.permissions.find === 'public' && sd.permissions.get === 'public' && sd.permissions.create === 'nobody' && sd.permissions.update === 'nobody' && sd.permissions.delete === 'nobody' && sd.creatorOwns === false, JSON.stringify(sd));

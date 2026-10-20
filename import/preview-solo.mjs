@@ -6,15 +6,14 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import http from 'node:http';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { nodegxRepo } from '../lib/nodegx.mjs';
+import { kit } from '../lib/nodegx.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const repo = nodegxRepo;
 const flag = (name) => { const at = process.argv.indexOf(name); return at === -1 ? undefined : process.argv[at + 1]; };
 const projectDir = resolve(process.argv.slice(2).find((a) => !a.startsWith('--') && process.argv[process.argv.indexOf(a) - 1] !== '--port') ?? '.');
 if (!existsSync(join(projectDir, 'nodegx.project.json'))) { console.error(`preview-solo: ${projectDir} has no nodegx.project.json`); process.exit(2); }
-const runtimeDir = flag('--runtime') ?? join(repo, 'packages/noodl-editor/src/external/deploy');
-const bundle = join(repo, 'packages/noodl-preview/dist/browser/noodl-preview-in-page.js');
+const runtimeDir = flag('--runtime') ?? kit.runtimeDir;
+const bundle = kit.previewBundle;
 for (const [what, at] of [['the deploy runtime', join(runtimeDir, 'noodl.deploy.js')], ['the in-page preview bundle', bundle]]) if (!existsSync(at)) { console.error(`preview-solo: no ${what} at ${at}`); process.exit(2); }
 
 const types = { '.js': 'application/javascript', '.mjs': 'application/javascript', '.html': 'text/html; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.css': 'text/css', '.woff2': 'font/woff2' };

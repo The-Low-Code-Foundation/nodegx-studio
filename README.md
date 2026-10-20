@@ -19,18 +19,10 @@ by or supported by Bubble Group, Inc. Bubble® is a trademark of Bubble Group, I
 
 ## Run it
 
-You need **Node 22** (`.nvmrc`), Google Chrome (for the gates only) and a **NodeGX checkout** built once. Studio
-uses the NodeGX kit's built pieces in place for now; by default it looks for a sibling folder called `OpenNoodl`, or
-set `NODEGX_REPO`.
+You need **Node 22** (`.nvmrc`) and, for the gates only, Google Chrome. Nothing else: the NodeGX kit pieces Studio is
+built from come with it (see [The NodeGX kit](#the-nodegx-kit)).
 
 ```bash
-# in the NodeGX checkout, once
-npm install
-npm run build:editor:_viewer                          # the deploy runtime
-npm --prefix packages/noodl-preview run build         # the in-page preview
-bash dev-docs/tasks/phase-112-your-own-nodegx/prototype/real/build.sh   # look.js and specs.js
-
-# here
 npm install
 npm start                       # the desktop app: recent projects, a template, or an import
 npm start -- /path/to/project   # or opens one directly
@@ -56,9 +48,28 @@ as a labelled placeholder, so every page still opens. [docs/IMPORT.md](docs/IMPO
 how to get your app's files out of Bubble. Your Bubble terms let you reuse your own app's design and workflows on
 another platform; this reads only your own app.
 
+## The NodeGX kit
+
+Studio is built from NodeGX's kit, at pinned versions:
+
+- **npm**: `@nodegx/preview` (the deploy runtime, the in-page preview) and `@nodegx/mcp` (the MCP server Claude Code
+  talks to, and the backend service), at the exact versions in `package.json`.
+- **`vendor/`**: what NodeGX does not publish (its templates, the Bubble phrasebook, the canvas look and node specs,
+  the backend's provisioning code and the NodeGX editor's writer of `.mcp.json`), built from one NodeGX commit.
+  `vendor/NODEGX.json` names the commit and every file's hash; `npm run check:vendor` checks them.
+
+To work on the kit and Studio together, point Studio at a NodeGX checkout instead — it then uses the checkout's
+pieces as built there:
+
+```bash
+NODEGX_REPO=../NodeGX npm start          # or any gate
+NODEGX_REPO=../NodeGX npm run vendor     # rebuild vendor/ from that checkout's HEAD (refuses uncommitted sources)
+```
+
 ## Gates
 
 ```bash
+npm run check:vendor   # vendor/ is what NODEGX.json names, and every kit piece is there
 npm run check:editor   # 170 checks: drives the editor headless against a copy of NodeGX's todo template
 npm run check:timeline # 24 checks: Record / Stop and the run timeline, on fixtures and on the todo template's opening
 npm run check:pagedata # 33 checks: page data written, saved and read back from disk; NodeGX's validator on it
@@ -75,7 +86,8 @@ npm run smoke -- /path/to/project   # the desktop app opens the project and the 
 | `app/` | the Electron shell: the welcome screen (`welcome.html`, `actions.mjs`), the editor server for a project folder in a window, the gate |
 | `editor/` | `studio.html` (the whole editor, one file), `serve.mjs` (project files, save, the backend proxy), the gate |
 | `import/` | the Bubble importer, its fixtures (example editor requests) and its gate |
-| `lib/` | where the NodeGX checkout is; `backend.mjs`, the project's backend through NodeGX's own backend code |
+| `lib/` | `nodegx.mjs`, where each NodeGX kit piece is; `backend.mjs`, the project's backend through NodeGX's own backend code; `agent.mjs`, Connect Claude Code |
+| `vendor/` | the NodeGX kit pieces not on npm, at one commit (`scripts/vendor.mjs` builds it) |
 | `docs/` | the scope, the importer's dictionary, screenshots, and `history/` (how this started) |
 
 ## Licence

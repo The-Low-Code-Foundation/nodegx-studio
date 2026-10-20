@@ -1,10 +1,9 @@
-// Validate a NodeGX project folder through the noodl-mcp server over stdio (validate_project), grouping every error by kind. Needs the repo's noodl-mcp built (packages/noodl-mcp/dist).
+// Validate a NodeGX project folder through the noodl-mcp server over stdio (validate_project), grouping every error by kind. The server is the one lib/nodegx.mjs names.
 //   node import/validate-project.mjs <projectDir>
 import { spawn } from 'node:child_process';
-import { nodegxRepo } from '../lib/nodegx.mjs';
+import { kit } from '../lib/nodegx.mjs';
 const [,, dir] = process.argv;
-const repo = nodegxRepo;
-const proc = spawn(process.execPath, [`${repo}/packages/noodl-mcp/bin/noodl-mcp.js`, dir], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env } });
+const proc = spawn(process.execPath, [kit.mcpServer, dir], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env } });
 let buf = ''; const waiting = new Map(); let seq = 0;
 proc.stdout.on('data', (d) => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { const line = buf.slice(0, i); buf = buf.slice(i + 1); if (!line.trim()) continue; try { const m = JSON.parse(line); if (m.id && waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); } } catch {} } });
 proc.stderr.on('data', (d) => { if (/error|Error/.test(String(d))) process.stderr.write(d); });

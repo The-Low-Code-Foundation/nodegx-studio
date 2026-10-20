@@ -8,3 +8,5 @@ import/exports/
 *.pem
 # the kit pieces lib/backend.mjs bundles from the NodeGX checkout on every start
 .kit/
+# a vendor build in progress (scripts/vendor.mjs)
+vendor.tmp-*/

@@ -19,7 +19,7 @@ import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { attach } from '../editor/cdp.mjs';
-import { nodegxRepo, studioRoot } from '../lib/nodegx.mjs';
+import { kit, studioRoot } from '../lib/nodegx.mjs';
 import { importApp } from './actions.mjs';
 
 const shots = process.argv.includes('--shots');
@@ -105,7 +105,7 @@ try {
     const t2 = await editorReady(b);
     ok(/^ready My todos /.test(t2), 'clicking Todo list opens the new project in the editor', t2);
     ok(existsSync(join(todos, 'nodegx.project.json')) && readJson(join(todos, 'nodegx.project.json')).name === 'My todos', 'the project is in the folder named, and carries its name');
-    const tplDir = join(nodegxRepo, 'templates/todo-list');
+    const tplDir = join(kit.templates, 'todo-list');
     const expected = countFiles(tplDir) - ['.mcp.json', 'CLAUDE.md'].filter((n) => existsSync(join(tplDir, n))).length;
     ok(countFiles(todos) === expected, 'every file of the template came across', { copied: countFiles(todos), expected });
     ok(!existsSync(join(todos, '.mcp.json')) && !existsSync(join(todos, 'CLAUDE.md')), 'no editor-written agent files with another machine\'s paths');

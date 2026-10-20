@@ -8,7 +8,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, 
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { attachNewBackend, needsBackend } from '../lib/backend.mjs';
-import { nodegxRepo, studioRoot } from '../lib/nodegx.mjs';
+import { kit, studioRoot } from '../lib/nodegx.mjs';
 
 export const isProject = (dir) => !!dir && existsSync(join(dir, 'nodegx.project.json'));
 
@@ -17,10 +17,10 @@ export const isProject = (dir) => !!dir && existsSync(join(dir, 'nodegx.project.
 /**
  * The templates NodeGX publishes to its community shelf, with the shelf's own titles and summaries — the live rows of
  * `dev-docs/tasks/phase-78-the-templates/publish-templates-to-shelf.sh` in the NodeGX repo (the retired `planner`
- * row left out). Each is a whole project folder under the checkout's `templates/`. When the shelf changes, change
- * this list with it.
+ * row left out). Each is a whole project folder under NodeGX's `templates/`, vendored by `npm run vendor` (this list is
+ * what it copies). When the shelf changes, change this list with it and vendor again.
  */
-const TEMPLATES = [
+export const TEMPLATES = [
   { slug: 'todo-list', dir: 'todo-list', category: 'data-app', title: 'Todo list', summary: 'One list in the order you will do things, with deadlines, next actions and a history nothing is deleted from — and a Today tab for things that repeat (every day, week or month, at their times).' },
   { slug: 'planning', dir: 'planning', category: 'data-app', title: 'Planning', summary: 'A week for people who bill by the hour: hour budgets for billable, building, admin and hobby work, a strip of next moves, money that is ticked when it happens, and one sentence a night about what to do tomorrow.' },
   { slug: 'rocket-school', dir: 'rocket-school', category: 'game', title: 'Rocket School', summary: 'Maths and typing practice for ages 8 to 12, in English and French: four games, 62 skills from CE2 to 6e, and progress kept in the browser.' },
@@ -28,9 +28,9 @@ const TEMPLATES = [
   { slug: 'story-engine', dir: 'story-engine', category: 'game', title: 'Story engine', summary: 'A branching story where choices hand you things and some only appear once you carry them. The whole story is one list you can rewrite.' }
 ];
 
-const templateDir = (t) => join(nodegxRepo, 'templates', t.dir);
+const templateDir = (t) => join(kit.templates, t.dir);
 
-/** The list the welcome screen draws; a template whose folder is missing from the checkout is listed as unavailable.
+/** The list the welcome screen draws; a template whose folder is missing is listed as unavailable.
     Whether it needs a backend is NodeGX's rule read off the folder (a security policy, or a cloud function). */
 export const templates = () => TEMPLATES.map((t) => ({ ...t, needsBackend: needsBackend(templateDir(t)), available: isProject(templateDir(t)) }));
 
@@ -67,7 +67,7 @@ function nameAfterFolder(dir) {
 export async function createFromTemplate(slug, dest) {
   const t = TEMPLATES.find((x) => x.slug === slug);
   if (!t) throw new Error(`There is no template called ${slug}.`);
-  if (!isProject(templateDir(t))) throw new Error(`The ${t.title} template is not in the NodeGX checkout at ${nodegxRepo}.`);
+  if (!isProject(templateDir(t))) throw new Error(`The ${t.title} template is not in ${kit.templates}.`);
   dest = resolve(dest);
   const { created } = claimEmptyFolder(dest);
   try {
