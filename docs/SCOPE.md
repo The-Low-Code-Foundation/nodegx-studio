@@ -876,6 +876,60 @@ What STU-031 needs that the trace does not give: request times (probe, already i
 (MutationObserver or screenshots), names (the files), causes (the runtime fix). What it gets free: every step in
 order on the same clock as the other two.
 
+**Done (STU-031, 2026-10-20, s10): Record / Stop and the timeline.** A **Record** button in the bar (beside "Use the
+app") starts a recording and opens the **Run timeline**, a drawer under every tab; **Stop** reads it. In the drawer,
+**Record the page opening** opens a fresh copy of the app (a rebuild) and records from its first millisecond. Nothing
+is paused: Record marks a moment on the app frame's clock and Stop reads what three witnesses wrote since.
+[look/stu-031-timeline.png](look/stu-031-timeline.png) is the todo template's Todo page opening;
+[look/stu-031-timeline-add.png](look/stu-031-timeline-add.png) is a task added, recorded from now.
+
+- **Three lanes on one axis**, marks above and the rows below in time order, one line each: time, lane, what, detail.
+  Hovering a row lights its mark, clicking a mark finds its row. The axis runs from the first thing that happened to
+  the last, not from Record to Stop (the page opening is 0.48 s of a 4.8 s recording; the bar says "nothing after").
+- **Page data** = the probe's requests. A query says who asked: a page data item that asks exactly that, else the
+  Query Records node on that collection whose `items` came out with the answer (the trace, to 5 ms), named with the
+  page element that holds it ("Your tasks (in Your list, from the backend) asks for Task · 483 → 491 ms · 1 row");
+  when the trace does not confirm it, the row says so (a query whose answer did not change publishes nothing, and
+  JavaScript asks the same backend); a collection no query node asks is "JavaScript asks for Project". Writes,
+  sign-in and the signed-in user are said as what they do ("The app creates an Event").
+- **Workflows** = the trace's signals, made into runs of cards: a card's event starts a run, a signal into a node that
+  card reaches from one already in the run is a step of it ("If Signed in · When Todo: Did Mount · 5 steps ran over
+  4 ms"). Cards are the page's and those of every reusable placed on it: the Add button lives inside Open tasks
+  (`Todo/Task list`), so its card is the reusable's ("When Add: Click, inside Open tasks"). Clicking a row opens the
+  card, a reusable's in that reusable. A signal no card explains is hidden behind "Every signal (+n …)". The trace's
+  `cause` is still 0 (P123-STU030-SIGNALCAUSE), so "a step of it" comes from the files, not the trace.
+- **The screen** = a MutationObserver the probe starts with the frame (`window.__studioScreen`: elements added or
+  taken away, text changed, never styles; the last 5,000–6,000), each change given to the page element it happened
+  inside, changes to one element within 30 ms one row; plus the app's moves between pages. The parser building the
+  page (body into html, the "enable JavaScript" notice) is not drawing and is left out.
+- **What the Todo page's opening says:** the page draws empty at 479 ms ("List (0)"), the Task query answers at
+  491 ms, Open tasks draws the task at 499 ms; four requests come from JavaScript (Project, MoneyItem, MoneyMark,
+  BalanceReading), and Task is asked a second time, unconfirmed by the trace (STU-030 measured that one from
+  JavaScript). Before all that, "The app reads the signed-in user" took 23 ms in one run and 326 ms in another:
+  nothing draws until it answers.
+- Found on the way: **a copy of a reusable has no element in the preview** (`preview.elementsOf(copyId)` is empty
+  for `tdList`): a copy draws through its component's roots. The timeline reaches them through the runtime
+  (`drawnElements`, the instance's `getRoots()`); Design does not, so by the code a copy selected in the tree draws
+  no box, and a click on it selects the group around it (P123-STU031-COPYBOX, a kit gap, filed in NodeGX's bug ledger a93f0d2ed; not fixed; not looked at on
+  screen).
+- **Not built:** a recording that crosses pages (Sign in → Todo) gives card rows only for the page shown at Stop and
+  its reusables; the others' signals are minor rows. Two runs of one card that overlap are told apart only by which
+  started last. The probe's text sample is the DOM as inserted, before its values arrive ("TextTextTextLabel · 1 ·
+  Read the run timeline"). Inputs and outputs per step, screenshots and a scrubber are STU-032.
+
+Gate: `npm run check:timeline` (`editor/timeline-check.mjs`) 24/24. Eleven on fixtures (a request's start and end
+from Record and its asker; before Record left out; JavaScript; a write said as itself; a card's run; a minor signal;
+changes merged per element; the page and a move; time order; the axis from first to last; "an Event"); thirteen on
+the todo template with a backend: a visitor signs up and adds a task in the app, Todo is opened in Studio, Record the
+page opening, Stop — the Task query's row starts and ends on the probe's own milliseconds, names the query whose
+`items` came out with the answer in the runtime's own trace and links to the element holding it, the task list's
+row is after the answer and carries the task's title (which the copy's roots hold now, read off the runtime), the
+page's Did Mount is a row linked to its card, clicking rows selects the element and opens the card; then Record from
+now, a second task: the Add button's card, then the create request, then the task drawn, nothing from before Record.
+Mutants: no screen witness 22/24; copies draw nothing 23/24; the page's cards only 23/24. `check:editor` 170/170,
+`check:app` 34/34 (both load studio.html), `check:rules` 20/20, `check:phrases` 85/85, `check:pagedata` 33/33,
+`check:reusable` 12/12; `check:import` and `check:dictionary` not run (the importer is untouched).
+
 ---
 
 ## M5 — The importer as a product

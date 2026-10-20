@@ -37,4 +37,33 @@
     }
     return send.apply(this, arguments);
   };
+
+  /*
+   * The screen (STU-031): every change to the app's document from the frame's first moment, so a recording of the
+   * page opening has its drawing from 0 ms. Elements added or taken away and text changed, never styles (an animation
+   * would fill the log). Kept as the changed element itself, so Studio can say which page element it belongs to; the
+   * last few thousand only.
+   *
+   *   window.__studioScreen = [{ t, el, added, removed, text }]
+   */
+  var screen = (window.__studioScreen = []);
+  // the deploy page's own scripts, styles and "enable JavaScript" notice are written into the frame too: not drawing
+  var unseen = /^(SCRIPT|STYLE|NOSCRIPT|LINK|META|TEMPLATE)$/;
+  var seen = function (node) { return !(node.nodeType === 1 && unseen.test(node.tagName)); };
+  var words = function (nodes) { var s = ''; for (var i = 0; i < nodes.length && s.length < 80; i++) if (seen(nodes[i])) s += ' ' + (nodes[i].textContent || ''); return s.replace(/\s+/g, ' ').trim().slice(0, 80); };
+  var elements = function (nodes) { var n = 0; for (var i = 0; i < nodes.length; i++) if (nodes[i].nodeType === 1 && seen(nodes[i])) n++; return n; };
+  new MutationObserver(function (list) {
+    var t = performance.now();
+    for (var i = 0; i < list.length; i++) {
+      var m = list[i], el = m.target.nodeType === 1 ? m.target : m.target.parentElement;
+      // the parser building the page (body into html, the page's skeleton into body) is not the app drawing
+      if (!el || el === document.documentElement || (el === document.body && document.readyState === 'loading') || (el.closest && el.closest('head')) || !seen(el)) continue;
+      if (m.type === 'characterData') screen.push({ t: t, el: el, added: 0, removed: 0, text: String(m.target.data).trim().slice(0, 80) });
+      else {
+        var added = elements(m.addedNodes), removed = elements(m.removedNodes), text = words(m.addedNodes);
+        if (added || removed || text) screen.push({ t: t, el: el, added: added, removed: removed, text: text });
+      }
+    }
+    if (screen.length > 6000) screen.splice(0, 1000);
+  }).observe(document.documentElement, { subtree: true, childList: true, characterData: true });
 })();

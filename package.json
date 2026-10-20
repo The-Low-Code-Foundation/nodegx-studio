@@ -11,9 +11,10 @@
   "scripts": {
     "start": "node app/launch.mjs",
     "serve": "node editor/serve.mjs",
-    "check": "node editor/rules-check.mjs && node editor/phrases-check.mjs && node editor/pagedata-check.mjs && node editor/reusable-check.mjs && node editor/check.mjs && node import/check.mjs && node import/dictionary-check.mjs && node app/check.mjs",
+    "check": "node editor/rules-check.mjs && node editor/phrases-check.mjs && node editor/pagedata-check.mjs && node editor/reusable-check.mjs && node editor/check.mjs && node editor/timeline-check.mjs && node import/check.mjs && node import/dictionary-check.mjs && node app/check.mjs",
     "check:editor": "node editor/check.mjs",
     "check:pagedata": "node editor/pagedata-check.mjs",
+    "check:timeline": "node editor/timeline-check.mjs",
     "check:reusable": "node editor/reusable-check.mjs",
     "check:rules": "node editor/rules-check.mjs",
     "check:import": "node import/check.mjs",

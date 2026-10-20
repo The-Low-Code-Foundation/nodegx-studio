@@ -33,6 +33,7 @@
     --accent: #1f5eff; --accent-ink: #1446c7; --accent-soft: #e9efff; --accent-line: #b9caff;
     --ok: #16a34a; --warn: #d97706; --danger: #dc2626; --branch-yes: #0f9d58; --branch-no: #c2410c;
     --hover: #4ade80; --sel: #1f5eff; --guide: #ef3b3b; --pad: rgba(110, 200, 120, .32); --mar: rgba(255, 170, 60, .34);
+    --lane-data: #1f5eff; --lane-workflow: #9333ea; --lane-screen: #0f9d58;
     --r: 6px; --r-lg: 10px; --shadow: 0 10px 30px rgba(17, 24, 39, .14), 0 1px 3px rgba(17, 24, 39, .08);
     --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
     font-family: Inter, -apple-system, "Segoe UI", system-ui, sans-serif; font-size: 13px; line-height: 1.4; color: var(--ink);
@@ -60,7 +61,7 @@
   kbd { font: 11px var(--mono); background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 4px; padding: 0 4px; color: var(--muted); }
 
   /* ---- shell: rail · header · tab ---- */
-  #shell { display: grid; grid-template-columns: 48px 1fr; grid-template-rows: 44px 1fr; height: 100%; }
+  #shell { display: grid; grid-template-columns: 48px minmax(0, 1fr); grid-template-rows: 44px minmax(0, 1fr); height: 100%; }
   #rail { grid-row: 1 / span 2; background: #14181f; display: flex; flex-direction: column; align-items: center; padding: 8px 0; gap: 4px; }
   #rail .logo { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(135deg, #3b82f6, #1f5eff); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 15px; margin-bottom: 8px; }
   #rail button { width: 36px; height: 36px; padding: 0; justify-content: center; border: 0; background: transparent; color: #8b93a3; border-radius: 8px; position: relative; }
@@ -72,21 +73,21 @@
   #rail button:hover .tip { opacity: 1; }
   #rail .grow { flex: 1; }
   header { grid-column: 2; display: flex; align-items: center; gap: 10px; padding: 0 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
-  header .crumb { display: flex; align-items: center; gap: 6px; color: var(--ink-2); font-weight: 500; }
+  header .crumb { display: flex; align-items: center; gap: 6px; color: var(--ink-2); font-weight: 500; white-space: nowrap; flex: none; }
   header .crumb .sep { color: var(--line-2); }
   header .crumb select { width: auto; padding: 3px 24px 3px 8px; border-color: transparent; background-color: transparent; font-weight: 500; }
   header .crumb select:hover { border-color: var(--line-2); }
   header .seg, .pageitem .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: var(--r); overflow: hidden; }
   header .seg button, .pageitem .seg button { border: 0; border-radius: 0; padding: 4px 9px; color: var(--muted); }
   header .seg button[aria-pressed=true], .pageitem .seg button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent-ink); }
-  header .toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); cursor: pointer; user-select: none; }
+  header .toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); cursor: pointer; user-select: none; white-space: nowrap; flex: none; }
   header .toggle i { width: 30px; height: 16px; border-radius: 8px; background: var(--line-2); position: relative; transition: background .15s; }
   header .toggle i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 6px; background: #fff; transition: left .15s; }
   header .toggle input { display: none; }
   header .toggle input:checked + i { background: var(--accent); }
   header .toggle input:checked + i::after { left: 16px; }
   header .spacer { flex: 1; }
-  header .status { color: var(--muted); font-size: 12px; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+  header .status { color: var(--muted); font-size: 12px; max-width: 360px; min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
   header .status::before { content: ''; width: 7px; height: 7px; border-radius: 4px; background: var(--ok); flex: none; }
   header .status.busy::before { background: var(--warn); }
   header .status.bad { color: var(--danger); }
@@ -100,8 +101,45 @@
   .agent pre { margin: 0; padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r); font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-all; user-select: all; }
   .agent .acts { display: flex; gap: 8px; align-items: center; }
   .agent .acts .note { color: var(--muted); font-size: 12px; }
-  main { grid-column: 2; min-height: 0; }
-  section.tab { height: 100%; display: grid; min-height: 0; }
+  main { grid-column: 2; min-height: 0; display: flex; flex-direction: column; }
+  section.tab { flex: 1 1 0; display: grid; min-height: 0; }
+
+  /* ---- STU-031: Record / Stop and the run timeline, a drawer under every tab ---- */
+  header #recbtn { font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
+  header #recbtn .dot { width: 9px; height: 9px; border-radius: 5px; background: var(--danger); flex: none; }
+  header #recbtn .sq { width: 9px; height: 9px; border-radius: 2px; background: var(--danger); flex: none; animation: recpulse 1s ease-in-out infinite; }
+  header #recbtn.on { background: #fef2f2; border-color: #fca5a5; color: var(--danger); }
+  @keyframes recpulse { 50% { opacity: .35; } }
+  #timeline { flex: 0 0 300px; min-height: 0; background: var(--panel); border-top: 1px solid var(--line); display: grid; grid-template-rows: auto auto 1fr; }
+  #timeline[hidden] { display: none; }
+  body.tl #appwrap { height: calc(100vh - 44px - 40px - 300px); min-height: 340px; }
+  .tlhead { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  .tlhead h4 { margin: 0; font-size: 13px; font-weight: 600; }
+  .tlhead .note { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .tlhead .grow { flex: 1; }
+  .tlhead label { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: 12px; white-space: nowrap; }
+  .tlaxis { padding: 8px 12px 4px; display: grid; gap: 3px; }
+  .tlaxis .tlane { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+  .tlaxis .track { position: relative; height: 14px; background: var(--panel-2); border-radius: 3px; }
+  .tlaxis .mark { position: absolute; top: 2px; height: 10px; min-width: 3px; border-radius: 2px; opacity: .8; cursor: pointer; }
+  .tlaxis .mark.data { background: var(--lane-data); } .tlaxis .mark.workflow { background: var(--lane-workflow); } .tlaxis .mark.screen { background: var(--lane-screen); }
+  .tlaxis .mark.minor { opacity: .25; }
+  .tlaxis .mark.hl { opacity: 1; outline: 2px solid var(--ink); outline-offset: 1px; z-index: 2; }
+  .tlaxis .ticks { position: relative; height: 14px; margin-left: 100px; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .tlaxis .ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+  .tlaxis .ticks span:first-child { transform: none; } .tlaxis .ticks span:last-child { transform: translateX(-100%); }
+  .tlrows { overflow: auto; min-height: 0; padding: 2px 6px 10px; }
+  .tlrow { display: grid; grid-template-columns: 64px 96px 1fr; gap: 8px; align-items: baseline; padding: 2px 6px; border-radius: var(--r); color: var(--ink-2); cursor: default; }
+  .tlrow[data-link] { cursor: pointer; }
+  .tlrow:hover, .tlrow.hl { background: var(--panel-2); color: var(--ink); }
+  .tlrow .t { color: var(--muted); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+  .tlrow .ln { font-size: 11px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .tlrow .ln::before { content: ''; width: 7px; height: 7px; border-radius: 4px; background: var(--c); }
+  .tlrow .what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tlrow .what small { color: var(--muted); font-size: 12px; margin-left: 8px; }
+  .tlrow.minor { opacity: .7; }
+  .tlrow.flash { animation: tlflash 1.2s ease-out; }
+  @keyframes tlflash { from { background: var(--accent-soft); } }
   section[hidden] { display: none; }
   aside { background: var(--panel); border-right: 1px solid var(--line); overflow: auto; display: flex; flex-direction: column; min-height: 0; }
   aside.right { border-right: 0; border-left: 1px solid var(--line); }
@@ -503,6 +541,7 @@
       <button data-w="100%" aria-pressed="true">Fill</button><button data-w="1280">1280</button><button data-w="1024">1024</button><button data-w="768">768</button><button data-w="390">Phone</button>
     </div>
     <label class="toggle" id="previewmode-l"><input type="checkbox" id="previewmode"><i></i>Use the app</label>
+    <button id="recbtn" title="Record what the app does — the page data it asks for, the workflows that run, what the screen draws — then Stop and read it on one time axis"><i class="dot"></i>Record</button>
     <div class="spacer"></div>
     <div class="status" id="status">starting…</div>
     <button class="status backend" id="backendpill" title="The app's backend">…</button>
@@ -565,6 +604,17 @@
       <div id="stylemain"><div class="empty">Pick a style. A style is a set of properties every element of one type can wear; here it is a variant in nodegx.styles.json.</div></div>
       <aside class="right" id="styleprops"><div class="empty">The style's properties appear here.</div></aside>
     </section>
+
+    <section id="timeline" aria-label="Run timeline" hidden>
+      <div class="tlhead">
+        <h4>Run timeline</h4><span class="note" id="tlnote"></span><span class="grow"></span>
+        <label id="tlall-l" hidden><input type="checkbox" id="tlall"><span id="tlall-t">Every signal</span></label>
+        <button class="quiet tiny" id="tlopen" title="Open a fresh copy of the app and record from its first millisecond">Record the page opening</button>
+        <button class="quiet tiny" id="tlclose" title="Close the timeline (the recording is kept)" aria-label="Close the timeline"><svg class="i"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="tlaxis" id="tlaxis"></div>
+      <div class="tlrows" id="tlrows"></div>
+    </section>
   </main>
 </div>
 <div id="toast"></div>
@@ -577,7 +627,8 @@ import { applyEdit } from './edits.mjs';
 import { extractReusable } from './reusable.mjs';
 import { readRule, rulesOf, withoutArm, withValue, withCondition, addArm, valueOf, literal, SHOWING } from './rules.mjs';
 import { TYPES, TYPE_WORDS, dictionaryType, applyPhrase } from './phrases.mjs';
-import { OPERATORS, createEdits, updateEdits, removeEdits, readItems, readFrom, readersOf, itemOfSource, sameAs, signature, describe, lastRun, queriesOnOpen } from './pagedata.mjs';
+import { OPERATORS, createEdits, updateEdits, removeEdits, readItems, readFrom, readersOf, itemOfSource, sameAs, signature, describe, lastRun, queriesOnOpen, requestMatches } from './pagedata.mjs';
+import { LANES, buildTimeline, msText } from './timeline.mjs';
 
 const $ = (id) => document.getElementById(id);
 const h = (tag, attrs = {}, ...kids) => {
@@ -905,8 +956,11 @@ function rebuild(delay = 120) {
   clearTimeout(rebuildTimer);
   rebuildTimer = setTimeout(async () => {
     rebuilding = true;
+    // a recording is of one copy of the app: an edit replaces it, so the recording ends where that copy did (STU-031)
+    if (rec && !rec.pendingOpen) stopRecording('The app was rebuilt after an edit, so the recording ends there.');
     status('Rebuilding the app…', 'busy');
     const s = await preview.update(previewFiles());
+    if (rec?.pendingOpen) { if (s.status === 'ok') beginRecording(true); else { rec = null; renderRecButton(); toast('The app did not start, so there was nothing to record.'); } }
     lastShow = s;
     rebuilding = false;
     showProblems(s);
@@ -3569,6 +3623,186 @@ function renderStyles() {
     wrap.append(det);
   }
   props.append(wrap);
+}
+
+/* ================= STU-031: Record / Stop and the run timeline =================
+   Nothing is paused: Record marks a moment on the app frame's clock, Stop reads what three witnesses wrote down since —
+   the runtime's trace (armed by the in-page preview at boot), the probe's requests and the probe's screen changes
+   (./probe.js) — and ./timeline.mjs makes them rows. "Record the page opening" opens a fresh copy of the app (a
+   rebuild) and records from its first millisecond, when all three witnesses were already writing. */
+let rec = null;        // while recording: { frame, t0, fromOpen }; while the app restarts for one: { pendingOpen: true }
+let recording = null;  // the last recording, read into rows
+let tlOpen = false, tlTimer = null, tlAll = false;
+const frameNow = (frame) => { try { return frame.contentWindow.performance.now(); } catch { return NaN; } };
+function renderRecButton() {
+  const b = $('recbtn'); b.innerHTML = ''; b.classList.toggle('on', !!rec);
+  if (!rec) b.append(h('i', { class: 'dot' }), 'Record');
+  else if (rec.pendingOpen) b.append(h('i', { class: 'sq' }), 'Opening the app…');
+  else { const ms = frameNow(rec.frame) - rec.t0; b.append(h('i', { class: 'sq' }), `Stop · ${Number.isFinite(ms) ? msText(ms) : ''}`); }
+  b.title = rec ? 'Stop recording and read what happened' : 'Record what the app does — the page data it asks for, the workflows that run, what the screen draws — then Stop and read it on one time axis';
+}
+function startRecording({ fromOpen = false } = {}) {
+  if (rec) return;
+  tlOpen = true;
+  if (fromOpen) { rec = { pendingOpen: true }; renderRecButton(); renderTimeline(); rebuild(0); return; }
+  if (!preview.frame) return toast('The app is not on screen, so there is nothing to record.');
+  beginRecording(false);
+}
+function beginRecording(fromOpen) {
+  rec = { frame: preview.frame, t0: fromOpen ? 0 : frameNow(preview.frame), fromOpen };
+  clearInterval(tlTimer); tlTimer = setInterval(renderRecButton, 200);
+  renderRecButton(); renderTimeline();
+}
+/** The page's names for the trace's ids: a node anywhere in the files, and the element on this page that holds it. */
+function timelineNaming() {
+  const where = new Map(); // id → { key, node }
+  for (const key of Object.keys(registry())) {
+    let list; try { list = store.readComponent(key).files.nodes.nodes; } catch { continue; }
+    for (const n of list) if (!where.has(n.id)) where.set(n.id, { key, node: n });
+  }
+  const placedIn = new Map(); // component key → the components that place a copy of it
+  for (const { key, node } of where.values()) if (node.type.startsWith('/')) { const k = node.type.slice(1); if (!placedIn.has(k)) placedIn.set(k, new Set()); placedIn.get(k).add(key); }
+  const holder = (key, seen = new Set()) => {
+    const copy = nodes.find((n) => n.type === '/' + key); if (copy) return copy.id;
+    if (seen.has(key)) return null; seen.add(key);
+    for (const k of placedIn.get(key) || []) { const id = holder(k, seen); if (id) return id; }
+    return null;
+  };
+  const pageNode = (id) => (byId[id] ? id : where.has(id) ? holder(where.get(id).key) : null);
+  const label = (id) => (byId[id] ? labelOf(id) : where.has(id) ? where.get(id).node.label || typeName(where.get(id).node.type) : 'a node not in the files');
+  // a request's query: a page data item that asks exactly that; else a Query Records node on that collection, the one
+  // whose `items` came out when the answer did (the trace has a wired query to the ms, STU-030); none: JavaScript asked
+  const asker = (collection, e, trace) => {
+    const item = pageItems.find((it) => requestMatches(it, e)); if (item) return { name: item.name, link: { item: item.id } };
+    const qs = [...where.values()].filter(({ node }) => node.type === 'DbCollection2' && node.parameters?.collectionName === collection);
+    if (!qs.length) return null;
+    const ids = new Set(qs.map((q) => q.node.id));
+    const hit = e.t1 !== undefined ? trace.find((x) => ids.has(x.fromNode) && x.fromPort === 'items' && Math.abs(x.t - e.t1) <= 5) : null;
+    const q = hit ? qs.find((x) => x.node.id === hit.fromNode) : qs[0];
+    const at = pageNode(q.node.id);
+    // unconfirmed is said: a query whose answer did not change publishes nothing, and JavaScript asks the same backend
+    const name = `${q.node.label || `Query ${collection}`}${at && at !== q.node.id ? ` (in ${label(at)})` : ''}`;
+    const note = hit ? undefined : qs.length > 1 ? `one of the ${qs.length} queries on ${collection}, or a JavaScript node: the trace does not say which` : 'not confirmed by the trace: a JavaScript node may have asked this';
+    return { name, link: at ? { node: at } : null, note };
+  };
+  return { label, pageNode, asker };
+}
+/** What a node draws in the app. The preview maps none to a copy of a reusable: a copy draws through its roots. */
+function drawnElements(id) {
+  const own = preview.elementsOf(id); if (own.length) return own;
+  let copies = [];
+  try { copies = preview.frame.contentWindow.Noodl.Navigation._noodlRuntime.context.rootComponent.nodeScope.getNodesWithIdRecursive(id); } catch { return []; }
+  const out = [];
+  const through = (n, depth) => { for (const r of n.getRoots?.() || []) { const el = r.getDOMElement?.(); if (el) out.push(el); else if (depth < 6) through(r, depth + 1); } };
+  for (const c of copies) through(c, 0);
+  return out;
+}
+/**
+ * The cards a recording can show: the page's, and those of every reusable placed on it (the Add button inside the task
+ * list is the list's card, not the page's), each read as the Workflow tab reads its component, named as its card is.
+ */
+function timelineCards({ label }) {
+  const cardOf = (ev, component, where) => ({ node: ev.node, port: ev.port, component, name: cardName(ev), when: where ? `${eventTitle(ev)}, inside ${where}` : eventTitle(ev), reach: new Set(reachOf(ev).map((n) => n.id)) });
+  const out = events().map((ev) => cardOf(ev, pageKey));
+  const keys = new Map(), queue = [[pageKey, null]];
+  while (queue.length) {
+    const [key, copy] = queue.shift();
+    let list; try { list = store.readComponent(key).files.nodes.nodes; } catch { continue; }
+    for (const n of list) if (n.type.startsWith('/') && registry()[n.type.slice(1)] && !keys.has(n.type.slice(1)) && n.type.slice(1) !== pageKey) { const k = n.type.slice(1); keys.set(k, copy ?? n.id); queue.push([k, copy ?? n.id]); }
+  }
+  const saved = { pageKey, nodes, conns, byId, visualIds, depthOf, legacyName, pageItems, selItem };
+  try {
+    for (const [key, copy] of keys) { pageKey = key; readGraph(); out.push(...events().map((ev) => cardOf(ev, key, label(copy)))); }
+  } catch (e) { console.warn('timeline cards:', e.message); }
+  finally { ({ pageKey, nodes, conns, byId, visualIds, depthOf, legacyName, pageItems, selItem } = saved); }
+  return out;
+}
+function stopRecording(note = '') {
+  const r = rec; rec = null; clearInterval(tlTimer);
+  if (!r || r.pendingOpen) { renderRecButton(); renderTimeline(); return; }
+  const w = r.frame?.contentWindow;
+  if (!w) { recording = null; renderRecButton(); renderTimeline(); return toast('The app was replaced before Stop, so the recording is gone.'); }
+  const t1 = w.performance.now();
+  let trace = [], log = [], screen = [];
+  try { trace = w.Noodl.Navigation._noodlRuntime.context.getTraceEvents(0) || []; } catch { /* no trace in this frame */ }
+  try { log = w.__studioLog || []; } catch { /* no probe */ }
+  // a change on screen belongs to the page element it happened inside: the nearest one that draws it, a copy of a
+  // reusable included (the list's rows are drawn inside the copy, not inside the group around it)
+  const owner = new Map();
+  for (const id of visualIds) for (const el of drawnElements(id)) owner.set(el, id);
+  const ownerOf = (el) => { while (el && !owner.has(el)) el = el.parentElement; return el ? owner.get(el) : null; };
+  try { screen = (w.__studioScreen || []).filter((s) => s.t >= r.t0 && s.t <= t1).map((s) => ({ t: s.t, node: ownerOf(s.el), added: s.added, removed: s.removed, text: s.text })); } catch { /* no probe */ }
+  const naming = timelineNaming();
+  recording = { ...buildTimeline({ t0: r.t0, t1, fromOpen: r.fromOpen, trace, log, screen, cards: timelineCards(naming), ...naming }), page: pageKey, fromOpen: r.fromOpen, note };
+  window.__ob.timeline = recording;
+  renderRecButton(); renderTimeline();
+}
+$('recbtn').onclick = () => (rec && !rec.pendingOpen ? stopRecording() : startRecording());
+// pressed while recording: that recording is dropped, the page opening is what was asked for
+$('tlopen').onclick = () => { if (rec?.pendingOpen) return; if (rec) { rec = null; clearInterval(tlTimer); } startRecording({ fromOpen: true }); };
+$('tlclose').onclick = () => { tlOpen = false; renderTimeline(); };
+$('tlall').onchange = (e) => { tlAll = e.target.checked; renderTimeline(); };
+function followRow(row) {
+  const link = row.link; if (!link) return;
+  if (recording && recording.page !== pageKey) return toast(`That was recorded on ${recording.page.replace(/^Pages\//, '')}; open that page to go to it.`);
+  if (link.card) {
+    // a reusable's card is in the reusable: open it there, as the Workflow tab would
+    if (link.card.component && link.card.component !== pageKey) { if (!registry()[link.card.component]) return toast('That reusable is no longer in the project.'); openComponent(link.card.component); }
+    if (!byId[link.card.node]) return toast('That workflow is no longer there.');
+    return openCard({ node: link.card.node, port: link.card.port });
+  }
+  if (tab !== 'design') switchTab('design');
+  if (link.item) { if (!itemById(link.item)) return toast('That page data is no longer on this page.'); return openItem(link.item); }
+  if (link.node) { if (!byId[link.node]) return toast('That element is no longer on this page.'); select(link.node); elOf(link.node)?.scrollIntoView?.({ block: 'nearest' }); }
+}
+function renderTimeline() {
+  const box = $('timeline');
+  box.hidden = !tlOpen; document.body.classList.toggle('tl', tlOpen);
+  setTimeout(draw, 0); // the frame's size changed with the drawer
+  if (!tlOpen) return;
+  const axis = $('tlaxis'), list = $('tlrows'); axis.innerHTML = ''; list.innerHTML = '';
+  $('tlopen').disabled = !!rec?.pendingOpen;
+  $('tlall-l').hidden = !recording?.loose || !!rec;
+  if (rec) {
+    $('tlnote').textContent = rec.pendingOpen ? 'Opening a fresh copy of the app…' : rec.fromOpen ? 'Recording from the app opening' : 'Recording';
+    list.append(h('div', { class: 'hint' }, rec.pendingOpen ? 'The app is starting; everything it does from its first millisecond is being written down.' : `Use the app${$('previewmode').checked || tab !== 'design' ? '' : ' (turn on “Use the app” to click through it)'}, then press Stop in the bar above.`));
+    return;
+  }
+  if (!recording) {
+    $('tlnote').textContent = '';
+    list.append(h('div', { class: 'hint' }, 'Press Record, use the app, press Stop: the page data it asked for, the workflows that ran and what the screen drew, in the order they happened, on one time axis. Nothing is paused while it records. Or record the page opening: a fresh copy of the app, from its first millisecond.'));
+    return;
+  }
+  const shown = recording.rows.filter((r) => tlAll || !r.minor);
+  const { from, span } = recording;
+  const quiet = recording.length - span > 200 ? ` (nothing after ${msText(span)})` : '';
+  $('tlnote').textContent = `${recording.fromOpen ? 'The page opening' : 'A recording'} on ${recording.page.replace(/^Pages\//, '')} · ${msText(recording.length)}${quiet} · ${shown.length} row${shown.length === 1 ? '' : 's'}${recording.note ? ` · ${recording.note}` : ''}`;
+  $('tlall-t').textContent = `Every signal (+${recording.loose} that no workflow here starts)`;
+  $('tlall').checked = tlAll;
+  const pct = (t) => `${Math.max(0, Math.min(100, (t / (span - from)) * 100)).toFixed(3)}%`;
+  const rowEls = new Map(), markEls = new Map();
+  const light = (i, on) => { rowEls.get(i)?.classList.toggle('hl', on); markEls.get(i)?.classList.toggle('hl', on); };
+  for (const [lane, name] of LANES) {
+    const track = h('div', { class: 'track', 'data-lane': lane });
+    shown.forEach((r, i) => {
+      if (r.lane !== lane) return;
+      const m = h('div', { class: `mark ${lane}${r.minor ? ' minor' : ''}`, style: `left:${pct(r.t - from)};width:${r.end !== undefined ? `calc(${pct(r.end - r.t)})` : '3px'}`, title: `${msText(r.t)} · ${r.text}`,
+        onmouseenter: () => light(i, true), onmouseleave: () => light(i, false),
+        onclick: () => { const el = rowEls.get(i); el?.scrollIntoView({ block: 'nearest' }); el?.classList.remove('flash'); void el?.offsetWidth; el?.classList.add('flash'); } });
+      markEls.set(i, m); track.append(m);
+    });
+    axis.append(h('div', { class: 'tlane' }, h('span', {}, name), track));
+  }
+  axis.append(h('div', { class: 'ticks' }, ...[0, 0.25, 0.5, 0.75, 1].map((f) => h('span', { style: `left:${f * 100}%` }, msText(from + (span - from) * f)))));
+  const laneName = Object.fromEntries(LANES);
+  shown.forEach((r, i) => {
+    const link = r.link?.card ? `card:${r.link.card.node}.${r.link.card.port}` : r.link?.item ? `item:${r.link.item}` : r.link?.node ? `node:${r.link.node}` : undefined;
+    const el = h('div', { class: `tlrow${r.minor ? ' minor' : ''}`, 'data-lane': r.lane, 'data-t': Math.round(r.t), 'data-end': r.end !== undefined ? Math.round(r.end) : undefined, 'data-link': link,
+      title: link ? (r.link.card ? 'Open this workflow' : r.link.item ? 'Open this page data' : 'Select this element') : undefined,
+      onmouseenter: () => light(i, true), onmouseleave: () => light(i, false), onclick: () => followRow(r) },
+    h('span', { class: 't' }, msText(r.t)), h('span', { class: 'ln', style: `--c: var(--lane-${r.lane})` }, laneName[r.lane]), h('div', { class: 'what' }, r.text, h('small', {}, r.sub)));
+    rowEls.set(i, el); list.append(el);
+  });
 }
 
 /* ================= tabs, boot ================= */

@@ -59,7 +59,8 @@ another platform; this reads only your own app.
 ## Gates
 
 ```bash
-npm run check:editor   # 105 checks: drives the editor headless against a copy of NodeGX's todo template
+npm run check:editor   # 170 checks: drives the editor headless against a copy of NodeGX's todo template
+npm run check:timeline # 24 checks: Record / Stop and the run timeline, on fixtures and on the todo template's opening
 npm run check:pagedata # 33 checks: page data written, saved and read back from disk; NodeGX's validator on it
 npm run check:reusable # 12 checks: a group made reusable, every node and wire accounted for; NodeGX's validator on it
 npm run check:import   # the converter on the example editor requests and a page of repeated searches (50 checks; 58 with a template bundle)
