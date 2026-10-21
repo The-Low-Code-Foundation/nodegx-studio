@@ -214,6 +214,30 @@ async function reconcileBackend() {
 }
 const followBackend = () => inTurn(reconcileBackend);
 
+let mapNow = null; // { key, handle }: one map per backend and credential
+async function backendMap() {
+  if (!(backend.phase === 'running' || backend.phase === 'adopted')) {
+    return { words: backend.phase === 'none' ? 'This project has no backend yet. Add one in the Data tab, and the map draws it.' : backend.phase === 'remote' ? 'This project’s backend is not on this computer, so the map can’t ask it as each person.' : backend.phase === 'failed' ? `The backend didn’t start: ${backend.error}` : 'The backend is starting. Open this tab again in a moment.' };
+  }
+  const token = await backends.adminTokenOf(backend.id);
+  if (!token) return { words: 'The backend has no admin credential yet, so the map can’t ask it anything.' };
+  const key = `${backend.endpoint}|${token}`;
+  if (mapNow?.key !== key) {
+    let mod;
+    try {
+      mod = await import('@nodegx/backend-map');
+    } catch {
+      return { words: 'The backend map isn’t installed in this copy of Studio (npm install @nodegx/backend-map).' };
+    }
+    const editor = mod.createEditor({ project: projectDir, backend: backend.endpoint, token });
+    await editor.views.sweep();
+    mapNow = { key, handle: mod.handler(editor) };
+  }
+  return mapNow;
+}
+const mapWords = (words) =>
+  `<!doctype html><meta charset="utf-8"><body style="margin:0;height:100vh;display:grid;place-items:center;background:#141318;color:#c4cedb;font:15px system-ui,sans-serif"><p style="max-width:460px;text-align:center">${words.replace(/[<&]/g, (c) => (c === '<' ? '&lt;' : '&amp;'))}</p>`;
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const send = (status, body, type) => {
@@ -314,6 +338,14 @@ const server = http.createServer(async (req, res) => {
       // Studio's own writes, known before they land, so the watcher does not hand them back to the page as an outside edit
       const result = await agent.connect(projectDir, (rel, text) => known.set(rel, text));
       return json(200, result);
+    }
+    // the backend map (@nodegx/backend-map): who can reach which rows, run as each person. It holds the admin
+    // credential here, as the Data tab's proxy does; the page never sees it
+    if (url.pathname === '/backend-map') return res.writeHead(302, { location: '/backend-map/' }).end();
+    if (url.pathname.startsWith('/backend-map/')) {
+      const map = await backendMap();
+      if (map.words) return send(200, mapWords(map.words), types['.html']);
+      return map.handle(req, res, url.pathname.slice('/backend-map'.length));
     }
     if (url.pathname.startsWith('/api/backend/')) {
       const binding = backends.bindingOf(projectDir);

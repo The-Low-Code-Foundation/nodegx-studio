@@ -527,6 +527,9 @@
 
   /* ---- Data ---- */
   #data { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  /* the backend map (@nodegx/backend-map), served by serve.mjs at /backend-map/ */
+  #backendmap { grid-template-columns: 1fr; }
+  #mapframe { width: 100%; height: 100%; border: 0; display: block; }
   .subtabs { display: flex; gap: 2px; padding: 8px 20px 0; background: var(--panel); border-bottom: 1px solid var(--line); }
   .subtabs button { border: 0; background: transparent; border-radius: 0; padding: 8px 10px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
   .subtabs button:hover { color: var(--ink); background: transparent; }
@@ -566,6 +569,7 @@
   <symbol id="i-workflow" viewBox="0 0 24 24"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><path d="M9 6h6M18 9v6M6 9v9h9"/></symbol>
   <symbol id="i-data" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></symbol>
   <symbol id="i-styles" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.7-.7 1.7-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.7 1.7-1.7H16c3.3 0 6-2.7 6-6 0-4.7-4.5-8.4-10-8.4z"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7 6h10M6 8l5 8M18 8l-5 8"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
   <symbol id="i-group" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></symbol>
   <symbol id="i-text" viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></symbol>
@@ -603,6 +607,7 @@
     <button role="tab" data-tab="workflow" title="Workflow"><svg class="i"><use href="#i-workflow"/></svg><span class="tip">Workflow</span></button>
     <button role="tab" data-tab="data" title="Data"><svg class="i"><use href="#i-data"/></svg><span class="tip">Data</span></button>
     <button role="tab" data-tab="styles" title="Styles"><svg class="i"><use href="#i-styles"/></svg><span class="tip">Styles</span></button>
+    <button role="tab" data-tab="backendmap" title="Backend map"><svg class="i"><use href="#i-map"/></svg><span class="tip">Backend map</span></button>
     <div class="grow"></div>
     <button id="undo" title="Undo (⌘Z)"><svg class="i"><use href="#i-undo"/></svg><span class="tip">Undo <kbd>⌘Z</kbd></span></button>
   </nav>
@@ -667,6 +672,10 @@
         </aside>
         <div id="optmain"><div class="empty">Pick an option set, or make one. An option set is a fixed list the app loads with the page.</div></div>
       </div>
+    </section>
+
+    <section class="tab" id="backendmap" hidden>
+      <iframe id="mapframe" title="Backend map: who can reach which rows"></iframe>
     </section>
 
     <section class="tab" id="styles" hidden>
@@ -4101,7 +4110,7 @@ function switchTab(name) {
   tab = name;
   for (const x of document.querySelectorAll('#rail [role=tab]')) x.setAttribute('aria-selected', x.dataset.tab === name);
   for (const s of document.querySelectorAll('main > section.tab')) s.hidden = s.id !== name;
-  $('pagepick-l').style.display = name === 'data' || name === 'styles' ? 'none' : '';
+  $('pagepick-l').style.display = name === 'data' || name === 'styles' || name === 'backendmap' ? 'none' : '';
   $('widthseg').style.display = name === 'design' ? '' : 'none';
   $('previewmode-l').style.display = name === 'design' ? '' : 'none';
   renderAll();
@@ -4113,6 +4122,8 @@ function renderAll() {
   if (tab === 'workflow') renderWorkflow();
   if (tab === 'data') renderData();
   if (tab === 'styles') renderStyles();
+  // the map asks the backend itself; it loads once, the first time the tab opens
+  if (tab === 'backendmap' && !$('mapframe').getAttribute('src')) $('mapframe').src = '/backend-map/';
 }
 readGraph();
 renderPagePick();
