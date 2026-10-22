@@ -256,6 +256,14 @@ const followBackend = () => inTurn(async () => {
   await reconcileLive();
 });
 const isUp = (b) => b.phase === 'running' || b.phase === 'adopted';
+/** STU-062: the renames development made since the last Deploy to live, as the project records them (Studio's page clears them after one). */
+function liveRenames() {
+  try {
+    return JSON.parse(readFileSync(join(projectDir, 'nodegx.project.json'), 'utf8')).metadata?.cloudservicesLive?.renames ?? [];
+  } catch {
+    return [];
+  }
+}
 /** A backend of the app as its admin (lib/live.mjs), or a sentence saying why it can't be asked. */
 async function adminOf(which) {
   const state = which === 'live' ? live : backend;
@@ -387,7 +395,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === '/api/live-compare') {
       try {
-        const plan = await lives.compare(await adminOf('development'), await adminOf('live'));
+        const plan = await lives.compare(await adminOf('development'), await adminOf('live'), { renames: liveRenames() });
         return json(200, { added: plan.added, lost: plan.lost, rendered: plan.rendered, same: plan.same });
       } catch (err) {
         return json(409, { error: err.message });
@@ -396,7 +404,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/live-promote' && req.method === 'POST') {
       const { allowDestructive } = JSON.parse((await readBody(req)).toString('utf8') || '{}');
       try {
-        const r = await lives.promote(await adminOf('development'), await adminOf('live'), { allowDestructive: !!allowDestructive });
+        const r = await lives.promote(await adminOf('development'), await adminOf('live'), { allowDestructive: !!allowDestructive, renames: liveRenames() });
         return json(200, { done: r.done });
       } catch (err) {
         return json(409, { error: err.message, lost: err.plan?.lost });

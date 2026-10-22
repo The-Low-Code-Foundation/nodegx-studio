@@ -565,6 +565,12 @@
   #drawer label.f { display: grid; gap: 4px; font-size: 12px; color: var(--ink-2); }
   #drawer label.c { display: flex; gap: 8px; align-items: center; font-size: 12.5px; }
   #drawer .note { color: var(--muted); font-size: 12px; }
+  .readers { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .readers h4 { margin: 0; font-size: 12.5px; font-weight: 600; }
+  .readers ul { margin: 0; padding-left: 18px; font-size: 12px; display: grid; gap: 2px; }
+  .readers .maybe { display: grid; gap: 2px; font-size: 12px; }
+  .readers label.line { padding-left: 22px; min-width: 0; }
+  .readers label.line code { font-size: 11px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .kinds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .kinds button { flex-direction: column; align-items: flex-start; gap: 0; padding: 6px 8px; text-align: left; }
   .kinds button b { font-weight: 600; font-size: 12.5px; } .kinds button small { color: var(--muted); font-size: 11px; line-height: 1.3; }
@@ -784,6 +790,7 @@ import { TYPES, TYPE_WORDS, dictionaryType, applyPhrase } from './phrases.mjs';
 import { OPERATORS, createEdits, updateEdits, removeEdits, readItems, readFrom, readersOf, itemOfSource, sameAs, signature, describe, lastRun, queriesOnOpen, requestMatches } from './pagedata.mjs';
 import * as F from './fields.js';
 import { typesOf, driftOf, projectColumn, cellWords, editText, toWire, searchWhere, rowLabel, pageWords, rowsQuery } from './data.mjs';
+import { fieldReaders, typeReaders, renameField, renameType, appFields } from './rename.mjs';
 import { LANES, buildTimeline, msText, shotAt, stepValues } from './timeline.mjs';
 import { runOver, lastActivity, watchSignals, runtimeTimers, runTimers } from './runwatch.mjs';
 
@@ -3530,23 +3537,10 @@ const projectJson = () => store.readProjectFile();
 const writeProject = (pj) => writeJsonFile('nodegx.project.json', pj);
 const collections = () => projectJson()?.metadata?.dbCollections || [];
 const schemaTables = () => { try { return JSON.parse(files.read('backend/schema.json') || '[]').filter((s) => s.action === 'createTable'); } catch { return []; } };
-/** The collections the app's own nodes name (`collectionName`), with the record fields they set (`prop-*`): a
-    template like the todo list declares no types and is still an app with data (STU-004). */
-function appCollections() {
-  const found = new Map();
-  for (const [p, text] of Object.entries(files.entries())) {
-    if (!p.startsWith('components/') || !p.endsWith('/nodes.json')) continue;
-    let nodes; try { nodes = JSON.parse(text).nodes || []; } catch { continue; }
-    for (const n of nodes) {
-      const name = n.parameters?.collectionName;
-      if (typeof name !== 'string' || !name) continue;
-      const fields = found.get(name) ?? new Set();
-      for (const k of Object.keys(n.parameters)) if (k.startsWith('prop-')) fields.add(k.slice(5));
-      found.set(name, fields);
-    }
-  }
-  return found;
-}
+/** The collections the app's own nodes name (`collectionName`), with the record fields they set or read (`prop-*`, as a
+    setting or a wire): a template like the todo list declares no types and is still an app with data (STU-004). */
+function allComponents() { return store.componentKeys().map((k) => store.readComponent(k)); }
+function appCollections() { return appFields(allComponents()); }
 /** The running backend's own tables (its admin schema), fetched each time Data draws; [] when there is none. */
 let liveTables = [];
 async function readLiveTables() {
@@ -3630,6 +3624,7 @@ function renderTypeMain(t) {
   const where = [t.declared ? 'in the project' : t.file ? 'in backend/schema.json' : null, t.onBackend ? 'on the development database' : null, t.usedByApp ? 'used by the app' : null].filter(Boolean);
   main.append(h('h2', {}, t.name, h('span', { class: 'badge' }, where.join(' · ')), h('span', { class: 'acts' },
     t.onBackend ? h('button', { onclick: () => openOnMap(t.name) }, icon('map'), 'Open on the map') : null,
+    t.declared ? h('button', { class: 'quiet', 'data-act': 'rename-type-open', onclick: () => renameTypeDrawer(t) }, 'Rename') : null,
     t.declared || t.onBackend ? h('button', { class: 'quiet danger', onclick: () => deleteType(t) }, icon('trash'), 'Delete type') : null)));
   syncCards(main, t);
   const cols = t.declared ? t.columns : t.onBackend ? t.backendColumns : t.columns;
@@ -3722,12 +3717,37 @@ function draftOf(col, checks) {
   if (col.defaultValue !== undefined) { if (col.type === 'Boolean') { d.boolDefaultSet = true; d.boolDefault = col.defaultValue === true; } else d.dflt = String(col.defaultValue); }
   return d;
 }
+/**
+ * STU-062: what in the app names a field or a type (rename.mjs), as a drawer section. The sure ones follow a rename; the
+ * maybe ones (code, an object of no known type) are listed by node with each line, and follow only when ticked into `picked`.
+ */
+function readersSection(readers, picked, name) {
+  const box = h('div', { class: 'readers', 'data-readers': readers.length });
+  const where = (r) => h('span', {}, h('b', {}, r.label), h('span', { class: 'note' }, ` · ${r.key}`));
+  box.append(h('h4', {}, 'Used by'));
+  if (!readers.length) { box.append(h('div', { class: 'note' }, `Nothing in the app names ${name}.`)); return box; }
+  const sure = readers.filter((r) => r.sure), maybe = readers.filter((r) => !r.sure);
+  if (sure.length) box.append(h('div', { class: 'note' }, `A rename changes ${sure.length === 1 ? 'this' : `these ${sure.length}`} with it:`), h('ul', {}, ...sure.map((r) => h('li', { 'data-reader': r.id }, where(r), h('span', { class: 'note' }, ` — ${r.what}`)))));
+  if (!maybe.length) return box;
+  box.append(h('div', { class: 'note' }, `${sure.length ? 'These' : 'This app'} also use${sure.length ? '' : 's'} the name ${name}, with nothing saying it is this one: code reads ${name} of whatever it holds. Tick the ones that are, and a rename changes them too.`));
+  const byNode = new Map();
+  for (const r of maybe) byNode.set(`${r.key}|${r.node}`, [...(byNode.get(`${r.key}|${r.node}`) || []), r]);
+  for (const list of byNode.values()) {
+    const ticks = list.map((r) => h('input', { type: 'checkbox', 'data-pick': r.id, checked: picked.has(r.id), onchange: (e) => { if (e.target.checked) picked.add(r.id); else picked.delete(r.id); all.checked = list.every((x) => picked.has(x.id)); } }));
+    const all = h('input', { type: 'checkbox', 'data-pick-node': `${list[0].key}|${list[0].node}`, checked: list.every((x) => picked.has(x.id)), onchange: (e) => { for (const [i, r] of list.entries()) { if (e.target.checked) picked.add(r.id); else picked.delete(r.id); ticks[i].checked = e.target.checked; } } });
+    box.append(h('div', { class: 'maybe' }, h('label', { class: 'c' }, all, where(list[0]), h('span', { class: 'note' }, ` — ${list[0].kind === 'code' ? `${list.length} place${list.length === 1 ? '' : 's'} in its code` : list[0].what}`)),
+      ...list.filter((r) => r.line).map((r) => h('label', { class: 'c line', title: r.line }, ticks[list.indexOf(r)], h('code', {}, r.line)))));
+  }
+  return box;
+}
 async function fieldDrawer(t, col) {
   const records = await rowCount(t.name);
   const d = col ? draftOf(col, t.checks) : F.blankDraft('text');
   const oldKind = col ? F.kindById(d.kind) : null;
+  const readers = col ? fieldReaders(allComponents(), t.name, col.name) : [];
+  const picked = new Set();
   const why = h('span', { class: 'why' });
-  const save = h('button', { class: 'primary', onclick: () => saveField(t, col, d, records, why) }, col ? 'Save' : 'Add field');
+  const save = h('button', { class: 'primary', onclick: () => saveField(t, col, d, records, why, picked) }, col ? 'Save' : 'Add field');
   const body = h('div', { style: 'display:grid;gap:12px' });
   const input = (label, key, attrs = {}) => h('label', { class: 'f' }, label, h('input', { type: 'text', value: d[key], ...attrs, oninput: (e) => { d[key] = e.target.value; check(); } }));
   const check = () => { why.textContent = F.draftProblem(d, { taken: t.columns.map((c) => c.name).filter((n) => n !== col?.name), collections: typeNamesHere(), records: col ? 0 : records }) || ''; save.disabled = !!why.textContent; };
@@ -3753,14 +3773,30 @@ async function fieldDrawer(t, col) {
       body.append(input('Description (optional)', 'description'));
       if (records) body.append(h('div', { class: 'note' }, `${F.recordsWord(records)} on the development database already.`));
     } else {
-      body.append(h('div', { class: 'note' }, `Renaming it renames it on the development database${records ? ` (${F.recordsWord(records)} keep their values)` : ''}. Changing its kind converts the values it holds; ones that don’t convert are lost, and Studio says how many before it changes anything.`));
+      body.append(h('div', { class: 'note' }, `Renaming it renames it on the development database${records ? ` (${F.recordsWord(records)} keep their values)` : ''} and in the app, as below. Changing its kind converts the values it holds; ones that don’t convert are lost, and Studio says how many before it changes anything.`), readersSection(readers, picked, col.name));
     }
     check();
   };
   draw();
   openDrawer(col ? `${t.name} · ${col.name}` : `New field on ${t.name}`, [body], [why, h('button', { class: 'quiet', onclick: closeDrawer }, 'Cancel'), save]);
 }
-async function saveField(t, col, d, records, why) {
+/**
+ * STU-062: the components a rename rewrote and the project, written as one gesture (one undo). `fn(dbCollections, pj)`
+ * changes the project; `comps` are the components as read (their revisions guard the writes).
+ */
+function editProjectFollowing(changed, comps, fn) {
+  snapshot();
+  try { for (const [key, out] of changed) store.writeComponent(key, out, { ifRevision: comps.find((c) => c.key === key).revision }); }
+  catch (err) { const snap = undoStack.pop(); if (snap) { files = NodegxPreview.memoryFiles(snap); store = new NodegxPreview.V2ProjectStore(files); } toast(err.message); return false; }
+  const pj = projectJson(); pj.metadata ??= {}; pj.metadata.dbCollections ??= [];
+  fn(pj.metadata.dbCollections, pj);
+  files.write('nodegx.project.json', JSON.stringify(pj, null, 2));
+  persist(); readGraph(); rebuild();
+  return true;
+}
+/** STU-065 × STU-062: a rename made in development, kept for Deploy to live, which renames on live too (its values kept). */
+function renameForLive(pj, step) { if (pj.metadata.cloudservicesLive) (pj.metadata.cloudservicesLive.renames ??= []).push(step); }
+async function saveField(t, col, d, records, why, picked = new Set()) {
   const name = d.name.trim();
   const live = liveTables.find((x) => x.name === t.name);
   const checks = live?.checks || t.checks;
@@ -3792,20 +3828,25 @@ async function saveField(t, col, d, records, why) {
       const now = (await api('/admin/schema')).tables.find((x) => x.name === t.name)?.checks;
       if (!(await onBackend('Its rules were not set', () => schemaAct({ action: 'setChecks', table: t.name, checks: F.mergeRules(now, name, rules) })))) return;
     }
-    editProject((list) => {
+    const comps = allComponents();
+    const follow = name !== col.name ? renameField(comps, t.name, col.name, name, picked) : { changed: new Map(), count: 0 };
+    if (!editProjectFollowing(follow.changed, comps, (list, pj) => {
       const c = list.find((x) => x.name === t.name);
       const at = c.columns.findIndex((x) => x.name === col.name);
       c.columns[at] = projectColumn({ ...col, name, type: to.storage });
       const kept = (c.checks || []).filter((r) => r.field !== col.name);
       c.checks = [...kept, ...rules];
       if (!c.checks.length) delete c.checks;
-    });
+      if (name !== col.name && t.onBackend) renameForLive(pj, { table: t.name, from: col.name, to: name });
+    })) return;
+    if (follow.count) toast(`${col.name} is now ${name}: ${follow.count} place${follow.count === 1 ? '' : 's'} in the app follow${follow.count === 1 ? 's' : ''}`);
   }
   closeDrawer(); renderData();
 }
 async function deleteField(t, col) {
   const records = await rowCount(t.name);
-  if (!confirm(`Delete the field ${col.name} from ${t.name}?${t.onBackend && records ? ` On the development database, ${F.recordsWord(records)} lose their ${col.name}.` : ''}`)) return;
+  const sure = fieldReaders(allComponents(), t.name, col.name).filter((r) => r.sure);
+  if (!confirm(`Delete the field ${col.name} from ${t.name}?${t.onBackend && records ? ` On the development database, ${F.recordsWord(records)} lose their ${col.name}.` : ''}${sure.length ? ` ${sure.length} place${sure.length === 1 ? '' : 's'} in the app still name${sure.length === 1 ? 's' : ''} it (${sure.slice(0, 3).map((r) => r.label).join(', ')}${sure.length > 3 ? ', …' : ''}).` : ''}`)) return;
   if (backendUp() && t.onBackend && t.backendColumns.some((c) => c.name === col.name)) {
     const checks = liveTables.find((x) => x.name === t.name)?.checks;
     if (F.rulesOn(col.name, checks).length && !(await onBackend('Not deleted', () => schemaAct({ action: 'setChecks', table: t.name, checks: F.rulesWithout(checks, col.name) })))) return;
@@ -3820,6 +3861,69 @@ async function deleteType(t) {
   if (backendUp() && t.onBackend && !(await onBackend('Not deleted', () => schemaAct({ action: 'deleteTable', table: t.name })))) return;
   if (t.declared) editProject((list) => { const at = list.findIndex((c) => c.name === t.name); if (at >= 0) list.splice(at, 1); });
   selType = null; renderData();
+}
+/**
+ * STU-062: a type renamed. The development backend renames its table (rows kept), and moves its rule; the project
+ * renames it, and Links that point at it; nodegx.security.json keeps its rule under the new name; every node that
+ * names it follows, and the code that names it in quotes where ticked. With a live database, Deploy to live renames it
+ * there too.
+ */
+function renameTypeDrawer(t) {
+  const comps = allComponents();
+  const readers = typeReaders(comps, t.name);
+  const picked = new Set();
+  const why = h('span', { class: 'why' });
+  let name = t.name;
+  const go = h('button', { class: 'primary', 'data-act': 'rename-type', disabled: true, onclick: () => renameTypeNow(t, name, picked) }, 'Rename');
+  const check = () => {
+    why.textContent = name === t.name ? '' : !/^[A-Za-z][A-Za-z0-9_]*$/.test(name) ? 'A type’s name starts with a letter and has only letters, digits and _' : typeNamesHere().includes(name) ? 'There is a type called that already' : '';
+    go.disabled = name === t.name || !!why.textContent;
+  };
+  const links = collections().filter((c) => c.columns?.some((x) => x.targetClass === t.name)).map((c) => c.name);
+  openDrawer(`Rename ${t.name}`, [
+    h('label', { class: 'f' }, 'New name', h('input', { type: 'text', value: t.name, 'data-input': 'type-name', oninput: (e) => { name = e.target.value.trim(); check(); } })),
+    h('div', { class: 'note' }, [t.onBackend ? 'Its table on the development database is renamed, its rows kept, with its rule for who may reach it.' : '', links.length ? `Links from ${links.join(', ')} point at the new name.` : '', projectJson()?.metadata?.cloudservicesLive && t.onBackend ? 'Deploy to live renames it on live too.' : ''].filter(Boolean).join(' ')),
+    readersSection(readers, picked, t.name)
+  ], [why, h('button', { class: 'quiet', onclick: closeDrawer }, 'Cancel'), go]);
+}
+async function renameTypeNow(t, name, picked) {
+  if (backendUp() && t.onBackend) {
+    // the backend refuses to rename a table with rules or indexes built under its name: they come off and go back on under the new one
+    const live = liveTables.find((x) => x.name === t.name);
+    const checks = (live?.checks || []).filter((c) => c.declared).map((c) => c.rule);
+    const indexes = (live?.indexes || []).filter((i) => i.declared !== false).map(({ fields, unique }) => ({ fields, ...(unique ? { unique } : {}) }));
+    if (checks.length && !(await onBackend('Not renamed', () => schemaAct({ action: 'setChecks', table: t.name, checks: [] })))) return;
+    if (indexes.length && !(await onBackend('Not renamed', () => schemaAct({ action: 'setIndexes', table: t.name, indexes: [] })))) return;
+    if (!(await onBackend('Not renamed', () => schemaAct({ action: 'renameTable', table: t.name, newName: name })))) {
+      if (checks.length) await onBackend('Its rules for values were not put back', () => schemaAct({ action: 'setChecks', table: t.name, checks }));
+      if (indexes.length) await onBackend('Its indexes were not put back', () => schemaAct({ action: 'setIndexes', table: t.name, indexes }));
+      return;
+    }
+    if (checks.length) await onBackend('Renamed, but its rules for values were not put back', () => schemaAct({ action: 'setChecks', table: name, checks }));
+    if (indexes.length) await onBackend('Renamed, but its indexes were not put back', () => schemaAct({ action: 'setIndexes', table: name, indexes }));
+    // its rule moves with it, if the backend kept it under the old name
+    const rules = (await api('/admin/permissions').catch(() => null))?.config?.collections || {};
+    if (rules[t.name] && !rules[name]) {
+      await onBackend('Renamed, but its rule did not move', async () => { await api(`/admin/permissions/collections/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(rules[t.name]) }); await api(`/admin/permissions/collections/${encodeURIComponent(t.name)}`, { method: 'DELETE' }); });
+    }
+  }
+  const comps = allComponents();
+  const follow = renameType(comps, t.name, name, picked);
+  if (!editProjectFollowing(follow.changed, comps, (list, pj) => {
+    for (const c of list) {
+      if (c.name === t.name) c.name = name;
+      for (const x of c.columns || []) if (x.targetClass === t.name) x.targetClass = name;
+    }
+    if (t.onBackend) renameForLive(pj, { table: t.name, to: name });
+    const sec = files.read('nodegx.security.json');
+    if (!sec) return;
+    try {
+      const s = JSON.parse(sec);
+      if (s.collections?.[t.name] && !s.collections[name]) { s.collections[name] = s.collections[t.name]; delete s.collections[t.name]; files.write('nodegx.security.json', JSON.stringify(s, null, 2)); }
+    } catch { toast('nodegx.security.json could not be read, so its rule for the type keeps the old name'); }
+  })) return;
+  selType = name; closeDrawer(); renderData();
+  toast(`${t.name} is now ${name}${follow.count ? `: ${follow.count} place${follow.count === 1 ? '' : 's'} in the app follow${follow.count === 1 ? 's' : ''}` : ''}`);
 }
 
 /* ---- STU-060: the backend map is Data's Map; a type opens it on its table (#t:<type>) ---- */
@@ -4122,6 +4226,9 @@ async function deployDrawer() {
     ev.currentTarget.disabled = true;
     const res = await fetch('/api/live-promote', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ allowDestructive }) }); const j = await res.json();
     if (!res.ok) return openDrawer('Deploy to live', [h('div', { class: 'why' }, j.error)]);
+    // the renames are live's now (STU-062): the next deploy starts from none
+    const pj = projectJson();
+    if (pj?.metadata?.cloudservicesLive?.renames) { delete pj.metadata.cloudservicesLive.renames; writeProject(pj); }
     openDrawer('Deployed to live', [h('ul', { class: 'reach' }, ...j.done.map((d) => h('li', {}, d)))], [h('span', { class: 'why' }), h('button', { class: 'primary', onclick: () => { closeDrawer(); renderData(); } }, 'Done')]);
   };
   if (plan.same) return openDrawer('Deploy to live', [h('p', {}, 'Live already has development’s types, fields and rules. Nothing to deploy.')], [h('span', { class: 'why' }), h('button', { onclick: closeDrawer }, 'Close')]);

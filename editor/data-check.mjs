@@ -16,6 +16,10 @@
  *   6. live: made from Data; development's types and rules reach it; its rules hold on this computer; a new field
  *      reaches it only through Deploy to live; a field development dropped is lost on live only after the yes; rows
  *      copied after a dry run
+ *   7. STU-062, a rename follows the app: rename.mjs over the todo template; then the todo app's Task.closingNote
+ *      renamed in Studio, with the code that reads it ticked — the backend keeps the values, every Record node and
+ *      the ticked code follow, validate_project finds no error and the app still shows its rows; then, with live there,
+ *      a field and a type renamed in development reach live through Deploy to live as renames, live's rows kept
  *
  *   node editor/data-check.mjs            PASS n/n and exit 0, or the failing lines and exit 1
  *   node editor/data-check.mjs --shots    also writes ../docs/look/stu-06x-*.png
@@ -28,6 +32,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { browser } from './cdp.mjs';
 import { typesOf, driftOf, toWire, searchWhere, cellWords } from './data.mjs';
+import { fieldReaders, typeReaders, renameField, renameType, fieldMentions, appFields } from './rename.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const shots = process.argv.includes('--shots');
@@ -68,6 +73,21 @@ function adminOf(key) {
   };
 }
 
+/** NodeGX's own validator over the project (validate_project through the MCP server, over stdio). */
+const mcpBuilt = existsSync(kit.mcpServer);
+async function validate() {
+  const proc = spawn(process.execPath, [kit.mcpServer, project], { stdio: ['pipe', 'pipe', 'pipe'] });
+  let buf = ''; const waiting = new Map(); let seq = 0;
+  proc.stdout.on('data', (d) => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { const line = buf.slice(0, i); buf = buf.slice(i + 1); try { const m = JSON.parse(line); if (m.id && waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); } } catch { /* a log line */ } } });
+  const call = (method, params) => new Promise((done) => { const id = ++seq; waiting.set(id, done); proc.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n'); });
+  await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'studio-data-check', version: '0' } });
+  proc.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }) + '\n');
+  const r = await call('tools/call', { name: 'validate_project', arguments: {} });
+  proc.kill();
+  const text = (r.result?.content || []).map((c) => c.text || '').join('\n');
+  return JSON.parse(text.replace(/^[^{]*/, '')).diagnostics || [];
+}
+
 console.log('check: data.mjs');
 {
   const list = typesOf({ declared: [{ name: 'A', columns: [{ name: 'x', type: 'String' }] }], backend: [{ name: 'A', columns: [] }, { name: 'B', columns: [{ name: 'y', type: 'Number' }] }, { name: '_User', columns: [] }], used: new Map([['C', new Set(['z'])]]) });
@@ -77,6 +97,36 @@ console.log('check: data.mjs');
   ok(toWire({ name: 'n', type: 'Number' }, '4.5').value === 4.5 && toWire({ name: 'n', type: 'Number' }, 'four').error && toWire({ name: 'b', type: 'Boolean' }, 'Yes').value === true && toWire({ name: 'd', type: 'Date' }, '2026-10-22T10:00').value.__type === 'Date' && toWire({ name: 'p', type: 'Pointer', targetClass: 'T' }, 'abc').value.className === 'T' && toWire({ name: 'x', type: 'String' }, '').value === null, 'a typed value goes to the backend in its own shape; a wrong one is refused in words; empty clears');
   ok(JSON.stringify(searchWhere([{ name: 'title', type: 'String' }, { name: 'n', type: 'Number' }], 'a.b')) === '{"$or":[{"title":{"$regex":"a\\\\.b","$options":"i"}}]}' && searchWhere([{ name: 'n', type: 'Number' }], 'x') === null, 'a search looks in the text fields only, the words taken literally');
   ok(cellWords({ type: 'Boolean' }, false) === 'No' && cellWords({ type: 'Pointer' }, { objectId: 'q1' }) === 'q1', 'a cell says Yes / No and a link\'s id');
+}
+
+console.log('check: rename.mjs');
+const componentsOf = (dir) => {
+  const reg = readJson(join(dir, 'components', '_registry.json')).components;
+  return Object.entries(reg).map(([key, r]) => { const at = join(dir, 'components', r.path); return { key, files: { nodes: readJson(join(at, 'nodes.json')), connections: existsSync(join(at, 'connections.json')) ? readJson(join(at, 'connections.json')) : { connections: [] } } }; });
+};
+{
+  const todo = componentsOf(join(kit.templates, 'todo-list'));
+  ok([...(appFields(todo).get('Task') || [])].includes('closingNote'), 'the fields an app gives a type are read off its wires too (the todo app sets every field by wire)', [...(appFields(todo).get('Task') || [])]);
+  const r = fieldReaders(todo, 'Task', 'closingNote');
+  ok(r.filter((x) => x.sure).map((x) => x.key).sort().join() === 'Commands/Add task,Commands/Close task,Commands/Reopen task' && r.filter((x) => !x.sure).every((x) => x.kind === 'code'), 'Task.closingNote: the three Record nodes that set it are sure; the code that reads a closingNote is a maybe', r.map((x) => `${x.sure ? 'sure' : 'maybe'} ${x.key}: ${x.line || x.what}`));
+  ok(r.filter((x) => x.key === 'Logic/Selected task').length === 1, 'a node\'s own port (Outputs.closingNote) is never taken for a record\'s field: one mention on that line, task.closingNote', r.filter((x) => x.key === 'Logic/Selected task').map((x) => x.line));
+  const m = fieldMentions("a.title + b?.title + c['title'] + Inputs.title + 1.title + this.title + subtitle", 'title');
+  ok(m.length === 3, 'code mentions: .F, ?.F and [\'F\'], not Inputs.F, this.F or a longer word', m);
+  const picked = new Set(r.filter((x) => !x.sure).map((x) => x.id));
+  const out = renameField(todo, 'Task', 'closingNote', 'closingWords', picked);
+  const text = JSON.stringify([...out.changed.values()]);
+  ok(out.count === r.length && !text.includes('prop-closingNote') && text.includes('prop-closingWords') && text.includes('Outputs.closingNote = String(task.closingWords'), 'renamed: the prop-closingNote wires become prop-closingWords, the ticked code reads closingWords, a port keeps its name', { count: out.count, changed: [...out.changed.keys()] });
+  const none = renameField(todo, 'Task', 'closingNote', 'closingWords');
+  ok(none.count === 3 && [...none.changed.keys()].every((k) => k.startsWith('Commands/')), 'nothing ticked: only the sure ones change, the code is left as it was', [...none.changed.keys()]);
+  const sorted = renameField(todo, 'Task', 'position', 'rank').changed;
+  ok(JSON.stringify([...sorted.values()]).includes('"property": "rank"') || JSON.stringify([...sorted.values()]).includes('"property":"rank"'), 'a query that sorts by the field sorts by the new name');
+  const q = [{ key: 'P', files: { nodes: { nodes: [{ id: 'q', type: 'DbCollection2', parameters: { collectionName: 'T', visualFilter: { type: 'and', conditions: [{ field: 'a', operator: 'equalTo', value: 1 }, { type: 'or', conditions: [{ field: 'a' }, { field: 'b' }] }] } } }, { id: 'r', type: 'Model2', parameters: { properties: 'a,b' }, metadata: { pageDataRecord: { item: 'q' } } }, { id: 'x', type: 'Model2', parameters: { properties: 'a' } }] }, connections: { connections: [{ fromId: 'r', fromProperty: 'prop-a', toId: 'e', toProperty: 'value' }] } } }];
+  const qr = fieldReaders(q, 'T', 'a');
+  const qo = renameField(q, 'T', 'a', 'z').changed.get('P');
+  ok(qr.filter((x) => x.sure).length === 2 && qr.find((x) => x.node === 'x')?.sure === false && JSON.stringify(qo.nodes.nodes[0].parameters.visualFilter) === '{"type":"and","conditions":[{"field":"z","operator":"equalTo","value":1},{"type":"or","conditions":[{"field":"z"},{"field":"b"}]}]}' && qo.nodes.nodes[1].parameters.properties === 'z,b' && qo.connections.connections[0].fromProperty === 'prop-z' && qo.nodes.nodes[2].parameters.properties === 'a', 'page data: a filter (groups and all) and its first record follow; an object of no known type waits for a tick');
+  const tr = typeReaders(todo, 'Task');
+  const to = renameType(todo, 'Task', 'Job');
+  ok(tr.filter((x) => x.sure).length === 8 && !JSON.stringify([...to.changed.values()]).includes('"collectionName": "Task"') && !JSON.stringify([...to.changed.values()]).includes('"collectionName":"Task"'), 'a type renamed: every node that names it follows', tr.filter((x) => x.sure).length);
 }
 
 const children = [];
@@ -226,6 +276,64 @@ try {
   ok(anonBefore >= 400 && anonAfter === 200 && anonFind.allowed && !anonAdd.allowed && sec.collections?.Note?.permissions?.find === 'public' && sec.collections.Note.permissions.create === 'nobody', 'Make it so: someone not signed in was refused Note\'s rows and now gets them, nobody may add one, and nodegx.security.json says the same', { anonBefore, anonAfter, anonAdd: anonAdd.reason, file: sec.collections?.Note });
   await shot('4-privacy');
 
+  console.log('check: STU-062 a rename follows the app (the todo app\'s Task)');
+  // Task as the todo app keeps it: the importer's rows (title, position), and the fields its commands set, added as Claude Code would
+  for (const name of ['status', 'deadline', 'closingNote', 'closedAt']) await dev.post('/admin/schema', { action: 'addColumn', table: 'Task', column: { name, type: 'String' } });
+  await dev.post('/classes/Task', { title: 'Paint the fence', position: 9, status: 'done', closingNote: 'Painted it green', closedAt: '2026-10-22T10:00:00.000Z' });
+  // a visitor signs up in the app (Todo sends a signed-out visitor to Sign in) and adds a task
+  const W = '__ob.preview.frame.contentWindow';
+  const typeInto = (expr, text) => ev(`(() => { const w = ${W}; const input = ${expr}; if (!input) return false; input.focus(); w.Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(text)}); input.dispatchEvent(new w.Event('input', { bubbles: true })); return true; })()`);
+  const inputOf = (id) => `(() => { const el = __ob.preview.elementsOf(${JSON.stringify(id)})[0]; return el && (el.matches('input') ? el : el.querySelector('input')); })()`;
+  // the app is driven where a person sees it: on the Design tab (Data hides the app's frame)
+  const addTask = async (title) => {
+    await ev(`document.querySelector('[data-tab=design]').click()`); await settle();
+    const typed = await typeInto(`[...${W}.document.querySelectorAll('input[type=text], input:not([type])')].find(i => i.offsetParent)`, title);
+    await wait(300);
+    const pressed = await ev(`(() => { const btn = [...${W}.document.querySelectorAll('button')].find(e => e.textContent.trim() === 'Add' && e.offsetParent); if (!btn) return false; btn.click(); return true; })()`);
+    const shown = !!(await until(`${W}.document.body.innerText.includes(${JSON.stringify(title)})`, 10000));
+    await ev(`document.querySelector('[data-tab=data]').click()`); await settle();
+    return typed && pressed && shown;
+  };
+  const signNodes = readJson(join(project, 'components', 'Pages', 'Sign in', 'nodes.json')).nodes, idOf = (l) => signNodes.find((n) => n.label === l)?.id;
+  await until(`(() => { try { return !!__ob.preview.elementsOf(${JSON.stringify(idOf('Email'))})[0]; } catch { return false; } })()`, 20000);
+  await typeInto(inputOf(idOf('Email')), `rename${Date.now()}@example.com`); await typeInto(inputOf(idOf('Password')), 'rename-password-1');
+  await wait(300);
+  await ev(`(() => { const el = __ob.preview.elementsOf(${JSON.stringify(idOf('Create account'))})[0]; (el.matches('button') ? el : el.querySelector('button') || el).click(); })()`);
+  const signedUp = await until(`${W}.__studioLog.some(e => e.kind === 'nav' && /todo/i.test(e.path))`, 15000);
+  await wait(2500);
+  const firstAdd = await addTask('Before the rename');
+  ok(signedUp && firstAdd, 'in the app: a visitor signs up and adds a task', { signedUp });
+  await ev(`document.querySelector('[data-sub=types]').click()`); await settle();
+  await ev(`document.querySelector('#types .row[data-type=Task]').click()`); await settle();
+  await clickIn('#datamain .card.drift button', 'Declare Task'); await settle();
+  ok(declared('Task')?.columns.some((c) => c.name === 'closingNote'), 'Task declared from the development database', declared('Task')?.columns.map((c) => c.name));
+  const validateErrors = mcpBuilt ? (await validate()).filter((d) => d.severity === 'error') : null;
+  await ev(`document.querySelector('#datamain tr[data-field=closingNote] button[title="Change this field"]').click()`);
+  await until(`!!document.querySelector('#drawer:not([hidden]) .readers')`);
+  const sureRows = await ev(`[...document.querySelectorAll('#drawer .readers li[data-reader]')].map(li => li.textContent)`);
+  const maybeNodes = await ev(`[...document.querySelectorAll('#drawer .readers [data-pick-node]')].map(i => i.dataset.pickNode)`);
+  ok(sureRows.length === 3 && sureRows.every((t) => t.includes('sets it')) && maybeNodes.length === 3, 'Used by: the three commands that set it, and three pieces of code that read a closingNote, each to tick', { sureRows, maybeNodes });
+  await ev(`document.querySelectorAll('#drawer .readers [data-pick-node]').forEach(i => i.click())`);
+  await ev(`(() => { const i = document.querySelector('#drawer [data-input=name]'); i.value = 'closingWords'; i.dispatchEvent(new Event('input')); })()`); await wait(150);
+  await shot('2-rename');
+  await ev(`[...document.querySelectorAll('#drawer .dfoot button')].pop().click()`); await until(`document.getElementById('drawer').hidden`, 6000); await wait(2000);
+  const done = (await dev.get('/classes/Task?where=' + encodeURIComponent(JSON.stringify({ status: 'done' })))).results[0];
+  ok(done?.closingWords === 'Painted it green' && !('closingNote' in done) && declared('Task').columns.some((c) => c.name === 'closingWords'), 'the backend renamed the column and kept its value; the project says the same', done);
+  const onDisk = componentsOf(project);
+  const allText = JSON.stringify(onDisk);
+  ok(!allText.includes('prop-closingNote') && (allText.match(/prop-closingWords/g) || []).length === 3, 'every Record node that set closingNote sets closingWords, on disk', (allText.match(/prop-closingWords/g) || []).length);
+  const code = (key) => JSON.stringify(onDisk.find((c) => c.key === key).files.nodes);
+  ok(code('Logic/Task rows').includes('c.closingWords') && code('Logic/Selected task').includes('Outputs.closingNote = String(task.closingWords') && !code('Logic/Projects').includes('ct.closingNote'), 'the ticked code reads closingWords; the node\'s own output keeps its name', null);
+  if (mcpBuilt) {
+    const after = (await validate()).filter((d) => d.severity === 'error');
+    ok(after.length === 0, `validate_project: 0 errors after the rename (${validateErrors.length} before)`, after.map((d) => `${d.code} ${d.location?.component}: ${d.message}`));
+  } else console.log(`  skip validate_project — no NodeGX MCP server at ${kit.mcpServer}`);
+  await until(`(() => { try { return ${W}.document.body.innerText.includes('Before the rename'); } catch { return false; } })()`, 30000);
+  const shown = await ev(`${W}.document.body.innerText`);
+  const added = await addTask('After the rename');
+  const after = (await dev.get('/classes/Task?where=' + encodeURIComponent(JSON.stringify({ title: 'After the rename' })))).results?.[0];
+  ok(shown.includes('Before the rename') && added && after && 'closingWords' in after && !('closingNote' in after) && !(await dev.table('Task')).columns.some((c) => c.name === 'closingNote'), 'the app still shows its rows, and a task added now is written with closingWords (closingNote does not come back)', { shown: shown.slice(0, 160), after });
+
   console.log('check: STU-065 development and live');
   await ev(`document.querySelector('[data-sub=types]').click()`); await settle();
   await ev(`document.querySelector('#envbar [data-act=make-live]').click()`);
@@ -269,6 +377,37 @@ try {
   await until(`!!document.querySelector('#appmain .livebar')`); await settle();
   ok((await ev(`document.querySelector('#appmain [data-pages]')?.textContent`)) === `1–50 of ${await live.count('Note')}` && (await ev(`document.querySelector('#appmain h2 .badge').textContent`)) === 'live', 'App data on live: live\'s rows, said to be live\'s', await ev(`document.querySelector('#appmain [data-pages]')?.textContent`));
   await shot('5-live');
+
+  console.log('check: STU-062 renames reach live as renames');
+  await ev(`document.querySelector('#envbar [data-env=development]')?.click()`); await settle();
+  await ev(`document.querySelector('[data-sub=types]').click()`); await settle();
+  await ev(`document.querySelector('#types .row[data-type=Note]').click()`); await settle();
+  const liveRows = await live.count('Note');
+  await ev(`document.querySelector('#datamain tr[data-field=title] button[title="Change this field"]').click()`);
+  await until(`!!document.querySelector('#drawer:not([hidden]) [data-input=name]')`);
+  await ev(`(() => { const i = document.querySelector('#drawer [data-input=name]'); i.value = 'heading'; i.dispatchEvent(new Event('input')); })()`); await wait(150);
+  await ev(`[...document.querySelectorAll('#drawer .dfoot button')].pop().click()`); await until(`document.getElementById('drawer').hidden`, 6000); await settle();
+  await ev(`document.querySelector('#datamain [data-act=rename-type-open]').click()`);
+  await until(`!!document.querySelector('#drawer [data-input=type-name]')`);
+  await ev(`(() => { const i = document.querySelector('#drawer [data-input=type-name]'); i.value = 'Memo'; i.dispatchEvent(new Event('input')); })()`); await wait(150);
+  await ev(`document.querySelector('#drawer [data-act=rename-type]').click()`); await until(`document.getElementById('drawer').hidden`, 8000); await settle();
+  const memo = await dev.table('Memo');
+  const devRules = (await dev.get('/admin/permissions')).config.collections || {};
+  const sec2 = readJson(join(project, 'nodegx.security.json'));
+  ok(memo && !(await dev.table('Note')) && memo.columns.some((c) => c.name === 'heading') && memo.checks.some((c) => c.rule.field === 'state' && c.rule.oneOf) && (await dev.count('Memo')) === liveRows, 'Note renamed Memo on development: its rows, its renamed field and its Choice\'s check kept', { columns: memo?.columns.map((c) => c.name), checks: memo?.checks.map((c) => c.description) });
+  ok(devRules.Memo && !devRules.Note && sec2.collections?.Memo?.permissions?.find === 'public' && !sec2.collections?.Note, 'its rule for who may reach it moved with it, on the backend and in nodegx.security.json', { backend: Object.keys(devRules), file: Object.keys(sec2.collections || {}) });
+  ok(declared('Memo')?.columns.find((c) => c.name === 'task')?.targetClass === 'Memo' && !declared('Note'), 'the project: Memo, and its Link points at Memo', declared('Memo')?.columns);
+  ok(JSON.stringify(pj().metadata.cloudservicesLive.renames) === JSON.stringify([{ table: 'Note', from: 'title', to: 'heading' }, { table: 'Note', to: 'Memo' }]), 'both renames are kept for Deploy to live', pj().metadata.cloudservicesLive.renames);
+  await ev(`document.querySelector('#envbar [data-act=deploy-live]').click()`);
+  await until(`!!document.querySelector('#drawer [data-act=deploy-go], #drawer [data-act=deploy-lose]')`, 10000);
+  const renamePlan = await ev(`document.querySelector('#drawer .dbody').textContent`);
+  ok(renamePlan.includes("Note's field title renamed heading") && renamePlan.includes('the type Note renamed Memo') && !(await ev(`!!document.querySelector('#drawer [data-act=deploy-lose]')`)), 'Deploy to live names both renames and loses nothing', renamePlan.slice(0, 300));
+  await ev(`document.querySelector('#drawer [data-act=deploy-go]').click()`);
+  await until(`(document.querySelector('#drawer h3')?.textContent || '') === 'Deployed to live'`, 15000); await wait(800);
+  const liveMemo = await live.table('Memo');
+  const oneLive = (await live.get('/classes/Memo?limit=1')).results?.[0];
+  ok(liveMemo && !(await live.table('Note')) && (await live.count('Memo')) === liveRows && typeof oneLive?.heading === 'string' && !('title' in oneLive) && liveMemo.checks.some((c) => c.rule.field === 'state'), 'live: Memo, every row kept, its titles now its headings, its check back', { rows: await live.count('Memo'), was: liveRows, row: oneLive });
+  ok(!pj().metadata.cloudservicesLive.renames, 'and the renames are cleared from the project once live has them');
 } catch (err) {
   ok(false, `the gate stopped: ${err.stack || err.message}`);
 } finally {

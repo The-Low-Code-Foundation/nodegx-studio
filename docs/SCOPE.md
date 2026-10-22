@@ -32,7 +32,7 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 |---|---|---|
 | Design tab — palette, element tree, click / drag-reorder / resize on the real app, property editor, red spacing guide | works | `check:editor` |
 | Workflow tab — events, steps as the signal chain, add / delete a step, a Yes/No branch, the expression composer (chips, JavaScript, or both) | works | `check:editor` |
-| Data tab (M6) — Data types in NodeGX's words on the running backend and the project together, drift named with both ways to agree; Privacy through the backend map; App data paged, searched, edited by kind, exported and imported; option sets; the Map; a development and a live database, Deploy to live, Copy rows | works (2026-10-22, s15) | `check:data` 40/40, `check:editor` 170/170 |
+| Data tab (M6) — Data types in NodeGX's words on the running backend and the project together, drift named with both ways to agree; Privacy through the backend map; App data paged, searched, edited by kind, exported and imported; option sets; the Map; a development and a live database, Deploy to live, Copy rows; a field or a type renamed with what reads it in the app, and on live as a rename | works (2026-10-22, s15; STU-062 2026-10-22, s16) | `check:data` 64/64, `check:editor` 170/170 |
 | Live with outside edits — a file changed by Claude Code (MCP), VS Code or `git pull` is drawn without a reload; a clash with Studio's own edit asks | works (2026-10-19) | `check:editor` 46/46 |
 | Styles — global styles as NodeGX variants | works | `check:editor` |
 | Bubble importer — pages, elements, styles, workflows, expressions, option sets, reusables, custom states, data types, privacy rules → `nodegx.security.json`, backend workflows → cloud functions, Data-tab rows | spike, measured on a real 17-page app (0 validation errors); its searches arrive as page data (STU-013), a reusable's while that copy is shown (STU-014); its workflow conditions test only when the workflow runs (STU-013-NAVLOOP) | `check:import` 50/50 |
@@ -1357,9 +1357,41 @@ page's table. `check:editor` 170/170, `check:app` 45/45, `check:publish` **31/31
 - **Found on the way:** `button[hidden]` was drawn anyway (the buttons' own `display` beat it), so the header's Publish
   showed in the browser-only editor; it is hidden there now, as meant. A tick in App data redrew the table, so a second
   tick fell on a detached box: ticks change the Delete button only, and only the latest drawing draws.
-- **Not in it yet:** STU-062 (a rename does not follow into Record nodes and expressions); a type's rename; Required on
-  an existing field; `_User` in App data; the map's sample person is called "a signed-in learner" whatever the app
-  (the training app's word, in `@nodegx/backend-map`).
+- **Not in it yet:** Required on an existing field; `_User` in App data; the map's sample person is called "a
+  signed-in learner" whatever the app (the training app's word, in `@nodegx/backend-map`).
+
+**Done (s16, 2026-10-22): STU-062.** `editor/rename.mjs`, pure, graded by `check:data` (now **64/64**: 12 on the module,
+7 on the todo app's `Task.closingNote`, 8 on renames reaching live). `check:editor` 170/170, `check:app` 45/45,
+`check:publish` 31/31, `check:pagedata` 33/33, `check:reusable` 12/12, `check:timeline` 43/43, `check:rules` 20/20,
+`check:vendor` PASS. Picture: `docs/look/stu-062-rename.png`.
+- **What reads a field, in two kinds.** *Sure*: the field by name on something that names its type. A Record node on
+  the type sets or reads `prop-<field>` (a setting, or a wire in or out); a query on it filters by the field (both saved
+  shapes, `{combinator, rules: [{property}]}` and `{type, conditions: [{field}]}`, groups and all) or sorts by it; page
+  data's first record (`Model2` bound to a query on the type) lists it in `properties` and sends `prop-<field>` on, to
+  an element or a composed expression's chip. These follow a rename. *Maybe*: the name with nothing saying which type it
+  belongs to: code (`expression`, `functionScript`, `code`, `mapScript`, `templateScript`) reading `.F`, `?.F` or
+  `['F']` (never `Inputs.F`, `Outputs.F`, `this.F` or a global's), and an Object node not bound to page data. The field
+  drawer's **Used by** lists both, the maybes by node with each line, and a maybe follows only when ticked.
+- **Why the maybes matter, measured on the todo template:** it reads every field in JavaScript (`r.title`), so for
+  `RoutineCheck.date` there are 2 sure readers and 206 maybes, most of them a money item's `date`. Only a person can say
+  which `row.date` is this type's. For `Task.closingNote`: the three commands that set it (sure) and three pieces of
+  code that read it (maybes); with those ticked, the app keeps working: `validate_project` 0 errors before and after,
+  the list still shows, and a task added in the app after the rename is written with `closingWords` (the old column
+  does not come back). Not measured: whether `validate_project` would flag a `prop-` port the type no longer has.
+- **A type renamed** (Data types → Rename): the backend's `renameTable` (it refuses while checks or indexes are built
+  under the old name, so they come off and go back on, as for a field); its rule moves on the backend and in
+  `nodegx.security.json`; the project renames it and the Links that point at it; every node whose `collectionName` names
+  it follows, and code that names it in quotes where ticked.
+- **Renames reach live as renames.** The backend's diff knows no renames: it would drop the old field and add the new
+  one, losing live's values. So a rename made while there is a live database is kept in
+  `metadata.cloudservicesLive.renames`; Deploy to live (and Publish's schema step) shows it as "renamed, its values
+  kept", renames on live first (its checks lifted for it), then compares under the new names; the page clears the list
+  after a deploy. A rename live already has is skipped, so a stale entry does nothing. Graded: `Note.title` → `heading`
+  then `Note` → `Memo` in development; Deploy to live names both and loses nothing; live has Memo, all 120 rows, their
+  titles as headings, its Choice check back.
+- **Also fixed on the way:** the app's types read their fields off wires too (`appFields`): the todo app sets every
+  field by wire, so before this its types showed no fields until declared. Deleting a field names what in the app
+  still sets or reads it.
 
 - **Not in it:** the files manager (`/admin/files`), auth providers and email templates, backups and restore from
   Studio, backend workflows and triggers (they belong on the Workflow tab, drawn on the map; the kit has them all), and

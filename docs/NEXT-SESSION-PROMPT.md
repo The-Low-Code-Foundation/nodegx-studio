@@ -1,53 +1,54 @@
 Continue NodeGX Studio (~/vscode_projects/nodegx-studio, public, GPL-3.0; plan of record: docs/SCOPE.md). Edit in
-this repo, not OpenNoodl. Gates run on Node 22 (`~/.nvm/versions/node/v22.22.0/bin`): `npm run check:vendor` (PASS,
-883 files), `check:rules` (20/20), `check:phrases` (85/85), `check:dictionary` (PASS 65 / 2 / 22 / 5), `check:editor`
-(170/170), `check:timeline` (43/43), `check:pagedata` (33/33), `check:reusable` (12/12), `check:import` (79/79 with the
-gitignored template bundle), `check:app` (45/45), `check:publish` (27/27, new in s14). check:editor, check:app and
-check:publish were read on 2026-10-20 (s14); the others are s13's numbers on the same kit. 🔴 `check:app` and
-`check:editor` both load studio.html: run both after any studio.html change. One heavy gate at a time (`nice -n 19`,
-~/vscode_projects/OpenNoodl-worktrees/HEAVY.lock with mkdir, remove it only if YOU made it), and WAIT for another
-session's jest/vitest first. The safe shape is a wrapper: wait on `pgrep -f "jest|vitest"`, `until mkdir LOCK`,
-`trap 'rm -rf LOCK' EXIT`, then `nice -n 19 npm run --silent "$@"`. 🔴 npm eats a gate's own flags:
-`npm run check:app -- --shots`, not `npm run check:app --shots`. `--shots` rewrites docs/look/stu-003-*.png: put back
-the ones you did not mean to change. Three untracked docs/look/s2-composer-slot.png, s2-composer-then-menu.png,
-s2-panel-group.png predate s10 and are not yours to commit.
+this repo, not OpenNoodl. Gates run on Node 22 (`~/.nvm/versions/node/v22.22.0/bin`). Read on 2026-10-22 (s16), on the
+working tree that became the s16 commit: `check:data` **64/64**, `check:editor` 170/170, `check:app` 45/45,
+`check:publish` 31/31, `check:pagedata` 33/33, `check:reusable` 12/12, `check:timeline` 43/43, `check:rules` 20/20,
+`check:vendor` PASS (884 files). Not rerun in s16: `check:phrases` (85/85), `check:dictionary`, `check:import` (79/79),
+s13's numbers. 🔴 `check:app`, `check:editor` and `check:data` all load studio.html: run them after any studio.html change.
+One heavy gate at a time (`nice -n 19`, ~/vscode_projects/OpenNoodl-worktrees/HEAVY.lock with mkdir, remove it only if
+YOU made it), and wait for another session's jest/vitest first. 🔴 `pgrep -f "jest|vitest"` is the wrong wait: other
+sessions leave zsh wait-loops whose command text contains "jest", and it waits forever. Match node processes only:
+`ps -axo comm=,args= | awk '$1 ~ /(^|\/)node$/ && /jest|vitest/'`. 🔴 npm eats a gate's own flags:
+`npm run check:data -- --shots`. `--shots` rewrites docs/look/stu-06x-*.png: put back the ones you did not mean to
+change. Three untracked docs/look/s2-composer-slot.png, s2-composer-then-menu.png, s2-panel-group.png predate s10 and
+are not yours to commit.
 
-**The alpha (0.2) has a line now** (SCOPE.md "The alpha (0.2) — the line"): someone who is not Richard downloads
-Studio, opens or imports an app, changes it, and publishes it. Proposed by Claude in s14; Richard's answer was
-*"Rock out"*. Of its five items, s14 built three:
-1. **STU-008 Publish: done.** lib/publish.mjs, File → Publish… and the header's Publish. NodeGX's production deploy
-   engine into a folder Studio guards (`.nodegx-publish.json`), cloud functions through the MCP server's own
-   `deploy_cloud_functions` over stdio. Filed in NodeGX: **P123-STU008-BACKENDPUBLIC** (OpenNoodl 08bb41532): the
-   engine also publishes `nodegx.security.json` and `backend/`, and Publish names them to the person until the kit's
-   default ignore rules keep them out.
-2. **STU-007: macOS ad hoc, gated.** `npm run package` / `dist` (DMG 141 MB) / `dist:signed`. The whole desktop gate
-   runs on the package with `NODEGX_STUDIO_BINARY=…/NodeGX Studio.app/Contents/MacOS/NodeGX Studio npm run
-   check:app` (40/40 before STU-040's checks were added; not rerun on the package since). Gatekeeper rejects a
-   downloaded ad-hoc copy. `.github/workflows/package.yml` (macOS, Windows, Linux + smoke) is written and has never run.
-3. **STU-040: done.** The welcome screen's import guide (copy through the content-authoring skill's offline checks),
-   then the report in a drawer beside the app, and an Import report button in the header.
-4. Waits on NodeGX: an npm release carrying UNWIREDSIGNAL and BACKENDPUBLIC, then bump the pins and `npm run vendor`.
-5. Waits on Richard: pushing main (ahead of GitHub, now with the s14 commits too).
+**This file was three sessions stale when s16 opened it** (written in s14; the STU-007 signing, the backend map tab and
+M6 were committed after it without rewriting it). SCOPE.md was right; trust it over this file when they disagree.
 
-Ask Richard (in plain words): his Apple Developer credentials for `dist:signed` (a Developer ID certificate in the
-keychain, then APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID); whether main can be pushed (then run the package
-workflow by hand once); whether the alpha's line is right; ruling R10. Show him docs/look/stu-003-import-guide.png and
-stu-003-import-report.png, then the earlier pictures (docs/look/stu-032-scrub.png, stu-032-step.png,
-s2-workflow-card.png, s2-workflow-index.png, s2-workflow-branch.png). Tell him about the "Text" flash
-(P123-STU032-TEXTFLASH).
+**s16 built STU-062, M6's last task** (SCOPE.md "Done (s16)"): a field or a type renamed in Data follows into the app.
+`editor/rename.mjs` (pure) finds the readers in two kinds: *sure* (Record nodes on the type, a query's filter and sort,
+page data's first record and the chips wired from it) are rewritten; *maybe* (code reading `.F` / `?.F` / `['F']`, an
+Object node of no known type) are listed by node and line in the drawer's **Used by**, and change only when ticked.
+A type rename goes through the backend's `renameTable` (checks and indexes lifted and put back), moves its rule on the
+backend and in `nodegx.security.json`, and renames the Links that point at it. While a live database exists, renames
+are kept in `metadata.cloudservicesLive.renames`, and Deploy to live (and Publish's schema step) applies them on live as
+renames before the diff, so live keeps its values; the page clears the list after a deploy.
 
-Next buildable while Richard is away:
-1. Run the package gate again on a fresh `npm run package` (STU-040 is in it; the 40/40 was before).
-2. Publish's open edges (SCOPE "Done (STU-008)", Not in it): say that a path-routed app's deep links need the host's
-   index.html fallback; a site under a sub-path waits on P123-STU015-BASEURL.
-3. The import's Data-tab exports into the backend from Studio (`data-to-nodegx.mjs` writes the files and the
-   commands; nothing runs them).
-4. Timeline gaps (SCOPE "Not built" under STU-031..033), and s9's leftovers: a constant-`false` branch says "Set the
+Where M6 and the alpha stand (SCOPE "The alpha (0.2) — the line"): items 1 Publish, 3 Import, 6 Data (STU-060–065,
+and now 062) are done. 2: signed with the Developer ID and gated 46/46 on the package; notarising waits on the five
+secrets being visible to the repository; Windows and Linux built and smoke-opened in CI. 4: waits on NodeGX, read
+2026-10-22: `@nodegx/preview` 0.2.4, `@nodegx/mcp` 0.2.5 on npm, neither with BACKENDPUBLIC's fix (OpenNoodl 490361c22);
+Studio still pins preview 0.2.3 and mcp 0.2.2. 5: main is ahead of origin/main (bc5fb85) by the backend map, M6 and s16.
+
+Next buildable, in order:
+1. M6's "Not in it yet": Required on an existing field (the backend's `applyRequired` exists; say how many rows lack a
+   value first); `_User` in App data.
+2. When NodeGX publishes a release with BACKENDPUBLIC: bump the pins, `npm run vendor`, every gate.
+3. Publish's open edges (SCOPE "Done (STU-008)"): say that a path-routed app's deep links need the host's index.html
+   fallback; a site under a sub-path waits on P123-STU015-BASEURL.
+4. Timeline gaps (SCOPE "Not built" under STU-031..033) and s9's leftovers: a constant-`false` branch says "Set the
    condition…"; a card's name and hover read only its first lane; port names without words show raw ("When pickList").
 
-Waiting on Richard, unchanged from s13: how the one-run Record feels on his app; his second sitting on data; his real
-app export (STU-044's 22 missing operators, STU-053's unread keys, STU-024's 16 split elements); rulings R4, R5, R6,
-R10. Filed and open in NodeGX's ledger: P123-STU032-TEXTFLASH, P123-STU031-COPYBOX, P123-STU008-BACKENDPUBLIC.
+Waiting on Richard (ask in plain words):
+- Whether main can be pushed (three commits ahead), then whether the package workflow should run once by hand.
+- The five notarisation secrets made visible to this repository.
+- His look at docs/look/stu-062-rename.png, and one question it raises: the todo app reads fields in JavaScript, so a
+  common name has hundreds of maybes (`RoutineCheck.date`: 206). Is a tick per line right, or should Studio offer
+  "tick every line in nodes that also name this type"? Studio cannot know from the code alone, so it asks.
+- Rulings R4, R5, R6, R10 (R10's leaning: a Linux VM over SSH, NodeGX's phase 89, not started).
+- Unchanged from s13: how the one-run Record feels on his app; his second sitting on data; his real app export
+  (STU-044's 22 missing operators, STU-053's unread keys, STU-024's 16 split elements). Filed and open in NodeGX's
+  ledger: P123-STU032-TEXTFLASH, P123-STU031-COPYBOX, P123-STU008-BACKENDPUBLIC, P123-STU065-DEPLOYBACKEND.
 
 Not to forget (from s13): a look's property list is long (73 on a Button); no "1 inherited from Style" count; a chip
 from a record field has no type yet; a dropdown's value read through `chosen` is typed nothing;
