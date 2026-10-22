@@ -396,7 +396,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/live-compare') {
       try {
         const plan = await lives.compare(await adminOf('development'), await adminOf('live'), { renames: liveRenames() });
-        return json(200, { added: plan.added, lost: plan.lost, rendered: plan.rendered, same: plan.same });
+        return json(200, { added: plan.added, lost: plan.lost, held: plan.held, rendered: plan.rendered, same: plan.same });
       } catch (err) {
         return json(409, { error: err.message });
       }

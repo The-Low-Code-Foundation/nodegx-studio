@@ -32,7 +32,7 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 |---|---|---|
 | Design tab — palette, element tree, click / drag-reorder / resize on the real app, property editor, red spacing guide | works | `check:editor` |
 | Workflow tab — events, steps as the signal chain, add / delete a step, a Yes/No branch, the expression composer (chips, JavaScript, or both) | works | `check:editor` |
-| Data tab (M6) — Data types in NodeGX's words on the running backend and the project together, drift named with both ways to agree; Privacy through the backend map; App data paged, searched, edited by kind, exported and imported; option sets; the Map; a development and a live database, Deploy to live, Copy rows; a field or a type renamed with what reads it in the app, and on live as a rename | works (2026-10-22, s15; STU-062 2026-10-22, s16) | `check:data` 64/64, `check:editor` 170/170 |
+| Data tab (M6) — Data types in NodeGX's words on the running backend and the project together, drift named with both ways to agree; Privacy through the backend map; App data paged, searched, edited by kind, exported and imported; option sets; the Map; a development and a live database, Deploy to live, Copy rows; a field or a type renamed with what reads it in the app, and on live as a rename; Required on a stored field, on development and live; the people with an account (`_User`) in App data | works (2026-10-22, s15; STU-062 s16; Required and User s17) | `check:data` 74/74, `check:editor` 170/170 |
 | Live with outside edits — a file changed by Claude Code (MCP), VS Code or `git pull` is drawn without a reload; a clash with Studio's own edit asks | works (2026-10-19) | `check:editor` 46/46 |
 | Styles — global styles as NodeGX variants | works | `check:editor` |
 | Bubble importer — pages, elements, styles, workflows, expressions, option sets, reusables, custom states, data types, privacy rules → `nodegx.security.json`, backend workflows → cloud functions, Data-tab rows | spike, measured on a real 17-page app (0 validation errors); its searches arrive as page data (STU-013), a reusable's while that copy is shown (STU-014); its workflow conditions test only when the workflow runs (STU-013-NAVLOOP) | `check:import` 50/50 |
@@ -1357,8 +1357,8 @@ page's table. `check:editor` 170/170, `check:app` 45/45, `check:publish` **31/31
 - **Found on the way:** `button[hidden]` was drawn anyway (the buttons' own `display` beat it), so the header's Publish
   showed in the browser-only editor; it is hidden there now, as meant. A tick in App data redrew the table, so a second
   tick fell on a detached box: ticks change the Delete button only, and only the latest drawing draws.
-- **Not in it yet:** Required on an existing field; `_User` in App data; the map's sample person is called "a
-  signed-in learner" whatever the app (the training app's word, in `@nodegx/backend-map`).
+- **Not in it yet:** ~~Required on an existing field; `_User` in App data~~ (both s17, below); the map's sample person
+  is called "a signed-in learner" whatever the app (the training app's word, in `@nodegx/backend-map`).
 
 **Done (s16, 2026-10-22): STU-062.** `editor/rename.mjs`, pure, graded by `check:data` (now **64/64**: 12 on the module,
 7 on the todo app's `Task.closingNote`, 8 on renames reaching live). `check:editor` 170/170, `check:app` 45/45,
@@ -1392,6 +1392,34 @@ page's table. `check:editor` 170/170, `check:app` 45/45, `check:publish` **31/31
 - **Also fixed on the way:** the app's types read their fields off wires too (`appFields`): the todo app sets every
   field by wire, so before this its types showed no fields until declared. Deleting a field names what in the app
   still sets or reads it.
+
+**Done (s17, 2026-10-22): M6's two leftovers.** `check:data` **74/74** (10 new: 3 on Required in development, 4 on
+App data's User, 3 on Required reaching live), `check:editor` 170/170, `check:app` 45/45, `check:publish` 31/31. Pictures: `docs/look/stu-061-required.png`, `stu-063-users.png`.
+- **Required on a stored field.** The field drawer has the Required tick for a field that already holds values too
+  (not a list of links: the backend never makes one required). Ticked on, it first counts the rows on the development
+  database with nothing in the field (`{field: {$exists: false}}`, which is what the backend's `setRequired` counts:
+  NULL, not an empty text), says how many, and Save waits; **Show them in App data** opens the type on those rows only
+  ("1–2 of 2 with nothing in title", *Show every row* to leave). Saved, `setRequired` runs last, after a rename, a
+  kind change and the rules, so a refusal leaves the rest done and the project's `required` as the backend has it.
+  Measured: a row without one is then refused by the backend.
+- **Required reaches live.** The backend's diff does not compare a field's Required, so `lib/live.mjs` does (field by
+  field, under live's names), and Deploy to live (and Publish's schema step) makes it so on live with `setRequired`
+  after the apply. When live has rows with nothing in the field, the drawer says so under **Not on live yet** ("Memo's
+  state stays optional on live: 1 row there has nothing in it. Give it a value on live, then deploy again"), deploys the
+  rest, and leaves the field optional there; once the row has one, the next deploy makes it required. A field made
+  required before live existed arrives required, and stays so through a rename.
+- **App data's User.** A **User** row heads App data's types, on development or live: the people with an account,
+  through the backend's own Users API (`/admin/users`, the one its manager's Users page uses), so a password is hashed
+  and the account's own fields are written the one way the backend allows. Paged 50 at a time with the count, searched
+  by username or email (the backend's search), newest first; the account's fields (username, email, emailVerified,
+  disabled), the fields the app added to `_User`, and each person's groups. A cell is edited by its kind; **New
+  person** takes an email, a username (the email when left empty), a password and the app's own fields, and that
+  person can sign in (graded with `POST /login`); ticked people are deleted (signed out everywhere). Not here: sorting
+  by a column (the Users API sorts newest first only), Export and Import (whether the backend's export of `_User` leaves
+  out password hashes was not checked, so neither is offered), changing groups, and `_User` in Data types (adding a
+  field to users is still Claude Code's or the backend manager's).
+- **Found on the way:** clicking a type in App data always shows every row now (the field drawer's filter stayed on
+  after App data was left and opened again).
 
 - **Not in it:** the files manager (`/admin/files`), auth providers and email templates, backups and restore from
   Studio, backend workflows and triggers (they belong on the Workflow tab, drawn on the map; the kit has them all), and

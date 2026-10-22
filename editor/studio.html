@@ -3608,6 +3608,9 @@ function editProject(fn) { const pj = projectJson(); pj.metadata ??= {}; pj.meta
 const declare = (name, columns = [], checks = []) => editProject((list) => { if (!list.some((c) => c.name === name)) list.push({ name, columns: columns.map(projectColumn), ...(checks.length ? { checks } : {}) }); });
 const typeNamesHere = () => allTypes().map((t) => t.name);
 async function rowCount(type) { if (!backendUp()) return 0; try { return (await api(`/classes/${encodeURIComponent(type)}?count=1&limit=0`)).count ?? 0; } catch { return 0; } }
+/** The rows of a type with nothing in a field: what the backend counts before it makes the field required. */
+const noValue = (field) => ({ [field]: { $exists: false } });
+async function emptyCount(type, field) { if (!backendUp()) return 0; try { return (await api(`/classes/${encodeURIComponent(type)}?count=1&limit=0&where=${encodeURIComponent(JSON.stringify(noValue(field)))}`)).count ?? 0; } catch { return 0; } }
 /** Runs a change on the development backend; a refusal is said, and the caller writes nothing to the project. */
 async function onBackend(what, fn) { try { await fn(); return true; } catch (e) { toast(`${what}: ${e.message}`); return false; } }
 $('newtype').onclick = async () => {
@@ -3746,11 +3749,17 @@ async function fieldDrawer(t, col) {
   const oldKind = col ? F.kindById(d.kind) : null;
   const readers = col ? fieldReaders(allComponents(), t.name, col.name) : [];
   const picked = new Set();
+  // a stored field made required: the rows on the development database with nothing in it, which the backend refuses
+  let empty = 0;
   const why = h('span', { class: 'why' });
   const save = h('button', { class: 'primary', onclick: () => saveField(t, col, d, records, why, picked) }, col ? 'Save' : 'Add field');
   const body = h('div', { style: 'display:grid;gap:12px' });
   const input = (label, key, attrs = {}) => h('label', { class: 'f' }, label, h('input', { type: 'text', value: d[key], ...attrs, oninput: (e) => { d[key] = e.target.value; check(); } }));
-  const check = () => { why.textContent = F.draftProblem(d, { taken: t.columns.map((c) => c.name).filter((n) => n !== col?.name), collections: typeNamesHere(), records: col ? 0 : records }) || ''; save.disabled = !!why.textContent; };
+  const check = () => {
+    why.textContent = F.draftProblem(d, { taken: t.columns.map((c) => c.name).filter((n) => n !== col?.name), collections: typeNamesHere(), records: col ? 0 : records }) || (col && d.required && !col.required && empty ? `${F.recordsWord(empty)} ${empty === 1 ? 'has' : 'have'} no ${col.name} yet.` : '');
+    save.disabled = !!why.textContent;
+  };
+  const showEmpty = () => { closeDrawer(); env = 'development'; dataSub = 'app'; Object.assign(app, { type: t.name, skip: 0, q: '', order: '-createdAt', picked: new Set(), missing: col.name }); renderData(); };
   const draw = () => {
     body.innerHTML = '';
     // a stored field keeps the kinds its values can become; a Link's target is not changed here
@@ -3773,6 +3782,11 @@ async function fieldDrawer(t, col) {
       body.append(input('Description (optional)', 'description'));
       if (records) body.append(h('div', { class: 'note' }, `${F.recordsWord(records)} on the development database already.`));
     } else {
+      // a list of links is never required (the backend's own rule)
+      if (d.kind !== 'links') {
+        body.append(h('label', { class: 'c' }, h('input', { type: 'checkbox', checked: d.required, 'data-input': 'required', onchange: async (e) => { d.required = e.target.checked; if (d.required && !col.required && t.onBackend) empty = await emptyCount(t.name, col.name); draw(); } }), 'Required: every row must have it'));
+        if (d.required && !col.required && empty) body.append(h('div', { class: 'note', 'data-empty': empty }, `${F.recordsWord(empty)} on the development database ${empty === 1 ? 'has' : 'have'} nothing in ${col.name}. Give each one a value first, or keep it optional.`, ' ', h('button', { class: 'quiet tiny', 'data-act': 'show-empty', onclick: showEmpty }, 'Show them in App data')));
+      }
       body.append(h('div', { class: 'note' }, `Renaming it renames it on the development database${records ? ` (${F.recordsWord(records)} keep their values)` : ''} and in the app, as below. Changing its kind converts the values it holds; ones that don’t convert are lost, and Studio says how many before it changes anything.`), readersSection(readers, picked, col.name));
     }
     check();
@@ -3828,12 +3842,15 @@ async function saveField(t, col, d, records, why, picked = new Set()) {
       const now = (await api('/admin/schema')).tables.find((x) => x.name === t.name)?.checks;
       if (!(await onBackend('Its rules were not set', () => schemaAct({ action: 'setChecks', table: t.name, checks: F.mergeRules(now, name, rules) })))) return;
     }
+    // Required last: the backend refuses it while a row has nothing in the field, and then the rest still stands
+    let required = !!d.required;
+    if (up && required !== !!col.required && !(await onBackend(required ? `${name} was not made required` : `${name} was not made optional`, () => schemaAct({ action: 'setRequired', table: t.name, columns: { [name]: required } })))) required = !!col.required;
     const comps = allComponents();
     const follow = name !== col.name ? renameField(comps, t.name, col.name, name, picked) : { changed: new Map(), count: 0 };
     if (!editProjectFollowing(follow.changed, comps, (list, pj) => {
       const c = list.find((x) => x.name === t.name);
       const at = c.columns.findIndex((x) => x.name === col.name);
-      c.columns[at] = projectColumn({ ...col, name, type: to.storage });
+      c.columns[at] = projectColumn({ ...col, name, type: to.storage, required: required || undefined });
       const kept = (c.checks || []).filter((r) => r.field !== col.name);
       c.checks = [...kept, ...rules];
       if (!c.checks.length) delete c.checks;
@@ -3999,7 +4016,7 @@ function renderRoles(main, map) {
 }
 
 /* ---- STU-063: App data — every row of a type, paged, searched, sorted, edited by its kind, exported and imported ---- */
-const app = { type: null, skip: 0, order: '-createdAt', q: '', picked: new Set(), schema: [], drawn: 0 };
+const app = { type: null, skip: 0, order: '-createdAt', q: '', picked: new Set(), schema: [], drawn: 0, missing: null };
 const PAGE = 50;
 async function envTables() {
   if (env === 'live') { try { return ((await liveApi('/admin/schema')).tables || []).filter((t) => !t.name.startsWith('_')); } catch { return []; } }
@@ -4018,15 +4035,21 @@ async function renderAppData() {
   const schema = await envTables();
   if (mine !== app.drawn) return;
   app.schema = schema; box.innerHTML = ''; main.innerHTML = '';
-  for (const t of app.schema) box.append(h('div', { class: 'row', 'aria-selected': app.type === t.name, 'data-type': t.name, onclick: () => { if (app.type !== t.name) Object.assign(app, { type: t.name, skip: 0, q: '', order: '-createdAt', picked: new Set() }); renderAppData(); } }, icon('db'), t.name));
+  // the people with an account (the backend's _User), through its own Users API, first as in Bubble's App data
+  box.append(h('div', { class: 'row', 'aria-selected': app.type === '_User', 'data-type': '_User', onclick: () => { if (app.type !== '_User') Object.assign(app, { type: '_User', skip: 0, q: '', picked: new Set(), missing: null }); renderAppData(); } }, icon('user'), 'User', h('span', { class: 't' }, 'accounts')));
+  for (const t of app.schema) box.append(h('div', { class: 'row', 'aria-selected': app.type === t.name, 'data-type': t.name, onclick: () => { if (app.type !== t.name) Object.assign(app, { type: t.name, skip: 0, q: '', order: '-createdAt', picked: new Set() }); app.missing = null; renderAppData(); } }, icon('db'), t.name));
   if (!app.schema.length) box.append(h('div', { class: 'hint' }, env === 'live' ? 'Live has no types yet: Deploy to live.' : 'No types on the development database yet.'));
   if (env === 'live') main.append(h('div', { class: 'livebar' }, 'You are looking at the live database: what you change here is what the app’s people see.'));
   const imported = importedData();
   if (imported.length && env === 'development' && backendUp()) main.append(h('div', { class: 'card', 'data-card': 'imported' }, h('p', { style: 'margin:0 0 8px' }, `The importer wrote rows from the Bubble app’s data exports for ${imported.map((x) => `${x.collection} (${x.count})`).join(', ')}, in backend/data/.`), h('button', { 'data-act': 'imported', onclick: () => loadImported(imported) }, 'Check and load them…')));
+  if (app.type === '_User') return renderPeople(main, mine);
   const t = app.schema.find((x) => x.name === app.type);
   if (!t) { main.append(h('div', { class: 'empty' }, 'Pick a type to see its rows.')); return; }
   const cols = (t.columns || []).filter((c) => !['objectId', 'createdAt', 'updatedAt', 'ACL'].includes(c.name));
-  const where = searchWhere(cols, app.q);
+  // the field drawer's "Show them": only the rows with nothing in a field about to be made required
+  const missing = app.missing && cols.some((c) => c.name === app.missing) ? noValue(app.missing) : null;
+  const found = searchWhere(cols, app.q);
+  const where = found && missing ? { $and: [found, missing] } : found || missing;
   let page;
   try { page = await envApi(`/classes/${encodeURIComponent(t.name)}?${rowsQuery({ limit: PAGE, skip: app.skip, order: app.order, where })}`); }
   catch (e) { if (mine === app.drawn) main.append(h('div', { class: 'empty' }, `The ${env} database did not answer for ${t.name}: ${e.message}`)); return; }
@@ -4044,7 +4067,8 @@ async function renderAppData() {
       del,
       h('button', { 'data-act': 'export', onclick: (e) => exportMenu(e, t) }, 'Export'),
       h('button', { 'data-act': 'import', onclick: () => importRows(t, cols) }, 'Import…'),
-      h('span', { class: 'note', 'data-pages': '' }, `${pageWords(app.skip, rows.length, total)}${app.q ? ` matching “${app.q}”` : ''}`),
+      h('span', { class: 'note', 'data-pages': '' }, `${pageWords(app.skip, rows.length, total)}${app.q ? ` matching “${app.q}”` : ''}${missing ? ` with nothing in ${app.missing}` : ''}`),
+      missing ? h('button', { class: 'quiet tiny', 'data-act': 'all-rows', onclick: () => { app.missing = null; app.skip = 0; renderAppData(); } }, 'Show every row') : null,
       h('button', { class: 'quiet tiny', disabled: app.skip === 0, 'data-act': 'prev', onclick: () => { app.skip = Math.max(0, app.skip - PAGE); renderAppData(); } }, '‹'),
       h('button', { class: 'quiet tiny', disabled: app.skip + rows.length >= total, 'data-act': 'next', onclick: () => { app.skip += PAGE; renderAppData(); } }, '›')));
   const sortBy = (name) => { app.order = app.order === name ? `-${name}` : name; app.skip = 0; renderAppData(); };
@@ -4059,7 +4083,91 @@ async function renderAppData() {
   }
   main.append(h('div', { class: 'twrap' }, table));
   showPicked();
-  if (!rows.length) main.append(h('div', { class: 'empty' }, app.q ? 'Nothing matches.' : 'No rows yet.'));
+  if (!rows.length) main.append(h('div', { class: 'empty' }, missing && !app.q ? `Every row has a ${app.missing} now.` : app.q || missing ? 'Nothing matches.' : 'No rows yet.'));
+}
+/**
+ * App data's User: the people with an account on the database the switch names, through the backend's Users API
+ * (`/admin/users`, the one its own manager's Users page uses), so a password is hashed and the account's own fields
+ * are written the one way the backend allows. Paged and searched (by username or email) there; the newest first.
+ */
+const ACCOUNT_COLS = [{ name: 'username', type: 'String' }, { name: 'email', type: 'String' }, { name: 'emailVerified', type: 'Boolean' }, { name: 'disabled', type: 'Boolean' }];
+async function renderPeople(main, mine) {
+  let page;
+  try { page = await envApi(`/admin/users?${new URLSearchParams({ limit: String(PAGE), skip: String(app.skip), ...(app.q ? { q: app.q } : {}) })}`); }
+  catch (e) { if (mine === app.drawn) main.append(h('div', { class: 'empty' }, `The ${env} database did not answer for its people: ${e.message}`)); return; }
+  if (mine !== app.drawn) return;
+  const rows = page.users || [], total = page.total ?? rows.length;
+  const own = (page.columns || []).filter((c) => !ACCOUNT_COLS.some((a) => a.name === c.name));
+  const cols = [...ACCOUNT_COLS, ...own];
+  const picked = () => [...app.picked].filter((id) => rows.some((r) => r.objectId === id));
+  const del = h('button', { class: 'danger', 'data-act': 'delete', onclick: () => deletePeople(picked()) });
+  const showPicked = () => { const n = picked().length; del.hidden = !n; del.replaceChildren(icon('trash'), `Delete ${n}`); all.checked = rows.length > 0 && n === rows.length; };
+  const tick = (id, on) => { on ? app.picked.add(id) : app.picked.delete(id); showPicked(); };
+  const search = h('input', { type: 'search', placeholder: 'Search by username or email', value: app.q, 'data-input': 'search', onkeydown: (e) => { if (e.key === 'Enter') { app.q = e.target.value; app.skip = 0; renderAppData(); } } });
+  main.append(h('h2', {}, 'User', h('span', { class: 'badge' }, env)),
+    h('div', { class: 'note', style: 'margin:-4px 0 10px' }, 'The people with an account on this database, as the app’s sign-up makes them. A password is never shown; one is set when a person is added here.'),
+    h('div', { class: 'appbar' }, search,
+      h('button', { class: 'primary', 'data-act': 'new', onclick: () => newPerson(own) }, icon('plus'), 'New person'),
+      del,
+      h('span', { class: 'note', 'data-pages': '' }, `${pageWords(app.skip, rows.length, total)}${app.q ? ` matching “${app.q}”` : ''}`),
+      h('button', { class: 'quiet tiny', disabled: app.skip === 0, 'data-act': 'prev', onclick: () => { app.skip = Math.max(0, app.skip - PAGE); renderAppData(); } }, '‹'),
+      h('button', { class: 'quiet tiny', disabled: app.skip + rows.length >= total, 'data-act': 'next', onclick: () => { app.skip += PAGE; renderAppData(); } }, '›')));
+  const all = h('input', { type: 'checkbox', onchange: (e) => { for (const r of rows) tick(r.objectId, e.target.checked); for (const i of main.querySelectorAll('td.pick input')) i.checked = e.target.checked; } });
+  const table = h('table', {}, h('tr', {}, h('th', { class: 'pick' }, all), ...cols.map((c) => h('th', {}, c.name)), h('th', {}, 'groups'), h('th', {}, 'created')));
+  for (const row of rows) {
+    table.append(h('tr', { 'data-row': row.objectId },
+      h('td', { class: 'pick' }, h('input', { type: 'checkbox', checked: app.picked.has(row.objectId), onchange: (e) => tick(row.objectId, e.target.checked) })),
+      ...cols.map((c) => { const td = h('td', { class: 'cell', 'data-field': c.name, title: cellWords(c, row[c.name]), onclick: () => editPerson(td, row, c) }, cellWords(c, row[c.name])); return td; }),
+      h('td', { class: 'note' }, (row.roles || []).join(', ')),
+      h('td', { class: 'note' }, (row.createdAt || '').slice(0, 16).replace('T', ' '))));
+  }
+  main.append(h('div', { class: 'twrap' }, table));
+  showPicked();
+  if (!rows.length) main.append(h('div', { class: 'empty' }, app.q ? 'Nothing matches.' : 'Nobody has an account yet.'));
+}
+/** One of a person's fields, changed: the account's own at the top of the body, the app's own under `properties`. */
+async function editPerson(td, row, c) {
+  if (td.querySelector('input, select')) return;
+  const ctl = await valueControl({ checks: [] }, c, row[c.name]);
+  td.textContent = ''; td.append(ctl); ctl.focus();
+  let done = false;
+  const back = () => { td.textContent = cellWords(c, row[c.name]); };
+  const commit = async () => {
+    if (done) return; done = true;
+    const w = toWire(c, ctl.value);
+    if (w.error) { toast(w.error); return back(); }
+    const account = ACCOUNT_COLS.some((a) => a.name === c.name);
+    if (account && c.type === 'Boolean' && w.value === null) return back();
+    try {
+      const r = await envApi(`/admin/users/${encodeURIComponent(row.objectId)}`, { method: 'PUT', body: JSON.stringify(account ? { [c.name]: w.value } : { properties: { [c.name]: w.value } }) });
+      Object.assign(row, r.user); back();
+    } catch (e) { toast(e.message); back(); }
+  };
+  ctl.onblur = commit; if (ctl.tagName === 'SELECT') ctl.onchange = () => ctl.blur();
+  ctl.onkeydown = (e) => { if (e.key === 'Enter') ctl.blur(); if (e.key === 'Escape') { done = true; back(); } };
+}
+async function newPerson(own) {
+  const ctls = [];
+  for (const c of own) ctls.push([c, await valueControl({ checks: [] }, c, c.defaultValue)]);
+  const field = (label, attrs) => { const i = h('input', attrs); return [i, h('label', { class: 'f' }, label, i)]; };
+  const [email, emailBox] = field('Email', { type: 'email', 'data-input': 'email' });
+  const [username, userBox] = field('Username (the email when left empty)', { type: 'text', 'data-input': 'username' });
+  const [password, passBox] = field('Password', { type: 'password', 'data-input': 'password', autocomplete: 'new-password' });
+  const why = h('span', { class: 'why' });
+  openDrawer(`New person (${env})`, [emailBox, userBox, passBox, ...ctls.map(([c, ctl]) => h('label', { class: 'f', 'data-field': c.name }, c.name, ctl)), h('div', { class: 'note' }, 'They sign in with this password; the backend keeps it hashed.')], [why, h('button', { class: 'quiet', onclick: closeDrawer }, 'Cancel'), h('button', { class: 'primary', 'data-act': 'create', onclick: async () => {
+    const properties = {};
+    for (const [c, ctl] of ctls) { const w = toWire(c, ctl.value); if (w.error) { why.textContent = w.error; return; } if (w.value !== null) properties[c.name] = w.value; }
+    const body = { username: username.value.trim() || email.value.trim(), email: email.value.trim() || undefined, password: password.value || undefined, properties };
+    if (!body.username) { why.textContent = 'Give an email or a username.'; return; }
+    try { await envApi('/admin/users', { method: 'POST', body: JSON.stringify(body) }); closeDrawer(); renderAppData(); }
+    catch (e) { why.textContent = e.message; }
+  } }, 'Add')]);
+}
+async function deletePeople(ids) {
+  if (!confirm(`Delete ${ids.length} account(s) from the ${env} database? They are signed out everywhere and can no longer sign in.`)) return;
+  let gone = 0;
+  for (const id of ids) { try { await envApi(`/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE' }); gone++; app.picked.delete(id); } catch (e) { toast(e.message); break; } }
+  toast(`${gone} account(s) deleted`); renderAppData();
 }
 function renderStartBackend(main) {
   if (backendState.phase === 'starting') { main.append(h('div', { class: 'empty' }, `${backendState.name} is starting…`)); return; }
@@ -4235,6 +4343,7 @@ async function deployDrawer() {
   openDrawer('Deploy to live', [
     h('p', {}, 'Live gets development’s types, fields and rules. Rows are not touched: they stay where they are (Copy rows… moves them).'),
     plan.added.length ? h('div', {}, h('b', {}, 'Added on live'), h('ul', { class: 'reach' }, ...plan.added.map((a) => h('li', {}, a)))) : null,
+    plan.held?.length ? h('div', { 'data-held': plan.held.length }, h('b', {}, 'Not on live yet'), h('ul', { class: 'reach' }, ...plan.held.map((x) => h('li', {}, x)))) : null,
     plan.lost.length ? h('div', {}, h('b', { style: 'color:var(--danger)' }, 'Lost on live'), h('ul', { class: 'reach' }, ...plan.lost.map((l) => h('li', {}, l.words))), h('div', { class: 'note' }, 'Development no longer has these. The backend takes a backup of live before it deletes a type.')) : null
   ], [h('span', { class: 'why' }), h('button', { class: 'quiet', onclick: closeDrawer }, 'Cancel'), plan.lost.length ? h('button', { class: 'primary', style: 'background:var(--danger);border-color:var(--danger)', 'data-act': 'deploy-lose', onclick: go(true) }, 'Deploy, and lose these') : h('button', { class: 'primary', 'data-act': 'deploy-go', onclick: go(false) }, 'Deploy')]);
 }

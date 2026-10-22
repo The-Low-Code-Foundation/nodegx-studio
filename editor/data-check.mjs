@@ -20,6 +20,10 @@
  *      renamed in Studio, with the code that reads it ticked — the backend keeps the values, every Record node and
  *      the ticked code follow, validate_project finds no error and the app still shows its rows; then, with live there,
  *      a field and a type renamed in development reach live through Deploy to live as renames, live's rows kept
+ *   8. Required on a stored field: refused while rows have nothing in it, those rows shown in App data, then made so on
+ *      the backend and in the project; on live through Deploy to live, held while live has rows without it
+ *   9. App data's User: the people with an account, through the backend's Users API — the one who signed up in the
+ *      app, a field of the app's own and a yes / no changed, a person added who can then sign in, and deleted
  *
  *   node editor/data-check.mjs            PASS n/n and exit 0, or the failing lines and exit 1
  *   node editor/data-check.mjs --shots    also writes ../docs/look/stu-06x-*.png
@@ -67,6 +71,7 @@ function adminOf(key) {
   return {
     get: async (p) => (await call('GET', p)).json,
     post: async (p, b) => (await call('POST', p, b)).json,
+    put: async (p, b) => (await call('PUT', p, b)).json,
     anonymous: (method, p, b) => call(method, p, b, false),
     table: async (name) => ((await call('GET', '/admin/schema')).json.tables || []).find((t) => t.name === name),
     count: async (name) => (await call('GET', `/classes/${name}?count=1&limit=0`)).json.count
@@ -206,6 +211,29 @@ try {
   ok(!(await dev.table('Note')).columns.some((c) => c.name === 'count') && !declared('Note').columns.some((c) => c.name === 'count'), 'Delete field: the column goes from the backend and the project');
   await shot('1-types');
 
+  console.log('check: Required on a stored field');
+  await dev.post('/classes/Note', { state: 'open' }); await dev.post('/classes/Note', { state: 'closed' });
+  const openTitle = async () => { await ev(`document.querySelector('#datamain tr[data-field=title] button[title="Change this field"]').click()`); await until(`!!document.querySelector('#drawer:not([hidden]) [data-input=required]')`); };
+  await openTitle();
+  await ev(`document.querySelector('#drawer [data-input=required]').click()`);
+  await until(`!!document.querySelector('#drawer [data-empty]')`);
+  const emptyNote = await ev(`document.querySelector('#drawer [data-empty]').textContent`);
+  await shot('1-required');
+  ok(emptyNote.startsWith('2 records') && (await ev(`[...document.querySelectorAll('#drawer .dfoot button')].pop().disabled`)), 'Required on title: the two rows with nothing in it are counted first, and Save waits', emptyNote);
+  await ev(`document.querySelector('#drawer [data-act=show-empty]').click()`);
+  await until(`(document.querySelector('#appmain [data-pages]')?.textContent || '').includes('with nothing in title')`); await settle();
+  ok((await ev(`document.querySelector('#appmain [data-pages]').textContent`)) === '1–2 of 2 with nothing in title', 'Show them in App data: only those two rows', await ev(`document.querySelector('#appmain [data-pages]').textContent`));
+  await ev(`[...document.querySelectorAll('#appmain tr[data-row] td.pick input')].forEach(i => i.click())`); await settle();
+  await ev(`document.querySelector('#appmain [data-act=delete]').click()`);
+  await until(`(document.querySelector('#appmain .empty')?.textContent || '') === 'Every row has a title now.'`);
+  await ev(`document.querySelector('[data-sub=types]').click()`); await settle();
+  await ev(`document.querySelector('#types .row[data-type=Note]').click()`); await settle();
+  await openTitle();
+  await ev(`document.querySelector('#drawer [data-input=required]').click()`); await wait(400);
+  await ev(`[...document.querySelectorAll('#drawer .dfoot button')].pop().click()`); await until(`document.getElementById('drawer').hidden`, 6000); await settle();
+  const titleCol = (await dev.table('Note')).columns.find((c) => c.name === 'title');
+  ok(titleCol?.required === true && declared('Note').columns.find((c) => c.name === 'title')?.required === true && !!(await dev.post('/classes/Note', { state: 'open' }))?.error && (await dev.count('Note')) === 1, 'then made required on the backend and in the project; a row without one is refused', { backend: titleCol, project: declared('Note').columns.find((c) => c.name === 'title') });
+
   console.log('check: STU-061 drift');
   await dev.post('/admin/schema', { action: 'addColumn', table: 'Note', column: { name: 'pinned', type: 'Boolean' } }); // as Claude Code would
   await ev(`document.querySelector('[data-sub=types]').click()`); await settle();
@@ -296,7 +324,8 @@ try {
   };
   const signNodes = readJson(join(project, 'components', 'Pages', 'Sign in', 'nodes.json')).nodes, idOf = (l) => signNodes.find((n) => n.label === l)?.id;
   await until(`(() => { try { return !!__ob.preview.elementsOf(${JSON.stringify(idOf('Email'))})[0]; } catch { return false; } })()`, 20000);
-  await typeInto(inputOf(idOf('Email')), `rename${Date.now()}@example.com`); await typeInto(inputOf(idOf('Password')), 'rename-password-1');
+  const visitor = `rename${Date.now()}@example.com`;
+  await typeInto(inputOf(idOf('Email')), visitor); await typeInto(inputOf(idOf('Password')), 'rename-password-1');
   await wait(300);
   await ev(`(() => { const el = __ob.preview.elementsOf(${JSON.stringify(idOf('Create account'))})[0]; (el.matches('button') ? el : el.querySelector('button') || el).click(); })()`);
   const signedUp = await until(`${W}.__studioLog.some(e => e.kind === 'nav' && /todo/i.test(e.path))`, 15000);
@@ -333,6 +362,34 @@ try {
   const added = await addTask('After the rename');
   const after = (await dev.get('/classes/Task?where=' + encodeURIComponent(JSON.stringify({ title: 'After the rename' })))).results?.[0];
   ok(shown.includes('Before the rename') && added && after && 'closingWords' in after && !('closingNote' in after) && !(await dev.table('Task')).columns.some((c) => c.name === 'closingNote'), 'the app still shows its rows, and a task added now is written with closingWords (closingNote does not come back)', { shown: shown.slice(0, 160), after });
+
+  console.log('check: App data\'s User');
+  await dev.post('/admin/schema', { action: 'addColumn', table: '_User', column: { name: 'nickname', type: 'String' } }); // a field of the app's own, as Claude Code would add it
+  await ev(`document.querySelector('[data-sub=app]').click()`); await settle();
+  await ev(`document.querySelector('#apptypes .row[data-type=_User]').click()`);
+  await until(`!!document.querySelector('#appmain tr[data-row]')`); await settle();
+  const people = await ev(`[...document.querySelectorAll('#appmain tr[data-row] td[data-field=email]')].map(td => td.textContent)`);
+  const heads = await ev(`[...document.querySelectorAll('#appmain th')].map(th => th.textContent).join()`);
+  ok(people.length === 1 && people[0] === visitor && heads.includes('nickname') && heads.includes('emailVerified'), 'User: the one who signed up in the app, with the account\'s fields and the app\'s own', { people, heads });
+  const editIn = async (field, value) => {
+    await ev(`document.querySelector('#appmain tr[data-row] td[data-field=${field}]').click()`);
+    await until(`!!document.querySelector('#appmain td[data-field=${field}] input, #appmain td[data-field=${field}] select')`);
+    await ev(`(() => { const c = document.querySelector('#appmain td[data-field=${field}] input, #appmain td[data-field=${field}] select'); c.value = ${JSON.stringify(value)}; c.dispatchEvent(new Event(c.tagName === 'SELECT' ? 'change' : 'input')); c.dispatchEvent(new Event('blur')); })()`); // the app's frame had the focus: a blur() would not fire
+    await wait(800);
+  };
+  await editIn('nickname', 'Paint person'); await editIn('emailVerified', 'yes');
+  const signedUpRow = (await dev.get('/admin/users')).users.find((u) => u.email === visitor);
+  ok(signedUpRow?.nickname === 'Paint person' && signedUpRow.emailVerified === true, 'a field of the app\'s own and a yes / no, changed in a cell, through the Users API', signedUpRow);
+  await ev(`document.querySelector('#appmain [data-act=new]').click()`);
+  await until(`!!document.querySelector('#drawer [data-input=password]')`);
+  await ev(`(() => { for (const [k, v] of [['email', 'added@example.com'], ['password', 'added-password-1']]) { const i = document.querySelector('#drawer [data-input=' + k + ']'); i.value = v; i.dispatchEvent(new Event('input')); } })()`);
+  await ev(`document.querySelector('#drawer [data-act=create]').click()`); await until(`document.getElementById('drawer').hidden`, 6000); await settle();
+  const login = await dev.anonymous('POST', '/login', { username: 'added@example.com', password: 'added-password-1' });
+  ok((await dev.get('/admin/users')).total === 2 && login.status === 200, 'New person: an account whose password signs in (kept hashed by the backend)', { status: login.status, total: (await dev.get('/admin/users')).total });
+  await ev(`[...document.querySelectorAll('#appmain tr[data-row]')].find(tr => tr.textContent.includes('added@example.com')).querySelector('td.pick input').click()`); await settle();
+  await ev(`document.querySelector('#appmain [data-act=delete]').click()`); await wait(1500);
+  ok((await dev.get('/admin/users')).total === 1 && (await dev.anonymous('POST', '/login', { username: 'added@example.com', password: 'added-password-1' })).status >= 400, 'ticked and deleted: that person can no longer sign in, the one from the app stays');
+  await shot('3-users');
 
   console.log('check: STU-065 development and live');
   await ev(`document.querySelector('[data-sub=types]').click()`); await settle();
@@ -408,6 +465,30 @@ try {
   const oneLive = (await live.get('/classes/Memo?limit=1')).results?.[0];
   ok(liveMemo && !(await live.table('Note')) && (await live.count('Memo')) === liveRows && typeof oneLive?.heading === 'string' && !('title' in oneLive) && liveMemo.checks.some((c) => c.rule.field === 'state'), 'live: Memo, every row kept, its titles now its headings, its check back', { rows: await live.count('Memo'), was: liveRows, row: oneLive });
   ok(!pj().metadata.cloudservicesLive.renames, 'and the renames are cleared from the project once live has them');
+  await ev(`document.querySelector('#drawer .dfoot .primary').click()`); await settle();
+
+  console.log('check: Required reaches live');
+  ok((await live.table('Memo')).columns.find((c) => c.name === 'heading')?.required === true, 'title was required in development before live was made: live\'s heading is required too, through the rename');
+  await ev(`document.querySelector('#types .row[data-type=Memo]').click()`); await settle();
+  await ev(`document.querySelector('#datamain tr[data-field=state] button[title="Change this field"]').click()`);
+  await until(`!!document.querySelector('#drawer:not([hidden]) [data-input=required]')`);
+  await ev(`document.querySelector('#drawer [data-input=required]').click()`); await wait(400);
+  await ev(`[...document.querySelectorAll('#drawer .dfoot button')].pop().click()`); await until(`document.getElementById('drawer').hidden`, 6000); await settle();
+  const stray = await live.post('/classes/Memo', { heading: 'on live, no state' });
+  await ev(`document.querySelector('#envbar [data-act=deploy-live]').click()`);
+  await until(`!!document.querySelector('#drawer [data-act=deploy-go]')`, 10000);
+  const heldText = await ev(`document.querySelector('#drawer [data-held]')?.textContent || ''`);
+  await ev(`document.querySelector('#drawer [data-act=deploy-go]').click()`);
+  await until(`(document.querySelector('#drawer h3')?.textContent || '') === 'Deployed to live'`, 10000);
+  ok((await dev.table('Memo')).columns.find((c) => c.name === 'state')?.required === true && heldText.includes("Memo's state stays optional on live: 1 row there has nothing in it") && !(await live.table('Memo')).columns.find((c) => c.name === 'state')?.required, 'state made required in development; live has a row without one, so Deploy to live says so and leaves it optional there', heldText);
+  await ev(`document.querySelector('#drawer .dfoot .primary').click()`); await settle();
+  await live.put(`/classes/Memo/${stray.objectId}`, { state: 'open' });
+  await ev(`document.querySelector('#envbar [data-act=deploy-live]').click()`);
+  await until(`!!document.querySelector('#drawer [data-act=deploy-go]')`, 10000);
+  const reqPlan = await ev(`document.querySelector('#drawer .dbody').textContent`);
+  await ev(`document.querySelector('#drawer [data-act=deploy-go]').click()`);
+  await until(`(document.querySelector('#drawer h3')?.textContent || '') === 'Deployed to live'`, 10000);
+  ok(reqPlan.includes("Memo's state made required") && (await live.table('Memo')).columns.find((c) => c.name === 'state')?.required === true, 'once that row has one, Deploy to live makes it required on live', reqPlan.slice(0, 200));
 } catch (err) {
   ok(false, `the gate stopped: ${err.stack || err.message}`);
 } finally {
