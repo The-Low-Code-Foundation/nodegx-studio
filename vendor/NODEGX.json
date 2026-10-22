@@ -5,16 +5,18 @@
     "committed": "2026-10-20T15:52:52+02:00",
     "subject": "fix(p112 own-024): the community app's bar says its name; no devotional promised; a taken email says so; an add empties its fields"
   },
-  "built": "2026-10-20T13:55:30.171Z",
+  "built": "2026-10-22T20:18:10.146Z",
   "esbuild": "0.25.12",
   "npm": {
+    "@nodegx/backend-map": "0.1.0",
     "@nodegx/mcp": "0.2.2",
     "@nodegx/preview": "0.2.3"
   },
-  "sources": 229,
+  "sources": 232,
   "files": {
     "agent.cjs": "68cf15f628561bc0864c42321238eb9a32b7d124916665839f04427e2c225ae9",
     "backend.cjs": "ea77e71f7818f99af805dbc3b0e90885d8d955a4cadc55e518c3e9a15db861bb",
+    "fields.js": "86e99b4cf706b4bb9cb5c54c9911762214ddca06a8871164ac956d1fdae3449e",
     "look.js": "0df321ba069438bdb215cc1276249dd997b221cd51940f80c830515c91a82c8c",
     "phrasebook/rows.js": "fef66fcff1b2c7e683f39672745c59004431a0c94405ebeb5496dd0d985de560",
     "specs.js": "82a807c970730d2f8dc996784b4f669089a19296a099644e12488ba27d7d4c59",

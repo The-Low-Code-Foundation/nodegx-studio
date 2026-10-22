@@ -53,6 +53,7 @@
   button.danger { color: var(--danger); }
   button.tiny { padding: 2px 7px; font-size: 12px; line-height: 16px; }
   button svg { width: 14px; height: 14px; flex: none; }
+  button[hidden] { display: none; }
   input[type=text], input[type=number], select, textarea { border: 1px solid var(--line-2); border-radius: var(--r); padding: 5px 8px; background: #fff; width: 100%; min-width: 0; line-height: 18px; }
   input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   select { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23717886' stroke-width='2.4'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; padding-right: 26px; }
@@ -527,9 +528,55 @@
 
   /* ---- Data ---- */
   #data { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-  /* the backend map (@nodegx/backend-map), served by serve.mjs at /backend-map/ */
-  #backendmap { grid-template-columns: 1fr; }
+  /* STU-060: the backend map (@nodegx/backend-map, served by serve.mjs at /backend-map/) is Data's Map */
+  #data-map { min-height: 0; height: 100%; }
+  #data-map[hidden] { display: none; }
   #mapframe { width: 100%; height: 100%; border: 0; display: block; }
+  /* STU-065: development or live, beside the sub-tabs */
+  .subtabs .grow { flex: 1; }
+  .subtabs .env { display: flex; align-items: center; gap: 8px; padding-bottom: 6px; }
+  .subtabs .env .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: var(--r); overflow: hidden; }
+  .subtabs .env .seg button { border: 0; border-radius: 0; margin: 0; padding: 3px 10px; color: var(--muted); border-bottom: 0; }
+  .subtabs .env .seg button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent-ink); }
+  .subtabs .env .seg button.live[aria-pressed=true] { background: #fff1e6; color: #b45309; }
+  .subtabs .env > button { border: 1px solid var(--line-2); border-radius: var(--r); margin: 0; padding: 3px 10px; color: var(--ink-2); }
+  .livebar { background: #fff7ed; border: 1px solid #fdba74; border-radius: var(--r); padding: 6px 10px; color: #9a3412; font-size: 12px; margin-bottom: 12px; max-width: 1100px; }
+  #datamain, #appmain, #privmain { overflow: auto; padding: 20px 24px; }
+  #datamain h2, #appmain h2, #privmain h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  #datamain h2 .acts, #appmain h2 .acts, #privmain h2 .acts { margin-left: auto; display: flex; gap: 6px; font-weight: 400; font-size: 13px; }
+  .badge { font: 11px var(--mono); color: var(--muted); background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; white-space: nowrap; }
+  .kind { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .kind i { font-style: normal; width: 20px; text-align: center; color: var(--accent-ink); font-weight: 600; }
+  .drift { border-left: 3px solid var(--warn); }
+  .drift p { margin: 4px 0 8px; color: var(--ink-2); }
+  .drift .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .reach li { margin: 3px 0; } .reach { margin: 4px 0 8px; padding-left: 18px; }
+  .reach .yes { color: var(--ok); } .reach .no { color: var(--muted); }
+  .row .dot { width: 7px; height: 7px; border-radius: 4px; background: var(--line-2); flex: none; }
+  .row .dot.warn { background: var(--warn); } .row .dot.open { background: var(--danger); } .row .dot.mid { background: var(--accent); }
+  /* a field's drawer and a new row's form */
+  #drawer { position: fixed; top: 44px; right: 0; bottom: 0; width: min(460px, calc(100vw - 48px)); background: var(--panel); border-left: 1px solid var(--line); box-shadow: var(--shadow); z-index: 45; display: flex; flex-direction: column; }
+  #drawer[hidden] { display: none; }
+  #drawer .dhead { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  #drawer .dhead h3 { margin: 0; font-size: 14px; font-weight: 600; flex: 1; }
+  #drawer .dbody { overflow: auto; padding: 14px 16px; display: grid; gap: 12px; align-content: start; }
+  #drawer .dfoot { border-top: 1px solid var(--line); padding: 10px 16px; display: flex; gap: 8px; align-items: center; }
+  #drawer .dfoot .why { flex: 1; color: var(--danger); font-size: 12px; }
+  #drawer label.f { display: grid; gap: 4px; font-size: 12px; color: var(--ink-2); }
+  #drawer label.c { display: flex; gap: 8px; align-items: center; font-size: 12.5px; }
+  #drawer .note { color: var(--muted); font-size: 12px; }
+  .kinds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .kinds button { flex-direction: column; align-items: flex-start; gap: 0; padding: 6px 8px; text-align: left; }
+  .kinds button b { font-weight: 600; font-size: 12.5px; } .kinds button small { color: var(--muted); font-size: 11px; line-height: 1.3; }
+  .kinds button[aria-pressed=true] { border-color: var(--accent); background: var(--accent-soft); }
+  .kinds button[disabled] { opacity: .45; cursor: default; }
+  .appbar { display: flex; gap: 8px; align-items: center; margin: 0 0 10px; max-width: 1100px; flex-wrap: wrap; }
+  .appbar input[type=search] { width: 220px; border: 1px solid var(--line-2); border-radius: var(--r); padding: 5px 8px; }
+  .appbar .note { color: var(--muted); font-size: 12px; margin-left: auto; }
+  th.sort { cursor: pointer; user-select: none; } th.sort:hover { color: var(--ink); }
+  td.pick, th.pick { width: 28px; padding-right: 0; }
+  .twrap { overflow-x: auto; max-width: 1100px; }
+  .report { font-size: 12px; } .report td, .report th { padding: 4px 8px; }
   .subtabs { display: flex; gap: 2px; padding: 8px 20px 0; background: var(--panel); border-bottom: 1px solid var(--line); }
   .subtabs button { border: 0; background: transparent; border-radius: 0; padding: 8px 10px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
   .subtabs button:hover { color: var(--ink); background: transparent; }
@@ -607,7 +654,6 @@
     <button role="tab" data-tab="workflow" title="Workflow"><svg class="i"><use href="#i-workflow"/></svg><span class="tip">Workflow</span></button>
     <button role="tab" data-tab="data" title="Data"><svg class="i"><use href="#i-data"/></svg><span class="tip">Data</span></button>
     <button role="tab" data-tab="styles" title="Styles"><svg class="i"><use href="#i-styles"/></svg><span class="tip">Styles</span></button>
-    <button role="tab" data-tab="backendmap" title="Backend map"><svg class="i"><use href="#i-map"/></svg><span class="tip">Backend map</span></button>
     <div class="grow"></div>
     <button id="undo" title="Undo (⌘Z)"><svg class="i"><use href="#i-undo"/></svg><span class="tip">Undo <kbd>⌘Z</kbd></span></button>
   </nav>
@@ -656,7 +702,12 @@
     <section class="tab" id="data" hidden>
       <div class="subtabs" role="tablist">
         <button role="tab" data-sub="types" aria-selected="true">Data types</button>
+        <button role="tab" data-sub="privacy">Privacy</button>
+        <button role="tab" data-sub="app">App data</button>
         <button role="tab" data-sub="options">Option sets</button>
+        <button role="tab" data-sub="map">Map</button>
+        <div class="grow"></div>
+        <div class="env" id="envbar"></div>
       </div>
       <div class="split" id="data-types">
         <aside>
@@ -665,6 +716,21 @@
         </aside>
         <div id="datamain"><div class="empty">Pick a data type.</div></div>
       </div>
+      <div class="split" id="data-privacy" hidden>
+        <aside>
+          <h3 class="sec">Who can reach each type</h3>
+          <div class="types list" id="privtypes"></div>
+        </aside>
+        <div id="privmain"><div class="empty">Pick a data type.</div></div>
+      </div>
+      <div class="split" id="data-app" hidden>
+        <aside>
+          <h3 class="sec">App data</h3>
+          <div class="types list" id="apptypes"></div>
+        </aside>
+        <div id="appmain"><div class="empty">Pick a data type.</div></div>
+      </div>
+      <div id="data-map" hidden><iframe id="mapframe" title="The backend map: who can reach which rows"></iframe></div>
       <div class="split" id="data-options" hidden>
         <aside>
           <h3 class="sec">Option sets <button class="tiny primary" id="newoptset"><svg class="i"><use href="#i-plus"/></svg>New</button></h3>
@@ -672,10 +738,6 @@
         </aside>
         <div id="optmain"><div class="empty">Pick an option set, or make one. An option set is a fixed list the app loads with the page.</div></div>
       </div>
-    </section>
-
-    <section class="tab" id="backendmap" hidden>
-      <iframe id="mapframe" title="Backend map: who can reach which rows"></iframe>
     </section>
 
     <section class="tab" id="styles" hidden>
@@ -709,6 +771,7 @@
   </main>
 </div>
 <div id="toast"></div>
+<div id="drawer" hidden></div>
 <div id="clash" role="alertdialog" aria-labelledby="clash-msg" hidden><p id="clash-msg"></p><div><button id="clash-theirs" class="quiet">Take theirs</button><button id="clash-mine">Keep mine</button></div></div>
 
 <script src="/preview.js"></script>
@@ -719,6 +782,8 @@ import { extractReusable } from './reusable.mjs';
 import { readRule, rulesOf, withoutArm, withValue, withCondition, addArm, valueOf, literal, SHOWING } from './rules.mjs';
 import { TYPES, TYPE_WORDS, dictionaryType, applyPhrase } from './phrases.mjs';
 import { OPERATORS, createEdits, updateEdits, removeEdits, readItems, readFrom, readersOf, itemOfSource, sameAs, signature, describe, lastRun, queriesOnOpen, requestMatches } from './pagedata.mjs';
+import * as F from './fields.js';
+import { typesOf, driftOf, projectColumn, cellWords, editText, toWire, searchWhere, rowLabel, pageWords, rowsQuery } from './data.mjs';
 import { LANES, buildTimeline, msText, shotAt, stepValues } from './timeline.mjs';
 import { runOver, lastActivity, watchSignals, runtimeTimers, runTimers } from './runwatch.mjs';
 
@@ -3489,108 +3554,603 @@ async function readLiveTables() {
   if (!backendUp()) return;
   try { liveTables = ((await api('/admin/schema')).tables || []).filter((t) => !t.name.startsWith('_')); } catch { /* shown by the rows */ }
 }
-for (const b of document.querySelectorAll('#data .subtabs button')) b.onclick = () => { dataSub = b.dataset.sub; for (const x of document.querySelectorAll('#data .subtabs button')) x.setAttribute('aria-selected', x === b); $('data-types').hidden = dataSub !== 'types'; $('data-options').hidden = dataSub !== 'options'; renderData(); };
-function renderTypes() {
-  const box = $('types'); box.innerHTML = '';
-  const names = new Set();
-  for (const c of collections()) { names.add(c.name); box.append(h('div', { class: 'row', 'aria-selected': selType === c.name, onclick: () => { selType = c.name; renderData(); } }, icon('db'), c.name, h('span', { class: 't' }, `${c.columns?.length ?? 0} fields`))); }
-  for (const t of schemaTables()) if (!names.has(t.table)) { names.add(t.table); box.append(h('div', { class: 'row', 'aria-selected': selType === t.table, onclick: () => { selType = t.table; renderData(); } }, icon('db'), t.table, h('span', { class: 't' }, 'schema.json'))); }
-  const undeclared = [...new Set([...appCollections().keys(), ...liveTables.map((t) => t.name)])].filter((n) => !names.has(n)).sort();
-  for (const name of undeclared) box.append(h('div', { class: 'row', 'aria-selected': selType === name, onclick: () => { selType = name; renderData(); } }, icon('db'), name, h('span', { class: 't' }, appCollections().has(name) ? 'used by the app' : 'on the backend')));
-  if (!box.children.length) box.append(h('div', { class: 'hint' }, 'No data types yet.'));
-}
-$('newtype').onclick = () => {
-  const name = prompt('Name of the new data type (a collection)');
-  if (!name) return;
-  const pj = projectJson(); pj.metadata ??= {}; pj.metadata.dbCollections ??= [];
-  if (pj.metadata.dbCollections.some((c) => c.name === name)) return toast('That type exists');
-  pj.metadata.dbCollections.push({ name, columns: [] });
-  writeProject(pj); selType = name; renderData();
-};
-const FIELD_TYPES = ['String', 'Number', 'Boolean', 'Date', 'Pointer', 'Array', 'Object', 'File', 'GeoPoint'];
-async function renderData() {
-  if (dataSub === 'options') return renderOptionSets();
-  await readLiveTables();
-  renderTypes();
-  const main = $('datamain'); main.innerHTML = '';
-  if (!selType) { main.append(h('div', { class: 'empty' }, 'Pick a data type.')); return; }
-  const pj = projectJson();
-  const coll = (pj?.metadata?.dbCollections || []).find((c) => c.name === selType);
-  const fromSchema = schemaTables().find((t) => t.table === selType);
-  const live = liveTables.find((t) => t.name === selType);
-  const used = appCollections().get(selType);
-  const cols = coll?.columns || fromSchema?.columns || [...(live?.columns || []), ...[...(used || [])].filter((f) => !live?.columns?.some((c) => c.name === f)).map((name) => ({ name, type: '' }))];
-  main.append(h('h2', {}, selType));
-  if (fromSchema && !coll) main.append(h('div', { class: 'bar' }, h('span', { class: 'note' }, 'Defined in backend/schema.json (read-only here).')));
-  else if (!coll) main.append(h('div', { class: 'bar' }, h('span', { class: 'note' }, `${used ? 'The app\u2019s Record nodes use this type' : 'This type is on the backend'}; the project does not declare it, so its fields are the ones ${used ? 'the app sets' : 'the backend holds'} (read-only here).`)));
-  const ft = h('table', {}, h('tr', {}, h('th', {}, 'Field'), h('th', {}, 'Type'), h('th', {}, 'Of type'), h('th', {})));
-  cols.forEach((col, i) => ft.append(h('tr', {},
-    h('td', {}, coll ? h('input', { type: 'text', value: col.name, onchange: (e) => { col.name = e.target.value; writeProject(pj); renderData(); } }) : col.name),
-    h('td', {}, coll ? h('select', { onchange: (e) => { col.type = e.target.value; writeProject(pj); renderData(); } }, ...FIELD_TYPES.map((t) => h('option', { value: t, selected: col.type === t }, t))) : col.type),
-    h('td', {}, col.type === 'Pointer' ? (coll ? h('input', { type: 'text', value: col.targetClass || '', placeholder: 'target type', onchange: (e) => { col.targetClass = e.target.value; writeProject(pj); } }) : col.targetClass) : ''),
-    h('td', {}, coll ? h('button', { class: 'quiet tiny danger', onclick: () => { coll.columns.splice(i, 1); writeProject(pj); renderData(); } }, icon('x')) : ''))));
-  main.append(ft);
-  if (coll) main.append(h('div', { class: 'bar' }, h('button', { onclick: () => { const name = prompt('Field name'); if (!name) return; coll.columns ??= []; coll.columns.push({ name, type: 'String' }); writeProject(pj); renderData(); } }, icon('plus'), 'New field'),
-    h('button', { class: 'quiet danger', onclick: () => { if (!confirm(`Remove the type ${selType} from the project? (Rows on the backend are kept.)`)) return; pj.metadata.dbCollections = pj.metadata.dbCollections.filter((c) => c.name !== selType); writeProject(pj); selType = null; renderData(); } }, 'Remove type')));
-  main.append(h('h2', { style: 'margin-top:26px' }, 'App data'));
-  const rowsBox = h('div', {}, h('div', { class: 'note' }, 'Loading…'));
-  main.append(rowsBox);
-  await renderRows(rowsBox, cols);
-}
+for (const b of document.querySelectorAll('#data .subtabs [data-sub]')) b.onclick = () => { dataSub = b.dataset.sub; renderData(); };
 async function api(path, init) {
   const r = await fetch('/api/backend' + path, { headers: { 'content-type': 'application/json' }, ...init });
   let body = null; try { body = await r.json(); } catch { /* empty */ }
   if (!r.ok) throw new Error(body?.error || `${r.status} ${r.statusText}`);
   return body;
 }
-async function renderRows(box, cols) {
-  box.innerHTML = '';
-  const backend = backendState;
-  if (backend.phase === 'none') {
-    const start = h('button', { class: 'primary', onclick: async () => {
-      start.disabled = true; start.textContent = 'Starting a backend…';
-      const r = await fetch('/api/backend-provision', { method: 'POST' }); const j = await r.json();
-      if (!r.ok) { toast(j.error); start.disabled = false; start.textContent = 'Start a backend for this app'; return; }
-      takeBackend(j); for (const w of j.warnings || []) toast(w);
-    } }, 'Start a backend for this app');
-    box.append(h('div', { class: 'note' }, 'This app is bound to no backend, so it has nowhere to keep rows. Studio can start one on this machine — the same kind the NodeGX editor and Claude Code start — and bind the app to it.'), h('div', { class: 'bar' }, start));
-    return;
-  }
-  if (backend.phase === 'starting') { box.append(h('div', { class: 'note' }, `${backend.name} is starting…`)); return; }
-  if (backend.phase === 'failed') { box.append(h('div', { class: 'note' }, `${backend.name || 'The backend'} did not start: ${backend.error}`)); return; }
-  let rows;
-  try { rows = (await api(`/classes/${encodeURIComponent(selType)}?limit=100`)).results || []; }
-  catch (err) { box.append(h('div', { class: 'note' }, `The backend at ${backend.endpoint} did not answer for ${selType}: ${err.message}`)); return; }
-  const names = cols.map((c) => c.name);
-  const t = h('table', {}, h('tr', {}, h('th', {}, 'id'), ...names.map((n) => h('th', {}, n)), h('th', {}, 'created'), h('th', {})));
-  for (const row of rows) {
-    const tr = h('tr', {}, h('td', {}, h('code', {}, String(row.objectId || row.id || '').slice(0, 10))));
-    for (const n of names) {
-      const v = row[n];
-      const td = h('td', { class: 'cell', onclick: () => editCell(td, row, n, v) }, v === undefined || v === null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v));
-      tr.append(td);
-    }
-    tr.append(h('td', {}, (row.createdAt || '').slice(0, 16)), h('td', {}, h('button', { class: 'quiet tiny danger', onclick: async () => { if (!confirm('Delete this row?')) return; try { await api(`/classes/${encodeURIComponent(selType)}/${row.objectId}`, { method: 'DELETE' }); renderData(); } catch (e) { toast(e.message); } } }, icon('x'))));
-    t.append(tr);
-  }
-  box.append(h('div', { class: 'bar' }, h('button', { class: 'primary', onclick: async () => { try { await api(`/classes/${encodeURIComponent(selType)}`, { method: 'POST', body: JSON.stringify({}) }); renderData(); } catch (e) { toast(e.message); } } }, icon('plus'), 'New entry'), h('span', { class: 'note' }, `${rows.length} row(s) on ${backend.endpoint}`)), t);
+/** STU-065: App data's requests go to the database the switch names; everything else in Data is development's. */
+const envApi = (path, init) => (env === 'live' ? liveApi(path, init) : api(path, init));
+async function liveApi(path, init) {
+  const r = await fetch('/api/live' + path, { headers: { 'content-type': 'application/json' }, ...init });
+  let body = null; try { body = await r.json(); } catch { /* empty */ }
+  if (!r.ok) throw new Error(body?.error || `${r.status} ${r.statusText}`);
+  return body;
 }
-function editCell(td, row, field, value) {
-  if (td.querySelector('input')) return;
-  const col = (collections().find((c) => c.name === selType)?.columns || []).find((c) => c.name === field);
-  const inp = h('input', { type: 'text', value: value === undefined || value === null ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value) });
-  td.textContent = ''; td.append(inp); inp.focus(); inp.select();
+const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body) });
+const schemaAct = (body) => post('/admin/schema', body);
+const DATA_SUBS = { types: 'data-types', privacy: 'data-privacy', app: 'data-app', options: 'data-options', map: 'data-map' };
+async function renderData() {
+  for (const x of document.querySelectorAll('#data .subtabs [data-sub]')) x.setAttribute('aria-selected', x.dataset.sub === dataSub);
+  for (const [sub, id] of Object.entries(DATA_SUBS)) $(id).hidden = dataSub !== sub;
+  renderEnvBar();
+  if (dataSub === 'options') return renderOptionSets();
+  if (dataSub === 'map') return renderMap();
+  await readLiveTables();
+  if (dataSub === 'privacy') return renderPrivacy();
+  if (dataSub === 'app') return renderAppData();
+  return renderTypes();
+}
+
+/* ---- the app's types: the project's, the development backend's and the ones its nodes use, once each (data.mjs) ---- */
+function allTypes() {
+  const declared = collections();
+  const fromFile = schemaTables().filter((t) => !declared.some((c) => c.name === t.table)).map((t) => ({ name: t.table, columns: t.columns || [] }));
+  const list = typesOf({ declared: [...declared, ...fromFile], backend: liveTables, used: appCollections() });
+  for (const t of list) {
+    t.file = fromFile.some((f) => f.name === t.name); // backend/schema.json: shown, not edited here
+    if (t.file) t.declared = false;
+    const live = liveTables.find((x) => x.name === t.name);
+    t.checks = live?.checks || declared.find((c) => c.name === t.name)?.checks?.map((rule) => ({ rule, declared: true })) || [];
+    t.indexes = live?.indexes || [];
+    t.backendColumns = live?.columns || [];
+    t.drift = t.declared && t.onBackend ? driftOf(t.columns, t.backendColumns) : null;
+    // a type need not be declared (NodeGX's templates declare none): the dot is for a declared one the backend disagrees with
+    t.warn = (backendUp() && t.declared && !t.onBackend) || (t.drift && !t.drift.none);
+  }
+  return list;
+}
+const typeRow = (t, sel, onclick, note) => h('div', { class: 'row', 'aria-selected': sel === t.name, 'data-type': t.name, onclick }, icon('db'), t.name, t.warn ? h('span', { class: 'dot warn', title: 'The project and the backend disagree about this type' }) : null, h('span', { class: 't' }, note));
+function renderTypes() {
+  const box = $('types'); box.innerHTML = '';
+  const list = allTypes();
+  for (const t of list) box.append(typeRow(t, selType, () => { selType = t.name; renderData(); }, t.file ? 'schema.json' : t.declared ? `${t.columns.length} field${t.columns.length === 1 ? '' : 's'}` : t.onBackend ? 'on the backend' : 'used by the app'));
+  if (!list.length) box.append(h('div', { class: 'hint' }, 'No data types yet.'));
+  renderTypeMain(list.find((t) => t.name === selType));
+}
+function editProject(fn) { const pj = projectJson(); pj.metadata ??= {}; pj.metadata.dbCollections ??= []; fn(pj.metadata.dbCollections); writeProject(pj); }
+const declare = (name, columns = [], checks = []) => editProject((list) => { if (!list.some((c) => c.name === name)) list.push({ name, columns: columns.map(projectColumn), ...(checks.length ? { checks } : {}) }); });
+const typeNamesHere = () => allTypes().map((t) => t.name);
+async function rowCount(type) { if (!backendUp()) return 0; try { return (await api(`/classes/${encodeURIComponent(type)}?count=1&limit=0`)).count ?? 0; } catch { return 0; } }
+/** Runs a change on the development backend; a refusal is said, and the caller writes nothing to the project. */
+async function onBackend(what, fn) { try { await fn(); return true; } catch (e) { toast(`${what}: ${e.message}`); return false; } }
+$('newtype').onclick = async () => {
+  const name = (prompt('Name of the new data type (a collection), e.g. Task') || '').trim();
+  if (!name) return;
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name)) return toast('A type’s name starts with a letter and has only letters, digits and _');
+  if (typeNamesHere().includes(name)) return toast('That type exists');
+  if (backendUp() && !(await onBackend(`${name} was not made`, () => schemaAct({ action: 'createTable', table: name, columns: [] })))) return;
+  declare(name); selType = name; renderData();
+};
+function renderTypeMain(t) {
+  const main = $('datamain'); main.innerHTML = '';
+  if (!t) { main.append(h('div', { class: 'empty' }, 'Pick a data type, or make one. A type is a table of rows on the app’s backend: Task, Customer, Order.')); return; }
+  const where = [t.declared ? 'in the project' : t.file ? 'in backend/schema.json' : null, t.onBackend ? 'on the development database' : null, t.usedByApp ? 'used by the app' : null].filter(Boolean);
+  main.append(h('h2', {}, t.name, h('span', { class: 'badge' }, where.join(' · ')), h('span', { class: 'acts' },
+    t.onBackend ? h('button', { onclick: () => openOnMap(t.name) }, icon('map'), 'Open on the map') : null,
+    t.declared || t.onBackend ? h('button', { class: 'quiet danger', onclick: () => deleteType(t) }, icon('trash'), 'Delete type') : null)));
+  syncCards(main, t);
+  const cols = t.declared ? t.columns : t.onBackend ? t.backendColumns : t.columns;
+  const ft = h('table', {}, h('tr', {}, h('th', {}, 'Field'), h('th', {}, 'Kind'), h('th', {}, 'Details'), h('th', {})));
+  for (const col of cols) {
+    const kind = col.type ? F.kindOf(col, t.checks) : null;
+    const rules = F.rulesOn(col.name, t.checks);
+    const details = [col.targetClass ? `points at ${col.targetClass}` : '', rules.find((r) => r.oneOf)?.oneOf.join(', '), col.required ? 'required' : '', F.defaultWords(col) ? `default ${F.defaultWords(col)}` : '', rules.find((r) => r.maxLength) ? `at most ${rules.find((r) => r.maxLength).maxLength} characters` : '', col.description || ''].filter(Boolean).join(' · ');
+    ft.append(h('tr', { 'data-field': col.name },
+      h('td', {}, col.name),
+      h('td', {}, kind ? h('span', { class: 'kind' }, h('i', {}, kind.icon), kind.label, h('span', { class: 'badge' }, col.type)) : h('span', { class: 'note' }, 'set by the app, no kind yet')),
+      h('td', { class: 'note' }, details),
+      h('td', { style: 'text-align:right;white-space:nowrap' }, t.declared ? [h('button', { class: 'quiet tiny', title: 'Change this field', onclick: () => fieldDrawer(t, col) }, icon('settings')), h('button', { class: 'quiet tiny danger', title: 'Delete this field', onclick: () => deleteField(t, col) }, icon('x'))] : '')));
+  }
+  if (!cols.length) ft.append(h('tr', {}, h('td', { colspan: 4, class: 'note' }, 'No fields yet.')));
+  main.append(ft);
+  if (t.declared) main.append(h('div', { class: 'bar' }, h('button', { class: 'primary', onclick: () => fieldDrawer(t, null) }, icon('plus'), 'New field')));
+  if (t.onBackend) {
+    const reach = h('div', { class: 'card' }, h('h4', {}, 'Who can reach it'), h('div', { class: 'note' }, 'Asking the backend…'));
+    main.append(reach);
+    whoCanReach(reach, t.name);
+  }
+}
+/** Where the project and the development backend disagree about a type, with both ways to agree (STU-061). */
+function syncCards(main, t) {
+  const card = (text, ...buttons) => main.append(h('div', { class: 'card drift' }, h('p', {}, text), h('div', { class: 'acts' }, ...buttons)));
+  if (t.file) return card('This type is defined in backend/schema.json, so Studio shows it and leaves it as it is.');
+  if (!t.declared) {
+    return card(`The project doesn’t declare ${t.name}: ${t.onBackend ? 'the development database holds it' : 'the app’s Record nodes use it'}. Declared, its fields get kinds and Studio keeps the project and the backend the same.`,
+      h('button', { class: 'primary', onclick: async () => {
+        const cols = t.onBackend ? t.backendColumns : t.columns.map((c) => ({ name: c.name, type: 'String' }));
+        if (!t.onBackend && backendUp() && !(await onBackend(`${t.name} was not made`, () => schemaAct({ action: 'createTable', table: t.name, columns: cols })))) return;
+        declare(t.name, cols, t.checks.filter((c) => c.declared).map((c) => c.rule)); renderData();
+      } }, `Declare ${t.name} in the project`));
+  }
+  if (!backendUp()) return;
+  if (!t.onBackend) {
+    return card(`${t.name} is in the project but not on the development database yet, so the app can’t keep its rows.`,
+      h('button', { class: 'primary', onclick: async () => {
+        if (!(await onBackend(`${t.name} was not made`, () => schemaAct({ action: 'createTable', table: t.name, columns: t.columns })))) return;
+        const rules = collections().find((c) => c.name === t.name)?.checks || [];
+        if (rules.length) await onBackend('Its rules for values were not set', () => schemaAct({ action: 'setChecks', table: t.name, checks: rules }));
+        renderData();
+      } }, 'Make it on the development database'));
+  }
+  const d = t.drift;
+  if (!d || d.none) return;
+  if (d.onlyProject.length) card(`In the project but not on the development database: ${d.onlyProject.map((c) => c.name).join(', ')}.`,
+    h('button', { class: 'primary', onclick: async () => { for (const c of d.onlyProject) if (!(await onBackend(`${c.name} was not added`, () => schemaAct({ action: 'addColumn', table: t.name, column: c })))) break; renderData(); } }, 'Add them to the backend'),
+    h('button', { onclick: () => { editProject((list) => { const c = list.find((x) => x.name === t.name); c.columns = c.columns.filter((x) => !d.onlyProject.some((p) => p.name === x.name)); }); renderData(); } }, 'Take them out of the project'));
+  if (d.onlyBackend.length) card(`On the development database but not in the project: ${d.onlyBackend.map((c) => `${c.name} (${c.type})`).join(', ')}. Something other than Studio added them: Claude Code, the NodeGX editor, or the app’s import.`,
+    h('button', { class: 'primary', onclick: () => { editProject((list) => { list.find((x) => x.name === t.name).columns.push(...d.onlyBackend.map(projectColumn)); }); renderData(); } }, 'Declare them in the project'));
+  for (const r of d.retyped) card(`${r.name} is ${r.project.type}${r.project.targetClass ? ` → ${r.project.targetClass}` : ''} in the project and ${r.backend.type}${r.backend.targetClass ? ` → ${r.backend.targetClass}` : ''} on the development database.`,
+    h('button', { onclick: async () => { if (!confirm(`Change ${r.name} on the development database to ${r.project.type}? Values that don’t convert are lost.`)) return; await onBackend(`${r.name} was not changed`, () => schemaAct({ action: 'changeColumnType', table: t.name, column: r.name, type: r.project.type })); renderData(); } }, `Make the backend’s ${r.project.type}`),
+    h('button', { onclick: () => { editProject((list) => { const cols = list.find((x) => x.name === t.name).columns; cols[cols.findIndex((x) => x.name === r.name)] = projectColumn(r.backend); }); renderData(); } }, `Make the project’s ${r.backend.type}`));
+}
+async function whoCanReach(card, type) {
+  const say = (...kids) => { card.lastChild.replaceWith(h('div', {}, ...kids)); };
+  let r;
+  try { r = await fetch(`/backend-map/api/check?table=${encodeURIComponent(type)}`); } catch (e) { return say(h('span', { class: 'note' }, e.message)); }
+  if (!(r.headers.get('content-type') || '').includes('json')) return say(h('span', { class: 'note' }, 'The map can’t answer for this backend.'));
+  const { checks = [], error } = await r.json();
+  if (error) return say(h('span', { class: 'note' }, error));
+  const who = [...new Set(checks.map((c) => c.who))];
+  const verb = { find: 'find its rows', create: 'add rows' };
+  say(h('ul', { class: 'reach' }, ...who.map((w) => h('li', {}, h('b', {}, w), ': ', ...checks.filter((c) => c.who === w).flatMap((c, i) => [i ? ', ' : '', h('span', { class: c.allowed ? 'yes' : 'no', title: c.reason }, `${c.allowed ? 'can' : 'can’t'} ${verb[c.op] ?? c.op}`)])))),
+    h('div', { class: 'acts', style: 'display:flex;gap:8px' }, h('button', { onclick: () => { dataSub = 'privacy'; renderData(); } }, 'Change who can reach it'), h('button', { class: 'quiet', onclick: () => openOnMap(type) }, icon('map'), 'See it on the map')),
+    h('div', { class: 'note', style: 'margin-top:6px' }, 'The backend’s own answer, asked as each kind of person; nothing ran.'));
+}
+
+/* ---- a field, in the backend manager's words (fields.js): made, changed and deleted on the project and the development backend together ---- */
+function closeDrawer() { $('drawer').hidden = true; $('drawer').innerHTML = ''; }
+function openDrawer(title, body, foot) {
+  const d = $('drawer'); d.innerHTML = '';
+  d.append(h('div', { class: 'dhead' }, h('h3', {}, title), h('button', { class: 'quiet tiny', title: 'Close', onclick: closeDrawer }, icon('x'))), h('div', { class: 'dbody' }, ...body), foot ? h('div', { class: 'dfoot' }, ...foot) : null);
+  d.hidden = false;
+}
+/** The drawer's draft for a field as it stands: its kind read back with the type's checks (a Choice is a String with one-of). */
+function draftOf(col, checks) {
+  const d = F.blankDraft(F.kindOf(col, checks).id);
+  d.name = col.name; d.description = col.description || ''; d.required = !!col.required; d.target = col.targetClass || '';
+  for (const r of F.rulesOn(col.name, checks)) {
+    if (r.oneOf) d.values = r.oneOf.map(String);
+    if (r.maxLength !== undefined) d.maxLength = String(r.maxLength);
+    if (r.looksLike) d.looksLike = r.looksLike;
+    if (r.min !== undefined) d.min = String(r.min);
+    if (r.max !== undefined) d.max = String(r.max);
+    if (r.whole) d.whole = true;
+  }
+  if (col.defaultValue !== undefined) { if (col.type === 'Boolean') { d.boolDefaultSet = true; d.boolDefault = col.defaultValue === true; } else d.dflt = String(col.defaultValue); }
+  return d;
+}
+async function fieldDrawer(t, col) {
+  const records = await rowCount(t.name);
+  const d = col ? draftOf(col, t.checks) : F.blankDraft('text');
+  const oldKind = col ? F.kindById(d.kind) : null;
+  const why = h('span', { class: 'why' });
+  const save = h('button', { class: 'primary', onclick: () => saveField(t, col, d, records, why) }, col ? 'Save' : 'Add field');
+  const body = h('div', { style: 'display:grid;gap:12px' });
+  const input = (label, key, attrs = {}) => h('label', { class: 'f' }, label, h('input', { type: 'text', value: d[key], ...attrs, oninput: (e) => { d[key] = e.target.value; check(); } }));
+  const check = () => { why.textContent = F.draftProblem(d, { taken: t.columns.map((c) => c.name).filter((n) => n !== col?.name), collections: typeNamesHere(), records: col ? 0 : records }) || ''; save.disabled = !!why.textContent; };
+  const draw = () => {
+    body.innerHTML = '';
+    // a stored field keeps the kinds its values can become; a Link's target is not changed here
+    const kinds = h('div', { class: 'kinds' }, ...F.KINDS.map((k) => h('button', { 'aria-pressed': d.kind === k.id, 'data-kind': k.id, disabled: col && (k.id === 'link' || k.id === 'links' || oldKind.id === 'link' || oldKind.id === 'links') && k.id !== oldKind.id, onclick: () => { d.kind = k.id; draw(); } }, h('b', {}, `${k.icon}  ${k.label}`), h('small', {}, k.line))));
+    body.append(h('label', { class: 'f' }, 'Kind', kinds), input('Name', 'name', { placeholder: 'e.g. dueDate', 'data-input': 'name' }));
+    if (d.kind === 'link' || d.kind === 'links') body.append(h('label', { class: 'f' }, d.kind === 'link' ? 'Points at one row of' : 'Points at rows of', h('select', { disabled: !!col, onchange: (e) => { d.target = e.target.value; check(); } }, h('option', { value: '' }, 'Choose a type…'), ...typeNamesHere().map((n) => h('option', { value: n, selected: d.target === n }, n)))));
+    if (d.kind === 'choice') body.append(h('label', { class: 'f' }, 'The choices, one per line', h('textarea', { rows: 4, 'data-input': 'values', oninput: (e) => { d.values = e.target.value.split('\n').map((s) => s.trim()).filter(Boolean); check(); } }, d.values.join('\n'))));
+    if (d.kind === 'text') body.append(input('At most this many characters (optional)', 'maxLength'), h('label', { class: 'f' }, 'Must look like', h('select', { onchange: (e) => { d.looksLike = e.target.value; check(); } }, ...[['', 'anything'], ['email', 'an email address'], ['url', 'a web address']].map(([v, w]) => h('option', { value: v, selected: d.looksLike === v }, w)))));
+    if (d.kind === 'number') body.append(input('Smallest (optional)', 'min'), input('Largest (optional)', 'max'), h('label', { class: 'c' }, h('input', { type: 'checkbox', checked: d.whole, onchange: (e) => { d.whole = e.target.checked; check(); } }), 'Whole numbers only'));
+    if (!col) {
+      body.append(h('label', { class: 'c' }, h('input', { type: 'checkbox', checked: d.required, 'data-input': 'required', onchange: (e) => { d.required = e.target.checked; draw(); } }), 'Required: every row must have it'));
+      if (F.takesUnique(d.kind)) body.append(h('label', { class: 'c' }, h('input', { type: 'checkbox', checked: d.unique, onchange: (e) => { d.unique = e.target.checked; } }), 'Unique: no two rows share a value'));
+      const rule = F.defaultRule(d, records);
+      if (!rule.disabled || rule.why) {
+        if (d.kind === 'yesno') body.append(h('label', { class: 'f' }, rule.label, h('select', { disabled: rule.disabled, onchange: (e) => { d.boolDefaultSet = e.target.value !== ''; d.boolDefault = e.target.value === 'yes'; check(); } }, ...[['', 'none'], ['yes', 'Yes'], ['no', 'No']].map(([v, w]) => h('option', { value: v, selected: d.boolDefaultSet ? (d.boolDefault ? v === 'yes' : v === 'no') : v === '' }, w)))));
+        else if (d.kind === 'choice') body.append(h('label', { class: 'f' }, rule.label, h('select', { disabled: rule.disabled, onchange: (e) => { d.dflt = e.target.value; check(); } }, h('option', { value: '' }, 'none'), ...d.values.map((v) => h('option', { value: v, selected: d.dflt === v }, v)))));
+        else if (F.takesDefault(d.kind)) body.append(input(rule.label, 'dflt', { disabled: rule.disabled }));
+        if (rule.why) body.append(h('div', { class: 'note' }, rule.why));
+      }
+      body.append(input('Description (optional)', 'description'));
+      if (records) body.append(h('div', { class: 'note' }, `${F.recordsWord(records)} on the development database already.`));
+    } else {
+      body.append(h('div', { class: 'note' }, `Renaming it renames it on the development database${records ? ` (${F.recordsWord(records)} keep their values)` : ''}. Changing its kind converts the values it holds; ones that don’t convert are lost, and Studio says how many before it changes anything.`));
+    }
+    check();
+  };
+  draw();
+  openDrawer(col ? `${t.name} · ${col.name}` : `New field on ${t.name}`, [body], [why, h('button', { class: 'quiet', onclick: closeDrawer }, 'Cancel'), save]);
+}
+async function saveField(t, col, d, records, why) {
+  const name = d.name.trim();
+  const live = liveTables.find((x) => x.name === t.name);
+  const checks = live?.checks || t.checks;
+  const rules = F.toRules(d);
+  const up = backendUp() && t.onBackend;
+  if (!col) {
+    const column = F.toColumn(d, records);
+    if (up) {
+      if (!(await onBackend(`${name} was not added`, () => schemaAct({ action: 'addColumn', table: t.name, column })))) return;
+      if (rules.length && !(await onBackend('Its rules were not set', () => schemaAct({ action: 'setChecks', table: t.name, checks: F.mergeRules(checks, name, rules) })))) return;
+      if (d.unique) await onBackend('It was added, but not made unique', () => schemaAct({ action: 'setIndexes', table: t.name, indexes: [...(live?.indexes || []).filter((i) => i.declared !== false).map(({ fields, unique }) => ({ fields, ...(unique ? { unique } : {}) })), { fields: [name], unique: true }] }));
+    }
+    editProject((list) => { const c = list.find((x) => x.name === t.name); c.columns ??= []; c.columns.push(projectColumn({ ...column, fillExisting: undefined })); if (rules.length) c.checks = F.mergeRules(c.checks?.map((rule) => ({ rule, declared: true })), name, rules); });
+  } else {
+    const from = F.kindById(F.kindOf(col, checks).id), to = F.kindById(d.kind);
+    if (up && name !== col.name) {
+      // a rule built on the field holds its name: it comes off for the rename and goes back on under the new one
+      const mine = F.rulesOn(col.name, checks);
+      if (mine.length && !(await onBackend('Not renamed', () => schemaAct({ action: 'setChecks', table: t.name, checks: F.rulesWithout(checks, col.name) })))) return;
+      if (!(await onBackend('Not renamed', () => schemaAct({ action: 'renameColumn', table: t.name, oldName: col.name, newName: name })))) return;
+      if (mine.length) await onBackend('Renamed, but its rules were not put back', () => schemaAct({ action: 'setChecks', table: t.name, checks: [...F.rulesWithout(checks, col.name), ...mine.map((r) => ({ ...r, field: name }))] }));
+    }
+    if (up && from.storage !== to.storage) {
+      if (!confirm(`Change ${name} from ${from.label} to ${to.label}? ${records ? `Its values in ${F.recordsWord(records)} are converted; ones that don’t convert are lost.` : ''}`)) return;
+      let r; if (!(await onBackend(`${name} was not changed`, async () => { r = await schemaAct({ action: 'changeColumnType', table: t.name, column: name, type: to.storage }); }))) return;
+      if (r?.convertedValues) toast(`${r.convertedValues} value(s) converted to ${to.label}`);
+    }
+    if (up) {
+      const now = (await api('/admin/schema')).tables.find((x) => x.name === t.name)?.checks;
+      if (!(await onBackend('Its rules were not set', () => schemaAct({ action: 'setChecks', table: t.name, checks: F.mergeRules(now, name, rules) })))) return;
+    }
+    editProject((list) => {
+      const c = list.find((x) => x.name === t.name);
+      const at = c.columns.findIndex((x) => x.name === col.name);
+      c.columns[at] = projectColumn({ ...col, name, type: to.storage });
+      const kept = (c.checks || []).filter((r) => r.field !== col.name);
+      c.checks = [...kept, ...rules];
+      if (!c.checks.length) delete c.checks;
+    });
+  }
+  closeDrawer(); renderData();
+}
+async function deleteField(t, col) {
+  const records = await rowCount(t.name);
+  if (!confirm(`Delete the field ${col.name} from ${t.name}?${t.onBackend && records ? ` On the development database, ${F.recordsWord(records)} lose their ${col.name}.` : ''}`)) return;
+  if (backendUp() && t.onBackend && t.backendColumns.some((c) => c.name === col.name)) {
+    const checks = liveTables.find((x) => x.name === t.name)?.checks;
+    if (F.rulesOn(col.name, checks).length && !(await onBackend('Not deleted', () => schemaAct({ action: 'setChecks', table: t.name, checks: F.rulesWithout(checks, col.name) })))) return;
+    if (!(await onBackend('Not deleted', () => schemaAct({ action: 'dropColumn', table: t.name, column: col.name })))) return;
+  }
+  editProject((list) => { const c = list.find((x) => x.name === t.name); c.columns = c.columns.filter((x) => x.name !== col.name); if (c.checks) { c.checks = c.checks.filter((r) => r.field !== col.name); if (!c.checks.length) delete c.checks; } });
+  renderData();
+}
+async function deleteType(t) {
+  const records = t.onBackend ? await rowCount(t.name) : 0;
+  if (!confirm(`Delete the type ${t.name}?${t.onBackend ? ` Its table on the development database goes, with ${F.recordsWord(records)}.` : ''}${t.usedByApp ? ' The app’s Record nodes that name it will find nothing.' : ''}`)) return;
+  if (backendUp() && t.onBackend && !(await onBackend('Not deleted', () => schemaAct({ action: 'deleteTable', table: t.name })))) return;
+  if (t.declared) editProject((list) => { const at = list.findIndex((c) => c.name === t.name); if (at >= 0) list.splice(at, 1); });
+  selType = null; renderData();
+}
+
+/* ---- STU-060: the backend map is Data's Map; a type opens it on its table (#t:<type>) ---- */
+let mapFocus = null;
+function renderMap() {
+  const f = $('mapframe');
+  const want = `/backend-map/${mapFocus ? `?at=${encodeURIComponent(mapFocus)}#t:${encodeURIComponent(mapFocus)}` : ''}`;
+  if (f.getAttribute('src') !== want) f.src = want;
+}
+function openOnMap(type) { mapFocus = type; dataSub = 'map'; renderData(); }
+
+/* ---- STU-064: Privacy — each type's rule in the map's words (/backend-map/words.js), changed through the map, which writes the backend and nodegx.security.json together ---- */
+let selPriv = null;
+async function mapData() {
+  const r = await fetch('/backend-map/api/map');
+  if (!(r.headers.get('content-type') || '').includes('json')) throw new Error('The map can’t read this backend.');
+  const j = await r.json();
+  if (j.error) throw new Error(j.error);
+  return j;
+}
+async function renderPrivacy() {
+  const box = $('privtypes'), main = $('privmain'); box.innerHTML = ''; main.innerHTML = '';
+  if (!backendUp()) { main.append(h('div', { class: 'empty' }, 'Privacy is asked of the running development database, and there is none. Data types → Start a backend.')); return; }
+  let map, W;
+  try { [map, W] = await Promise.all([mapData(), import('/backend-map/words.js')]); } catch (e) { main.append(h('div', { class: 'empty' }, e.message)); return; }
+  const roles = map.roles.map((r) => r.name);
+  // the backend's tables, the types the rules name and the ones the app knows: a rule can be set before the first row
+  const names = [...new Set([...map.tables.map((x) => x.name), ...Object.keys(map.config.collections ?? {}), ...allTypes().map((x) => x.name)])].filter((n) => !n.startsWith('_')).sort();
+  for (const t of names.map((name) => ({ name }))) {
+    const rule = W.tableRule(map.config, t.name);
+    const open = Math.max(W.openness(W.readRule(rule.permissions)), W.openness(rule.permissions.create));
+    box.append(h('div', { class: 'row', 'aria-selected': selPriv === t.name, 'data-type': t.name, onclick: () => { selPriv = t.name; renderPrivacy(); } }, h('span', { class: `dot ${open >= 3 ? 'open' : open >= 2 ? 'warn' : open ? 'mid' : ''}` }), t.name, h('span', { class: 't' }, W.ruleWords(W.readRule(rule.permissions)))));
+  }
+  if (!files.read('nodegx.security.json')) {
+    main.append(h('div', { class: 'card drift' }, h('p', {}, 'The app’s rules are not kept in its folder (nodegx.security.json), so a change made here would last only until the backend restarts, and the map refuses to make one. Keep them in the folder first: Studio writes the rules the backend has now.'),
+      h('div', { class: 'acts' }, h('button', { class: 'primary', onclick: async () => { const { config } = await api('/admin/permissions'); writeJsonFile('nodegx.security.json', config); toast('The rules are in nodegx.security.json now'); setTimeout(renderPrivacy, 400); } }, 'Keep the rules in the app’s folder'))));
+  }
+  if (map.backend.devOpen) main.append(h('div', { class: 'livebar' }, 'On this computer the development database lets the app through whatever these rules say (devOpen), so you can build without signing in. A live database keeps them.'));
+  const t = names.includes(selPriv) ? { name: selPriv } : null;
+  if (!t) { main.append(h('div', { class: 'empty' }, 'Pick a type to say who may find, read, add, change and delete its rows.')); renderRoles(main, map); return; }
+  const rule = W.tableRule(map.config, t.name);
+  const cur = { read: W.readRule(rule.permissions), change: W.changeRule(rule.permissions), creatorOwns: rule.creatorOwns };
+  const edit = { ...cur };
+  const choices = W.audienceChoices(roles);
+  const known = (v) => typeof v === 'string' && choices.some((c) => c.value === v);
+  const pick = (key, label) => h('label', { class: 'f', style: 'display:grid;gap:4px;max-width:520px;margin-bottom:12px' }, h('b', {}, label),
+    h('select', { 'data-rule': key, onchange: (e) => { edit[key] = e.target.value; say(); } }, ...(known(cur[key]) ? [] : [h('option', { value: '' }, `${W.ruleWords(cur[key])} (as it is)`)]), ...choices.map((c) => h('option', { value: c.value, selected: cur[key] === c.value }, `${c.words} — ${c.long}`))));
+  const words = h('div', { class: 'note', style: 'margin:8px 0' });
+  const make = h('button', { class: 'primary', 'data-act': 'make', onclick: async () => {
+    make.disabled = true;
+    let r; try { r = await (await fetch('/backend-map/api/table-rule', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ table: t.name, read: edit.read, change: edit.change, creatorOwns: edit.creatorOwns, etag: map.etag, fileStamp: map.fileStamp }) })).json(); } catch (e) { r = { error: e.message }; }
+    if (r.error) { toast(r.error); make.disabled = false; return; }
+    toast(r.words?.[0] || 'Done'); renderPrivacy();
+  } }, 'Make it so');
+  const say = () => {
+    const changed = JSON.stringify(edit) !== JSON.stringify(cur);
+    make.disabled = !changed || !known(edit.read) || !known(edit.change);
+    words.textContent = known(edit.read) && known(edit.change) ? `Reading ${t.name}’s rows: ${W.ruleWords(edit.read)}. Adding, changing or deleting them: ${W.ruleWords(edit.change)}.${edit.creatorOwns ? ' And whoever made a row may always read and change that row.' : ''}` : 'Choose both.';
+  };
+  main.append(h('h2', {}, t.name, h('span', { class: 'badge' }, rule.own ? 'its own rule' : 'the app’s standard rule'), h('span', { class: 'acts' }, h('button', { onclick: () => openOnMap(t.name) }, icon('map'), 'See it on the map'))),
+    h('div', { class: 'card' }, pick('read', 'Looking at rows (finding and reading)'), pick('change', 'Adding, changing or deleting rows'),
+      h('label', { class: 'c', style: 'display:flex;gap:8px;align-items:center' }, h('input', { type: 'checkbox', checked: edit.creatorOwns, onchange: (e) => { edit.creatorOwns = e.target.checked; say(); } }), 'Whoever made a row may always read and change that row'),
+      words, h('div', { class: 'bar' }, make, rule.own ? h('button', { class: 'quiet', onclick: async () => { const r = await (await fetch('/backend-map/api/table-rule', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ table: t.name, reset: true, etag: map.etag, fileStamp: map.fileStamp }) })).json(); toast(r.error || 'Back to the app’s standard rule'); renderPrivacy(); } }, 'Back to the app’s standard rule') : null),
+      h('div', { class: 'note' }, `The backend obeys at once, and the same rule is written to nodegx.security.json, so it holds when the backend restarts and goes to live with Deploy to live.`)));
+  say();
+  const reach = h('div', { class: 'card' }, h('h4', {}, 'Who can reach it now'), h('div', { class: 'note' }, 'Asking the backend…'));
+  main.append(reach); whoCanReach(reach, t.name);
+  renderRoles(main, map);
+}
+function renderRoles(main, map) {
+  main.append(h('div', { class: 'card' }, h('h4', {}, 'Groups'), map.roles.length ? h('ul', { class: 'reach' }, ...map.roles.map((r) => h('li', {}, h('b', {}, r.name), `: ${r.members} ${r.members === 1 ? 'person' : 'people'}`))) : h('div', { class: 'note' }, 'No groups yet. A group (a role) is a set of people a rule can name: “staff”, “admins”.'),
+    h('div', { class: 'note' }, `${map.people} ${map.people === 1 ? 'person has' : 'people have'} an account on this database.`)));
+}
+
+/* ---- STU-063: App data — every row of a type, paged, searched, sorted, edited by its kind, exported and imported ---- */
+const app = { type: null, skip: 0, order: '-createdAt', q: '', picked: new Set(), schema: [], drawn: 0 };
+const PAGE = 50;
+async function envTables() {
+  if (env === 'live') { try { return ((await liveApi('/admin/schema')).tables || []).filter((t) => !t.name.startsWith('_')); } catch { return []; } }
+  // every type Data knows: the backend's, and the declared or used ones it has no table for yet (the first row makes it).
+  // A backend not on this computer answers rows, not its schema (no admin key here): the project's columns stand in
+  return allTypes().filter((t) => !t.file || t.onBackend).map((t) => ({ name: t.name, columns: t.onBackend ? t.backendColumns : t.columns, checks: t.checks }));
+}
+async function renderAppData() {
+  // only the latest drawing draws: a second one started while this one waits on the backend wins
+  const mine = ++app.drawn;
+  const box = $('apptypes'), main = $('appmain');
+  const up = env === 'live' ? liveUp() : backendUp() || backendState.phase === 'remote';
+  if (!up) { box.innerHTML = ''; main.innerHTML = ''; }
+  if (env === 'development' && !up) { renderStartBackend(main); return; }
+  if (!up) { main.append(h('div', { class: 'empty' }, `The live database is ${liveState.phase === 'none' ? 'not made yet' : liveState.phase}.`)); return; }
+  const schema = await envTables();
+  if (mine !== app.drawn) return;
+  app.schema = schema; box.innerHTML = ''; main.innerHTML = '';
+  for (const t of app.schema) box.append(h('div', { class: 'row', 'aria-selected': app.type === t.name, 'data-type': t.name, onclick: () => { if (app.type !== t.name) Object.assign(app, { type: t.name, skip: 0, q: '', order: '-createdAt', picked: new Set() }); renderAppData(); } }, icon('db'), t.name));
+  if (!app.schema.length) box.append(h('div', { class: 'hint' }, env === 'live' ? 'Live has no types yet: Deploy to live.' : 'No types on the development database yet.'));
+  if (env === 'live') main.append(h('div', { class: 'livebar' }, 'You are looking at the live database: what you change here is what the app’s people see.'));
+  const imported = importedData();
+  if (imported.length && env === 'development' && backendUp()) main.append(h('div', { class: 'card', 'data-card': 'imported' }, h('p', { style: 'margin:0 0 8px' }, `The importer wrote rows from the Bubble app’s data exports for ${imported.map((x) => `${x.collection} (${x.count})`).join(', ')}, in backend/data/.`), h('button', { 'data-act': 'imported', onclick: () => loadImported(imported) }, 'Check and load them…')));
+  const t = app.schema.find((x) => x.name === app.type);
+  if (!t) { main.append(h('div', { class: 'empty' }, 'Pick a type to see its rows.')); return; }
+  const cols = (t.columns || []).filter((c) => !['objectId', 'createdAt', 'updatedAt', 'ACL'].includes(c.name));
+  const where = searchWhere(cols, app.q);
+  let page;
+  try { page = await envApi(`/classes/${encodeURIComponent(t.name)}?${rowsQuery({ limit: PAGE, skip: app.skip, order: app.order, where })}`); }
+  catch (e) { if (mine === app.drawn) main.append(h('div', { class: 'empty' }, `The ${env} database did not answer for ${t.name}: ${e.message}`)); return; }
+  if (mine !== app.drawn) return;
+  const rows = page.results || [], total = page.count ?? rows.length;
+  const search = h('input', { type: 'search', placeholder: `Search ${t.name}`, value: app.q, 'data-input': 'search', onkeydown: (e) => { if (e.key === 'Enter') { app.q = e.target.value; app.skip = 0; renderAppData(); } } });
+  // ticking a row changes the Delete button, not the table
+  const picked = () => [...app.picked].filter((id) => rows.some((r) => r.objectId === id));
+  const del = h('button', { class: 'danger', 'data-act': 'delete', onclick: () => deleteRows(t, picked()) });
+  const showPicked = () => { const n = picked().length; del.hidden = !n; del.replaceChildren(icon('trash'), `Delete ${n}`); all.checked = rows.length > 0 && n === rows.length; };
+  const tick = (id, on) => { on ? app.picked.add(id) : app.picked.delete(id); showPicked(); };
+  main.append(h('h2', {}, t.name, h('span', { class: 'badge' }, env)),
+    h('div', { class: 'appbar' }, search,
+      h('button', { class: 'primary', 'data-act': 'new', onclick: () => newRow(t, cols) }, icon('plus'), 'New entry'),
+      del,
+      h('button', { 'data-act': 'export', onclick: (e) => exportMenu(e, t) }, 'Export'),
+      h('button', { 'data-act': 'import', onclick: () => importRows(t, cols) }, 'Import…'),
+      h('span', { class: 'note', 'data-pages': '' }, `${pageWords(app.skip, rows.length, total)}${app.q ? ` matching “${app.q}”` : ''}`),
+      h('button', { class: 'quiet tiny', disabled: app.skip === 0, 'data-act': 'prev', onclick: () => { app.skip = Math.max(0, app.skip - PAGE); renderAppData(); } }, '‹'),
+      h('button', { class: 'quiet tiny', disabled: app.skip + rows.length >= total, 'data-act': 'next', onclick: () => { app.skip += PAGE; renderAppData(); } }, '›')));
+  const sortBy = (name) => { app.order = app.order === name ? `-${name}` : name; app.skip = 0; renderAppData(); };
+  const arrow = (name) => (app.order === name ? ' ↑' : app.order === `-${name}` ? ' ↓' : '');
+  const all = h('input', { type: 'checkbox', onchange: (e) => { for (const r of rows) tick(r.objectId, e.target.checked); for (const i of main.querySelectorAll('td.pick input')) i.checked = e.target.checked; } });
+  const table = h('table', {}, h('tr', {}, h('th', { class: 'pick' }, all), ...cols.map((c) => h('th', { class: 'sort', onclick: () => sortBy(c.name) }, c.name + arrow(c.name))), h('th', { class: 'sort', onclick: () => sortBy('createdAt') }, 'created' + arrow('createdAt'))));
+  for (const row of rows) {
+    table.append(h('tr', { 'data-row': row.objectId },
+      h('td', { class: 'pick' }, h('input', { type: 'checkbox', checked: app.picked.has(row.objectId), onchange: (e) => tick(row.objectId, e.target.checked) })),
+      ...cols.map((c) => { const td = h('td', { class: 'cell', 'data-field': c.name, title: cellWords(c, row[c.name]), onclick: () => editCell(td, t, row, c) }, cellWords(c, row[c.name])); return td; }),
+      h('td', { class: 'note' }, (row.createdAt || '').slice(0, 16).replace('T', ' '))));
+  }
+  main.append(h('div', { class: 'twrap' }, table));
+  showPicked();
+  if (!rows.length) main.append(h('div', { class: 'empty' }, app.q ? 'Nothing matches.' : 'No rows yet.'));
+}
+function renderStartBackend(main) {
+  if (backendState.phase === 'starting') { main.append(h('div', { class: 'empty' }, `${backendState.name} is starting…`)); return; }
+  if (backendState.phase === 'failed') { main.append(h('div', { class: 'empty' }, `${backendState.name || 'The backend'} did not start: ${backendState.error}`)); return; }
+  if (backendState.phase === 'remote') { main.append(h('div', { class: 'empty' }, `This app’s backend is at ${backendState.endpoint}, not on this computer.`)); return; }
+  const start = h('button', { class: 'primary', onclick: async () => {
+    start.disabled = true; start.textContent = 'Starting a backend…';
+    const r = await fetch('/api/backend-provision', { method: 'POST' }); const j = await r.json();
+    if (!r.ok) { toast(j.error); start.disabled = false; start.textContent = 'Start a backend for this app'; return; }
+    takeBackend(j); for (const w of j.warnings || []) toast(w);
+  } }, 'Start a backend for this app');
+  main.append(h('div', { class: 'card' }, h('p', {}, 'This app is bound to no backend, so it has nowhere to keep rows. Studio can start one on this computer — the same kind the NodeGX editor and Claude Code start — and bind the app to it.'), start));
+}
+/** A control for one value of this column's kind: a Choice's values, Yes / No, a date, a Link's rows by their label. */
+async function valueControl(t, c, value) {
+  const kind = F.kindOf(c, t.checks).id;
+  const text = editText(c, value);
+  if (kind === 'choice') return h('select', {}, h('option', { value: '' }, ''), ...F.rulesOn(c.name, t.checks).find((r) => r.oneOf).oneOf.map((v) => h('option', { value: v, selected: String(v) === text }, v)));
+  if (kind === 'yesno') return h('select', {}, ...[['', ''], ['yes', 'Yes'], ['no', 'No']].map(([v, w]) => h('option', { value: v, selected: v === text }, w)));
+  if (kind === 'date') return h('input', { type: 'datetime-local', value: text });
+  if (kind === 'number') return h('input', { type: 'number', value: text, step: 'any' });
+  if (kind === 'link' && c.targetClass) {
+    let rows = [];
+    try { rows = (await envApi(`/classes/${encodeURIComponent(c.targetClass)}?limit=200`)).results || []; } catch { /* the id can still be typed */ }
+    const target = app.schema.find((x) => x.name === c.targetClass);
+    return h('select', {}, h('option', { value: '' }, ''), ...rows.map((r) => h('option', { value: r.objectId, selected: r.objectId === text }, rowLabel(r, target?.columns))));
+  }
+  return h('input', { type: 'text', value: text });
+}
+async function editCell(td, t, row, c) {
+  if (td.querySelector('input, select')) return;
+  const ctl = await valueControl(t, c, row[c.name]);
+  td.textContent = ''; td.append(ctl); ctl.focus();
   let done = false;
+  const back = () => { td.textContent = cellWords(c, row[c.name]); };
   const commit = async () => {
     if (done) return; done = true;
-    let v = inp.value;
-    if (col?.type === 'Number') v = v === '' ? null : Number(v);
-    else if (col?.type === 'Boolean') v = /^(true|yes|1)$/i.test(v);
-    else if (['Array', 'Object', 'Pointer', 'GeoPoint'].includes(col?.type)) { try { v = JSON.parse(v); } catch { /* keep text */ } }
-    try { await api(`/classes/${encodeURIComponent(selType)}/${row.objectId}`, { method: 'PUT', body: JSON.stringify({ [field]: v }) }); td.textContent = inp.value; }
-    catch (e) { toast(e.message); td.textContent = value ?? ''; }
+    const w = toWire(c, ctl.value);
+    if (w.error) { toast(w.error); return back(); }
+    try { await envApi(`/classes/${encodeURIComponent(t.name)}/${row.objectId}`, { method: 'PUT', body: JSON.stringify({ [c.name]: w.value }) }); row[c.name] = w.value; back(); }
+    catch (e) { toast(e.message); back(); }
   };
-  inp.onblur = commit; inp.onkeydown = (e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { done = true; td.textContent = value ?? ''; } };
+  ctl.onblur = commit; if (ctl.tagName === 'SELECT') ctl.onchange = () => ctl.blur();
+  ctl.onkeydown = (e) => { if (e.key === 'Enter') ctl.blur(); if (e.key === 'Escape') { done = true; back(); } };
+}
+async function newRow(t, cols) {
+  const ctls = [];
+  for (const c of cols) ctls.push([c, await valueControl(t, c, c.defaultValue)]);
+  const why = h('span', { class: 'why' });
+  openDrawer(`New ${t.name}`, ctls.map(([c, ctl]) => h('label', { class: 'f', 'data-field': c.name }, `${c.name}${c.required ? ' (required)' : ''}`, ctl)), [why, h('button', { class: 'quiet', onclick: closeDrawer }, 'Cancel'), h('button', { class: 'primary', 'data-act': 'create', onclick: async () => {
+    const body = {};
+    for (const [c, ctl] of ctls) { const w = toWire(c, ctl.value); if (w.error) { why.textContent = w.error; return; } if (w.value !== null) body[c.name] = w.value; }
+    try { await envApi(`/classes/${encodeURIComponent(t.name)}`, { method: 'POST', body: JSON.stringify(body) }); closeDrawer(); renderAppData(); }
+    catch (e) { why.textContent = e.message; }
+  } }, 'Create')]);
+}
+async function deleteRows(t, ids) {
+  if (!confirm(`Delete ${ids.length} row(s) of ${t.name} from the ${env} database?`)) return;
+  let gone = 0;
+  for (const id of ids) { try { await envApi(`/classes/${encodeURIComponent(t.name)}/${id}`, { method: 'DELETE' }); gone++; app.picked.delete(id); } catch (e) { toast(e.message); break; } }
+  toast(`${gone} row(s) deleted`); renderAppData();
+}
+function exportMenu(e, t) {
+  closeMenu();
+  const r = e.currentTarget.getBoundingClientRect();
+  const save = async (format) => {
+    closeMenu();
+    try {
+      const { content, count } = await envApi(`/admin/export/${encodeURIComponent(t.name)}?format=${format}`);
+      const a = h('a', { href: URL.createObjectURL(new Blob([content], { type: format === 'csv' ? 'text/csv' : 'application/json' })), download: `${t.name}-${env}.${format}` });
+      document.body.append(a); a.click(); a.remove();
+      toast(`${count} row(s) of ${t.name} exported`);
+    } catch (err) { toast(err.message); }
+  };
+  const menu = h('div', { class: 'menu', style: `top:${r.bottom + 4}px;left:${r.left}px;min-width:200px` }, h('div', { class: 'item', onclick: () => save('csv') }, 'As CSV (a spreadsheet)'), h('div', { class: 'item', onclick: () => save('json') }, 'As JSON (with the types of its fields)'));
+  document.body.append(menu); dismissOnOutside(menu);
+}
+function importRows(t) {
+  const file = h('input', { type: 'file', accept: '.csv,.json,text/csv,application/json' });
+  file.onchange = async () => {
+    const f = file.files[0]; if (!f) return;
+    const format = /\.json$/i.test(f.name) ? 'json' : 'csv';
+    const content = await f.text();
+    const run = (dryRun) => envApi(`/admin/import/${encodeURIComponent(t.name)}`, { method: 'POST', body: JSON.stringify({ format, content, dryRun }) });
+    let dry; try { dry = await run(true); } catch (e) { return toast(e.message); }
+    const go = h('button', { class: 'primary', 'data-act': 'import-go', disabled: !!dry.error || !(dry.created + dry.updated), onclick: async () => { go.disabled = true; try { const r = await run(false); toast(`${r.created} added, ${r.updated} replaced${r.rejected?.length ? `, ${r.rejected.length} refused` : ''}`); closeDrawer(); renderAppData(); } catch (e) { toast(e.message); go.disabled = false; } } }, `Import ${dry.created + dry.updated} row(s)`);
+    openDrawer(`Import into ${t.name} (${env})`, [
+      h('div', {}, `${f.name}: ${dry.total} row(s). Checked first; nothing is written yet.`),
+      dry.error ? h('div', { class: 'why' }, dry.error) : h('ul', { class: 'reach' }, h('li', {}, `${dry.created} new`), h('li', {}, `${dry.updated} replace a row with the same id`), h('li', {}, `${dry.rejected.length} refused`)),
+      ...(dry.rejected || []).slice(0, 30).map((r) => h('div', { class: 'note' }, `Row ${r.index + 1}: ${(r.errors || [r.error]).join('; ')}`)),
+      h('div', { class: 'note' }, 'The backend’s own import: a row whose id this database has replaces it, the others are added. A Choice’s rule is tested when the rows are written, not in this check.')
+    ], [h('span', { class: 'why' }), h('button', { class: 'quiet', onclick: closeDrawer }, 'Cancel'), go]);
+  };
+  file.click();
+}
+
+/** The importer's data files (import/data-to-nodegx.mjs → backend/data/<type>.json), in the backend's own import format. */
+function importedData() {
+  const out = [];
+  for (const [path, text] of Object.entries(files.entries())) {
+    if (!/^backend\/data\/[^/]+\.json$/.test(path)) continue;
+    try { const j = JSON.parse(text); if (j.format === 'nodegx-collection' && j.collection) out.push({ path, collection: j.collection, count: j.count ?? j.records?.length ?? 0, text }); } catch { /* not one */ }
+  }
+  return out;
+}
+async function loadImported(list) {
+  const run = async (dryRun) => {
+    const rep = [];
+    for (const x of list) {
+      try { rep.push({ ...x, r: await api(`/admin/import/${encodeURIComponent(x.collection)}`, { method: 'POST', body: JSON.stringify({ format: 'json', content: x.text, dryRun }) }) }); }
+      catch (e) { rep.push({ ...x, r: { error: e.message, created: 0, updated: 0, rejected: [] } }); }
+    }
+    return rep;
+  };
+  const table = (rep, dry) => h('table', { class: 'report' }, h('tr', {}, h('th', {}, 'Type'), h('th', {}, 'Rows'), h('th', {}, dry ? 'Would add' : 'Added'), h('th', {}, dry ? 'Would replace' : 'Replaced'), h('th', {}, 'Refused')),
+    ...rep.map(({ collection, count, r }) => h('tr', {}, h('td', {}, collection), ...(r.error ? [h('td', { colspan: 4, class: 'note' }, r.error)] : [h('td', {}, count), h('td', {}, r.created), h('td', {}, r.updated), h('td', {}, r.rejected?.length ?? 0)]))));
+  openDrawer('The imported rows', [h('div', { class: 'note' }, 'Checking them against the development database…')]);
+  const dry = await run(true);
+  const go = h('button', { class: 'primary', 'data-act': 'imported-go', disabled: !dry.some((x) => x.r.created + x.r.updated), onclick: async () => {
+    go.disabled = true;
+    const done = await run(false);
+    openDrawer('The imported rows', [table(done, false), h('div', { class: 'note' }, 'Loaded into the development database. Copy rows… takes them to live.')], [h('span', { class: 'why' }), h('button', { class: 'primary', onclick: () => { closeDrawer(); renderData(); } }, 'Done')]);
+  } }, 'Load them');
+  openDrawer('The imported rows', [h('div', {}, 'Checked against the development database; nothing is written yet.'), table(dry, true),
+    ...dry.flatMap(({ collection, r }) => (r.rejected || []).slice(0, 10).map((x) => h('div', { class: 'note' }, `${collection} row ${x.index + 1}: ${(x.errors || [x.error]).join('; ')}`))),
+    h('div', { class: 'note' }, 'backend/data/IMPORT-DATA.md lists every value the importer could not read. A row whose id the database has replaces it; the others are added.')
+  ], [h('span', { class: 'why' }), h('button', { class: 'quiet', onclick: closeDrawer }, 'Cancel'), go]);
+}
+
+/* ---- STU-065: development and live — the switch, Make a live database, Deploy to live, Copy rows (lib/live.mjs through serve.mjs) ---- */
+let env = 'development';
+let liveState = opened.live ?? { phase: 'none' };
+const liveUp = () => liveState.phase === 'running' || liveState.phase === 'adopted';
+function takeLive(next) {
+  const was = liveState.phase;
+  liveState = next; window.__ob.live = next;
+  if (!liveUp() && env === 'live' && next.phase !== 'starting') env = 'development';
+  if (tab === 'data' && was !== next.phase) renderData();
+}
+function renderEnvBar() {
+  const bar = $('envbar'); bar.innerHTML = '';
+  if (!backendUp()) return;
+  if (liveState.phase === 'none') {
+    bar.append(h('button', { 'data-act': 'make-live', title: 'A second database for the published app: development stays yours to try things on', onclick: makeLive }, 'Make a live database'));
+    return;
+  }
+  const seg = (name, words) => h('button', { class: name, 'aria-pressed': env === name, 'data-env': name, disabled: name === 'live' && !liveUp(), onclick: () => { env = name; Object.assign(app, { skip: 0, picked: new Set() }); if (dataSub !== 'app') dataSub = 'app'; renderData(); } }, words);
+  bar.append(h('div', { class: 'seg', title: 'Which database App data shows' }, seg('development', 'Development'), seg('live', liveUp() ? 'Live' : `Live (${liveState.phase})`)),
+    h('button', { 'data-act': 'deploy-live', disabled: !liveUp(), onclick: deployDrawer }, 'Deploy to live…'),
+    h('button', { 'data-act': 'copy-rows', disabled: !liveUp(), onclick: copyDrawer }, 'Copy rows…'));
+}
+async function makeLive(e) {
+  if (!confirm('Make a live database for this app?\n\nIt is a second backend on this computer. Publish points the app at it, so what people do in the published app lands there, not in development. Development’s types and rules are copied into it now; its rows start empty (Copy rows… brings some across).')) return;
+  const b = e.currentTarget; b.disabled = true; b.textContent = 'Making the live database…';
+  const r = await fetch('/api/live-provision', { method: 'POST' }); const j = await r.json();
+  if (!r.ok) { toast(j.error); b.disabled = false; b.textContent = 'Make a live database'; return; }
+  takeLive(j); toast(`Live database ready at ${hostOf(j.endpoint)}${j.done?.length ? ` · ${j.done.length} change(s) deployed` : ''}`); renderData();
+}
+async function deployDrawer() {
+  openDrawer('Deploy to live', [h('div', { class: 'note' }, 'Comparing development with live…')]);
+  const r = await fetch('/api/live-compare'); const plan = await r.json();
+  if (!r.ok) return openDrawer('Deploy to live', [h('div', { class: 'why' }, plan.error)]);
+  const go = (allowDestructive) => async (ev) => {
+    ev.currentTarget.disabled = true;
+    const res = await fetch('/api/live-promote', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ allowDestructive }) }); const j = await res.json();
+    if (!res.ok) return openDrawer('Deploy to live', [h('div', { class: 'why' }, j.error)]);
+    openDrawer('Deployed to live', [h('ul', { class: 'reach' }, ...j.done.map((d) => h('li', {}, d)))], [h('span', { class: 'why' }), h('button', { class: 'primary', onclick: () => { closeDrawer(); renderData(); } }, 'Done')]);
+  };
+  if (plan.same) return openDrawer('Deploy to live', [h('p', {}, 'Live already has development’s types, fields and rules. Nothing to deploy.')], [h('span', { class: 'why' }), h('button', { onclick: closeDrawer }, 'Close')]);
+  openDrawer('Deploy to live', [
+    h('p', {}, 'Live gets development’s types, fields and rules. Rows are not touched: they stay where they are (Copy rows… moves them).'),
+    plan.added.length ? h('div', {}, h('b', {}, 'Added on live'), h('ul', { class: 'reach' }, ...plan.added.map((a) => h('li', {}, a)))) : null,
+    plan.lost.length ? h('div', {}, h('b', { style: 'color:var(--danger)' }, 'Lost on live'), h('ul', { class: 'reach' }, ...plan.lost.map((l) => h('li', {}, l.words))), h('div', { class: 'note' }, 'Development no longer has these. The backend takes a backup of live before it deletes a type.')) : null
+  ], [h('span', { class: 'why' }), h('button', { class: 'quiet', onclick: closeDrawer }, 'Cancel'), plan.lost.length ? h('button', { class: 'primary', style: 'background:var(--danger);border-color:var(--danger)', 'data-act': 'deploy-lose', onclick: go(true) }, 'Deploy, and lose these') : h('button', { class: 'primary', 'data-act': 'deploy-go', onclick: go(false) }, 'Deploy')]);
+}
+async function copyDrawer() {
+  const state = { from: 'development', types: new Set() };
+  const names = liveTables.map((t) => t.name);
+  const out = h('div', {});
+  const run = async (dryRun) => {
+    const r = await fetch('/api/live-copy', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from: state.from, types: [...state.types], dryRun }) }); const j = await r.json();
+    if (!r.ok) { out.replaceChildren(h('div', { class: 'why' }, j.error)); return null; }
+    out.replaceChildren(h('table', { class: 'report' }, h('tr', {}, h('th', {}, 'Type'), h('th', {}, 'Rows'), h('th', {}, dryRun ? 'Would add' : 'Added'), h('th', {}, dryRun ? 'Would replace' : 'Replaced'), h('th', {}, 'Refused')),
+      ...j.report.map((x) => h('tr', {}, h('td', {}, x.type), ...(x.error && !x.rows ? [h('td', { colspan: 4, class: 'note' }, x.error)] : [h('td', {}, x.rows), h('td', {}, x.created), h('td', {}, x.updated), h('td', {}, x.rejected.length)])))));
+    return j;
+  };
+  const go = h('button', { class: 'primary', 'data-act': 'copy-go', disabled: true, onclick: async () => { go.disabled = true; await run(false); toast('Rows copied'); renderData(); } }, 'Copy');
+  const checkFirst = h('button', { 'data-act': 'copy-check', onclick: async () => { const j = await run(true); go.disabled = !j || !j.report.some((x) => x.created + x.updated); } }, 'Check first');
+  const reset = () => { go.disabled = true; out.replaceChildren(); };
+  openDrawer('Copy rows', [
+    h('label', { class: 'f' }, 'From', h('select', { 'data-input': 'from', onchange: (e) => { state.from = e.target.value; reset(); } }, h('option', { value: 'development' }, 'Development → Live'), h('option', { value: 'live' }, 'Live → Development'))),
+    h('div', { class: 'f' }, h('div', { class: 'note' }, 'Types (none ticked: every type)'), ...names.map((n) => h('label', { class: 'c' }, h('input', { type: 'checkbox', onchange: (e) => { e.target.checked ? state.types.add(n) : state.types.delete(n); reset(); } }), n))),
+    h('div', { class: 'note' }, 'A row whose id the other database has replaces it there; the others are added; rows only the other database has stay.'),
+    out
+  ], [h('span', { class: 'why' }), checkFirst, go]);
 }
 
 /* ---- option sets: a logic component with one Static Data node (JSON) and Component Outputs (Items, Count) ---- */
@@ -4110,7 +4670,7 @@ function switchTab(name) {
   tab = name;
   for (const x of document.querySelectorAll('#rail [role=tab]')) x.setAttribute('aria-selected', x.dataset.tab === name);
   for (const s of document.querySelectorAll('main > section.tab')) s.hidden = s.id !== name;
-  $('pagepick-l').style.display = name === 'data' || name === 'styles' || name === 'backendmap' ? 'none' : '';
+  $('pagepick-l').style.display = name === 'data' || name === 'styles' ? 'none' : '';
   $('widthseg').style.display = name === 'design' ? '' : 'none';
   $('previewmode-l').style.display = name === 'design' ? '' : 'none';
   renderAll();
@@ -4122,8 +4682,6 @@ function renderAll() {
   if (tab === 'workflow') renderWorkflow();
   if (tab === 'data') renderData();
   if (tab === 'styles') renderStyles();
-  // the map asks the backend itself; it loads once, the first time the tab opens
-  if (tab === 'backendmap' && !$('mapframe').getAttribute('src')) $('mapframe').src = '/backend-map/';
 }
 readGraph();
 renderPagePick();
@@ -4143,7 +4701,7 @@ if (first.status === 'ok') {
 }
 renderAll();
 // from here on, a file changed outside Studio is taken in and drawn (STU-002)
-new EventSource(`/api/events?client=${windowId}`).onmessage = (e) => { const m = JSON.parse(e.data); if (m.backend) takeBackend(m.backend); else takeOutside(m); };
+new EventSource(`/api/events?client=${windowId}`).onmessage = (e) => { const m = JSON.parse(e.data); if (m.backend || m.live) { if (m.backend) takeBackend(m.backend); if (m.live) takeLive(m.live); } else takeOutside(m); };
 $('backendpill').onclick = () => switchTab('data');
 showBackend();
 $('agentpill').onclick = openAgent;

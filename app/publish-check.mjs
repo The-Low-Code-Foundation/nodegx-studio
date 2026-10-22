@@ -11,6 +11,8 @@
  *   5. published again into the same folder: the last publish's files are replaced, a file the person put there stays
  *   6. an app with cloud functions (the importer's backend-workflow fixtures): published, its four functions deployed
  *      to its backend by NodeGX's deploy_cloud_functions, a second publish finds them unchanged, and one answers
+ *   7. STU-065: the todo app with a live database: published, the site names live; a field development added since is
+ *      deployed to live first; a todo added in the published app is on live and not on development
  *
  *   node app/publish-check.mjs     PASS n/n and exit 0, or the failing lines and exit 1
  */
@@ -27,6 +29,7 @@ process.env.NODEGX_BACKENDS_DIR = join(tmp, 'backends'); // before the kit loads
 const { createFromTemplate, importApp } = await import('./actions.mjs');
 const backend = await import('../lib/backend.mjs');
 const { publish, claimSiteFolder, MARKER } = await import('../lib/publish.mjs');
+const lives = await import('../lib/live.mjs');
 
 const results = [];
 const ok = (cond, what, detail) => { results.push(!!cond); console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${what}${detail !== undefined ? ' — ' + JSON.stringify(detail).slice(0, 260) : ''}`); };
@@ -156,6 +159,37 @@ try {
   const control = await callFn('noFunctionByThisName');
   console.log('  …', JSON.stringify({ known, control }));
   ok(JSON.stringify(known) !== JSON.stringify(control), 'and the backend answers a call to one differently from a name it does not serve, so it is served, not only reported', { known, control });
+
+  console.log('7. STU-065: published against the live database');
+  const liveUp = await backend.provisionLiveFor(todo); // what Data's Make a live database runs, then its first deploy
+  started.push(liveUp.id);
+  const asAdmin = (u) => lives.admin({ endpoint: u.endpoint, token: secretOf(u.id), appId: u.id });
+  await lives.closeLive(asAdmin(liveUp));
+  await lives.promote(asAdmin(up), asAdmin(liveUp));
+  await asAdmin(up).post('/admin/schema', { action: 'addColumn', table: 'Task', column: { name: 'note', type: 'String' } }); // development moved on since
+  const liveSite = join(tmp, 'sites', 'My todos live');
+  const l1 = await publish(todo, liveSite);
+  const liveIndex = readdirSync(liveSite).find((f) => /^index-.*\.js$/.test(f));
+  const bundle = readFileSync(join(liveSite, liveIndex), 'utf8');
+  ok(l1.backend.live === true && l1.backend.endpoint === liveUp.endpoint && bundle.includes(`"endpoint":"${liveUp.endpoint}"`) && !bundle.includes(`"endpoint":"${up.endpoint}"`), 'the site names the live database, not development', l1.backend);
+  ok(l1.schema?.status === 'deployed' && l1.schema.done.some((d) => d.includes('note')) && ((await asAdmin(liveUp).get('/admin/schema')).tables.find((t) => t.name === 'Task')?.columns ?? []).some((c) => c.name === 'note'), 'development\'s new field went to live before the site was written', l1.schema);
+  ok(readJson(join(todo, 'nodegx.project.json')).metadata.cloudservices.endpoint === up.endpoint && readdirSync(tmpdir()).every((n) => !n.startsWith('nodegx-studio-live-') || !existsSync(join(tmpdir(), n, 'My todos'))), 'the project still names development, and the copy published from is gone');
+  const servedLive = await serveStatic(liveSite);
+  b = await browser({ port: await freePort(), width: 1200, height: 900 });
+  const liveEmail = `live-${Date.now()}@example.com`;
+  await b.goto(servedLive.url);
+  await b.until(`!!document.querySelector('input[type=email]')`, 30000);
+  await b.clickSel('input[type=email]'); await b.type(liveEmail);
+  await b.clickSel('input[type=password]'); await b.type('correct horse battery');
+  await b.evaluate(`[...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Create account').click()`);
+  await b.until(`!!document.querySelector('input[placeholder^="Add a task"]')`, 20000);
+  await b.clickSel('input[placeholder^="Add a task"]'); await b.type('Ship it');
+  await b.evaluate(`[...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Add').click()`);
+  await b.until(`/List \\(1\\)/.test(document.body.innerText)`, 15000);
+  const onLive = await rows(liveUp, 'Task'), onDev = await rows(up, 'Task');
+  ok(onLive.map((t) => t.title).join() === 'Ship it' && !onDev.some((t) => t.title === 'Ship it'), 'a todo added in the published app is on live, and development never saw it', { live: onLive.map((t) => t.title), development: onDev.map((t) => t.title) });
+  await b.close(); b = null;
+  servedLive.close();
 } catch (err) {
   ok(false, 'the gate ran to the end', err.stack?.split('\n').slice(0, 3).join(' | '));
 } finally {

@@ -286,8 +286,8 @@ async function publishFlow() {
   if (target.local) {
     const answer = await ask(asked, {
       type: 'info',
-      message: 'This app’s backend runs on this computer',
-      detail: `The site will talk to ${target.endpoint}, which only this computer can reach, and only while Studio (or the NodeGX editor) runs that backend. Publish it to try it in a browser here; putting the app and its backend somewhere others can reach is not built yet.`,
+      message: target.live ? 'This app’s live database runs on this computer' : 'This app’s backend runs on this computer',
+      detail: `The site will talk to ${target.live ? 'the live database at ' : ''}${target.endpoint}, which only this computer can reach, and only while Studio (or the NodeGX editor) runs that backend. Publish it to try it in a browser here; putting the app and its backend somewhere others can reach is not built yet.`,
       buttons: ['Continue', 'Cancel'],
       cancelId: 1
     });
@@ -317,8 +317,12 @@ async function publishFlow() {
   }
   rememberSite(dir, result.site);
   const lines = [`${result.files} files in ${home(result.site)}. Serve that folder with any web server and open it in a browser.`];
-  if (result.backend.endpoint) lines.push(`It talks to the backend at ${result.backend.endpoint}${result.backend.local ? ', on this computer only' : ''}.`);
+  if (result.backend.endpoint) lines.push(`It talks to the ${result.backend.live ? 'live database' : 'backend'} at ${result.backend.endpoint}${result.backend.local ? ', on this computer only' : ''}.`);
   else lines.push('It has no backend: it keeps no rows.');
+  const schema = result.schema;
+  if (schema?.status === 'deployed') lines.push(`Live’s schema was brought up to development’s: ${schema.done.join('; ')}.`);
+  else if (schema?.status === 'behind') lines.push(`Live still has what development dropped (${schema.lost.join('; ')}). Data → Deploy to live removes it, after asking.`);
+  else if (schema?.status === 'skipped') lines.push(schema.reason);
   const fns = result.functions;
   if (fns.status === 'deployed') lines.push(`Cloud functions: ${fns.result.functions.length} on the backend (${fns.result.changed ? 'updated' : 'already up to date'}).`);
   else if (fns.status !== 'none') lines.push(`Cloud functions: ${fns.reason ?? 'not deployed'}.`);

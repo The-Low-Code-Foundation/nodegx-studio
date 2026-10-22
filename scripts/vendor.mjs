@@ -10,6 +10,8 @@
  *   phrasebook/rows.js    scripts/bubble-phrasebook/rows.js, from git
  *   look.js, specs.js     @nodegx/canvas-look and @nodegx/node-spec's browser entry as ES modules, as the Orbit
  *                         prototype's build.sh bundles them
+ *   fields.js             the backend manager's words for a field (nodegx-backend admin/app/fieldKinds.ts: Text, Number,
+ *                         Yes / No, …, Choice as a declared check), as an ES module for the Data tab (STU-061)
  *   backend.cjs           the MCP server's provisioning and runtime record, and the backend's policy validator (lib/backend.mjs)
  *   agent.cjs             the NodeGX editor's MCP front door, registration and writer of `.mcp.json` (lib/agent.mjs)
  *   NODEGX.json           the commit, the npm versions it sits beside, and every file's sha-256
@@ -25,7 +27,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { builtinModules } from 'node:module';
 import { join, relative, sep } from 'node:path';
-import { kit, nodegxRepo, ORBIT, studioRoot, vendorDir } from '../lib/nodegx.mjs';
+import { fieldsBundle, kit, nodegxRepo, ORBIT, studioRoot, vendorDir } from '../lib/nodegx.mjs';
 
 const MANIFEST = join(vendorDir, 'NODEGX.json');
 const BUILTIN = new Set(builtinModules);
@@ -84,6 +86,7 @@ rmSync(join(out, 'scripts'), { recursive: true });
 const bundles = {
   'look.js': { entryPoints: [join(repo, 'packages/nodegx-canvas-look/src/index.ts')], bundle: true, format: 'esm', platform: 'browser', logLevel: 'warning' },
   'specs.js': { entryPoints: [join(repo, ORBIT, 'specs-entry.ts')], bundle: true, format: 'esm', platform: 'browser', minify: true, logLevel: 'warning' },
+  'fields.js': fieldsBundle(repo),
   'backend.cjs': backend.bundleOptions(repo, null),
   'agent.cjs': agent.bundleOptions(repo, null)
 };

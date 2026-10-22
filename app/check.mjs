@@ -53,12 +53,13 @@ async function backendRows(dir, collection) {
 }
 const backendAnswers = async (dir) => { try { return (await fetch(`${bindingOf(dir).endpoint}/health`, { signal: AbortSignal.timeout(1500) })).ok; } catch { return false; } };
 const backendUp = (b) => b.until(`['running', 'adopted'].includes(window.__ob?.backend?.phase) && window.__ob.backend`, 30000);
-/** Data → the type → the rows' note ("n row(s) on …"). */
+/** Data → App data → the type → its rows' count ("No rows", "1–1 of 1"). */
 async function openRows(b, type) {
   await b.clickSel('#backendpill');
-  await b.until(`[...document.querySelectorAll('#types .row')].some((r) => r.textContent.startsWith(${JSON.stringify(type)}))`, 10000);
-  await b.evaluate(`[...document.querySelectorAll('#types .row')].find((r) => r.textContent.startsWith(${JSON.stringify(type)})).click()`);
-  return b.until(`[...document.querySelectorAll('#datamain .note')].map((n) => n.textContent).find((t) => t.includes('row(s) on'))`, 10000);
+  await b.evaluate(`document.querySelector('#data .subtabs [data-sub=app]').click()`);
+  await b.until(`!!document.querySelector('#apptypes .row[data-type=${JSON.stringify(type)}]')`, 10000);
+  await b.evaluate(`document.querySelector('#apptypes .row[data-type=${JSON.stringify(type)}]').click()`);
+  return b.until(`document.querySelector('#appmain h2')?.textContent.startsWith(${JSON.stringify(type)}) && document.querySelector('#appmain [data-pages]')?.textContent`, 10000);
 }
 const recentDirs = () => (existsSync(recentFile) ? readJson(recentFile).projects.map((p) => p.dir) : []);
 const serversOf = () => { try { return execFileSync('pgrep', ['-f', `serve.mjs ${tmp}`], { encoding: 'utf8' }).trim().split('\n').filter(Boolean); } catch { return []; } };
@@ -132,9 +133,11 @@ try {
     const visitor = await fetch(`${bound.endpoint}/classes/Task`, { headers: { 'X-Parse-Application-Id': bound.instanceId } });
     ok(visitor.status >= 400, 'a visitor with no sign-in is refused the tasks, as the policy says', visitor.status);
     const note = await openRows(b, 'Task');
-    ok(/^0 row\(s\)/.test(note || ''), 'Data lists Task, which the app uses but does not declare, and shows its rows: none yet', note);
-    await b.evaluate(`[...document.querySelectorAll('#datamain button')].find((x) => /New entry/.test(x.textContent)).click()`);
-    const after = await b.until(`[...document.querySelectorAll('#datamain .note')].map((n) => n.textContent).find((t) => t.startsWith('1 row(s)'))`, 10000);
+    ok(note === 'No rows', 'App data lists Task, which the app uses but does not declare, and shows its rows: none yet', note);
+    await b.evaluate(`document.querySelector('#appmain [data-act=new]').click()`);
+    await b.until(`!!document.querySelector('#drawer [data-act=create]')`, 10000);
+    await b.evaluate(`document.querySelector('#drawer [data-act=create]').click()`);
+    const after = await b.until(`document.querySelector('#appmain [data-pages]')?.textContent === '1–1 of 1' && '1–1 of 1'`, 10000);
     const rows = await backendRows(todos, 'Task');
     ok(after && rows.length === 1, 'New entry adds a row, and the backend holds it', { after, rows: rows.length });
     await shot(b, 'backend-row');
@@ -156,7 +159,7 @@ try {
     ok((await backendUp(b))?.phase === 'running', 'its backend is started again');
     ok(await b.evaluate(`document.querySelector('#reportpill').hidden && !document.querySelector('#reportpanel')`), 'a project with no import report shows no report and no button for one');
     const note = await openRows(b, 'Task');
-    ok(/^1 row\(s\)/.test(note || '') && (await backendRows(todos, 'Task')).length === 1, 'the row added before the quit is there', note);
+    ok(note === '1–1 of 1' && (await backendRows(todos, 'Task')).length === 1, 'the row added before the quit is there', note);
 
     console.log('3b. Publish (STU-008; the site itself is graded by check:publish)');
     ok(await b.evaluate(`!document.querySelector('#publishbtn').hidden`), 'the header has Publish in the desktop app');

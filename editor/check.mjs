@@ -369,12 +369,16 @@ try {
   await b.clickSel('[data-tab=data]'); await wait(300);
   await b.evaluate(`window.prompt = () => 'Note'`); await b.clickSel('#newtype'); await wait(800);
   ok(onDisk('nodegx.project.json').metadata.dbCollections.some((c) => c.name === 'Note'), 'a new data type is written into nodegx.project.json');
-  await b.evaluate(`window.prompt = () => 'title'`); await clickText('#datamain .bar button', 'New field'); await wait(800);
-  ok(onDisk('nodegx.project.json').metadata.dbCollections.find((c) => c.name === 'Note').columns.some((c) => c.name === 'title'), 'a new field is written into the type');
+  await clickText('#datamain .bar button', 'New field'); await b.until(`!!document.querySelector('#drawer:not([hidden]) [data-input=name]')`, 4000);
+  await b.evaluate(`(() => { const i = document.querySelector('#drawer [data-input=name]'); i.value = 'title'; i.dispatchEvent(new Event('input')); [...document.querySelectorAll('#drawer .dfoot button')].pop().click(); })()`); await wait(800);
+  ok(onDisk('nodegx.project.json').metadata.dbCollections.find((c) => c.name === 'Note').columns.some((c) => c.name === 'title' && c.type === 'String'), 'a new field (Text) is written into the type');
   await wait(1200);
-  await clickText('#datamain .bar button', 'New entry'); await wait(1500);
+  await b.clickSel('#data .subtabs button[data-sub=app]'); await b.until(`!!document.querySelector('#apptypes .row[data-type=Note]')`, 4000);
+  await b.evaluate(`document.querySelector('#apptypes .row[data-type=Note]').click()`); await b.until(`!!document.querySelector('#appmain [data-act=new]')`, 4000);
+  await b.evaluate(`document.querySelector('#appmain [data-act=new]').click()`); await b.until(`!!document.querySelector('#drawer [data-act=create]')`, 4000);
+  await b.evaluate(`(() => { const i = document.querySelector('#drawer [data-field=title] input'); i.value = 'first'; document.querySelector('#drawer [data-act=create]').click(); })()`); await wait(1500);
   const rows = await fetch(`http://127.0.0.1:${backendPort}/classes/Note?limit=10`, { headers: { 'X-Parse-Application-Id': 'studio_check' } }).then((r) => r.json());
-  ok(rows.results?.length === 1, '"+ New entry" creates a row on the backend', { rows: rows.results?.length });
+  ok(rows.results?.length === 1 && rows.results[0].title === 'first', 'App data → New entry creates a row on the backend', { rows: rows.results?.map((r) => r.title) });
   await shot('data');
   {
     await b.clickSel('#data .subtabs button[data-sub=options]'); await wait(200);
@@ -510,11 +514,11 @@ try {
       for (const t0 = Date.now(); Date.now() - t0 < 3000 && !(d?.w > 0); await wait(150)) d = await drawn();
       ok(imgNode()?.parameters.src === 'assets/dot.png' && existsSync(join(project, 'assets/dot.png')) && d?.w === 1, 'Upload an image… copies it into the project\'s assets/, the Image\'s source says so, and the app loads it', { src: imgNode()?.parameters.src, drawn: d });
       await openPicker();
-      await b.until(`document.querySelector('.menu.images .igrid .cell[data-path="assets/dot.png"]')`, 4000);
+      await b.until(`!!document.querySelector('.menu.images .igrid .cell[data-path="assets/dot.png"]')`, 4000);
       n0 = await shows(); await upload('dot.png'); await rebuilt(n0);
       ok(imgNode()?.parameters.src === 'assets/dot-1.png' && existsSync(join(project, 'assets/dot.png')), 'the same name again is made unique before the extension (dot-1.png), the first kept', imgNode()?.parameters.src);
       await openPicker();
-      await b.until(`document.querySelector('.menu.images .igrid .cell[data-path="assets/dot.png"]')`, 4000);
+      await b.until(`!!document.querySelector('.menu.images .igrid .cell[data-path="assets/dot.png"]')`, 4000);
       n0 = await shows(); await b.evaluate(`document.querySelector('.menu.images .igrid .cell[data-path="assets/dot.png"]').click()`); await rebuilt(n0);
       ok(imgNode()?.parameters.src === 'assets/dot.png' && (await b.evaluate(`document.querySelector('#right [data-image=src] .cname').textContent`)) === 'dot.png', 'the project\'s images are listed; picking one writes it, and the chip names it', imgNode()?.parameters.src);
       await openPicker();

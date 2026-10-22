@@ -22,8 +22,15 @@
  *                          header the runtime sends; the Data tab reads rows through it, as the backend's admin when it
  *                          is a local one (its own `secrets.json`, read here and never sent to the page)
  *   GET  /api/backend-status    the project's backend (STU-004): `{ phase, name, endpoint, error }`, also pushed over
- *                          /api/events as `{ backend }` whenever it changes
+ *                          /api/events as `{ backend }` whenever it changes; `{ live }` the same for its live one
  *   POST /api/backend-provision a backend for a project bound to none: NodeGX's provision, then the binding
+ *   ANY  /api/live/*       STU-065: as /api/backend/*, to the app's live backend (`metadata.cloudservicesLive`)
+ *   POST /api/live-provision    a live backend for the app: NodeGX's provision, its rules kept on this computer too,
+ *                          then development's schema deployed to it (nothing in it can be lost: it is empty)
+ *   GET  /api/live-compare      what Deploy to live would add and what it would lose (lib/live.mjs compare)
+ *   POST /api/live-promote      { allowDestructive } Deploy to live; refused with the plan when it would lose something
+ *   POST /api/live-copy         { from: 'development' | 'live', types: [], dryRun } rows from one to the other
+ *   GET  /fields.js        STU-061: the backend manager's field kinds (vendor/fields.js, or bundled from NODEGX_REPO)
  *   GET  /api/agent        STU-005: Claude Code and this folder (`lib/agent.mjs` stateOf): `{ state, serverName, command, … }`
  *   POST /api/agent-connect     "Connect Claude Code": the NodeGX editor's writer of `.mcp.json`, `CLAUDE.md`, `AGENTS.md`
  *   GET  /api/images       STU-051: every image file in the project folder, `[path]`, for the image popover
@@ -42,8 +49,9 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, wat
 import http from 'node:http';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { kit } from '../lib/nodegx.mjs';
+import { fieldsBundle, kit, nodegxRepo, studioRoot } from '../lib/nodegx.mjs';
 import * as backends from '../lib/backend.mjs';
+import * as lives from '../lib/live.mjs';
 import * as agent from '../lib/agent.mjs';
 import { createRequire } from 'node:module';
 import { TYPES, phrasesFor } from './phrases.mjs';
@@ -212,7 +220,63 @@ async function reconcileBackend() {
     setBackend({ phase: 'failed', id: config.id, name: config.name, endpoint: binding.endpoint, error: err.message });
   }
 }
-const followBackend = () => inTurn(reconcileBackend);
+/* STU-065: the app's live backend, run the same way: started (or adopted) with the project, stopped with it. */
+let live = { phase: 'none' };
+let oursLive = null;
+const setLive = (next) => {
+  live = next;
+  tell({ live });
+};
+async function reconcileLive() {
+  const binding = backends.liveBindingOf(projectDir);
+  if (oursLive && oursLive !== binding.instanceId) {
+    await backends.stop(oursLive).catch(() => {});
+    oursLive = null;
+  }
+  if (!binding.endpoint) return setLive({ phase: 'none' });
+  let config;
+  try {
+    config = await backends.localBackendOf(projectDir, backends.LIVE);
+  } catch (err) {
+    return setLive({ phase: 'failed', endpoint: binding.endpoint, error: err.message });
+  }
+  if (!config) return setLive({ phase: 'remote', endpoint: binding.endpoint });
+  if (live.id === config.id && (live.phase === 'running' || live.phase === 'adopted')) return;
+  setLive({ phase: 'starting', id: config.id, name: config.name, endpoint: binding.endpoint });
+  try {
+    const up = await backends.startFor(projectDir, config);
+    if (up.phase === 'running') oursLive = up.id;
+    setLive(up);
+  } catch (err) {
+    setLive({ phase: 'failed', id: config.id, name: config.name, endpoint: binding.endpoint, error: err.message });
+  }
+}
+const followBackend = () => inTurn(async () => {
+  await reconcileBackend();
+  await reconcileLive();
+});
+const isUp = (b) => b.phase === 'running' || b.phase === 'adopted';
+/** A backend of the app as its admin (lib/live.mjs), or a sentence saying why it can't be asked. */
+async function adminOf(which) {
+  const state = which === 'live' ? live : backend;
+  const binding = which === 'live' ? backends.liveBindingOf(projectDir) : backends.bindingOf(projectDir);
+  const what = which === 'live' ? 'live database' : 'development database';
+  if (!isUp(state)) throw new Error(state.phase === 'none' ? `This app has no ${what}.` : `The ${what} is not running here (${state.phase}).`);
+  const token = await backends.adminTokenOf(state.id);
+  if (!token) throw new Error(`The ${what} has no admin credential on this computer.`);
+  return lives.admin({ endpoint: state.endpoint, token, appId: binding.appId ?? binding.instanceId });
+}
+/** STU-061: the field kinds, from vendor/ or bundled once from the checkout NODEGX_REPO names. */
+let fieldsFile = kit.fields;
+async function fieldsModule() {
+  if (fieldsFile) return readFileSync(fieldsFile);
+  const out = join(studioRoot, '.kit', 'fields.js');
+  const { buildSync } = await import(join(nodegxRepo, 'node_modules/esbuild/lib/main.js'));
+  mkdirSync(dirname(out), { recursive: true });
+  buildSync({ ...fieldsBundle(nodegxRepo), outfile: out });
+  fieldsFile = out;
+  return readFileSync(out);
+}
 
 let mapNow = null; // { key, handle }: one map per backend and credential
 async function backendMap() {
@@ -252,6 +316,7 @@ const server = http.createServer(async (req, res) => {
       try { const { rows } = createRequire(import.meta.url)(kit.phrasebook); return json(200, Object.fromEntries(TYPES.map((t) => [t, phrasesFor(rows, t)]))); }
       catch (err) { return json(404, { error: `no phrasebook at ${kit.phrasebook}: ${err.message}` }); }
     }
+    if (url.pathname === '/fields.js') return send(200, await fieldsModule(), types['.js']);
     if (url.pathname === '/look.js' || url.pathname === '/specs.js') return send(200, readFileSync(url.pathname === '/look.js' ? kit.look : kit.specs), types['.js']);
     // the app's frame gets Studio's probe first in its head (what it asks the backend, which page it is on): STU-011
     if (url.pathname === '/runtime/index.html') {
@@ -262,13 +327,13 @@ const server = http.createServer(async (req, res) => {
       const files = projectFiles(projectDir);
       known.clear();
       for (const [p, t] of Object.entries(files)) known.set(p, t);
-      return json(200, { dir: projectDir, name: projectDir.split(sep).pop(), files, backend });
+      return json(200, { dir: projectDir, name: projectDir.split(sep).pop(), files, backend, live });
     }
     if (url.pathname === '/api/events') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
       res.write(': watching the project folder\n\n');
       // the page connects after it has drawn, which a backend may have finished starting before: it hears where it is now
-      res.write(`data: ${JSON.stringify({ backend })}\n\n`);
+      res.write(`data: ${JSON.stringify({ backend, live })}\n\n`);
       clients.set(res, url.searchParams.get('client'));
       req.on('close', () => clients.delete(res));
       return;
@@ -303,7 +368,49 @@ const server = http.createServer(async (req, res) => {
       if (written.length || gone.length) tell({ changed: Object.fromEntries(written.map((rel) => [rel, files[rel]])), removed: gone }, client);
       return json(200, { written, removed: gone });
     }
-    if (url.pathname === '/api/backend-status') return json(200, backend);
+    if (url.pathname === '/api/backend-status') return json(200, { ...backend, live });
+    if (url.pathname === '/api/live-provision' && req.method === 'POST') {
+      try {
+        const up = await inTurn(async () => {
+          const made = await backends.provisionLiveFor(projectDir);
+          if (made.phase === 'running') oursLive = made.id;
+          setLive(made);
+          return made;
+        });
+        const [dev, liveBe] = [await adminOf('development'), await adminOf('live')];
+        await lives.closeLive(liveBe);
+        const first = await lives.promote(dev, liveBe);
+        return json(200, { ...up, done: first.done });
+      } catch (err) {
+        return json(409, { error: err.message });
+      }
+    }
+    if (url.pathname === '/api/live-compare') {
+      try {
+        const plan = await lives.compare(await adminOf('development'), await adminOf('live'));
+        return json(200, { added: plan.added, lost: plan.lost, rendered: plan.rendered, same: plan.same });
+      } catch (err) {
+        return json(409, { error: err.message });
+      }
+    }
+    if (url.pathname === '/api/live-promote' && req.method === 'POST') {
+      const { allowDestructive } = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      try {
+        const r = await lives.promote(await adminOf('development'), await adminOf('live'), { allowDestructive: !!allowDestructive });
+        return json(200, { done: r.done });
+      } catch (err) {
+        return json(409, { error: err.message, lost: err.plan?.lost });
+      }
+    }
+    if (url.pathname === '/api/live-copy' && req.method === 'POST') {
+      const { from, types: only = [], dryRun = true } = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      try {
+        const [dev, liveBe] = [await adminOf('development'), await adminOf('live')];
+        return json(200, await lives.copyRows(from === 'live' ? liveBe : dev, from === 'live' ? dev : liveBe, { types: only, dryRun: dryRun !== false }));
+      } catch (err) {
+        return json(409, { error: err.message });
+      }
+    }
     if (url.pathname === '/api/backend-provision' && req.method === 'POST') {
       try {
         const up = await inTurn(async () => {
@@ -347,16 +454,18 @@ const server = http.createServer(async (req, res) => {
       if (map.words) return send(200, mapWords(map.words), types['.html']);
       return map.handle(req, res, url.pathname.slice('/backend-map'.length));
     }
-    if (url.pathname.startsWith('/api/backend/')) {
-      const binding = backends.bindingOf(projectDir);
-      const endpoint = backend.phase === 'running' || backend.phase === 'adopted' ? backend.endpoint : binding.endpoint;
-      if (!endpoint) return json(503, { error: 'This project is not bound to a backend (no metadata.cloudservices.endpoint).' });
-      const target = endpoint.replace(/\/$/, '') + url.pathname.slice('/api/backend'.length) + url.search;
+    if (url.pathname.startsWith('/api/backend/') || url.pathname.startsWith('/api/live/')) {
+      const isLive = url.pathname.startsWith('/api/live/');
+      const state = isLive ? live : backend;
+      const binding = isLive ? backends.liveBindingOf(projectDir) : backends.bindingOf(projectDir);
+      const endpoint = isUp(state) ? state.endpoint : binding.endpoint;
+      if (!endpoint) return json(503, { error: isLive ? 'This app has no live database yet.' : 'This project is not bound to a backend (no metadata.cloudservices.endpoint).' });
+      const target = endpoint.replace(/\/$/, '') + url.pathname.slice(isLive ? '/api/live'.length : '/api/backend'.length) + url.search;
       const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : await readBody(req);
       const headers = { 'X-Parse-Application-Id': binding.appId ?? binding.instanceId ?? '', 'Content-Type': req.headers['content-type'] ?? 'application/json' };
       // the Data tab is the app's owner looking at its data: on a local backend it asks as the backend's admin, as the
       // NodeGX editor's Data Browser does, so a policy that keeps rows from the app's visitors does not keep them from it
-      const token = backend.id ? await backends.adminTokenOf(backend.id) : null;
+      const token = state.id ? await backends.adminTokenOf(state.id) : null;
       if (token) headers['X-Parse-Master-Key'] = token;
       let upstream;
       try {

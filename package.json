@@ -13,10 +13,11 @@
     "serve": "node editor/serve.mjs",
     "vendor": "node scripts/vendor.mjs",
     "check:vendor": "node scripts/vendor.mjs --check",
-    "check": "node scripts/vendor.mjs --check && node editor/rules-check.mjs && node editor/phrases-check.mjs && node editor/pagedata-check.mjs && node editor/reusable-check.mjs && node editor/check.mjs && node editor/timeline-check.mjs && node import/check.mjs && node import/dictionary-check.mjs && node app/check.mjs && node app/publish-check.mjs",
+    "check": "node scripts/vendor.mjs --check && node editor/rules-check.mjs && node editor/phrases-check.mjs && node editor/pagedata-check.mjs && node editor/reusable-check.mjs && node editor/check.mjs && node editor/data-check.mjs && node editor/timeline-check.mjs && node import/check.mjs && node import/dictionary-check.mjs && node app/check.mjs && node app/publish-check.mjs",
     "check:editor": "node editor/check.mjs",
     "check:pagedata": "node editor/pagedata-check.mjs",
     "check:timeline": "node editor/timeline-check.mjs",
+    "check:data": "node editor/data-check.mjs",
     "check:reusable": "node editor/reusable-check.mjs",
     "check:rules": "node editor/rules-check.mjs",
     "check:import": "node import/check.mjs",
@@ -30,6 +31,7 @@
     "dist:signed": "electron-builder --publish never"
   },
   "dependencies": {
+    "@nodegx/backend-map": "0.1.0",
     "@nodegx/mcp": "0.2.2",
     "@nodegx/preview": "0.2.3"
   },

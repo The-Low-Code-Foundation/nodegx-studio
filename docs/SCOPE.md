@@ -32,7 +32,7 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 |---|---|---|
 | Design tab — palette, element tree, click / drag-reorder / resize on the real app, property editor, red spacing guide | works | `check:editor` |
 | Workflow tab — events, steps as the signal chain, add / delete a step, a Yes/No branch, the expression composer (chips, JavaScript, or both) | works | `check:editor` |
-| Data tab — types and fields, rows on the bound backend, option sets | works | `check:editor` |
+| Data tab (M6) — Data types in NodeGX's words on the running backend and the project together, drift named with both ways to agree; Privacy through the backend map; App data paged, searched, edited by kind, exported and imported; option sets; the Map; a development and a live database, Deploy to live, Copy rows | works (2026-10-22, s15) | `check:data` 40/40, `check:editor` 170/170 |
 | Live with outside edits — a file changed by Claude Code (MCP), VS Code or `git pull` is drawn without a reload; a clash with Studio's own edit asks | works (2026-10-19) | `check:editor` 46/46 |
 | Styles — global styles as NodeGX variants | works | `check:editor` |
 | Bubble importer — pages, elements, styles, workflows, expressions, option sets, reusables, custom states, data types, privacy rules → `nodegx.security.json`, backend workflows → cloud functions, Data-tab rows | spike, measured on a real 17-page app (0 validation errors); its searches arrive as page data (STU-013), a reusable's while that copy is shown (STU-014); its workflow conditions test only when the workflow runs (STU-013-NAVLOOP) | `check:import` 50/50 |
@@ -55,8 +55,9 @@ Studio, opens or imports an app, changes it, and publishes it.** What that needs
 | 1 | **STU-008 Publish** to a folder | done (s14) |
 | 2 | **STU-007 a downloadable build**: signed and notarised with NodeGX's Developer ID; Windows and Linux | signed locally with the Developer ID and gated 46/46 (s14); notarising waits on the five secrets being visible to this repository; Windows / Linux built and smoke-opened in CI |
 | 3 | **STU-040 Import an App…** with the report shown in the app | done (s14) |
-| 4 | **A NodeGX npm release** carrying P112-OWN020-UNWIREDSIGNAL and P123-STU008-BACKENDPUBLIC, then Studio's pins bumped and `npm run vendor` at that commit | waits on NodeGX |
+| 4 | **A NodeGX npm release** carrying P112-OWN020-UNWIREDSIGNAL and P123-STU008-BACKENDPUBLIC, then Studio's pins bumped and `npm run vendor` at that commit | waits on NodeGX: read 2026-10-22, `@nodegx/preview` 0.2.4 and `@nodegx/mcp` 0.2.5 are on npm (UNWIREDSIGNAL is in the 0.2.4 cut); BACKENDPUBLIC's fix (OpenNoodl 490361c22, 13:11) landed after 0.2.5 was published, so no release has it yet |
 | 5 | **main pushed** | waits on Richard |
+| 6 | **STU-065 a development and a live database** (M6), and the Data tab it sits in (STU-060, 061, 063, 064). Richard, 2026-10-22: *"Alpha please"* | done (s15) |
 
 Not in the alpha: STU-041–043 (the converter's one home, the fidelity gate, plugins), the timeline's gaps, rulings
 R4–R6, and R10 beyond a folder on this machine.
@@ -1287,6 +1288,87 @@ they are): 69/73, the four that grade them.
 - **Not read, for want of a payload:** a dropdown's own caption expression (its key is not in the bundle's table), the
   popup's backdrop and its "close when pressing Esc", a group focus's reference element and offsets. Richard's real app
   export is the place to look, with STU-044's missing names.
+
+---
+
+## M6 — Data: the backend, in Studio
+
+Written 2026-10-22 (s15). Richard: *"I'm hoping we can work on the data tab, it's VERY basic at the moment."* Asked
+three things, he ruled: **the backend map folds into Data**; **fields in NodeGX's words**, not Bubble's; **a development
+and a live database, in the alpha**. *"Rock out."*
+
+What Data was before this: types and fields written to `metadata.dbCollections` only (the running backend got them once,
+when it was provisioned, and never a change after); the first 100 rows of a type as text cells; option sets. No privacy,
+no files, no users. The backend underneath already has all of it over its admin API: `POST /admin/schema` (add, rename,
+retype and drop a column, Choice as a declared check), `/admin/permissions` per collection, roles and users, export and
+import of a collection as JSON or CSV, and `/admin/schema/diff` and `/apply` (BAK-007's development → production
+promotion). The backend's own manager (phase 104) names a field's kind in `admin/app/fieldKinds.ts`: Text, Number,
+Yes / No, Date & time, Choice, Link, Links, Picture or file, Location, List, Anything, the storage type as a small badge.
+Those are the words (principle 5: Studio uses that module from vendor/, it does not copy it).
+
+| id | task | done when |
+|---|---|---|
+| STU-060 | **The map in Data.** No fifth rail tab: Data's sub-tabs are Data types · Privacy · App data · Option sets · Map. A type has *Who can reach it* (the map's own answer, `/backend-map/api/check?table=`) and *Open on the map* (the map at `#t:<type>`). | the rail has four tabs; a type's panel says who can reach it in the map's words, and its link opens the map on that table |
+| STU-061 | **Fields in NodeGX's words, on the running backend.** A field is made, renamed, retyped and deleted in the project's `dbCollections` and on the development backend in one act (`POST /admin/schema`); a Choice's values, a Link's target, Required, Unique, a default and a description as the backend's drawer has them. A change that loses values says how many before it runs. Where the project and the backend disagree, the type says so and offers both ways to agree. | a field added in Studio is a column on the running backend without a restart; a type the backend holds and the project does not, or the other way, is named with its two buttons; `check:editor` grades each |
+| STU-062 | **A rename follows the app.** Renaming a field or a type rewrites what reads it: Record nodes' `collectionName` and `prop-*`, page data filters and sorts, composed expressions; *Used by* lists each reader. | renaming a field on the todo template leaves `validate_project` at 0 errors and the app still showing its rows |
+| STU-063 | **App data you can work in.** Paging over every row with the count, search, sort by a column, a filter; a cell edited by its kind (a date picker, Yes / No, a Choice's values, a Link picked by its row's label); several rows selected and deleted together; a type's rows exported and imported as CSV or JSON through the backend's own import (a dry run first, its report shown); the importer's `data-to-nodegx.mjs` files loaded from here. | 250 rows page; a CSV round-trips; a dry run's rejects are shown before anything is written |
+| STU-064 | **Privacy.** Each type's rule (who may find, read, create, change, delete) in sentences, written to `nodegx.security.json` and the running backend together, with the map's verdict for someone not signed in, a signed-in person and each role; roles and their members listed. | a type made private in Studio refuses an anonymous read on the backend, and the file says the same after a restart |
+| STU-065 | **Development and live (in the alpha).** A second backend, the live one, recorded in the project as `metadata.cloudservicesLive` (the shape of `cloudservices`); App data switches between the two, as Bubble's *Switch to live database*; **Deploy to live** shows the backend's own promotion diff (what tables and fields change, and whether anything is lost) and applies it; Publish builds the site against live and deploys the functions there; rows copied development → live or live → development, one type or all, after a dry run. Development stays `cloudservices`, which the NodeGX editor and Claude Code use. | a field added in development reaches live only through Deploy to live; a published site reads live's rows, not development's |
+
+Built in that order, except STU-065 before STU-062: it is in the alpha's line and the rename is not.
+
+**Done (s15, 2026-10-22): STU-060, 061, 063, 064, 065.** `npm run check:data` (`editor/data-check.mjs`) **40/40**: a copy
+of the todo template, its backend made by Studio's own *Start a backend* under a backends folder of the gate's own, the
+editor driven in headless Chrome, every assertion read off the running backends' admin API, the project's files or the
+page's table. `check:editor` 170/170, `check:app` 45/45, `check:publish` **31/31** (4 new), `check:timeline` 43/43,
+`check:pagedata` 33/33, `check:reusable` 12/12, `check:rules` 20/20, `check:vendor` PASS (884 files). Pictures:
+`docs/look/stu-060-map.png`, `stu-061-types.png`, `stu-063-appdata.png`, `stu-064-privacy.png`, `stu-065-live.png`.
+- **The kit, not a copy.** The field kinds are the backend manager's own module, vendored as `vendor/fields.js`
+  (`nodegx-backend/src/admin/app/fieldKinds.ts`, bundled at the same NodeGX commit as everything else in vendor/:
+  rebuilt from a worktree of 6cba197ad, and every other vendored file came out byte for byte the same). Privacy reads
+  its words from the map (`/backend-map/words.js`) and changes a rule through the map's own `/api/table-rule`, which
+  writes the backend and `nodegx.security.json` together or neither. Who can reach a type is the map's `/api/check`.
+  Deploy to live is the backend's `/admin/schema/diff` and `/apply` (BAK-007). Rows move by its `/admin/export` and
+  `/admin/import`. `@nodegx/backend-map` 0.1.0 is on npm now and pinned in `dependencies`.
+- **STU-060.** The rail has four tabs again; Data's sub-tabs are Data types · Privacy · App data · Option sets · Map.
+  A type's panel says who can reach it and opens the map on its table (`#t:<type>`).
+- **STU-061.** A field is made in a drawer of the eleven kinds; it goes to the development backend (`addColumn`, a
+  Choice's `setChecks`, Unique's `setIndexes`) and only then into `dbCollections` (with `required`, `description`,
+  `defaultValue`, and the type's `checks`, which the NodeGX editor ignores). A rename lifts the field's checks, renames,
+  and puts them back under the new name (the backend refuses a rename under a built check, measured). A kind change
+  says how many values convert. A type the project does not declare is never a warning (NodeGX's templates declare
+  none); a declared one the backend disagrees with is a card per disagreement, each with both ways to agree.
+- **STU-063.** 50 rows a page with the count, a search over the text fields (`$regex`, the words taken literally), sort
+  by a column, a cell edited by its kind (a Choice's values, Yes / No, a date, a Link's rows by their label), rows
+  ticked and deleted together, Export as CSV or JSON, Import… checked first. The importer's `backend/data/*.json`
+  (`data-to-nodegx.mjs`) are offered as a card, checked, then loaded with their ids. A backend not on this computer
+  shows its rows through the proxy, with the project's types standing in for its schema.
+- **STU-064.** Each type's rule as two choices (looking at rows; adding, changing or deleting them) and *whoever made a
+  row*, in the map's words; groups and their members; a project without `nodegx.security.json` is offered one written
+  from the backend's rules first (the map refuses to change a rule it cannot keep).
+- **STU-065.** *Make a live database* (Data's bar): NodeGX's provision under "<app> live backend", owned by the
+  project, named in `metadata.cloudservicesLive`; `devOpen` off on live (its rules hold on this computer too); then
+  development's schema deployed to it. *Development | Live* switches App data. *Deploy to live…* shows what is added
+  and what is lost, and asks before losing anything; what the backend's apply leaves for a person (a dropped field, a
+  changed type) and the rules, which it writes to live's file but not into the running backend, Studio does through
+  the admin API after it (`lib/live.mjs`). *Copy rows…* either way, checked first. **Publish** goes against live when
+  there is one: development's additive changes first, then the site from a copy of the project naming live, the
+  functions to live; `check:publish` 7 has a todo added in the published app land on live and never on development.
+- **Found on the way:** `button[hidden]` was drawn anyway (the buttons' own `display` beat it), so the header's Publish
+  showed in the browser-only editor; it is hidden there now, as meant. A tick in App data redrew the table, so a second
+  tick fell on a detached box: ticks change the Delete button only, and only the latest drawing draws.
+- **Not in it yet:** STU-062 (a rename does not follow into Record nodes and expressions); a type's rename; Required on
+  an existing field; `_User` in App data; the map's sample person is called "a signed-in learner" whatever the app
+  (the training app's word, in `@nodegx/backend-map`).
+
+- **Not in it:** the files manager (`/admin/files`), auth providers and email templates, backups and restore from
+  Studio, backend workflows and triggers (they belong on the Workflow tab, drawn on the map; the kit has them all), and
+  a live backend anywhere but this machine (R10).
+- **For NodeGX:** `nodegx-deploy` takes the backend from the project file only, so Studio publishes against live from a
+  copy of the project that names it (filed as P123-STU065-DEPLOYBACKEND: a `--backend` flag would remove the copy);
+  the editor and the MCP server know one backend per project, so `cloudservicesLive` is Studio's word until NodeGX has
+  one; `@nodegx/backend-map` is not on npm yet (its publish waits on Richard's OTP), so the map is still found in
+  `node_modules` only on a machine that installed it by hand.
 
 ---
 
