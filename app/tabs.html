@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>NodeGX Studio tabs</title>
+<!--
+  STU-009 — the window's tab strip. Every open project is a tab (its own editor server and page), the welcome screen is
+  the new tab. The strip only draws what the main process says (`tabs:state`) and asks it to select, close, add or move
+  one (tabs-preload.cjs); the pages themselves sit below it, one WebContentsView each.
+-->
+<style>
+  :root { font-family: Inter, -apple-system, "Segoe UI", system-ui, sans-serif; font-size: 12px; -webkit-font-smoothing: antialiased; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0b0e12; overflow: hidden; user-select: none; }
+  #strip { display: flex; align-items: flex-end; height: 38px; padding: 0 8px; gap: 2px; }
+  .tab { display: flex; align-items: center; gap: 8px; height: 31px; min-width: 120px; max-width: 220px; flex: 0 1 220px; padding: 0 6px 0 12px; border-radius: 8px 8px 0 0; color: #9aa4b2; cursor: default; position: relative; }
+  .tab:hover { background: #161a21; color: #dfe5ec; }
+  .tab.active { background: #fff; color: #171b22; }
+  .tab .dot { width: 7px; height: 7px; border-radius: 50%; background: #4da3ff; flex: none; }
+  .tab.welcome .dot { background: #717886; }
+  .tab.busy .dot { animation: beat 1s ease-in-out infinite; }
+  @keyframes beat { 50% { opacity: .25; } }
+  .tab .name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 500; }
+  .tab button { width: 20px; height: 20px; border: 0; border-radius: 5px; background: transparent; color: inherit; opacity: .55; font: 14px/1 system-ui; padding: 0; display: grid; place-items: center; }
+  .tab button:hover { opacity: 1; background: rgba(127,127,127,.22); }
+  .tab.over { box-shadow: inset 2px 0 0 #4da3ff; }
+  #add { width: 28px; height: 28px; margin: 0 0 2px 4px; border: 0; border-radius: 7px; background: transparent; color: #9aa4b2; font: 18px/1 system-ui; padding: 0; }
+  #add:hover { background: #161a21; color: #fff; }
+</style>
+<div id="strip"><button id="add" title="New tab (⌘T): the welcome screen, to open or start another project">+</button></div>
+<script>
+  const strip = document.getElementById('strip'), add = document.getElementById('add');
+  add.onclick = () => window.tabs.add();
+  let dragging = null;
+  window.tabs.onState((list) => {
+    for (const el of [...strip.querySelectorAll('.tab')]) el.remove();
+    for (const t of list) {
+      const el = document.createElement('div');
+      el.className = `tab${t.active ? ' active' : ''}${t.dir ? '' : ' welcome'}${t.busy ? ' busy' : ''}`;
+      el.dataset.id = t.id; el.title = t.dir || 'Welcome: open or start a project'; el.draggable = true;
+      el.innerHTML = '<span class="dot"></span><span class="name"></span><button title="Close tab (⌘W)">×</button>';
+      el.querySelector('.name').textContent = t.title;
+      el.onmousedown = (e) => { if (e.button === 0 && e.target.tagName !== 'BUTTON') window.tabs.select(t.id); };
+      el.onauxclick = (e) => { if (e.button === 1) window.tabs.close(t.id); };
+      el.querySelector('button').onclick = (e) => { e.stopPropagation(); window.tabs.close(t.id); };
+      el.ondragstart = () => { dragging = t.id; };
+      el.ondragover = (e) => { e.preventDefault(); el.classList.add('over'); };
+      el.ondragleave = () => el.classList.remove('over');
+      el.ondrop = (e) => { e.preventDefault(); el.classList.remove('over'); if (dragging && dragging !== t.id) window.tabs.move(dragging, list.indexOf(t)); dragging = null; };
+      strip.insertBefore(el, add);
+    }
+    document.title = `tabs ${list.length}`;
+  });
+  window.tabs.ready();
+</script>
+</html>

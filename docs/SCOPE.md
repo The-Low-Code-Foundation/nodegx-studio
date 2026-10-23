@@ -380,7 +380,25 @@ Electron's own Node; `npm run smoke -- <dir>` opens a project headless and exits
 | STU-006 | **Runs without a NodeGX checkout.** A build step copies the kit pieces Studio uses (deploy runtime, in-page preview, look and specs modules, backend, MCP server) into `vendor/` at pinned NodeGX versions; `lib/nodegx.mjs` prefers `vendor/`. | a fresh clone + `npm install` + `npm start` works on a machine with no OpenNoodl folder |
 | STU-007 | **Packaged and signed.** electron-builder for macOS (signed, notarised), Windows and Linux, on NodeGX's release workflow. | a downloadable build opens a project on all three |
 | STU-008 | **Publish.** File → **Publish…** writes the app as a static site with NodeGX's own deploy — `@nodegx/preview`'s `nodegx-deploy`, the `deployToFolder` the NodeGX editor's *Deploy to Folder* runs, with the production engine npm ships (1.7 MB; a checkout's development engine is refused) — to a folder the person picks, and deploys the app's cloud functions to its backend when it has any (NodeGX's `deploy_cloud_functions`). The window then says where the site is and which backend it talks to; an app bound to a backend on 127.0.0.1 works on this machine only, and says so before it is published. Where else a site and its backend can go is R10. A site under a sub-path waits on P123-STU015-BASEURL. The deploy must carry P123-S2-VARIANTLOST's fix: npm's 0.2.3 `nodegx-deploy` does (STU-006). | the todo template's copy published to a folder, served by any static server and opened in a browser: sign in, add a todo, and the row is on the backend |
-| STU-009 | **Projects in tabs** (Richard, 2026-10-23, s21): several projects open in one window, a tab each, the welcome screen as the new tab. Each tab is its own `serve.mjs` and page, as one project is today, so none of the NodeGX editor's singleton problem (ECO-003) applies | open two projects, edit both, close one: the other keeps its server, its backend and its unsaved state |
+| STU-009 | **Projects in tabs** (Richard, 2026-10-23, s21): several projects open in one window, a tab each, the welcome screen as the new tab. Each tab is its own `serve.mjs` and page, as one project is today, so none of the NodeGX editor's singleton problem (ECO-003) applies | done (s21): a tab per project, its own server and backend; closing one stops them, the other keeps working ([look/stu-009-tabs.png](look/stu-009-tabs.png)) |
+
+**Done (STU-009, s21).** Richard: *"If we could do the whole multiple projects in tabs concept in the NodeGX Studio
+that we intended to do in the original NodeGX repo editor, that would be a solution and also amazing."* NodeGX's
+ECO-003 gated it because the NodeGX editor holds one project in singletons everywhere; Studio already ran each project
+as its own `serve.mjs` and page, so a tab is one of those. `app/main.cjs`: the window's own page is the strip
+(`tabs.html`, `tabs-preload.cjs`); each tab is a `WebContentsView` with its own editor server (the welcome screen when
+it has no project). A project opened from a welcome tab takes that tab; opened from anywhere else it gets a new tab, or
+the tab already showing it is selected. Closing a tab stops its server and so its backend; opening that project again
+waits for the stop. ⌘T new tab, ⌘W close tab (⌘⇧W the window), ⌘1–9, Ctrl+Tab; a tab can be dragged along the strip;
+Reload and DevTools act on the tab's page. Every IPC handler is handed the tab that asked, so Publish publishes that
+tab's project. Found on the way: in `--hidden` a view in a hidden window is a hidden page (`visibilityState`
+"hidden") and takes no input, so the header's Publish did nothing under the gate (the click never arrived); `--hidden`
+now shows the window transparent, unfocused and out of the taskbar (Electron 43 has no `incrementCapturerCount`).
+`check:app` 53/53 (7 new, "5b": one tab for the imported project; opening My todos from it makes a second tab, active,
+both drawn, two servers, its backend up; opening Imported again selects its tab, still two servers; closing My todos'
+tab stops its server and backend, Imported's page still answers). The smoke run passes. `editor/cdp.mjs`'s `attach`
+takes `match` (the strip is a page target of its own). **Not built:** a tab that has a project's unsaved edit (Studio
+saves each gesture, so there are none to ask about); tabs across two windows; a project dragged out of the strip.
 
 **Done (STU-002, 2026-10-19).** `serve.mjs` watches the project folder and keeps every file as Studio last read or
 wrote it, so Studio's own saves are recognised by their content and dropped; anything else goes to the page over

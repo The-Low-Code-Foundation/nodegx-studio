@@ -9,10 +9,15 @@
  *   npm start -- [<project-dir>] --smoke   opens it (or the welcome screen), waits for it to draw, prints the result
  *                                          and quits (exit 0/1)
  *
+ * STU-009: one window, a tab per project. The window's own page is the tab strip (tabs.html); each tab is a
+ * WebContentsView with its own editor server, showing that project's Studio or, with none, the welcome screen. A
+ * project opened from a welcome tab takes that tab; opened from anywhere else it gets a tab of its own, or the tab that
+ * already shows it.
+ *
  * For the gate (app/check.mjs): NODEGX_STUDIO_USER_DATA puts the recent list somewhere else, `--hidden` keeps the
  * window off screen, and NODEGX_STUDIO_TEST_PICKS (a JSON array of paths) answers the open / save dialogs in order.
  */
-const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, WebContentsView, Menu, dialog, ipcMain, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 
@@ -29,20 +34,28 @@ const recentFile = () => path.join(app.getPath('userData'), 'recent-projects.jso
 const sitesFile = () => path.join(app.getPath('userData'), 'published-sites.json');
 const testPicks = process.env.NODEGX_STUDIO_TEST_PICKS ? JSON.parse(process.env.NODEGX_STUDIO_TEST_PICKS) : null;
 
+const TAB_H = 38; // the strip's height (tabs.html)
 let win = null;
-let server = null;
-let openDir = null; // the project the window shows, or null on the welcome screen
+let tabs = []; // { id, view, dir: the project it shows or null (welcome), server: its editor server, busy }
+let activeId = null;
+let nextId = 1;
+const closing = new Map(); // project folder → its server stopping, which the next open of it waits for
 let actions = null; // app/actions.mjs, an ES module
 
-/** Starts serve.mjs on a free loopback port under Electron's own Node, and resolves with its URL. */
-async function startServer(projectDir) {
-  await stopServer();
+const activeTab = () => tabs.find((t) => t.id === activeId) ?? null;
+const tabOf = (contents) => tabs.find((t) => t.view.webContents === contents) ?? null;
+const tabTitle = (t) => (t.dir ? path.basename(t.dir) : 'Welcome');
+
+/** Starts serve.mjs for a tab on a free loopback port under Electron's own Node, and resolves with its URL. */
+async function startServer(tab, projectDir) {
+  await stopServer(tab);
+  await closing.get(projectDir);
   return new Promise((ok, no) => {
     const child = spawn(process.execPath, [serveJs, projectDir], {
       env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
       stdio: ['ignore', 'pipe', 'pipe']
     });
-    server = child;
+    tab.server = child;
     let out = '';
     const on = (d) => {
       out += d;
@@ -52,25 +65,26 @@ async function startServer(projectDir) {
     child.stdout.on('data', on);
     child.stderr.on('data', on);
     child.on('exit', (code) => {
-      if (server === child) server = null;
+      if (tab.server === child) tab.server = null;
       no(new Error(out.trim() || `the editor server stopped (exit ${code})`));
     });
   });
 }
 
-/** app.exit skips before-quit, so every exit goes through here and takes the server with it. */
+/** app.exit skips before-quit, so every exit goes through here and takes every tab's server with it. */
 function quit(code) {
-  stopServer().then(() => app.exit(code));
+  stopAll().then(() => app.exit(code));
 }
+const stopAll = () => Promise.all(tabs.map((t) => stopServer(t)));
 
 /**
  * Stops the editor server and resolves once it has gone. It stops the project's backend on its way out (STU-004),
  * which takes up to a few seconds; opening the project again before that finished would adopt a backend that is
  * about to stop, so nothing opens, and the app does not quit, until it has.
  */
-function stopServer() {
-  const child = server;
-  server = null;
+function stopServer(tab) {
+  const child = tab?.server;
+  if (tab) tab.server = null;
   if (!child || child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
   return new Promise((ok) => {
     const late = setTimeout(() => {
@@ -85,7 +99,7 @@ function stopServer() {
   });
 }
 
-/** The one window. Its page reports readiness in document.title ("ready …"), which the window does not show. */
+/** The one window. Its own page is the tab strip; the tabs' pages report readiness in document.title ("ready …"). */
 function windowFor() {
   if (win) return win;
   win = new BrowserWindow({
@@ -94,46 +108,128 @@ function windowFor() {
     minWidth: 760,
     minHeight: 520,
     show: !hidden,
-    backgroundColor: '#eef0f3',
+    // --hidden (the gates, the smoke run): a view in a hidden window is a hidden page, and a hidden page takes no
+    // input, so the window is shown, but transparent, without the focus and out of the taskbar
+    ...(hidden ? { opacity: 0, skipTaskbar: true } : {}),
+    backgroundColor: '#0b0e12',
     title: 'NodeGX Studio',
     icon: path.join(__dirname, 'icon.png'), // Windows and Linux; macOS takes the Dock's (below) until STU-007 packages one
-    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), backgroundThrottling: !hidden }
+    webPreferences: { preload: path.join(__dirname, 'tabs-preload.cjs') }
   });
   win.on('closed', () => (win = null));
-  // links the app opens go to the person's browser, not into the editor window
-  win.webContents.setWindowOpenHandler(({ url: target }) => {
+  win.on('resize', layout);
+  win.on('page-title-updated', (event) => event.preventDefault());
+  win.loadFile(path.join(__dirname, 'tabs.html')).catch(loadCut);
+  if (hidden) win.showInactive();
+  if (smoke) setTimeout(() => (console.log('smoke: the window did not report ready in 90 s'), quit(1)), 90000);
+  return win;
+}
+
+/** What the strip draws, and the window's title: the active tab's project. */
+function sendState() {
+  if (!win) return;
+  win.webContents.send('tabs:state', tabs.map((t) => ({ id: t.id, title: tabTitle(t), dir: t.dir, active: t.id === activeId, busy: !!t.busy })));
+  const a = activeTab();
+  win.setTitle(a?.dir ? `${tabTitle(a)} — NodeGX Studio` : 'NodeGX Studio');
+}
+/** Every tab's page fills the window under the strip; only the active one is shown. */
+function layout() {
+  if (!win) return;
+  const [width, height] = win.getContentSize();
+  for (const t of tabs) {
+    t.view.setBounds({ x: 0, y: TAB_H, width, height: Math.max(0, height - TAB_H) });
+    t.view.setVisible(t.id === activeId);
+  }
+}
+function select(id) {
+  if (!tabs.some((t) => t.id === id)) return;
+  activeId = id;
+  layout();
+  sendState();
+  menu();
+  activeTab()?.view.webContents.focus();
+}
+/** A new tab, active, empty until it shows the welcome screen or a project. */
+function newTab() {
+  const w = windowFor();
+  const view = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.cjs'), backgroundThrottling: !hidden } });
+  view.setBackgroundColor('#eef0f3');
+  const tab = { id: nextId++, view, dir: null, server: null, busy: false };
+  // links the app opens go to the person's browser, not into the editor
+  view.webContents.setWindowOpenHandler(({ url: target }) => {
     shell.openExternal(target);
     return { action: 'deny' };
   });
-  win.on('page-title-updated', (event, title) => {
-    event.preventDefault();
+  view.webContents.on('page-title-updated', (_event, title) => {
     if (smoke && title.startsWith('ready')) {
       console.log(`smoke: ${title}`);
       quit(0);
     }
   });
-  if (smoke) setTimeout(() => (console.log('smoke: the window did not report ready in 90 s'), quit(1)), 90000);
-  return win;
+  w.contentView.addChildView(view);
+  tabs.push(tab);
+  select(tab.id);
+  return tab;
 }
+/** Closes a tab and stops its server (its edits are already saved); the last one closed leaves a welcome tab. */
+function closeTab(id) {
+  const tab = tabs.find((t) => t.id === id);
+  if (!tab) return;
+  const i = tabs.indexOf(tab);
+  tabs.splice(i, 1);
+  win?.contentView.removeChildView(tab.view);
+  tab.view.webContents.close();
+  if (tab.dir) {
+    const stopping = stopServer(tab).then(() => closing.delete(tab.dir));
+    closing.set(tab.dir, stopping);
+  }
+  if (!tabs.length) return showWelcome(newTab());
+  if (activeId === id) activeId = (tabs[i] ?? tabs[i - 1]).id;
+  select(activeId);
+}
+function moveTab(id, to) {
+  const tab = tabs.find((t) => t.id === id);
+  if (!tab) return;
+  tabs.splice(tabs.indexOf(tab), 1);
+  tabs.splice(Math.max(0, Math.min(tabs.length, to)), 0, tab);
+  sendState();
+  menu();
+}
+const cycle = (by) => tabs.length && select(tabs[(tabs.indexOf(activeTab()) + by + tabs.length) % tabs.length].id);
 
-/** Opens a project in the window. `report`: an import just made it, so its report opens beside it (STU-040). */
-async function open(projectDir, { report = false } = {}) {
+/** Shows a project in a tab. `report`: an import just made it, so its report opens beside it (STU-040). */
+async function openIn(tab, projectDir, { report = false } = {}) {
   let url;
+  tab.busy = true;
+  sendState();
   try {
-    url = await startServer(projectDir);
+    url = await startServer(tab, projectDir);
   } catch (err) {
-    busy('');
+    tab.busy = false;
+    sendState();
+    busy('', tab);
     dialog.showErrorBox('NodeGX Studio could not open the project', err.message);
     if (smoke) quit(1);
     return;
   }
-  openDir = projectDir;
+  tab.dir = projectDir;
+  tab.busy = false;
   actions.rememberRecent(recentFile(), projectDir);
   app.addRecentDocument(projectDir);
+  sendState();
   menu();
-  const w = windowFor();
-  w.setTitle(`${path.basename(projectDir)} — NodeGX Studio`);
-  await w.loadURL(report ? `${url}?report=import` : url).catch(loadCut);
+  await tab.view.webContents.loadURL(report ? `${url}?report=import` : url).catch(loadCut);
+}
+/** Opens a project: the tab already showing it; else the welcome tab that asked, or the active tab when it is a
+    welcome tab; else a new tab. */
+async function open(projectDir, options = {}, from = null) {
+  const dir = path.resolve(projectDir);
+  const there = tabs.find((t) => t.dir === dir);
+  if (there) return select(there.id);
+  const a = activeTab();
+  const tab = (from && !from.dir ? from : null) ?? (a && !a.dir ? a : null) ?? newTab();
+  select(tab.id);
+  return openIn(tab, dir, options);
 }
 
 /** A load that the next one replaces, or that quitting cuts off (the smoke run quits as soon as the page has drawn,
@@ -142,14 +238,22 @@ function loadCut(err) {
   if (!/ERR_ABORTED|ERR_FAILED \(-2\)/.test(err.message)) console.warn(`nodegx-studio: ${err.message}`);
 }
 
-/** STU-003: the welcome screen. Showing it closes the open project (every edit is already saved). */
-async function welcome() {
-  await stopServer();
-  openDir = null;
+/** STU-003: the welcome screen in a tab. Showing it there closes the project that tab had (every edit is already saved). */
+async function showWelcome(tab) {
+  await stopServer(tab);
+  tab.dir = null;
+  sendState();
   menu();
-  const w = windowFor();
-  w.setTitle('NodeGX Studio');
-  await w.loadFile(path.join(__dirname, 'welcome.html')).catch(loadCut);
+  await tab.view.webContents.loadFile(path.join(__dirname, 'welcome.html')).catch(loadCut);
+}
+/** File → Welcome and the strip's +: the welcome tab there is, or a new one. */
+function welcome() {
+  const there = tabs.find((t) => !t.dir && !t.busy);
+  if (there) {
+    select(there.id);
+    return Promise.resolve();
+  }
+  return showWelcome(newTab());
 }
 
 /** A dialog, or the gate's next answer. Resolves with a path or null. */
@@ -183,12 +287,13 @@ function chooseImportSource(kind) {
   return pick('open', { title: 'Import an app from an export file', properties: ['openFile'], filters: [{ name: 'App export', extensions: ['json', 'bubble'] }] });
 }
 
-/** Each handler answers `{ error }` when nothing happened; a project opens after the answer, because opening it replaces the page that asked. */
-const busy = (text) => win?.webContents.send('studio:busy', text);
-const later = (fn) => setImmediate(() => fn().catch((err) => dialog.showErrorBox('NodeGX Studio', err.message)));
-const asking = (fn) => async (_event, ...rest) => {
+/** Each handler answers `{ error }` when nothing happened; a project opens after the answer, because opening it may
+    replace the page that asked. Each is handed the tab that asked, so what it opens or says goes there. */
+const busy = (text, tab = activeTab()) => tab?.view.webContents.send('studio:busy', text);
+const later = (fn) => setImmediate(() => Promise.resolve(fn()).catch((err) => dialog.showErrorBox('NodeGX Studio', err.message)));
+const asking = (fn) => async (event, ...rest) => {
   try {
-    return (await fn(...rest)) ?? { ok: true };
+    return (await fn(tabOf(event.sender), ...rest)) ?? { ok: true };
   } catch (err) {
     return { error: err.message };
   }
@@ -197,54 +302,60 @@ function handlers() {
   ipcMain.handle('studio:welcome', asking(() => ({ recent: actions.readRecent(recentFile()), templates: actions.templates(), version: app.getVersion(), home: app.getPath('home') })));
   ipcMain.handle(
     'studio:open',
-    asking((dir) => {
+    asking((tab, dir) => {
       if (!actions.isProject(dir)) return { error: `${dir} is no longer a NodeGX project folder — it was moved or deleted.` };
-      busy('Opening…');
-      later(() => open(dir));
+      busy('Opening…', tab);
+      later(() => open(dir, {}, tab));
     })
   );
   ipcMain.handle(
     'studio:open-folder',
-    asking(async () => {
+    asking(async (tab) => {
       const dir = await chooseProject();
       if (!dir) return { cancelled: true };
-      busy('Opening…');
-      later(() => open(dir));
+      busy('Opening…', tab);
+      later(() => open(dir, {}, tab));
     })
   );
   ipcMain.handle(
     'studio:new',
-    asking(async (slug) => {
+    asking(async (tab, slug) => {
       const t = actions.templates().find((x) => x.slug === slug);
       if (!t) return { error: `There is no template called ${slug}.` };
       const dest = await chooseDestination(`New project from ${t.title}`, t.title, 'Create');
       if (!dest) return { cancelled: true };
-      busy(`Copying ${t.title}…`);
+      busy(`Copying ${t.title}…`, tab);
       const { dir } = await actions.createFromTemplate(slug, dest);
-      later(() => open(dir));
+      later(() => open(dir, {}, tab));
     })
   );
   ipcMain.handle('studio:import', asking(importFlow));
   ipcMain.handle('studio:publish', asking(publishFlow));
   ipcMain.handle(
     'studio:forget',
-    asking((dir) => {
+    asking((_tab, dir) => {
       actions.forgetRecent(recentFile(), dir);
       menu();
     })
   );
-  ipcMain.handle('studio:reveal', asking((dir) => shell.showItemInFolder(dir)));
+  ipcMain.handle('studio:reveal', asking((_tab, dir) => shell.showItemInFolder(dir)));
+  // the strip (tabs.html)
+  ipcMain.on('tabs:ready', () => sendState());
+  ipcMain.on('tabs:select', (_event, id) => select(id));
+  ipcMain.on('tabs:close', (_event, id) => closeTab(id));
+  ipcMain.on('tabs:add', () => welcome());
+  ipcMain.on('tabs:move', (_event, id, to) => moveTab(id, to));
 }
 
 /** Import an App…: the source, the new folder, the importer, then the project with its report (`docs/IMPORT-REPORT.md`) open beside it. */
-async function importFlow(kind = 'file') {
+async function importFlow(tab, kind = 'file') {
   const source = await chooseImportSource(kind);
   if (!source) return { cancelled: true };
   const dest = await chooseDestination('Import into a new NodeGX project', path.basename(source).replace(/\.(json|bubble)$/i, '').replace(/\.export$/i, '') || 'Imported app', 'Import');
   if (!dest) return { cancelled: true };
-  busy('Importing — a large app takes a minute…');
+  busy('Importing — a large app takes a minute…', tab);
   const { dir } = await actions.importApp(source, dest);
-  later(() => open(dir, { report: true }));
+  later(() => open(dir, { report: true }, tab));
 }
 
 /* ---------------------------------------------------------------- STU-008: Publish */
@@ -277,8 +388,8 @@ const home = (p) => p.replace(app.getPath('home'), '~');
  * whose backend is on this computer is said to work here only before anything is written; R10 rules where else it can go.
  * Answers with what was published, and what the window said, so the page and the gate can read it.
  */
-async function publishFlow() {
-  const dir = openDir;
+async function publishFlow(tab) {
+  const dir = tab?.dir ?? activeTab()?.dir;
   if (!dir) return { error: 'Open a project first: Publish writes the open app as a site.' };
   const pub = await import(publishUrl);
   const asked = [];
@@ -337,11 +448,14 @@ async function publishFlow() {
 
 function menu() {
   const recent = actions.readRecent(recentFile()).filter((p) => p.exists);
+  const a = activeTab();
+  const page = () => activeTab()?.view.webContents;
   const template = [
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
     {
       label: 'File',
       submenu: [
+        { label: 'New Tab', accelerator: 'CmdOrCtrl+T', click: () => welcome() },
         { label: 'Welcome', accelerator: 'CmdOrCtrl+Shift+H', click: () => welcome() },
         {
           label: 'Open Project…',
@@ -357,18 +471,44 @@ function menu() {
         },
         { label: 'New from a Template…', click: () => welcome() },
         // the welcome screen's guide says what to bring before any dialog opens
-        { label: 'Import an App…', click: () => welcome().then(() => win?.webContents.executeJavaScript('window.openImportGuide?.()')) },
+        { label: 'Import an App…', click: () => welcome().then(() => page()?.executeJavaScript('window.openImportGuide?.()')) },
         { type: 'separator' },
-        { label: 'Show Project Folder', enabled: !!server, click: () => server && shell.openPath(server.spawnargs[2]) },
-        { label: 'Publish…', enabled: !!server, click: () => win?.webContents.executeJavaScript('window.__ob?.publish?.()') },
-        { label: 'Connect Claude Code…', enabled: !!server, click: () => win?.webContents.executeJavaScript('window.__ob?.openAgent?.()') },
+        { label: 'Show Project Folder', enabled: !!a?.dir, click: () => a?.dir && shell.openPath(a.dir) },
+        { label: 'Publish…', enabled: !!a?.dir, click: () => page()?.executeJavaScript('window.__ob?.publish?.()') },
+        { label: 'Connect Claude Code…', enabled: !!a?.dir, click: () => page()?.executeJavaScript('window.__ob?.openAgent?.()') },
         { type: 'separator' },
-        process.platform === 'darwin' ? { role: 'close' } : { role: 'quit' }
+        { label: 'Close Tab', accelerator: 'CmdOrCtrl+W', click: () => activeId !== null && closeTab(activeId) },
+        process.platform === 'darwin' ? { role: 'close', accelerator: 'CmdOrCtrl+Shift+W' } : { role: 'quit' }
       ]
     },
     { role: 'editMenu' },
-    { role: 'viewMenu' },
-    { role: 'windowMenu' }
+    {
+      label: 'View',
+      submenu: [
+        // the tab's page, not the strip's
+        { label: 'Reload Tab', accelerator: 'CmdOrCtrl+R', click: () => page()?.reload() },
+        { label: 'Toggle Developer Tools', accelerator: process.platform === 'darwin' ? 'Alt+Cmd+I' : 'Ctrl+Shift+I', click: () => page()?.toggleDevTools() },
+        { type: 'separator' },
+        { label: 'Actual Size', accelerator: 'CmdOrCtrl+0', click: () => page()?.setZoomLevel(0) },
+        { label: 'Zoom In', accelerator: 'CmdOrCtrl+Plus', click: () => page() && page().setZoomLevel(page().getZoomLevel() + 0.5) },
+        { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => page() && page().setZoomLevel(page().getZoomLevel() - 0.5) },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        ...(process.platform === 'darwin' ? [{ role: 'zoom' }] : []),
+        { type: 'separator' },
+        { label: 'Next Tab', accelerator: 'Ctrl+Tab', click: () => cycle(1) },
+        { label: 'Previous Tab', accelerator: 'Ctrl+Shift+Tab', click: () => cycle(-1) },
+        { type: 'separator' },
+        ...tabs.map((t, i) => ({ label: tabTitle(t), type: 'radio', checked: t.id === activeId, accelerator: i < 9 ? `CmdOrCtrl+${i + 1}` : undefined, click: () => select(t.id) })),
+        ...(process.platform === 'darwin' ? [{ type: 'separator' }, { role: 'front' }] : [])
+      ]
+    }
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -378,22 +518,27 @@ app.whenReady().then(async () => {
   actions = await import(actionsUrl);
   handlers();
   menu();
+  const first = newTab();
   if (projectArg) {
-    if (actions.isProject(projectArg)) return open(path.resolve(projectArg));
+    if (actions.isProject(projectArg)) return openIn(first, path.resolve(projectArg));
     if (smoke) {
       console.log(`smoke: ${projectArg} is not a NodeGX project`);
       return quit(1);
     }
     await dialog.showMessageBox({ type: 'warning', message: 'That folder is not a NodeGX project', detail: `${path.resolve(projectArg)} has no nodegx.project.json.` });
   }
-  welcome();
+  showWelcome(first);
 });
 
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', (event) => {
-  if (!server) return;
+  if (!tabs.some((t) => t.server) && !closing.size) return;
   event.preventDefault();
-  stopServer().then(() => app.quit());
+  Promise.all([stopAll(), ...closing.values()]).then(() => {
+    tabs = [];
+    closing.clear();
+    app.quit();
+  });
 });
 // Ctrl-C in the terminal that started it, or a gate stopping it: the editor server goes too, never left running alone
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => quit(0));

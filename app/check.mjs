@@ -75,8 +75,8 @@ async function start(picks = [], extra = []) {
   proc.stdout.on('data', (d) => (log += d));
   proc.stderr.on('data', (d) => (log += d));
   const exited = new Promise((r) => proc.on('exit', r));
-  const b = await attach({ port });
-  running = { proc, b, exited, log: () => log };
+  const b = await attach({ port, match: (t) => !t.url.endsWith('/tabs.html') }); // a tab's page, not the strip (STU-009)
+  running = { proc, b, exited, log: () => log, port };
   return b;
 }
 /** Stops it the way a terminal's Ctrl-C would; resolves once the process is gone. */
@@ -214,6 +214,30 @@ try {
     const pj = existsSync(join(imported, 'nodegx.project.json')) ? readJson(join(imported, 'nodegx.project.json')) : {};
     ok(pj.metadata?.imported?.by === 'nodegx-studio' && pj.name === 'Imported' && pj.metadata.imported.appId === 'backend-only' && existsSync(join(imported, 'docs/IMPORT-REPORT.md')), 'the folder holds the importer\'s project, named as the person named it, and its report', { name: pj.name, appId: pj.metadata?.imported?.appId });
     ok(JSON.stringify(recentDirs()) === JSON.stringify([imported, todos]), 'the recent list is newest first', recentDirs());
+
+    console.log('5b. projects in tabs (STU-009)');
+    // the strip is the window's own page; each tab's page is a target of its own on the debugging port
+    const { port } = running;
+    const strip = await attach({ port, match: (t) => t.url.endsWith('/tabs.html') });
+    const named = `JSON.stringify([...document.querySelectorAll('.tab')].map((t) => t.querySelector('.name').textContent + (t.classList.contains('active') ? '*' : '')))`;
+    const pages = async () => (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).filter((t) => t.type === 'page' && !t.url.endsWith('/tabs.html')).map((t) => t.title);
+    const until = async (fn, ms) => { for (const t0 = Date.now(); Date.now() - t0 < ms; await wait(250)) { const v = await fn(); if (v) return v; } return null; };
+    ok((await strip.evaluate(named)) === '["Imported*"]', 'the window has a tab strip with one tab: the project open in it', await strip.evaluate(named));
+    await b.evaluate(`window.studio.open(${JSON.stringify(todos)})`);
+    const two = await strip.until(`document.querySelectorAll('.tab').length === 2 && !document.querySelector('.tab.busy') && ${named}`, 60000);
+    ok(two === '["Imported","My todos*"]', 'opening another project from a project gives it a tab of its own, made active; the first stays', two);
+    const drawn = await until(async () => (await pages()).some((t) => /^ready My todos /.test(t)) && pages(), 90000);
+    ok(drawn && drawn.some((t) => /^ready Imported /.test(t)) && serversOf().length === 2, 'both projects are drawn, each with an editor server of its own', { pages: drawn, servers: serversOf().length });
+    ok(await until(() => backendAnswers(todos), 30000), 'the new tab started its project\'s backend');
+    await b.evaluate(`window.studio.open(${JSON.stringify(imported)})`);
+    const back = await strip.until(`${named} === '["Imported*","My todos"]' && ${named}`, 10000);
+    ok(back && serversOf().length === 2, 'opening a project that is already open selects its tab: no second tab, no second server', { back, servers: serversOf().length });
+    await strip.evaluate(`[...document.querySelectorAll('.tab')].find((t) => t.textContent.includes('My todos')).querySelector('button').click()`);
+    const one = await strip.until(`document.querySelectorAll('.tab').length === 1 && ${named}`, 10000);
+    const stopped = await until(async () => serversOf().length === 1 && !(await backendAnswers(todos)), 20000);
+    ok(one === '["Imported*"]' && stopped, 'closing a tab stops its editor server and its backend; the other tab stays', { one, servers: serversOf().length });
+    ok(/^ready Imported /.test(await b.evaluate('document.title')) && (await b.evaluate(`!!document.querySelector('#pagepick')`)), 'and the tab left keeps working: its page answers as before');
+    await strip.close();
     await stop();
   }
 
@@ -232,7 +256,7 @@ try {
     await shot(b, 'welcome-missing');
     await b.clickSel(`${row} .forget`);
     await b.until(`!document.querySelector(${JSON.stringify(row)})`, 5000);
-    ok(JSON.stringify(recentDirs()) === JSON.stringify([imported, todos]), 'its ✕ takes it off the list on disk, and only it', recentDirs());
+    ok(JSON.stringify(recentDirs()) === JSON.stringify([todos, imported]), 'its ✕ takes it off the list on disk, and only it (My todos first: 5b opened it last)', recentDirs());
     await stop();
   }
 

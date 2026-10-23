@@ -31,13 +31,14 @@ export async function browser({ port = 9333, width = 1440, height = 900, chrome 
  * The same driver on a page that something else started — the desktop app's window (`electron --remote-debugging-port`).
  * `close` closes the connection only, unless `onClose` says more. `width`/`height` set the page's viewport when given.
  */
-export async function attach({ port, width, height, onClose } = {}) {
+/** `match`: which page target to attach to (the desktop app's window has its tab strip as a page of its own). */
+export async function attach({ port, width, height, onClose, match = () => true } = {}) {
   if (typeof WebSocket === 'undefined') throw new Error(`the gate needs Node 22 or later (this is ${process.version}); see .nvmrc`);
   let target;
   for (let i = 0; i < 80 && !target; i++) {
     await wait(250);
     try {
-      target = await new Promise((res, rej) => http.get({ host: '127.0.0.1', port, path: '/json/list' }, (r) => { let b = ''; r.on('data', (d) => (b += d)); r.on('end', () => { try { res(JSON.parse(b).find((t) => t.type === 'page')); } catch (e) { rej(e); } }); }).on('error', rej));
+      target = await new Promise((res, rej) => http.get({ host: '127.0.0.1', port, path: '/json/list' }, (r) => { let b = ''; r.on('data', (d) => (b += d)); r.on('end', () => { try { res(JSON.parse(b).find((t) => t.type === 'page' && match(t))); } catch (e) { rej(e); } }); }).on('error', rej));
     } catch { /* not up yet */ }
   }
   if (!target) throw new Error(`no page on the debugging port ${port}`);
