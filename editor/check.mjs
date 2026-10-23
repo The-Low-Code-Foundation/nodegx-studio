@@ -321,6 +321,9 @@ try {
     const noNav = nodes.find((n) => n.type === 'RouterNavigate' && wires.some((w) => w.fromId === cond.id && w.fromProperty === 'onfalse' && w.toId === n.id && w.toProperty === 'navigate'));
     const yesEmpty = !wires.some((w) => w.fromId === cond.id && w.fromProperty === 'ontrue');
     ok(noNav && yesEmpty, 'an action added in the No column is a Navigate wired from the Condition\'s On False; the Yes column is still empty', { noNav: !!noNav, yesEmpty });
+    const noPage = () => b.evaluate(`document.querySelector('#steps .branch.no .step .nopage')?.textContent ?? null`);
+    const said = await noPage();
+    ok(/No page picked: it goes nowhere, and nothing after it runs/.test(said || ''), 'a Go to page with no page says on its step that it goes nowhere and nothing after it runs (RouterNavigate says Done only on arriving)', said);
     await clickText('#steps .branch.yes .addrow button', 'Add an action'); await wait(250);
     await b.type('custom state'); await wait(200); await menuItem('Set a custom state');
     await b.until(`[...document.querySelectorAll('.menu .item')].some(e => e.textContent.includes("Sign-in card's state"))`, 4000);
@@ -407,7 +410,20 @@ try {
     await b.clickSel('#undo'); await wait(800);
     const g4 = onSign();
     ok([cond.id, setV.id, noNav.id].every((id) => g4.nodes.some((n) => n.id === id)) && intoDo(g4, joined?.id).join() === [setV.id, noNav.id].sort().join() && !g4.wires.some((w) => w.fromId === card && w.toId === joined?.id), 'R4: one Undo puts the branch, its sides and the rejoin back', { intoJoined: intoDo(g4, joined?.id) });
+    const afterUndo = await b.evaluate(`document.getElementById('toast').textContent`);
+    ok(afterUndo === 'Undone', 'after Undo the toast says Undone, not what was undone ("Deleted the branch…")', afterUndo);
     await shot('workflow-rejoin');
+    // the step's "Pick a page…" opens its settings; a page picked there takes the line away, and Undo brings it back
+    await clickText('#steps .branch.no .step .nopage button', 'Pick a page…'); await wait(200);
+    const picked = await b.evaluate(`(() => { const f = [...document.querySelectorAll('#steps .branch.no .step .settings .field')].find(f => /^target/i.test(f.querySelector('label')?.textContent || '')); const s = f?.querySelector('select'); const o = s && [...s.options].find(o => o.value); if (!o) return null; s.value = o.value; s.dispatchEvent(new Event('change')); return o.value; })()`);
+    let target;
+    for (const t0 = Date.now(); Date.now() - t0 < 5000 && !target; await wait(150)) target = onSign().nodes.find((n) => n.id === noNav.id)?.parameters?.target;
+    await wait(300);
+    const gone = await noPage();
+    ok(picked && target === picked && gone === null, 'Pick a page… opens the step\'s settings; a page picked there is written as its target and the line goes', { picked, target, line: gone });
+    await b.clickSel('#undo'); await wait(800);
+    const back = await noPage();
+    ok(!onSign().nodes.find((n) => n.id === noNav.id)?.parameters?.target && /No page picked/.test(back || ''), 'Undo takes the page back off, and the line with it', { line: back });
   }
   console.log('check: Data');
   await b.clickSel('[data-tab=data]'); await wait(300);

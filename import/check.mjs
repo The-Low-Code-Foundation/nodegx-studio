@@ -337,17 +337,22 @@ const countBy = (text, re) => (text.match(re) || []).length;
         cb: { id: 'cb', type: 'Button', name: 'Button set', properties: { text: txt('Set it') } },
         cg: { id: 'cg', type: 'Group', name: 'Group details', properties: { container_layout: 'column' }, elements: {
           cd: { id: 'cd', type: 'Text', name: 'Text detail', properties: { text: { type: 'TextExpression', entries: { 0: 'detail ', 1: { type: 'ElementParent' } } } } } } },
-        ch: { id: 'ch', type: 'Group', name: 'Group extra', properties: { container_layout: 'column' }, elements: { cx: { id: 'cx', type: 'Text', name: 'Text extra', properties: { text: txt('extra here') } } } } },
+        ch: { id: 'ch', type: 'Group', name: 'Group extra', properties: { container_layout: 'column' }, elements: { cx: { id: 'cx', type: 'Text', name: 'Text extra', properties: { text: txt('extra here') } } } },
+        ctg: { id: 'ctg', type: 'Button', name: 'Button toggle', properties: { text: txt('Toggle it') } } },
       workflows: { w1: { id: 'w1', type: 'ButtonClicked', properties: { element_id: 'cb' }, actions: {
         0: { id: 'a1', type: 'SetCustomState', properties: { element_id: 'ce1', custom_state: 'custom.mood_', value: txt('clicked') } },
         1: { id: 'a2', type: 'HideElement', properties: { element_id: 'ch' } },
-        2: { id: 'a3', type: 'DisplayGroupData', properties: { element_id: 'cg', data_source: txt('shown') } } } } } } };
+        2: { id: 'a3', type: 'DisplayGroupData', properties: { element_id: 'cg', data_source: txt('shown') } } } },
+        w3: { id: 'w3', type: 'ButtonClicked', properties: { element_id: 'ctg' }, actions: { 0: { id: 'a5', type: 'ToggleElement', properties: { element_id: 'ch' } } } } } } };
     synth.pages = { rpage: { type: 'Page', id: 'rpage', name: 'index', properties: { new_responsive: true, container_layout: 'column' }, elements: {
       c1: { id: 'c1', type: 'CustomElement', name: 'Card one', properties: { custom_id: 'ce1' } },
       c2: { id: 'c2', type: 'CustomElement', name: 'Card two', properties: { custom_id: 'ce1' } },
       pr: { id: 'pr', type: 'Text', name: 'Text page reads', properties: { text: { type: 'TextExpression', entries: { 0: 'page reads ', 1: mood('c1') } } } },
-      pb: { id: 'pb', type: 'Button', name: 'Button page set', properties: { text: txt('Page sets') } } },
-      workflows: { w2: { id: 'w2', type: 'ButtonClicked', properties: { element_id: 'pb' }, actions: { 0: { id: 'a4', type: 'SetCustomState', properties: { element_id: 'c2', custom_state: 'custom.mood_', value: txt('from page') } } } } } } };
+      pb: { id: 'pb', type: 'Button', name: 'Button page set', properties: { text: txt('Page sets') } },
+      pg: { id: 'pg', type: 'Group', name: 'Group page bonus', properties: { container_layout: 'column' }, elements: { px: { id: 'px', type: 'Text', name: 'Text bonus', properties: { text: txt('page bonus here') } } } },
+      pt: { id: 'pt', type: 'Button', name: 'Button page toggle', properties: { text: txt('Page toggles') } } },
+      workflows: { w2: { id: 'w2', type: 'ButtonClicked', properties: { element_id: 'pb' }, actions: { 0: { id: 'a4', type: 'SetCustomState', properties: { element_id: 'c2', custom_state: 'custom.mood_', value: txt('from page') } } } },
+        w4: { id: 'w4', type: 'ButtonClicked', properties: { element_id: 'pt' }, actions: { 0: { id: 'a6', type: 'ToggleElement', properties: { element_id: 'pg' } } } } } } };
     const out = path.join(tmp, 'r5'); fs.mkdirSync(out); const exp = path.join(out, 'app.export.json'); fs.writeFileSync(exp, JSON.stringify(synth));
     const project = path.join(out, 'project');
     const c = run([path.join(here, 'app-to-nodegx.mjs'), exp, project]);
@@ -359,7 +364,7 @@ const countBy = (text, re) => (text.match(re) || []).length;
       check('R5: the state in the reusable is a Component Object property with its default (one value per copy), not a Variable', st?.type === 'net.noodl.ComponentObject' && st.parameters.properties === 'mood' && st.parameters['value-mood'] === 'calm' && !r.nodes.some((n) => n.type === 'Variable2' || n.type === 'Set Variable'), JSON.stringify(st));
       const read = r.nodes.find((n) => n.type === 'Expression' && r.conns.some((w) => w.fromId === n.id && w.toId === 'el_ct'));
       check('R5: the text reads the state\'s own value (value-mood), not a field off the element', read && r.conns.some((w) => w.fromId === st?.id && w.fromProperty === 'value-mood' && w.toId === read.id) && !/el_Card/.test(read.parameters.expression), JSON.stringify(read?.parameters));
-      const steps = r.nodes.filter((n) => n.type === 'net.noodl.SetComponentObjectProperties');
+      const steps = r.nodes.filter((n) => n.type === 'net.noodl.SetComponentObjectProperties' && !/^ToggleElement/.test(n.label));
       const set = steps.find((n) => n.parameters.properties === 'mood'), hide = steps.find((n) => n.parameters.properties === 'Group_extra_shown'), show = steps.find((n) => n.parameters.properties === 'Group_details_data');
       check('R5: the click\'s three steps set the copy\'s record, chained store → done', set?.parameters['prop-mood'] === 'clicked' && hide?.parameters['prop-Group_extra_shown'] === false && show?.parameters['prop-Group_details_data'] === 'shown' && has(r, 'el_cb', 'onClick', set?.id, 'store') && has(r, set?.id, 'done', hide?.id, 'store') && has(r, hide?.id, 'done', show?.id, 'store'), JSON.stringify(steps.map((n) => n.parameters)));
       const vis = r.nodes.find((n) => n.type === 'net.noodl.ComponentObject' && n.parameters.properties === 'Group_extra_shown');
@@ -368,6 +373,11 @@ const countBy = (text, re) => (text.match(re) || []).length;
       check('R5: the hidden group\'s mounted and the filled group\'s data are the copy\'s too, and the text inside reads that data', vis?.parameters['value-Group_extra_shown'] === true && has(r, vis.id, 'value-Group_extra_shown', 'el_ch', 'mounted') && data && detail && r.conns.some((w) => w.fromId === data.id && w.fromProperty === 'value-Group_details_data' && w.toId === detail.id), JSON.stringify({ vis: vis?.parameters, data: data?.id, detail: detail?.parameters }));
       const outs = r.nodes.find((n) => n.type === 'Component Outputs'), ins = r.nodes.find((n) => n.id === 'copy_ce1');
       check('R5: the page reads Card one\'s mood through an output the reusable declares, and sets Card two\'s through an input', outs?.ports.some((q) => q.name === 'state-mood') && has(r, st?.id, 'value-mood', outs.id, 'state-mood') && pg.conns.some((w) => w.fromId === 'el_c1' && w.fromProperty === 'state-mood') && ins?.ports.some((q) => q.name === 'state-mood') && has(r, 'copy_ce1', 'state-mood', st?.id, 'value-mood') && pg.conns.some((w) => w.toId === 'el_c2' && w.toProperty === 'state-mood') && !pg.conns.some((w) => w.toId === 'el_c1' && w.toProperty === 'state-mood'), JSON.stringify({ outs: outs?.ports, ins: ins?.ports }));
+      // a Toggle stores the opposite of what the shown holder says now, in a reusable (the copy's record) and on a page (its Variable)
+      const notOf = (g, fromId, fromPort) => g.nodes.find((n) => n.type === 'Expression' && n.parameters.expression === '!shown' && has(g, fromId, fromPort, n.id, 'shown'));
+      const rTog = r.nodes.find((n) => n.type === 'net.noodl.SetComponentObjectProperties' && /^ToggleElement/.test(n.label)), rNot = vis && notOf(r, vis.id, 'value-Group_extra_shown');
+      const pVis = pg.nodes.find((n) => n.type === 'Variable2' && has(pg, n.id, 'value', 'el_pg', 'mounted')), pTog = pg.nodes.find((n) => n.type === 'Set Variable' && /^ToggleElement/.test(n.label)), pNot = pVis && notOf(pg, pVis.id, 'value');
+      check('R5: a Toggle is "set to the opposite of shown now": in the reusable from the copy\'s record, on the page from the element\'s Variable', rTog && rNot && !('prop-Group_extra_shown' in rTog.parameters) && has(r, rNot.id, 'result', rTog.id, 'prop-Group_extra_shown') && pTog && pNot && has(pg, pNot.id, 'result', pTog.id, 'value'), JSON.stringify({ rTog: rTog?.parameters, rNot: rNot?.id, pTog: pTog?.parameters, pNot: pNot?.id }));
       validateProject('R5 fixture', project);
       const chrome = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
       if (!exists(chrome)) skip('R5: in the running app', `no Chrome at ${chrome}`);
@@ -383,15 +393,27 @@ const countBy = (text, re) => (text.match(re) || []).length;
           await b.until(`/draw|not shown/.test(document.getElementById('status')?.textContent || '')`, 60000);
           const W = '__preview.frame.contentWindow';
           const wait = (ms) => new Promise((res) => setTimeout(res, ms));
-          const seen = async () => JSON.parse(await b.evaluate(`JSON.stringify((() => { const t = ${W}.document.body.innerText; return { moods: t.match(/mood [\\w ]*/g), page: t.match(/page reads[\\w ]*/g), details: t.match(/detail[\\w ]*/g), extra: (t.match(/extra here/g) || []).length }; })())`));
-          const press = (label) => b.evaluate(`[...${W}.document.querySelectorAll('button')].find((e) => e.textContent.trim() === ${JSON.stringify(label)}).click()`);
+          const seen = async () => JSON.parse(await b.evaluate(`JSON.stringify((() => { const t = ${W}.document.body.innerText; return { moods: t.match(/mood [\\w ]*/g), page: t.match(/page reads[\\w ]*/g), details: t.match(/detail[\\w ]*/g), extra: (t.match(/extra here/g) || []).length, bonus: (t.match(/page bonus here/g) || []).length }; })())`));
+          const press = (label, nth = 0) => b.evaluate(`[...${W}.document.querySelectorAll('button')].filter((e) => e.textContent.trim() === ${JSON.stringify(label)})[${nth}].click()`);
           await wait(1500); const open = await seen();
           await press('Set it'); await wait(800); const one = await seen();
           await press('Page sets'); await wait(800); const two = await seen();
+          // Card two sets its own, then the page sets it again to what its Variable already holds ("from page")
+          await press('Set it', 1); await wait(800); const own = await seen();
+          await press('Page sets'); await wait(800); const again = await seen();
+          // Toggle: Card one's group is hidden (its Set it hid it), Card two's too (its own Set it): Card one's toggle shows
+          // only its own, and again hides it; the page's toggle hides and shows its own group
+          await press('Toggle it', 0); await wait(800); const tog1 = await seen();
+          await press('Toggle it', 0); await wait(800); const tog2 = await seen();
+          await press('Page toggles'); await wait(800); const ptog1 = await seen();
+          await press('Page toggles'); await wait(800); const ptog2 = await seen();
           const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
           check('R5, in the running app: both copies open at the default, and the page reads Card one\'s', same(open.moods, ['mood calm', 'mood calm']) && same(open.page, ['page reads calm']) && open.extra === 2, JSON.stringify(open));
           check('R5, in the running app: Card one\'s click sets its own mood, hides its own group and fills its own; Card two is as it was', same(one.moods, ['mood clicked', 'mood calm']) && same(one.page, ['page reads clicked']) && same(one.details, ['detail shown', 'detail ']) && one.extra === 1, JSON.stringify(one));
           check('R5, in the running app: the page sets Card two\'s mood, and Card one keeps its own', same(two.moods, ['mood clicked', 'mood from page']) && two.extra === 1, JSON.stringify(two));
+          check('R5, in the running app: after Card two set its own mood, the page setting it again to the value its Variable already holds takes (Set Variable writes with forceChange)', same(own.moods, ['mood clicked', 'mood clicked']) && same(again.moods, ['mood clicked', 'mood from page']), JSON.stringify({ own: own.moods, again: again.moods }));
+          check('R5, in the running app: a copy\'s Toggle shows its own hidden group, then hides it again; the other copy\'s stays hidden', own.extra === 0 && tog1.extra === 1 && tog2.extra === 0, JSON.stringify([own.extra, tog1.extra, tog2.extra]));
+          check('R5, in the running app: the page\'s Toggle hides its shown group, then shows it again', open.bonus === 1 && ptog1.bonus === 0 && ptog2.bonus === 1, JSON.stringify([open.bonus, ptog1.bonus, ptog2.bonus]));
           check('R5, in the running app: no errors', !b.problems.some((p) => /port named|Error/.test(p)), JSON.stringify(b.problems.slice(0, 3)));
         } catch (e) { check('R5, in the running app: the run itself', false, e.message); }
         finally { try { await b?.close(); } catch { /* gone */ } srv.kill(); }

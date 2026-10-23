@@ -952,6 +952,8 @@ async function undo() {
   readGraph();
   rebuild();
   renderAll();
+  // what was undone may have said something ("Deleted the branch…"): left up, it reads as still true
+  toast('Undone');
 }
 $('undo').onclick = undo;
 
@@ -1015,8 +1017,9 @@ function edits(componentKey, list, { rebuildApp = true, redraw } = {}) {
   persist();
   if (componentKey === pageKey) readGraph();
   if (rebuildApp) rebuild();
-  // an edit that changes which fields or steps exist redraws the panel; typing into a field does not (it would lose the caret)
-  const structural = redraw ?? list.some((e) => !['set_parameter', 'rename', 'move'].includes(e.edit) || (e.edit === 'set_parameter' && e.name === 'collectionName'));
+  // an edit that changes which fields or steps exist redraws the panel; typing into a field does not (it would lose the caret).
+  // A Go to page's page is picked from a list, and its step says when there is none
+  const structural = redraw ?? list.some((e) => !['set_parameter', 'rename', 'move'].includes(e.edit) || (e.edit === 'set_parameter' && ['collectionName', 'target'].includes(e.name)));
   if (structural) setTimeout(() => { if (tab === 'workflow') renderWorkflow(); else if (tab === 'design') { renderPageData(); renderTree(); renderProps(); } }, 0);
   return ids;
 }
@@ -3501,6 +3504,9 @@ function stepCard(s, n) {
   const ports = editablePorts(node, { wireOnly: true }).filter((p) => !['x', 'y'].includes(p.name) && !(isCond && p.name === 'condition'));
   if (!ports.length) settings.append(h('div', { class: 'hint' }, 'This action has no settings to type; its inputs come from values.'));
   for (const p of ports) settings.append(fieldFor(node, p, params[p.name], wiredIn[p.name]));
+  const openSettings = () => { settings.style.display = ''; openSteps.add(s.id); };
+  // a Go to page with no page never arrives, and RouterNavigate says Done only on arriving: nothing after it runs
+  if (node.type === 'RouterNavigate' && !params.target && !wiredIn.target) lines.unshift(h('span', { class: 'nopage', style: 'color:var(--warn);flex-basis:100%;display:flex;flex-wrap:wrap;gap:2px 8px;align-items:center' }, 'No page picked: it goes nowhere, and nothing after it runs.', h('button', { class: 'quiet tiny', style: 'white-space:nowrap', onclick: openSettings }, 'Pick a page…')));
   const card = h('div', { class: `step${isCond ? ' cond' : ''}` },
     h('div', { class: 'num' }, isCond ? icon('branch') : n),
     h('h3', {}, isCond ? 'Branch' : typeName(node.type), h('span', { title: isCond ? 'If the condition holds, Yes runs; otherwise No' : null }, isCond ? (node.label || 'if the condition holds, Yes; otherwise No') : node.label || '')),

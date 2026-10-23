@@ -1508,7 +1508,15 @@ click into the shared step; Undo restores it. Mutant (no rejoin read on the card
 fail; making it and running it pass either way, the wires being the same. `check:app` 46/46, `check:data` 80/80,
 `check:timeline` 46/46. [look/s2-workflow-rejoin.png](look/s2-workflow-rejoin.png).
 Found on the way: a Go to page with no target never says Done in the app (RouterNavigate settles only on arriving),
-so a step after it does not run; the card does not say so. **Not built:** lanes side by side (STU-024) that reach one
+so a step after it does not run; the card does not say so. **Said on the card (s21):** a Go to page with no page,
+typed or wired, says on its step *"No page picked: it goes nowhere, and nothing after it runs."* with *Pick a page…*,
+which opens its settings; picking one redraws the card (a page is picked from a list, so the redraw takes no caret) and
+the line goes. Undo now says *Undone*: before, the undone gesture's own toast ("Deleted the branch and its chains")
+stayed up for its 3.4 s after the branch was back. `check:editor` 191/191 (4 new, on "Check the card": the line on No's
+new Go to page; *Undone* after the R4 Undo; *Pick a page…* → a page written as its target and the line gone; Undo
+brings both back). Run before the redraw was added: 190/191, the target on disk and the line still drawn.
+[look/s2-workflow-branch.png](look/s2-workflow-branch.png), [look/s2-workflow-rejoin.png](look/s2-workflow-rejoin.png).
+**Not built:** lanes side by side (STU-024) that reach one
 step are not drawn as a rejoin; a rejoin reached only inside a nested branch on one side is drawn as before (the shared
 step in the first column it is met in).
 
@@ -1558,6 +1566,18 @@ before) 81/90, the old app showing every mood empty, a Hide hiding the group in 
 doesn't have a port named this". **Limits:** a page setting a copy's state to the value its Variable already holds
 does nothing (the wire carries changes); a state on an element inside a reusable read from the page, and a state in a
 reusable nested in a reusable converted before it, are reported rather than wired; Toggle is still "set to shown".
+**s21 on those limits.** The first was **wrong**: Set Variable writes with `forceChange` (`setvariablenode.ts`: "always
+trigger Variable nodes to send the value on their output, even if it's the same value twice"), so the copy's input gets
+the repeat. Gated now in the running app: Card two sets its own mood ("clicked"), the page sets it again to "from page",
+which its Variable already holds, and Card two reads "from page"; this passes on the s20 importer too. **Toggle,
+built:** a Toggle stores the opposite of what the element's shown holder says now (an Expression `!shown`, read when the
+step stores): in a reusable from the copy's record into Set Component Object Properties, on a page from the element's
+Variable into Set Variable; an element in another component is still "set to shown", reported. `check:import` 94/94
+(4 new: the wiring on disk; the Toggle-again run above; in the running app a copy's Toggle shows its own hidden group
+and hides it again while the other copy's stays hidden, and the page's Toggle hides and shows its own group). Mutant
+(the s20 importer): the three Toggle checks fail (the copy's group never shows, the page's never comes back). Still
+reported, not wired: a state on an element inside a reusable read from the page, and a state in a reusable nested in
+one converted before it.
 
 **Taken.** R6 (Richard, 2026-10-23): **one file per option set**, which is how they are built: each set is its own
 logic component under `Option sets/`, one Static Data node each.
