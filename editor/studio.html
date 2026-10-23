@@ -3487,7 +3487,7 @@ function renderWorkflow() {
   if (cardBack) wf.append(h('div', { class: 'cardnav' }, h('button', { class: 'quiet back', title: 'Back to the element in Design (Esc)', onclick: backFromCard }, '← ', labelOf(cardBack.node)),
     h('button', { class: 'quiet tiny', title: 'Every workflow on this page, listed', onclick: () => { cardBack = null; renderWorkflow(); } }, 'All workflows on this page')));
   wf.append(h('div', { class: 'event-card' }, h('div', { class: 'ic' }, icon('bolt')), h('div', { class: 'named' }, cardTitle(ev), h('small', {}, `${eventTitle(ev)} · ${typeName(byId[ev.node].type)}`)),
-    h('div', { style: 'margin-left:auto;display:flex;gap:6px;align-items:center' }, h('button', { class: 'quiet tiny showrun', 'aria-pressed': showRun, title: 'Light up what this workflow did the last time it ran in the app: the wires it crossed and the steps it ran', onclick: () => toggleLastRun() }, showRun ? 'Hide the last run' : 'Show the last run'), h('div', { class: 'zoom' }, h('button', { title: 'Smaller', onclick: () => zoomFlow(-0.1) }, '−'), h('span', { class: 'zoomval' }), h('button', { title: 'Bigger', onclick: () => zoomFlow(0.1) }, '+'), h('button', { title: 'Fit the whole workflow in view', onclick: () => { flowZoom = null; fitFlow(); } }, 'Fit')), isRenaming(ev) ? null : h('button', { class: 'quiet tiny rename', title: 'Name this workflow yourself; an empty name gives it back to its steps', onclick: () => { renaming = `${ev.node}.${ev.port}`; renderWorkflow(); } }, 'Rename'), eventSteps(ev) ? null : h('button', { class: 'quiet', onclick: () => { const i = draftEvents.findIndex((d) => d.node === ev.node && d.port === ev.port); if (i >= 0) draftEvents.splice(i, 1); selEvent = null; renderWorkflow(); } }, 'Discard'))));
+    h('div', { style: 'margin-left:auto;display:flex;gap:6px;align-items:center' }, h('button', { class: 'quiet tiny showrun', 'aria-pressed': showRun, title: runPin ? 'This is the run you opened from the timeline; hide it, and Show the last run lights the latest one again' : 'Light up what this workflow did the last time it ran in the app: the wires it crossed and the steps it ran', onclick: () => toggleLastRun() }, showRun ? (runPin ? 'Hide this run' : 'Hide the last run') : 'Show the last run'), h('div', { class: 'zoom' }, h('button', { title: 'Smaller', onclick: () => zoomFlow(-0.1) }, '−'), h('span', { class: 'zoomval' }), h('button', { title: 'Bigger', onclick: () => zoomFlow(0.1) }, '+'), h('button', { title: 'Fit the whole workflow in view', onclick: () => { flowZoom = null; fitFlow(); } }, 'Fit')), isRenaming(ev) ? null : h('button', { class: 'quiet tiny rename', title: 'Name this workflow yourself; an empty name gives it back to its steps', onclick: () => { renaming = `${ev.node}.${ev.port}`; renderWorkflow(); } }, 'Rename'), eventSteps(ev) ? null : h('button', { class: 'quiet', onclick: () => { const i = draftEvents.findIndex((d) => d.node === ev.node && d.port === ev.port); if (i >= 0) draftEvents.splice(i, 1); selEvent = null; renderWorkflow(); } }, 'Discard'))));
   flowWires = [];
   const flow = h('div', { class: 'flow' });
   flow.append(document.createElementNS(SVG_NS, 'svg')); flow.firstChild.setAttribute('class', 'wires');
@@ -3513,16 +3513,23 @@ function renderWorkflow() {
 }
 /* ---- STU-026: the last run, lit up. Read off the runtime's trace (armed when the app opens, nothing to press first), with
    the timeline's own reading of runs (./timeline.mjs runsOf): this card's latest run, every other card on the component
-   taken into account so a step another card ran is not this one's. Read again while shown, when the trace has more ---- */
-let showRun = false, runLit = null, runPoll = null, runSeen = null;
+   taken into account so a step another card ran is not this one's. Read again while shown, when the trace has more.
+   Opened from a timeline row, the card shows THAT run instead (`runPin`: the recording's trace and cards, the run's
+   start), until it is hidden or another card is opened ---- */
+let showRun = false, runLit = null, runPoll = null, runSeen = null, runPin = null;
 function toggleLastRun() {
-  showRun = !showRun; runLit = null; runSeen = null;
+  showRun = !showRun; runLit = null; runSeen = null; runPin = null;
   clearInterval(runPoll); runPoll = showRun ? setInterval(pollLastRun, 400) : null;
   renderWorkflow();
 }
 const appContext = () => { try { return preview.frame.contentWindow.Noodl.Navigation._noodlRuntime.context; } catch { return null; } };
 /** This card's last run: { run, at } (`at` the wall clock it started), or { none } saying why there is none. */
 function readLastRun(ev) {
+  if (runPin && (runPin.node !== ev.node || runPin.port !== ev.port)) runPin = null;
+  if (runPin) {
+    const run = lastRunOf(runPin.trace, runPin.cards, ev, runPin.t);
+    return run ? { run, at: new Date(runPin.clock + run.t), recorded: true } : { none: 'That run is not in the recording.' };
+  }
   const ctx = appContext();
   if (!ctx?.getTraceEvents) return { none: 'The app is not open, so there is no run to show.' };
   const trace = ctx.getTraceEvents(0) || [];
@@ -3534,7 +3541,7 @@ function readLastRun(ev) {
   return { run, at };
 }
 function pollLastRun() {
-  if (!showRun || tab !== 'workflow' || !selEvent || !$('steps').querySelector('.flow')) return;
+  if (!showRun || runPin || tab !== 'workflow' || !selEvent || !$('steps').querySelector('.flow')) return;
   const ctx = appContext();
   // a new copy of the app (a rebuild) has a trace of its own; the same one is read again only when it has more
   if (ctx && runSeen?.ctx === ctx && !(ctx.getTraceEvents(runSeen.seq) || []).length) return;
@@ -3557,7 +3564,7 @@ function applyRun() {
   if (!showRun) { say.textContent = ''; return; }
   if (!run) { say.textContent = runLit?.none ?? ''; return; }
   const sides = Object.values(run.sides).map((s) => (s === 'yes' ? 'Yes' : 'No'));
-  say.textContent = `● Last run${runLit.at ? ` at ${runLit.at.toLocaleTimeString()}` : ''} · ${run.steps} step${run.steps === 1 ? '' : 's'}${sides.length ? ` · took ${sides.join(', then ')}` : ''}`;
+  say.textContent = `● ${runLit.recorded ? 'The recorded run' : 'Last run'}${runLit.at ? ` at ${runLit.at.toLocaleTimeString()}` : ''} · ${run.steps} step${run.steps === 1 ? '' : 's'}${sides.length ? ` · took ${sides.join(', then ')}` : ''}`;
 }
 /** Did the last run cross this drawn wire? Null when no run is shown. */
 function wireRan(w) {
@@ -4990,7 +4997,7 @@ function stopRecording(note = '') {
   try { screen = (w.__studioScreen || []).filter((s) => s.t >= r.t0 && s.t <= t1).map((s) => ({ t: s.t, node: ownerOf(s.el), added: s.added, removed: s.removed, text: s.text })); } catch { /* no probe */ }
   const { nodeOf, keyOf, ...naming } = timelineNaming();
   const cards = timelineCards({ ...naming, keyOf, trace, t0: r.t0, t1 });
-  recording = { ...buildTimeline({ t0: r.t0, t1, fromOpen: r.fromOpen, trace, log, screen, cards, ...naming }), page: pageKey, fromOpen: r.fromOpen, note, nodeOf, cards, shots: shotsOf(w, r.t0, t1) };
+  recording = { ...buildTimeline({ t0: r.t0, t1, fromOpen: r.fromOpen, trace, log, screen, cards, ...naming }), page: pageKey, fromOpen: r.fromOpen, note, nodeOf, cards, trace, clock: Date.now() - t1, shots: shotsOf(w, r.t0, t1) };
   tlAt = null; tlSel = -1; tlShown = -1;
   window.__ob.timeline = recording;
   renderRecButton(); renderTimeline();
@@ -5022,6 +5029,11 @@ function followRow(row) {
     // a card says which component it is in (the page's, a reusable's, another page the run went to): open it there
     if (link.card.component && link.card.component !== pageKey) { if (!registry()[link.card.component]) return toast(`${link.card.component.replace(/^Pages\//, '')} is no longer in the project.`); openComponent(link.card.component); }
     if (!byId[link.card.node]) return toast('That workflow is no longer there.');
+    // with that run lit up on it (STU-026), read off the recording, not the app's latest
+    if (recording?.trace && link.card.t !== undefined) {
+      runPin = { node: link.card.node, port: link.card.port, t: link.card.t, trace: recording.trace, cards: recording.cards, clock: recording.clock };
+      showRun = true; runLit = null; runSeen = null; clearInterval(runPoll); runPoll = setInterval(pollLastRun, 400);
+    }
     return openCard({ node: link.card.node, port: link.card.port });
   }
   if (recording && recording.page !== pageKey) return toast(`That was recorded on ${recording.page.replace(/^Pages\//, '')}; open that page to go to it.`);

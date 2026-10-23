@@ -887,7 +887,7 @@ tab already reads it that way). A badge is "this visual node has a wired signal 
 | STU-023 | **Names from steps.** | a card with no name reads its steps; a renamed card keeps its name |
 | STU-024 | **The importer merges split workflows** into one card per event. Where the conditions are exact opposites (A / not A) they become one Yes/No branch. Where they overlap and both can run, they stay as **two lanes that run side by side**, because folding them into either/or would change what the app does. | the real app's 16 split elements become 16 cards; a fixture with overlapping conditions keeps both lanes and both still run |
 | STU-025 | **Rejoin** (R4, taken 2026-10-23): after a branch, both sides continue into one shared next step | done (s20): made from the card, drawn once after the branch, gated in the app |
-| STU-026 | **The flow, drawn** (Richard, 2026-10-23, s21): a workflow drawn as NodeGX draws, in the backend map's look: steps as nodes on a dark canvas, left to right, coloured wires (then, Yes, No, where both sides meet), the last run lit up; Bubble's landmarks kept ("When … is clicked", Step 1, 2, "Only when") | done (s21): every card drawn so, its edits unchanged; a rejoin is two wires meeting, in view at Fit; the last run lit up and a "+" on a wire (s22). Mock: [look/s21-flow-mock.png](look/s21-flow-mock.png) |
+| STU-026 | **The flow, drawn** (Richard, 2026-10-23, s21): a workflow drawn as NodeGX draws, in the backend map's look: steps as nodes on a dark canvas, left to right, coloured wires (then, Yes, No, where both sides meet), the last run lit up; Bubble's landmarks kept ("When … is clicked", Step 1, 2, "Only when") | done (s21): every card drawn so, its edits unchanged; a rejoin is two wires meeting, in view at Fit; the last run lit up and a "+" on a wire (s22); a timeline row opens its card with that run lit (s23). Mock: [look/s21-flow-mock.png](look/s21-flow-mock.png) |
 
 **Done (STU-020 and STU-021, 2026-10-19, s8).** An element with a workflow wears a **⚡** in Design: on the canvas, in
 its top right corner (Design mode only, not while using the app), and on its row of the element list (a row that folds
@@ -1550,6 +1550,18 @@ deleting it heals). First run 196/197: the event node's wire read `data-from="ev
 it now takes the first class, as `data-to` did. `check:timeline` 48/48 (2 new fixtures: the latest run, not the No
 before it; another card's run through a shared step is not it), `check:app` 54/54, `check:data` 80/80. No mutant run.
 Picture: [look/s2-workflow-lastrun.png](look/s2-workflow-lastrun.png).
+**Done (s23): a timeline row opens its card with that run lit.** Clicking a workflow row in the run timeline opened
+the card with nothing lit (or, if *Show the last run* was on, the app's latest run, which need not be the row's). The
+row's link now carries the run's start (`link.card.t`), the recording keeps its trace, cards and wall clock, and
+`lastRunOf(trace, cards, card, t)` picks the run that started at `t` instead of the latest. The card opens with that
+run lit, *The recorded run at 16:37:10 · 5 steps · took Yes* under the flow, and the button reads *Hide this run*;
+hiding it, or opening another card, lets go of the recording (Show the last run is the app's latest again). It is not
+re-read while shown: a recording does not grow. `check:timeline` 51/51 (3 new: a fixture asked for the run at 10 gets
+the No run, not the latest Yes; at 30, none; the Todo page's *If Signed in* row opens with its drawn steps that ran lit
+and no other, then *Hide this run* puts it out). No mutant run: the sentence and the button exist only on that path.
+**Found, not built:** a side of a branch that sends one signal to several steps draws only the first; the rest are
+*+ 3 more wired from the same signal* on that step (lanes are drawn only at the event). On the Todo page's *If Signed
+in*, Yes runs four steps and the card draws one, so its lit run shows 2 of the run's 5 steps.
 
 **Taken.** R4 (Richard, 2026-10-23): after a branch, both sides may rejoin into one next step. His leaning first:
 *"Rejoining would be great, like n8n style, but hard to manage maybe?"*; then, asked again in s20: *"Yep for R4."*

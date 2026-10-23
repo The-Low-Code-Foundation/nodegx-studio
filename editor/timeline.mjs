@@ -96,7 +96,7 @@ export function buildTimeline({ t0, t1, fromOpen = false, trace = [], log = [], 
     const n = r.steps.size;
     const steps = r.signals.map((e) => ({ node: e.toNode, name: label(e.toNode), port: e.toPort, t: at(e.t), ...values(e, settings(e.toNode)) }));
     rows.push({ lane: 'workflow', t: at(r.t), end: at(r.end), text: r.card.name, sub: `${r.card.when} · ${n} step${n === 1 ? '' : 's'} ran${r.end > r.t ? ` over ${msText(r.end - r.t)}` : ''}`,
-      link: { card: { node: r.card.node, port: r.card.port, component: r.card.component } }, steps });
+      link: { card: { node: r.card.node, port: r.card.port, component: r.card.component, t: r.t } }, steps });
   }
   for (const e of loose) {
     const to = pageNode(e.toNode), from = pageNode(e.fromNode);
@@ -162,11 +162,12 @@ export function runsOf(trace, cards, inside = () => true) {
 /**
  * A card's last run, for drawing it lit (STU-026): the wires it crossed (`from>to`, node ids), the nodes it ran, and
  * which side each branch took. `cards` are every card on the component, so a signal another card's run sent is not
- * read as this one's; `card` is the one asked about (matched by node and port). Null: no run in what the trace holds.
+ * read as this one's; `card` is the one asked about (matched by node and port). `t`, when given, picks the run that
+ * started then (a timeline row's run, its link's `t`) instead of the latest. Null: no such run in what the trace holds.
  */
-export function lastRunOf(trace, cards, card) {
+export function lastRunOf(trace, cards, card, t) {
   const mine = cards.find((c) => c.node === card.node && c.port === card.port) ?? card;
-  const run = runsOf(trace, cards.includes(mine) ? cards : [...cards, mine]).runs.findLast((r) => r.card === mine);
+  const run = runsOf(trace, cards.includes(mine) ? cards : [...cards, mine]).runs.findLast((r) => r.card === mine && (t === undefined || r.t === t));
   if (!run) return null;
   const sides = {};
   for (const e of run.signals) if (e.fromPort === 'ontrue' || e.fromPort === 'onfalse') sides[e.fromNode] = e.fromPort === 'ontrue' ? 'yes' : 'no';

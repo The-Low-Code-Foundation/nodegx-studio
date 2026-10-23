@@ -147,6 +147,9 @@ console.log('timeline: fixtures');
     const lr = lastRunOf(tr, both, { node: 'btn', port: 'onClick' });
     ok(lr && [...lr.edges].join() === 'btn>cond,cond>yes1,yes1>after' && [...lr.ran].sort().join() === 'after,btn,cond,yes1' && lr.sides.cond === 'yes' && lr.steps === 3 && lr.t === 50,
       "a card's last run is its latest one (Yes, not the No before it): the wires it crossed and the steps it ran; another card's run through a shared step is not it", lr && { edges: [...lr.edges], ran: [...lr.ran], sides: lr.sides });
+    const first = lastRunOf(tr, both, { node: 'btn', port: 'onClick' }, 10);
+    ok(first && [...first.edges].join() === 'btn>cond,cond>no1' && first.sides.cond === 'no' && first.t === 10 && lastRunOf(tr, both, { node: 'btn', port: 'onClick' }, 30) === null,
+      "asked for the run that started at a time (a timeline row's), it is that one (No), not the latest; no run started then, none", first && { edges: [...first.edges], sides: first.sides });
     ok(lastRunOf(tr.slice(5), both, { node: 'btn', port: 'onClick' }) === null && lastRunOf([], [], { node: 'btn', port: 'onClick', reach: new Set() }) === null, 'a card that has not run in what the trace holds has no last run');
   }
 }
@@ -304,6 +307,15 @@ try {
     await b.evaluate(`document.querySelector('#tlrows .tlrow[data-link=${JSON.stringify(openRow.link)}]').click()`); await wait(600);
     const card = JSON.parse(await b.evaluate(`JSON.stringify({ shown: !document.getElementById('workflow').hidden, title: document.querySelector('#steps .wf h2')?.textContent })`));
     ok(card.shown && card.title === openRow.text, 'clicking the workflow row opens its card', card);
+    // STU-026: with that run lit up, read off the recording: of the steps the card draws, those its row lists (a side's
+    // second wire from one signal is "+ n more", not drawn: Yes here has 4, the card draws 1), and it says it is the recorded one
+    const lit = JSON.parse(await b.evaluate(`JSON.stringify({ ran: [...document.querySelectorAll('#steps .flow .step.ran')].map(s => s.dataset.id).sort(), drawn: [...document.querySelectorAll('#steps .flow .step[data-id]')].map(s => s.dataset.id), want: [...new Set(__ob.timeline.rows.find(r => r.lane === 'workflow' && r.link?.card && 'card:' + r.link.card.node + '.' + r.link.card.port === ${JSON.stringify(openRow.link)} && Math.round(r.t) === ${openRow.t})?.steps.map(x => x.node) ?? [])].sort(), ev: !!document.querySelector('#steps .evnode.ran'), say: document.querySelector('#steps .flowlegend .lastrun')?.textContent, btn: document.querySelector('#steps button.showrun')?.textContent })`));
+    const drawnRan = lit.drawn.filter((id) => lit.want.includes(id)).sort();
+    ok(lit.ran.length > 0 && lit.ran.join() === drawnRan.join() && lit.ev && /^● The recorded run at .+ · \d+ steps?/.test(lit.say) && lit.btn === 'Hide this run',
+      'the card opens with that run lit up: the drawn steps its row lists wear "ran", no other, and under the flow "The recorded run at …"', lit);
+    await b.evaluate(`document.querySelector('#steps button.showrun').click()`); await wait(300);
+    const hid = JSON.parse(await b.evaluate(`JSON.stringify({ ran: document.querySelectorAll('#steps .flow .ran').length, btn: document.querySelector('#steps button.showrun')?.textContent })`));
+    ok(hid.ran === 0 && hid.btn === 'Show the last run', 'Hide this run puts it out', hid);
     await b.clickSel('[data-tab=design]'); await wait(400);
   }
 
