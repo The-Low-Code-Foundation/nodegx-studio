@@ -1309,6 +1309,14 @@ const tname = (t) => (typeof t === 'object' && t !== null ? t.name : t) ?? '*';
 /** The custom states of the page: Variable nodes that remember which element they hang on. */
 const statesOf = (elementId) => nodes.filter((n) => n.metadata?.customState && (elementId === undefined || n.metadata.customState.of === elementId));
 const stateName = (n) => n.metadata.customState.name;
+/**
+ * R5: a state on an element inside a reusable is one value per shown copy. A Variable is one value for the whole app, so
+ * there it is a Component Object property instead (NodeGX keeps one record per copy), set by Set Component Object Properties.
+ */
+const PER_COPY = 'net.noodl.ComponentObject', SET_PER_COPY = 'net.noodl.SetComponentObjectProperties';
+const perCopy = (n) => n.type === PER_COPY;
+const statePort = (n) => (perCopy(n) ? `value-${stateName(n)}` : 'value');
+const propsOf = (n) => String(n.parameters?.properties || '').split(',').map((p) => p.trim()).filter(Boolean);
 /** The expressions the composer made: Expression nodes that remember the field they feed. */
 const isComposed = (n) => n.type === 'Expression' && n.metadata?.composedFor;
 /** The option sets: logic components under `Option sets/`, one Static Data node each. */
@@ -1356,6 +1364,12 @@ function portsOf(node, plug) {
   for (const p of node.dynamicports || []) if ((p.plug === plug || p.plug === 'input/output') && !seen.has(p.name)) seen.set(p.name, { name: p.name, label: p.displayName || p.name, type: tname(p.type), signal: tname(p.type) === 'signal' });
   // an Expression's inputs are the free names of its text (the spec's own lexer)
   if (node.type === 'Expression' && plug === 'input') for (const name of exprNames(node.parameters?.expression)) if (!seen.has(name)) seen.set(name, { name, label: name, type: '*', signal: false, group: 'Inputs' });
+  // a Component Object's ports are its properties (the runtime makes them from `properties`, as the NodeGX editor shows them)
+  if (node.type === PER_COPY) for (const p of propsOf(node)) {
+    if (!seen.has(`value-${p}`)) seen.set(`value-${p}`, { name: `value-${p}`, label: p, type: '*', signal: false });
+    if (plug === 'output' && !seen.has(`changed-${p}`)) seen.set(`changed-${p}`, { name: `changed-${p}`, label: `${p} changed`, type: 'signal', signal: true });
+  }
+  if (node.type === SET_PER_COPY && plug === 'input') for (const p of propsOf(node)) if (!seen.has(`prop-${p}`)) seen.set(`prop-${p}`, { name: `prop-${p}`, label: p, type: '*', signal: false });
   return [...seen.values()];
 }
 /**
@@ -1789,6 +1803,7 @@ function synthPorts(node) {
     out.push(enumOf('collectionName', 'Data type (collection)', names));
   }
   if (node.type === 'Set Variable' || node.type === 'Variable2' || node.type === 'Variable') out.push({ name: 'name', displayName: 'Variable name', plug: 'input', group: 'General', type: 'string' });
+  if (node.type === SET_PER_COPY) for (const p of propsOf(node)) out.push({ name: `prop-${p}`, displayName: p, plug: 'input', group: 'General', type: '*' });
   return out;
 }
 function editablePorts(node, { wireOnly = false } = {}) {
@@ -2485,14 +2500,14 @@ function customStatesSection(node) {
     const cs = s.metadata.customState;
     const setMeta = (patch) => edits(pageKey, [{ edit: 'set_metadata', component: pageKey, id: s.id, metadata: { customState: { ...cs, ...patch } } }], { rebuildApp: false, redraw: false });
     table.append(h('tr', {},
-      h('td', {}, h('input', { type: 'text', value: cs.name, onchange: (e) => { const name = slug(e.target.value); edits(pageKey, [{ edit: 'set_metadata', component: pageKey, id: s.id, metadata: { customState: { ...cs, name } } }, { edit: 'set_parameter', component: pageKey, id: s.id, name: 'name', value: stateVarName(node, name) }, { edit: 'rename', component: pageKey, id: s.id, label: `${labelOf(node.id)}'s ${name}` }], { redraw: true }); } })),
+      h('td', {}, h('input', { type: 'text', value: cs.name, onchange: (e) => { const name = slug(e.target.value); edits(pageKey, [{ edit: 'set_metadata', component: pageKey, id: s.id, metadata: { customState: { ...cs, name } } }, ...(perCopy(s) ? perCopyRename(s, cs.name, name) : [{ edit: 'set_parameter', component: pageKey, id: s.id, name: 'name', value: stateVarName(node, name) }]), { edit: 'rename', component: pageKey, id: s.id, label: `${labelOf(node.id)}'s ${name}` }], { redraw: true }); } })),
       h('td', {}, h('select', { onchange: (e) => setMeta({ type: e.target.value }) }, ...TYPES.map((t) => h('option', { value: t, selected: cs.type === t }, t)))),
-      h('td', {}, h('input', { type: 'text', value: s.parameters?.value ?? '', placeholder: '(empty)', onchange: (e) => { const raw = e.target.value; const v = raw === '' ? undefined : cs.type === 'number' ? Number(raw) : cs.type === 'yes / no' ? /^(yes|true|1)$/i.test(raw) : raw; edits(pageKey, [{ edit: 'set_parameter', component: pageKey, id: s.id, name: 'value', value: v }], { redraw: false }); } })),
+      h('td', {}, h('input', { type: 'text', value: s.parameters?.[statePort(s)] ?? '', placeholder: '(empty)', onchange: (e) => { const raw = e.target.value; const v = raw === '' ? undefined : cs.type === 'number' ? Number(raw) : cs.type === 'yes / no' ? /^(yes|true|1)$/i.test(raw) : raw; edits(pageKey, [{ edit: 'set_parameter', component: pageKey, id: s.id, name: statePort(s), value: v }], { redraw: false }); } })),
       h('td', {}, h('input', { type: 'checkbox', style: 'width:auto', checked: !!cs.list, onchange: (e) => setMeta({ list: e.target.checked }) })),
       h('td', {}, h('button', { class: 'quiet danger tiny', title: 'Remove this state', onclick: () => { edits(pageKey, [{ edit: 'remove_node', component: pageKey, id: s.id }]); toast(`Removed the state ${cs.name}`); } }, icon('x')))));
   }
   if (mine.length) det.append(table);
-  det.append(h('div', { style: 'padding:6px 0 2px' }, h('button', { class: 'tiny', onclick: () => addCustomState(node) }, icon('plus'), 'New state'), h('span', { class: 'hint', style: 'padding:0 8px' }, 'read it anywhere as ', h('i', {}, `${labelOf(node.id)}'s <state>`))));
+  det.append(h('div', { style: 'padding:6px 0 2px' }, h('button', { class: 'tiny', onclick: () => addCustomState(node) }, icon('plus'), 'New state'), h('span', { class: 'hint', style: 'padding:0 8px' }, inReusable() ? 'each copy keeps its own; read it in this reusable as ' : 'read it anywhere as ', h('i', {}, `${labelOf(node.id)}'s <state>`))));
   return det;
 }
 const stateVarName = (node, name) => `${slug(labelOf(node.id))}.${name}`;
@@ -2500,8 +2515,28 @@ function addCustomState(node) {
   const n = statesOf(node.id).length;
   const name = n ? `state${n + 1}` : 'state';
   const logicN = nodes.filter((n) => !isVisualType(n.type)).length;
-  edits(pageKey, [{ edit: 'add_node', component: pageKey, type: 'Variable2', label: `${labelOf(node.id)}'s ${name}`, x: 1000, y: 100 + logicN * 70, parameters: { name: stateVarName(node, name) }, metadata: { customState: { of: node.id, name, type: 'text', list: false } } }]);
+  const customState = { of: node.id, name, type: 'text', list: false };
+  if (inReusable()) {
+    edits(pageKey, [{ edit: 'add_node', component: pageKey, type: PER_COPY, label: `${labelOf(node.id)}'s ${name}`, x: 1000, y: 100 + logicN * 70, parameters: { properties: name }, metadata: { customState } }]);
+    return toast(`Added the state ${name} on ${labelOf(node.id)} — each copy of ${pageKey.split('/').pop()} keeps its own`);
+  }
+  edits(pageKey, [{ edit: 'add_node', component: pageKey, type: 'Variable2', label: `${labelOf(node.id)}'s ${name}`, x: 1000, y: 100 + logicN * 70, parameters: { name: stateVarName(node, name) }, metadata: { customState } }]);
   toast(`Added the state ${name} on ${labelOf(node.id)} — a Variable the whole page can read`);
+}
+const inReusable = () => reusableKeys().includes(pageKey);
+/** A per-copy state renamed: its property, its default, the wires out of it, and every step in this component that sets it. */
+function perCopyRename(s, from, to) {
+  const out = [{ edit: 'set_parameter', component: pageKey, id: s.id, name: 'properties', value: propsOf(s).map((p) => (p === from ? to : p)).join(',') }];
+  const move = (n, a, b) => { if (n.parameters?.[a] !== undefined) out.push({ edit: 'set_parameter', component: pageKey, id: n.id, name: a, value: undefined }, { edit: 'set_parameter', component: pageKey, id: n.id, name: b, value: n.parameters[a] }); };
+  const rewire = (w, at) => out.push({ edit: 'disconnect', component: pageKey, from: { node: w.fromId, port: w.fromProperty }, to: { node: w.toId, port: w.toProperty } }, { edit: 'connect', component: pageKey, ...at });
+  move(s, `value-${from}`, `value-${to}`);
+  for (const w of conns) if (w.fromId === s.id && (w.fromProperty === `value-${from}` || w.fromProperty === `changed-${from}`)) rewire(w, { from: { node: s.id, port: w.fromProperty.replace(from, to) }, to: { node: w.toId, port: w.toProperty } });
+  for (const n of nodes) if (n.type === SET_PER_COPY && propsOf(n).includes(from)) {
+    out.push({ edit: 'set_parameter', component: pageKey, id: n.id, name: 'properties', value: propsOf(n).map((p) => (p === from ? to : p)).join(',') });
+    move(n, `prop-${from}`, `prop-${to}`);
+    for (const w of conns) if (w.toId === n.id && w.toProperty === `prop-${from}`) rewire(w, { from: { node: w.fromId, port: w.fromProperty }, to: { node: n.id, port: `prop-${to}` } });
+  }
+  return out;
 }
 function fieldFor(node, p, value, wire, setter) {
   const ty = tname(p.type);
@@ -2603,7 +2638,7 @@ function valueSources(forNode) {
   const outs = (n) => portsOf(n, 'output').filter((o) => !o.signal).sort((a, b) => rank(a) - rank(b));
   const data = pageDataSources();
   if (data.length) groups.push(['Page data', data]);
-  const states = statesOf().filter((n) => n.id !== forNode?.id).map((n) => ({ node: n.id, port: 'value', text: `${labelOf(n.metadata.customState.of)}'s ${stateName(n)}`, sub: n.metadata.customState.type, kind: 'state' }));
+  const states = statesOf().filter((n) => n.id !== forNode?.id).map((n) => ({ node: n.id, port: statePort(n), text: `${labelOf(n.metadata.customState.of)}'s ${stateName(n)}`, sub: n.metadata.customState.type, kind: 'state' }));
   if (states.length) groups.push(['Custom states', states]);
   const sets = optionSetKeys().map((k) => ({ setKey: k, text: `${k.split('/').pop()} · all options`, sub: 'option set', kind: 'opt' }));
   if (sets.length) groups.push(['Option sets', sets]);
@@ -3249,6 +3284,7 @@ function nodeEffects(n, seen) {
   const p = n.parameters || {};
   if (WRITES.has(n.type)) return p.collectionName ? [{ kind: 'data', target: p.collectionName }] : [];
   if (n.type === 'Set Variable') return p.name ? [{ kind: 'state', target: p.name }] : [];
+  if (n.type === SET_PER_COPY) return propsOf(n).map((target) => ({ kind: 'state', target }));
   if (n.type === 'RouterNavigate' || n.type === 'Navigate To Path') return [{ kind: 'nav', target: p.target ? String(p.target).split('/').pop() : String(p.path ?? '') }];
   if (/^net\.noodl\.user\.(LogIn|LogOut|SignUp)$/.test(n.type)) return [{ kind: 'user' }];
   if (n.type === 'CloudFunction2' && p.function) return [{ kind: 'backend', target: p.function }];
@@ -3507,7 +3543,7 @@ function refreshMenu(e, from) {
 function setStateMenu(e, from) {
   const menu = popover(e);
   menu.append(h('div', { class: 'h' }, 'Which state?'));
-  for (const s of statesOf()) menu.append(h('div', { class: 'item', onclick: () => { closeMenu(); addAction('Set Variable', from, { name: s.parameters?.name }, `Set ${labelOf(s.metadata.customState.of)}'s ${stateName(s)}`); } }, icon('state'), `${labelOf(s.metadata.customState.of)}'s ${stateName(s)}`, h('small', {}, s.metadata.customState.type)));
+  for (const s of statesOf()) menu.append(h('div', { class: 'item', onclick: () => { closeMenu(); addAction(perCopy(s) ? SET_PER_COPY : 'Set Variable', from, perCopy(s) ? { properties: stateName(s) } : { name: s.parameters?.name }, `Set ${labelOf(s.metadata.customState.of)}'s ${stateName(s)}`); } }, icon('state'), `${labelOf(s.metadata.customState.of)}'s ${stateName(s)}`, h('small', {}, s.metadata.customState.type)));
   menu.append(h('div', { class: 'item', onclick: () => { closeMenu(); addAction('Set Variable', from); } }, icon('code'), 'A page variable by name'));
   document.body.append(menu); dismissOnOutside(menu);
 }

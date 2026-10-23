@@ -858,6 +858,30 @@ try {
     ok(!existsSync(join(project, 'components/__studio')) && !readFileSync(join(project, 'components/App/nodes.json'), 'utf8').includes('__studio'), 'the canvas page is Studio\'s: not in the project folder, not in its router');
     await select('ppText');
     ok((await b.evaluate('document.querySelector("#right .head input")?.value')) === 'Probe text', 'clicking its text in the canvas selects it');
+    // R5: a state made in a reusable is each copy's own: a Component Object property, not one Variable for the whole app
+    await clickText('#right .ptabs button', 'Interaction'); await wait(250);
+    n0 = await shows();
+    await clickText('#right .states button', 'New state'); await rebuilt(n0);
+    const co = onDisk(PANEL + 'nodes.json').nodes.find((n) => n.metadata?.customState?.of === 'ppText');
+    ok(co?.type === 'net.noodl.ComponentObject' && co.parameters?.properties === 'state' && !onDisk(PANEL + 'nodes.json').nodes.some((n) => n.type === 'Variable2'), 'New state on an element inside a reusable writes a Component Object property (one value per copy), not a Variable', { type: co?.type, properties: co?.parameters?.properties });
+    n0 = await shows();
+    await b.evaluate(`(() => { const i = document.querySelector('#right .states td:nth-child(3) input'); i.focus(); i.select(); })()`);
+    await b.type('each its own'); await b.evaluate(`document.querySelector('#right .states td:nth-child(3) input').dispatchEvent(new Event('change'))`); await rebuilt(n0);
+    ok(onDisk(PANEL + 'nodes.json').nodes.find((n) => n.id === co.id)?.parameters?.['value-state'] === 'each its own', 'its default is the property\'s own value (value-state)');
+    await clickText('#right .ptabs button', 'Visual'); await wait(250);
+    const pf = await b.evaluate(`[...document.querySelectorAll('#right .field')].map(f => f.querySelector('label').textContent)`);
+    await b.evaluate(`[...document.querySelectorAll('#right .field')][${pf.indexOf('Text')}].querySelector('.bolt').click()`); await wait(250);
+    n0 = await shows();
+    await menuItem("Probe text's state"); await rebuilt(n0);
+    const toText = () => onDisk(PANEL + 'connections.json').connections.find((w) => w.fromId === co.id && w.toId === 'ppText' && w.toProperty === 'text')?.fromProperty;
+    ok(toText() === 'value-state' && (await appText()).includes('each its own'), 'the ⚡ lists it, and picking it wires value-state into the text: the canvas copy shows the default', { wire: toText(), text: (await appText()).slice(0, 60) });
+    // renamed, the property, its default and the wire out of it follow (a Variable's port is always `value`; this one is named)
+    await clickText('#right .ptabs button', 'Interaction'); await wait(250);
+    n0 = await shows();
+    await b.evaluate(`(() => { const i = document.querySelector('#right .states td:nth-child(1) input'); i.value = 'mood'; i.dispatchEvent(new Event('change')); })()`); await rebuilt(n0);
+    const renamed = onDisk(PANEL + 'nodes.json').nodes.find((n) => n.id === co.id);
+    ok(renamed.parameters.properties === 'mood' && renamed.parameters['value-mood'] === 'each its own' && !('value-state' in renamed.parameters) && toText() === 'value-mood' && (await appText()).includes('each its own'), 'renamed to mood: the property, its default and the wire into the text follow, and the canvas still shows it', { parameters: renamed.parameters, wire: toText() });
+    await clickText('#right .ptabs button', 'Visual'); await wait(250);
     // data made here is the reusable's, in STU-014's form
     const formIn = async (sel, value, ev = 'input') => b.evaluate(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event(${JSON.stringify(ev)}, { bubbles: true })); })()`);
     await b.clickSel('#newpagedata');
@@ -885,6 +909,13 @@ try {
     const frame = await b.evaluate(`__ob.preview.frame.contentWindow.Noodl.Navigation._noodlRuntime.context.rootComponent.nodeScope.getNodesWithTypeRecursive('Router')[0]._internal.currentPage?.component`);
     const panelAsks = await b.evaluate(noteAsks); // a fresh frame: going back is a rebuild that starts on Sign in
     ok(onCanvas === 1 && frame === '/Pages/Sign in' && panelAsks === 2, 'the canvas\'s copy asks it once; on the page, the two shown copies ask it once each and the hidden two not at all', { onCanvas, frame, panelAsks });
+    // R5 on the page: each copy's record set to its own value, every shown copy shows its own (with a Variable they would all show the last)
+    const shownTexts = `JSON.stringify(__ob.preview.elementsOf('ppText').filter(e => e.getClientRects().length).map(e => e.textContent))`;
+    const before = JSON.parse(await b.evaluate(shownTexts));
+    const records = await b.evaluate(`(() => { const cos = __ob.preview.frame.contentWindow.Noodl.Navigation._noodlRuntime.context.rootComponent.nodeScope.getNodesWithTypeRecursive('net.noodl.ComponentObject'); cos.forEach((c, i) => c._internal.model.set('mood', 'copy ' + i)); return cos.length; })()`);
+    await wait(500);
+    const after = JSON.parse(await b.evaluate(shownTexts));
+    ok(before.length === 2 && before.every((t) => t === 'each its own') && records >= 2 && after.length === 2 && after.every((t) => /^copy \d$/.test(t)) && new Set(after).size === 2, 'on Sign in the two shown copies start at the default; each copy built has its own record, and set apart, each shown copy shows its own value', { before, records, after });
   }
   console.log('check: the Conditional tab (STU-051)');
   {

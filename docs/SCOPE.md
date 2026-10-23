@@ -61,7 +61,7 @@ Studio, opens or imports an app, changes it, and publishes it.** What that needs
 | 6 | **STU-065 a development and a live database** (M6), and the Data tab it sits in (STU-060, 061, 063, 064). Richard, 2026-10-22: *"Alpha please"* | done (s15) |
 
 Not in the alpha: STU-041–043 (the converter's one home, the fidelity gate, plugins), the timeline's gaps, R4's
-rejoin, R5's states in reusables, and R10's SSH publish (ruled 2026-10-23; NodeGX's to build first).
+rejoin, R5's importer half (a Bubble reusable's states per copy; Studio's own are, s19), and R10's SSH publish (ruled 2026-10-23; NodeGX's to build first).
 
 [history/](history/) is how it started (NodeGX phase 123, working title "Open Bubble"): the brief, the look, the
 first play test and every ruling taken.
@@ -1486,6 +1486,19 @@ the **Component Object** (`net.noodl.ComponentObject`, `componentState<instance 
 Properties* (`properties`, `prop-<name>`, signal `store`) and read as `value-<name>`; both are in preview 0.2.3. One
 catch: a For Each's row component has the row's item as its Component Object, so a state there shares the item's
 field names.
+**Built in Studio (s19).** *New state* on an element inside a reusable (one opened on its own) writes a Component
+Object with the state as its one property (`metadata.customState` as before); its default is `value-<name>`, the ⚡
+offers it as `value-<name>`, *Set a custom state* writes a Set Component Object Properties step (`prop-<name>`, run
+by `store`), and a rename moves the property, its default, the wires out of it and the steps that set it. On a page it
+is a Variable, as before. `check:editor` 177/177 (5 new, on the gate's Probe panel with four copies on Sign in): the
+node and its default on disk, the ⚡ wire into the text, the rename to `mood` with its wire, and in the running app
+both shown copies start at the default, there are 4 records (one per copy), and set apart the two shown copies read
+"copy 0" and "copy 1". Not gated: the Set step (built on the same path as Set Variable's). **Not built:** the
+importer's half: a Bubble reusable's states, its elements' show / hide and display data are still global Variables
+by name, read and set by name in compiled expressions and actions (`convertReusable`, `SetCustomState`,
+`ShowElement`, `DisplayGroupData`); moving them per copy means compiling those reads to the copy's record, a larger
+change than Studio's. Also not built: reading a copy's state from the page outside it (Bubble's "Reusable's
+state"), which would be a Component Outputs port.
 
 **Taken.** R6 (Richard, 2026-10-23): **one file per option set**, which is how they are built: each set is its own
 logic component under `Option sets/`, one Static Data node each.
