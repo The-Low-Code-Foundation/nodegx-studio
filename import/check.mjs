@@ -319,6 +319,87 @@ const countBy = (text, re) => (text.match(re) || []).length;
   }
 }
 
+// ---------------------------------------------------------------- 1g. R5: a reusable's states, shown / hidden and displayed data are each copy's own
+// Bubble's Card has a state (mood, default "calm"), a text reading it, a group a step fills ("Display data") with a text
+// reading "Parent group's thing", and a group a step hides; one click sets all three. The page places two copies, reads
+// Card one's mood and sets Card two's. Before R5 a read of a state came out empty, the displayed data was never read, and
+// a Hide in one copy hid the group in both. Measured in the running app when Chrome is there.
+{
+  const base = path.join(tmp, 'editor requests', 'app.export.json');
+  if (exists(base)) {
+    const synth = readJson(base);
+    const txt = (s) => ({ type: 'TextExpression', entries: { 0: s } });
+    const mood = (el) => ({ type: 'GetElement', properties: { element_id: el }, next: { type: 'Message', name: 'custom.mood_' } });
+    synth.custom_elements = { ce1: { id: 'ce1', type: 'CustomDefinition', name: 'Card', properties: { element_type: 'Group', container_layout: 'column' },
+      custom_states: { mood_: { display: 'mood', value: 'text', default_val: 'calm' } },
+      elements: {
+        ct: { id: 'ct', type: 'Text', name: 'Text mood', properties: { text: { type: 'TextExpression', entries: { 0: 'mood ', 1: mood('ce1') } } } },
+        cb: { id: 'cb', type: 'Button', name: 'Button set', properties: { text: txt('Set it') } },
+        cg: { id: 'cg', type: 'Group', name: 'Group details', properties: { container_layout: 'column' }, elements: {
+          cd: { id: 'cd', type: 'Text', name: 'Text detail', properties: { text: { type: 'TextExpression', entries: { 0: 'detail ', 1: { type: 'ElementParent' } } } } } } },
+        ch: { id: 'ch', type: 'Group', name: 'Group extra', properties: { container_layout: 'column' }, elements: { cx: { id: 'cx', type: 'Text', name: 'Text extra', properties: { text: txt('extra here') } } } } },
+      workflows: { w1: { id: 'w1', type: 'ButtonClicked', properties: { element_id: 'cb' }, actions: {
+        0: { id: 'a1', type: 'SetCustomState', properties: { element_id: 'ce1', custom_state: 'custom.mood_', value: txt('clicked') } },
+        1: { id: 'a2', type: 'HideElement', properties: { element_id: 'ch' } },
+        2: { id: 'a3', type: 'DisplayGroupData', properties: { element_id: 'cg', data_source: txt('shown') } } } } } } };
+    synth.pages = { rpage: { type: 'Page', id: 'rpage', name: 'index', properties: { new_responsive: true, container_layout: 'column' }, elements: {
+      c1: { id: 'c1', type: 'CustomElement', name: 'Card one', properties: { custom_id: 'ce1' } },
+      c2: { id: 'c2', type: 'CustomElement', name: 'Card two', properties: { custom_id: 'ce1' } },
+      pr: { id: 'pr', type: 'Text', name: 'Text page reads', properties: { text: { type: 'TextExpression', entries: { 0: 'page reads ', 1: mood('c1') } } } },
+      pb: { id: 'pb', type: 'Button', name: 'Button page set', properties: { text: txt('Page sets') } } },
+      workflows: { w2: { id: 'w2', type: 'ButtonClicked', properties: { element_id: 'pb' }, actions: { 0: { id: 'a4', type: 'SetCustomState', properties: { element_id: 'c2', custom_state: 'custom.mood_', value: txt('from page') } } } } } } };
+    const out = path.join(tmp, 'r5'); fs.mkdirSync(out); const exp = path.join(out, 'app.export.json'); fs.writeFileSync(exp, JSON.stringify(synth));
+    const project = path.join(out, 'project');
+    const c = run([path.join(here, 'app-to-nodegx.mjs'), exp, project]);
+    if (check('R5: a reusable with a state, a filled group and a hidden one, two copies on a page, converts', c.status === 0, (c.stderr || c.stdout).slice(-600))) {
+      const load = (rel) => { const d = path.join(project, 'components', rel); return { nodes: readJson(path.join(d, 'nodes.json')).nodes, conns: readJson(path.join(d, 'connections.json')).connections }; };
+      const r = load('Reusable/Card'), pg = load('Pages/index');
+      const has = (g, from, fp, to, tp) => g.conns.some((w) => w.fromId === from && w.fromProperty === fp && w.toId === to && w.toProperty === tp);
+      const st = r.nodes.find((n) => n.metadata?.customState?.name === 'mood');
+      check('R5: the state in the reusable is a Component Object property with its default (one value per copy), not a Variable', st?.type === 'net.noodl.ComponentObject' && st.parameters.properties === 'mood' && st.parameters['value-mood'] === 'calm' && !r.nodes.some((n) => n.type === 'Variable2' || n.type === 'Set Variable'), JSON.stringify(st));
+      const read = r.nodes.find((n) => n.type === 'Expression' && r.conns.some((w) => w.fromId === n.id && w.toId === 'el_ct'));
+      check('R5: the text reads the state\'s own value (value-mood), not a field off the element', read && r.conns.some((w) => w.fromId === st?.id && w.fromProperty === 'value-mood' && w.toId === read.id) && !/el_Card/.test(read.parameters.expression), JSON.stringify(read?.parameters));
+      const steps = r.nodes.filter((n) => n.type === 'net.noodl.SetComponentObjectProperties');
+      const set = steps.find((n) => n.parameters.properties === 'mood'), hide = steps.find((n) => n.parameters.properties === 'Group_extra_shown'), show = steps.find((n) => n.parameters.properties === 'Group_details_data');
+      check('R5: the click\'s three steps set the copy\'s record, chained store → done', set?.parameters['prop-mood'] === 'clicked' && hide?.parameters['prop-Group_extra_shown'] === false && show?.parameters['prop-Group_details_data'] === 'shown' && has(r, 'el_cb', 'onClick', set?.id, 'store') && has(r, set?.id, 'done', hide?.id, 'store') && has(r, hide?.id, 'done', show?.id, 'store'), JSON.stringify(steps.map((n) => n.parameters)));
+      const vis = r.nodes.find((n) => n.type === 'net.noodl.ComponentObject' && n.parameters.properties === 'Group_extra_shown');
+      const data = r.nodes.find((n) => n.type === 'net.noodl.ComponentObject' && n.parameters.properties === 'Group_details_data');
+      const detail = r.nodes.find((n) => n.type === 'Expression' && r.conns.some((w) => w.fromId === n.id && w.toId === 'el_cd'));
+      check('R5: the hidden group\'s mounted and the filled group\'s data are the copy\'s too, and the text inside reads that data', vis?.parameters['value-Group_extra_shown'] === true && has(r, vis.id, 'value-Group_extra_shown', 'el_ch', 'mounted') && data && detail && r.conns.some((w) => w.fromId === data.id && w.fromProperty === 'value-Group_details_data' && w.toId === detail.id), JSON.stringify({ vis: vis?.parameters, data: data?.id, detail: detail?.parameters }));
+      const outs = r.nodes.find((n) => n.type === 'Component Outputs'), ins = r.nodes.find((n) => n.id === 'copy_ce1');
+      check('R5: the page reads Card one\'s mood through an output the reusable declares, and sets Card two\'s through an input', outs?.ports.some((q) => q.name === 'state-mood') && has(r, st?.id, 'value-mood', outs.id, 'state-mood') && pg.conns.some((w) => w.fromId === 'el_c1' && w.fromProperty === 'state-mood') && ins?.ports.some((q) => q.name === 'state-mood') && has(r, 'copy_ce1', 'state-mood', st?.id, 'value-mood') && pg.conns.some((w) => w.toId === 'el_c2' && w.toProperty === 'state-mood') && !pg.conns.some((w) => w.toId === 'el_c1' && w.toProperty === 'state-mood'), JSON.stringify({ outs: outs?.ports, ins: ins?.ports }));
+      validateProject('R5 fixture', project);
+      const chrome = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+      if (!exists(chrome)) skip('R5: in the running app', `no Chrome at ${chrome}`);
+      else {
+        const { spawn } = await import('node:child_process');
+        const { browser } = await import('../editor/cdp.mjs');
+        const srv = spawn(process.execPath, [path.join(here, 'preview-solo.mjs'), project, '--port', '0'], { stdio: ['ignore', 'pipe', 'ignore'] });
+        let b;
+        try {
+          const url = await new Promise((res, rej) => { setTimeout(() => rej(new Error('preview-solo did not start')), 30000); srv.stdout.on('data', (d) => { const m = /http:\/\/[\d.:]+\//.exec(String(d)); if (m) res(m[0]); }); });
+          b = await browser({ port: 9300 + Math.floor(Math.random() * 600), chrome });
+          await b.goto(url);
+          await b.until(`/draw|not shown/.test(document.getElementById('status')?.textContent || '')`, 60000);
+          const W = '__preview.frame.contentWindow';
+          const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+          const seen = async () => JSON.parse(await b.evaluate(`JSON.stringify((() => { const t = ${W}.document.body.innerText; return { moods: t.match(/mood [\\w ]*/g), page: t.match(/page reads[\\w ]*/g), details: t.match(/detail[\\w ]*/g), extra: (t.match(/extra here/g) || []).length }; })())`));
+          const press = (label) => b.evaluate(`[...${W}.document.querySelectorAll('button')].find((e) => e.textContent.trim() === ${JSON.stringify(label)}).click()`);
+          await wait(1500); const open = await seen();
+          await press('Set it'); await wait(800); const one = await seen();
+          await press('Page sets'); await wait(800); const two = await seen();
+          const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+          check('R5, in the running app: both copies open at the default, and the page reads Card one\'s', same(open.moods, ['mood calm', 'mood calm']) && same(open.page, ['page reads calm']) && open.extra === 2, JSON.stringify(open));
+          check('R5, in the running app: Card one\'s click sets its own mood, hides its own group and fills its own; Card two is as it was', same(one.moods, ['mood clicked', 'mood calm']) && same(one.page, ['page reads clicked']) && same(one.details, ['detail shown', 'detail ']) && one.extra === 1, JSON.stringify(one));
+          check('R5, in the running app: the page sets Card two\'s mood, and Card one keeps its own', same(two.moods, ['mood clicked', 'mood from page']) && two.extra === 1, JSON.stringify(two));
+          check('R5, in the running app: no errors', !b.problems.some((p) => /port named|Error/.test(p)), JSON.stringify(b.problems.slice(0, 3)));
+        } catch (e) { check('R5, in the running app: the run itself', false, e.message); }
+        finally { try { await b?.close(); } catch { /* gone */ } srv.kill(); }
+      }
+    }
+  }
+}
+
 // ---------------------------------------------------------------- 1f. STU-053: the Bubble elements NodeGX has no node of its own for
 // Two floating groups (one at the bottom, one at Bubble's default), a popup, a repeating group of three columns and a
 // dropdown whose choices come from a search.

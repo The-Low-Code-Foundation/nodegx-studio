@@ -61,8 +61,8 @@ Studio, opens or imports an app, changes it, and publishes it.** What that needs
 | 6 | **STU-065 a development and a live database** (M6), and the Data tab it sits in (STU-060, 061, 063, 064). Richard, 2026-10-22: *"Alpha please"* | done (s15) |
 
 Not in the alpha: STU-041–043 (the converter's one home, the fidelity gate, plugins), the timeline's gaps, and R10's
-SSH publish (ruled 2026-10-23; NodeGX's to build first). Ruled in on 2026-10-23 (s20), to build next: R5's importer half
-(Richard: *"Yep reusables get one state per copy"*) and R4's rejoin (*"Yep for R4"*).
+SSH publish (ruled 2026-10-23; NodeGX's to build first). Ruled in on 2026-10-23 (s20): R5's importer half
+(Richard: *"Yep reusables get one state per copy"*; built s20) and R4's rejoin (*"Yep for R4"*).
 
 [history/](history/) is how it started (NodeGX phase 123, working title "Open Bubble"): the brief, the look, the
 first play test and every ruling taken.
@@ -1517,8 +1517,26 @@ importer's half: a Bubble reusable's states, its elements' show / hide and displ
 by name, read and set by name in compiled expressions and actions (`convertReusable`, `SetCustomState`,
 `ShowElement`, `DisplayGroupData`); moving them per copy means compiling those reads to the copy's record, a larger
 change than Studio's. **Ruled in (s20):** Richard, asked whether it comes before the alpha: *"Yep reusables get one
-state per copy."* Also not built: reading a copy's state from the page outside it (Bubble's "Reusable's
-state"), which would be a Component Outputs port.
+state per copy."*
+**The importer's half, built (s20).** s19's read was wrong in one place: a compiled expression never read a state by
+name. "Card's mood" compiled to a field read off the element (`el_Card?.mood` from the element's `this`), which is
+empty on a page as well as in a reusable, and a "Display data" step set a Variable nothing read. Now
+(`import/app-to-nodegx.mjs`): every state is registered before anything is compiled (so a text above the state's
+element reads it). A state in a reusable is a Component Object property with its default; a state on a page or in a
+repeating group's row is a Variable, as before (a row's own record is its item; reported). A read takes the state's
+own value: `value-<name>`, or `value` of the Variable, or a Variable node of the same name from another component.
+*Set state* in the reusable is Set Component Object Properties (`store` → `done`). A page reads a copy's state through
+a Component Outputs port `state-<name>` the reusable declares (Bubble's "Reusable's state"); it sets one copy's
+through a Variable of that copy's own wired into an input `state-<name>`, which the reusable passes to its record. Show /
+hide inside a reusable is a property `<label>_shown` wired into `mounted`. *Display data* fills a holder (a property,
+or on a page a Variable) that the group's children read as "Parent group's thing" and "Group's data" reads, its own
+data source until the step runs. `check:import` 90/90 (11 new, 4 of them in the running app through preview-solo):
+both copies open at "calm" and the page reads Card one's; Card one's click sets its mood, hides its own group and fills
+its own, Card two unchanged; the page sets Card two's mood, Card one keeps its own; no errors. Mutant (the importer
+before) 81/90, the old app showing every mood empty, a Hide hiding the group in both copies, and "Node /Reusable/Card
+doesn't have a port named this". **Limits:** a page setting a copy's state to the value its Variable already holds
+does nothing (the wire carries changes); a state on an element inside a reusable read from the page, and a state in a
+reusable nested in a reusable converted before it, are reported rather than wired; Toggle is still "set to shown".
 
 **Taken.** R6 (Richard, 2026-10-23): **one file per option set**, which is how they are built: each set is its own
 logic component under `Option sets/`, one Static Data node each.
