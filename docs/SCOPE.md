@@ -60,8 +60,9 @@ Studio, opens or imports an app, changes it, and publishes it.** What that needs
 | 5 | **main pushed** | done 2026-10-23 (Richard's yes; origin/main fb31c9f) |
 | 6 | **STU-065 a development and a live database** (M6), and the Data tab it sits in (STU-060, 061, 063, 064). Richard, 2026-10-22: *"Alpha please"* | done (s15) |
 
-Not in the alpha: STU-041–043 (the converter's one home, the fidelity gate, plugins), the timeline's gaps, R4's
-rejoin, R5's importer half (a Bubble reusable's states per copy; Studio's own are, s19), and R10's SSH publish (ruled 2026-10-23; NodeGX's to build first).
+Not in the alpha: STU-041–043 (the converter's one home, the fidelity gate, plugins), the timeline's gaps, and R10's
+SSH publish (ruled 2026-10-23; NodeGX's to build first). Ruled in on 2026-10-23 (s20), to build next: R5's importer half
+(Richard: *"Yep reusables get one state per copy"*) and R4's rejoin (*"Yep for R4"*).
 
 [history/](history/) is how it started (NodeGX phase 123, working title "Open Bubble"): the brief, the look, the
 first play test and every ruling taken.
@@ -1484,7 +1485,11 @@ Required either way).
 
 | id | question | from |
 |---|---|---|
-| R4 | After a branch, can both sides rejoin into one next step? **Leaning (Richard, 2026-10-23):** *"Rejoining would be great, like n8n style, but hard to manage maybe?"* Wanted; what it costs in the graph and on the card is to be worked out (STU-025) and brought back before it is built. | phase 123 |
+| — | none open: R4 taken 2026-10-23 (s20), below | |
+
+**Taken.** R4 (Richard, 2026-10-23): after a branch, both sides may rejoin into one next step. His leaning first:
+*"Rejoining would be great, like n8n style, but hard to manage maybe?"*; then, asked again in s20: *"Yep for R4."*
+Built as STU-025.
 
 **Taken.** R5 (Richard, 2026-10-23): *"Yep for custom states in reusables."* A custom state can live inside a reusable,
 each shown copy with its own value. What Studio does today there is to be read before building (custom states are
@@ -1511,7 +1516,8 @@ shown copy makes it read "clicked" while the second keeps "copy 1". **Not built:
 importer's half: a Bubble reusable's states, its elements' show / hide and display data are still global Variables
 by name, read and set by name in compiled expressions and actions (`convertReusable`, `SetCustomState`,
 `ShowElement`, `DisplayGroupData`); moving them per copy means compiling those reads to the copy's record, a larger
-change than Studio's. Also not built: reading a copy's state from the page outside it (Bubble's "Reusable's
+change than Studio's. **Ruled in (s20):** Richard, asked whether it comes before the alpha: *"Yep reusables get one
+state per copy."* Also not built: reading a copy's state from the page outside it (Bubble's "Reusable's
 state"), which would be a Component Outputs port.
 
 **Taken.** R6 (Richard, 2026-10-23): **one file per option set**, which is how they are built: each set is its own
