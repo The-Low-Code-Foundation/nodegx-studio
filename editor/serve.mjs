@@ -321,14 +321,19 @@ const holdOf = () => {
   if (!existsSync(at)) return { held: false };
   try { return { held: true, ...JSON.parse(readFileSync(at, 'utf8')) }; } catch { return { held: true, at: statSync(at).mtime.toISOString(), note: '' }; }
 };
-/** studio.html for a foreign origin: Studio's own absolute origin on the one script tag, the runtime base, the module imports, and the bridge in the head. */
+/** studio.html for a foreign origin: Studio's own absolute origin on the one script tag, the runtime base, the module
+ * imports (root-relative AND `./`: in a sandbox the page is `about:srcdoc`, and `./specs.js` resolves to nowhere), the
+ * bridge in the head, and Studio's module waiting for the bridge's `window.__studioReady` (the proxy may answer 503
+ * until Studio is up). ⚠️ The same five rewrites as NodeGX's `packages/noodl-mcp/src/studio/panelHtml.ts`, which
+ * builds the MCP App resource from this file on disk before any Studio runs: change one, change both. */
 const panelHtml = (origin) =>
   readFileSync(join(here, 'studio.html'), 'utf8')
     // studio.html has no <head> tag of its own: the bridge goes in before its first script, so it runs first
     .replace(/<script\b/i, (tag) => `<script>window.__STUDIO_ORIGIN=${JSON.stringify(origin)}</script><script type="module" src="${origin}/hosted/hosted.js"></script>${tag}`)
     .replace(/(src|href)="\/(?!\/)/g, `$1="${origin}/`)
     .replace(/runtimeBase:\s*'\/runtime\/'/g, `runtimeBase: '${origin}/runtime/'`)
-    .replace(/(import\(|from\s+)(['"])\/(?!\/)/g, `$1$2${origin}/`);
+    .replace(/(import\(|from\s+)(['"])\.?\/(?!\/)/g, `$1$2${origin}/`)
+    .replace(/<script type="module">/, '<script type="module">\nawait window.__studioReady;\n');
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');

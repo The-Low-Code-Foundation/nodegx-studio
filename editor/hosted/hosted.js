@@ -24,7 +24,8 @@ const ORIGIN = window.__STUDIO_ORIGIN ?? location.origin;
 const hosted = window.parent !== window;
 
 // 1. Root-relative requests go to Studio. Absolute URLs and relative paths are left alone.
-const abs = (u) => (typeof u === 'string' && u.startsWith('/') && !u.startsWith('//') ? ORIGIN + u : u);
+const abs = (u) =>
+  typeof u !== 'string' ? u : u.startsWith('/') && !u.startsWith('//') ? ORIGIN + u : u.startsWith('./') ? ORIGIN + u.slice(1) : u;
 const nativeFetch = window.fetch.bind(window);
 window.fetch = (input, init) => nativeFetch(typeof input === 'string' ? abs(input) : input instanceof URL ? input : input, init);
 const NativeEventSource = window.EventSource;
@@ -97,6 +98,22 @@ const noteEl = $('holdnote');
 
 let app = null;
 const say = (text, held = false) => { stateEl.textContent = text; stateEl.classList.toggle('held', held); };
+
+// Studio's own module awaits this (the /panel rewrite puts `await window.__studioReady` at its top): served through
+// NodeGX's proxy, the origin answers 503 until the agent's open_studio has started Studio, and a page that asked
+// for the project then would draw nothing. Polled on /api/hold, the smallest answer there is; direct from Studio
+// it resolves on the first try.
+window.__studioReady = (async () => {
+  for (let i = 0; i < 120; i++) {
+    try {
+      const r = await fetch('/api/hold');
+      if (r.ok) return;
+    } catch { /* not up yet */ }
+    say(i === 0 ? 'Studio is starting…' : `Studio is starting… (${i}s)`);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  say('Studio did not start. Ask the agent to call open_studio.');
+})();
 
 // The model hears a hold the moment it happens, not on its next refused write. Best effort: a host without the
 // capability, or a transport that is gone, changes nothing about the hold itself, which is the file.
