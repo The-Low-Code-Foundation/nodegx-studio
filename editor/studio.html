@@ -1386,7 +1386,8 @@ function stepOnly(node, port) {
   return has && node.parameters?.[box] !== false ? [{ edit: 'set_parameter', component: pageKey, id: node.id, name: box, value: false }] : [];
 }
 const exprNames = (text) => { try { return text ? expressionPorts(String(text)) : []; } catch { return []; } };
-const portLabel = (node, plug, name) => portsOf(node, plug).find((p) => p.name === name)?.label || name;
+// a record's field port (`prop-title`) is made at run time from its fields: it reads as the field
+const portLabel = (node, plug, name) => portsOf(node, plug).find((p) => p.name === name)?.label || (/^prop-./.test(name) ? name.slice(5) : name);
 const isSignalPort = (node, plug, name) => { const p = portsOf(node, plug).find((p) => p.name === name); return p ? p.signal : /^(on[A-Z]|did|do$|navigate$|store$|fetch$|login$|logout$|send$|eval$)/.test(name) && !/changed$/i.test(name); };
 
 /* ================= pages ================= */

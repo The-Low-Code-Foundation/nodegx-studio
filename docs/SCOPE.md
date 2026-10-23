@@ -1208,7 +1208,9 @@ when Record is pressed, not at the app's first signal, 42/43. Seen in the pictur
 the step's details above the screen in one column and squeezed the copy to a thumbnail; they are now side by side.
 
 - **Not built / limits.** A step that is a copy of a reusable is one step (its inside is that reusable's own run, a row
-  of its own when it has a card). A record's fields are named by their ports ("prop-title"). A request the app made
+  of its own when it has a card). ~~A record's fields are named by their ports ("prop-title")~~ (s19: a `prop-` port
+  with no words of its own reads as its field, everywhere `portLabel` names one; `check:timeline` 44/44 reads
+  `title "Second task, recorded"` on the step). A request the app made
   before Record and still waiting does not hold the run. An app that sends a signal on its own all the time (a
   repeating timer wired to a step) never goes quiet: Stop ends it.
 ---

@@ -345,6 +345,7 @@ try {
   const back = await detail();
   if (shots) { await b.clickSel('#tlnext'); await wait(400); await b.screenshot(join(here, '..', 'docs', 'look', 'stu-033-steps.png')); await b.key('ArrowLeft', 'ArrowLeft', 37); await wait(200); }
   ok(back.node === makeStep && /^Step 2 of 3/.test(back.head), '← goes back one step', back);
+  ok(/title "/.test(back.ins || '') && !/prop-/.test(back.ins || ''), 'the record\'s fields read as its fields ("title"), not as their ports ("prop-title")', back.ins);
 
   // a slow answer: the backend's reply to the next task's write is held 3 s at the network; the recording waits for it
   await b.send('Fetch.enable', { patterns: [{ urlPattern: '*/classes/Task*', requestStage: 'Request' }] });
