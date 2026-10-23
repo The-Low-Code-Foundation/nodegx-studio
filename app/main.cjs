@@ -34,6 +34,20 @@ const recentFile = () => path.join(app.getPath('userData'), 'recent-projects.jso
 const sitesFile = () => path.join(app.getPath('userData'), 'published-sites.json');
 const testPicks = process.env.NODEGX_STUDIO_TEST_PICKS ? JSON.parse(process.env.NODEGX_STUDIO_TEST_PICKS) : null;
 
+// STU-009: one Studio at a time. A second launch (Window ↗ in a conversation, which NodeGX runs as `open -n -a` on macOS
+// and the executable elsewhere; a double-click) hands its project to the Studio already running, which opens it in a
+// tab, and quits. The gates run --hidden, each apart, unless one asks for the lock to test it.
+if ((!hidden || process.env.NODEGX_STUDIO_SINGLE_INSTANCE) && !app.requestSingleInstanceLock()) app.exit(0);
+app.on('second-instance', (_event, argv) => {
+  if (win && !hidden) {
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  }
+  const dir = actions && argv.slice(1).find((a) => !a.startsWith('--') && actions.isProject(a));
+  if (dir) open(path.resolve(dir));
+});
+
 const TAB_H = 38; // the strip's height (tabs.html)
 let win = null;
 let tabs = []; // { id, view, dir: the project it shows or null (welcome), server: its editor server, busy }

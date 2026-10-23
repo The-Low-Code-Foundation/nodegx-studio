@@ -68,7 +68,7 @@ let running = null;
 /** Starts the app with these dialog answers and attaches to its window. */
 async function start(picks = [], extra = []) {
   const port = await freePort();
-  const env = { ...process.env, NODEGX_STUDIO_USER_DATA: userData, NODEGX_STUDIO_TEST_PICKS: JSON.stringify(picks) };
+  const env = { ...process.env, NODEGX_STUDIO_USER_DATA: userData, NODEGX_STUDIO_TEST_PICKS: JSON.stringify(picks), NODEGX_STUDIO_SINGLE_INSTANCE: '1' };
   delete env.ELECTRON_RUN_AS_NODE;
   const proc = spawn(electron, [...appArgs, '--hidden', `--remote-debugging-port=${port}`, ...extra], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';
@@ -237,6 +237,12 @@ try {
     const stopped = await until(async () => serversOf().length === 1 && !(await backendAnswers(todos)), 20000);
     ok(one === '["Imported*"]' && stopped, 'closing a tab stops its editor server and its backend; the other tab stays', { one, servers: serversOf().length });
     ok(/^ready Imported /.test(await b.evaluate('document.title')) && (await b.evaluate(`!!document.querySelector('#pagepick')`)), 'and the tab left keeps working: its page answers as before');
+    // a second launch on a project (what Window ↗ in a conversation does through NodeGX) opens it as a tab here, and quits
+    const env2 = { ...process.env, NODEGX_STUDIO_USER_DATA: userData, NODEGX_STUDIO_SINGLE_INSTANCE: '1' };
+    delete env2.ELECTRON_RUN_AS_NODE;
+    const second = await new Promise((r) => { const p = spawn(electron, [...appArgs, todos, '--hidden'], { env: env2, stdio: 'ignore' }); const t = setTimeout(() => (p.kill(), r('still running')), 30000); p.on('exit', (code) => (clearTimeout(t), r(code))); });
+    const handed = await strip.until(`document.querySelectorAll('.tab').length === 2 && !document.querySelector('.tab.busy') && ${named}`, 60000);
+    ok(second === 0 && handed === '["Imported","My todos*"]', 'a second launch on My todos hands it to this Studio, which opens it in a tab, and the second launch quits', { second, handed });
     await strip.close();
     await stop();
   }

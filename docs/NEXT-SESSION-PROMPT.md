@@ -1,7 +1,7 @@
 Continue NodeGX Studio (~/vscode_projects/nodegx-studio, public, GPL-3.0; plan of record: docs/SCOPE.md). Edit in
-this repo, not OpenNoodl. Gates run on Node 22 (`~/.nvm/versions/node/v22.22.0/bin`). Read on 2026-10-23 (s21), on
-the tree committed after deee252: `check:editor` **191/191**, `check:import` **94/94**, `check:app` 46/46,
-`check:data` 80/80, `check:timeline` 46/46. `check:dictionary` 65 covered / 2 wrong (filed) / 22 missing (s20). Not
+this repo, not OpenNoodl. Gates run on Node 22 (`~/.nvm/versions/node/v22.22.0/bin`). Read on 2026-10-23 (s21): on
+adf9812 (STU-026) `check:editor` **193/193**, `check:data` 80/80, `check:timeline` 46/46; on the STU-009 tree
+(single-instance included) `check:app` **54/54** and the smoke run; on 5acdd1d `check:import` **94/94**. `check:editor` 193/193 again on the final tree (after `attach` took `match`). `check:dictionary` 65 covered / 2 wrong (filed) / 22 missing (s20). Not
 rerun since (nothing they test changed): `check:publish` 34/34, `check:pagedata` 33/33, `check:reusable` 12/12,
 `check:rules` 20/20, `check:vendor` PASS (s18); `check:phrases` 85/85 (s13). 🔴 `check:app`, `check:editor`,
 `check:data` and `check:timeline` load studio.html: run them after any studio.html change. One heavy gate at a time
@@ -38,11 +38,22 @@ Where the alpha stands (SCOPE "The alpha (0.2) — the line"): 1 Publish, 3 Impo
 with BACKENDPUBLIC. **main pushed** to 97f3c72 on 2026-10-23 (Richard: "Push to main ok"), with the other session's
 commits up to deee252. Ask again before the next push.
 
-Next buildable, in order (Richard's two rulings of s21 first; SCOPE quotes them under R4):
-A. **STU-009 projects in tabs** (desktop app, app/main.cjs: today one `win`, one `server`, one `openDir`): a tab
-   strip, a WebContentsView per project with its own serve.mjs, the welcome screen as the new tab. Ruled in.
-B. **STU-026 the flow, drawn** in the backend map's look: [look/s21-flow-mock.png](look/s21-flow-mock.png) (source
-   in the s21 scratchpad, gone: redraw from the picture). Wait for Richard's read of the mock before building it.
+**s21, later the same day.** Richard on the rejoin picture: *"Meh it's not clear that you're rejoining… I'd have liked
+a bit more of a Noodl / NodeGX style connector system"*; on tabs: *"If we could do the whole multiple projects in
+tabs concept… that would be a solution and also amazing."* Mock shown: *"It looks hot, I approve."* Both built:
+- **STU-026 the flow, drawn** (adf9812): the card on a dark canvas in the backend map's palette, left to right, wires
+  in an svg drawn from where the nodes land, fitted to the panel. Same DOM classes as before (two gate selectors moved
+  from `.wf > .chain` to `.flow > .chain`).
+- **STU-009 projects in tabs** (2391dc0 + the single-instance commit): `app/main.cjs` is a tab strip (`tabs.html`)
+  over a `WebContentsView` per tab, each with its own `serve.mjs`. A second launch hands its project to the running
+  Studio as a tab (which is what the other session's 65b1623 "Window ↗ opens the desktop app" now does through NodeGX:
+  `open -n -a … --args <dir>`). 🔴 `--hidden` shows the window transparent: a view in a hidden window is a hidden page
+  and takes no input (the header's Publish silently did nothing until this). Picture: [look/stu-009-tabs.png](look/stu-009-tabs.png),
+  composed from the strip's and the tab's own CDP screenshots (no screen capture).
+
+Next buildable, in order:
+0. STU-026's last run lit up (the mock's *Show the last run*: the runtime trace, as the timeline reads it), and a "+"
+   on a wire to put a step between two; STU-009 on Windows / Linux in the package workflow (only macOS was run).
 1. When NodeGX publishes a release with BACKENDPUBLIC: bump the pins, `npm run vendor`, every gate. Check npm first
    (`npm view @nodegx/preview versions`).
 2. From "Not to forget": a step's In list names a record's data type by its parameter (`collectionName "Task"`).
@@ -56,7 +67,9 @@ The M4 timeline's remaining gap (overlapping runs) waits on NodeGX's trace `caus
 Waiting on Richard (ask in plain words):
 - What he made of docs/look/s2-workflow-rejoin.png (opened in Preview for him in s21) and the five from s20.
 - The five notarisation secrets: "I'll get the secrets for you" (s21).
-- His read of docs/look/s21-flow-mock.png (opened for him in s21) before STU-026 is built.
+- His look at the drawn flow in the app (docs/look/s2-workflow-rejoin.png, s2-workflow-card.png) and at the tabs
+  (docs/look/stu-009-tabs.png).
+- Pushing everything after 97f3c72 (STU-026, STU-009, the docs; the other session's 65b1623 rides along).
 - **His idea (s21): "Window ↗" in the conversation opening the desktop app when it is installed, not the browser.**
   Not built; proposed: serve.mjs (local) launches the app with the project folder, a `nodegx-studio://` scheme for
   links from elsewhere, the hold passes to the desktop window. His answer to "what if the app already shows another

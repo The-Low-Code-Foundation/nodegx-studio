@@ -390,13 +390,16 @@ as its own `serve.mjs` and page, so a tab is one of those. `app/main.cjs`: the w
 it has no project). A project opened from a welcome tab takes that tab; opened from anywhere else it gets a new tab, or
 the tab already showing it is selected. Closing a tab stops its server and so its backend; opening that project again
 waits for the stop. ⌘T new tab, ⌘W close tab (⌘⇧W the window), ⌘1–9, Ctrl+Tab; a tab can be dragged along the strip;
-Reload and DevTools act on the tab's page. Every IPC handler is handed the tab that asked, so Publish publishes that
+Reload and DevTools act on the tab's page. One Studio at a time: a second launch on a project (Window ↗ in a
+conversation, which NodeGX runs as `open -n -a … --args <folder>` on macOS since STU-070's 65b1623, or a double-click)
+hands the folder to the Studio already running, which opens it in a tab, and quits. Every IPC handler is handed the tab that asked, so Publish publishes that
 tab's project. Found on the way: in `--hidden` a view in a hidden window is a hidden page (`visibilityState`
 "hidden") and takes no input, so the header's Publish did nothing under the gate (the click never arrived); `--hidden`
 now shows the window transparent, unfocused and out of the taskbar (Electron 43 has no `incrementCapturerCount`).
-`check:app` 53/53 (7 new, "5b": one tab for the imported project; opening My todos from it makes a second tab, active,
+`check:app` 54/54 (8 new, "5b": one tab for the imported project; opening My todos from it makes a second tab, active,
 both drawn, two servers, its backend up; opening Imported again selects its tab, still two servers; closing My todos'
-tab stops its server and backend, Imported's page still answers). The smoke run passes. `editor/cdp.mjs`'s `attach`
+tab stops its server and backend, Imported's page still answers; a second launch on My todos is handed over as a tab
+and exits 0). The smoke run passes. `editor/cdp.mjs`'s `attach`
 takes `match` (the strip is a page target of its own). **Not built:** a tab that has a project's unsaved edit (Studio
 saves each gesture, so there are none to ask about); tabs across two windows; a project dragged out of the strip.
 
