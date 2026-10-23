@@ -380,6 +380,7 @@ Electron's own Node; `npm run smoke -- <dir>` opens a project headless and exits
 | STU-006 | **Runs without a NodeGX checkout.** A build step copies the kit pieces Studio uses (deploy runtime, in-page preview, look and specs modules, backend, MCP server) into `vendor/` at pinned NodeGX versions; `lib/nodegx.mjs` prefers `vendor/`. | a fresh clone + `npm install` + `npm start` works on a machine with no OpenNoodl folder |
 | STU-007 | **Packaged and signed.** electron-builder for macOS (signed, notarised), Windows and Linux, on NodeGX's release workflow. | a downloadable build opens a project on all three |
 | STU-008 | **Publish.** File → **Publish…** writes the app as a static site with NodeGX's own deploy — `@nodegx/preview`'s `nodegx-deploy`, the `deployToFolder` the NodeGX editor's *Deploy to Folder* runs, with the production engine npm ships (1.7 MB; a checkout's development engine is refused) — to a folder the person picks, and deploys the app's cloud functions to its backend when it has any (NodeGX's `deploy_cloud_functions`). The window then says where the site is and which backend it talks to; an app bound to a backend on 127.0.0.1 works on this machine only, and says so before it is published. Where else a site and its backend can go is R10. A site under a sub-path waits on P123-STU015-BASEURL. The deploy must carry P123-S2-VARIANTLOST's fix: npm's 0.2.3 `nodegx-deploy` does (STU-006). | the todo template's copy published to a folder, served by any static server and opened in a browser: sign in, add a todo, and the row is on the backend |
+| STU-009 | **Projects in tabs** (Richard, 2026-10-23, s21): several projects open in one window, a tab each, the welcome screen as the new tab. Each tab is its own `serve.mjs` and page, as one project is today, so none of the NodeGX editor's singleton problem (ECO-003) applies | open two projects, edit both, close one: the other keeps its server, its backend and its unsaved state |
 
 **Done (STU-002, 2026-10-19).** `serve.mjs` watches the project folder and keeps every file as Studio last read or
 wrote it, so Studio's own saves are recognised by their content and dropped; anything else goes to the page over
@@ -865,6 +866,7 @@ tab already reads it that way). A badge is "this visual node has a wired signal 
 | STU-023 | **Names from steps.** | a card with no name reads its steps; a renamed card keeps its name |
 | STU-024 | **The importer merges split workflows** into one card per event. Where the conditions are exact opposites (A / not A) they become one Yes/No branch. Where they overlap and both can run, they stay as **two lanes that run side by side**, because folding them into either/or would change what the app does. | the real app's 16 split elements become 16 cards; a fixture with overlapping conditions keeps both lanes and both still run |
 | STU-025 | **Rejoin** (R4, taken 2026-10-23): after a branch, both sides continue into one shared next step | done (s20): made from the card, drawn once after the branch, gated in the app |
+| STU-026 | **The flow, drawn** (Richard, 2026-10-23, s21): a workflow drawn as NodeGX draws, in the backend map's look: steps as nodes on a dark canvas, left to right, coloured wires (then, Yes, No, where both sides meet), the last run lit up; Bubble's landmarks kept ("When … is clicked", Step 1, 2, "Only when") | a rejoin reads as two wires meeting at one step; every edit the card makes today is made on the drawing; mock: [look/s21-flow-mock.png](look/s21-flow-mock.png) |
 
 **Done (STU-020 and STU-021, 2026-10-19, s8).** An element with a workflow wears a **⚡** in Design: on the canvas, in
 its top right corner (Design mode only, not while using the app), and on its row of the element list (a row that folds
@@ -1486,6 +1488,14 @@ Required either way).
 | id | question | from |
 |---|---|---|
 | — | none open: R4 taken 2026-10-23 (s20), below | |
+
+**Taken (s21), on how R4 looks.** Richard, shown s2-workflow-rejoin.png: *"Meh it's not clear that you're rejoining.
+In fact the whole system of showing branches is a bit weak. I'd have liked a bit more of a Noodl / NodeGX style
+connector system, colourful and cool, to bring it in line with the 'data explorer' thing which is much more of a NodeGX
+style system. We don't have to stay married to Bubble's style, just making sure people coming from Bubble find their
+landmarks."* The "data explorer" is the backend map (Data → Map). Built as STU-026. Same day, on a desktop app that is
+already showing another project: *"If we could do the whole multiple projects in tabs concept in the NodeGX Studio that
+we intended to do in the original NodeGX repo editor, that would be a solution and also amazing."* Built as STU-009.
 
 **Taken.** R4 (Richard, 2026-10-23): after a branch, both sides may rejoin into one next step. His leaning first:
 *"Rejoining would be great, like n8n style, but hard to manage maybe?"*; then, asked again in s20: *"Yep for R4."*
