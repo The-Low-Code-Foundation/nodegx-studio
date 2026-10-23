@@ -18,6 +18,8 @@
  *   - Record waits for the app and stops by itself once the run is over (STU-033); the steps of every run are marks
  *     on the Workflows lane, and ▶ / ← go through them one at a time with their in and out; a write whose answer is
  *     held 3 s at the network keeps the recording open until it comes.
+ *   - a run that leaves the page (Sign out on Todo lands on Sign in): Sign in's Did Mount is a run of its own card,
+ *     and its row opens Sign in at that card.
  *
  *   node editor/timeline-check.mjs [--shots]     PASS n/n and exit 0, or the failing lines and exit 1
  *   TIMELINE_DUMP=1 node editor/timeline-check.mjs   also prints every row of the page opening's recording
@@ -369,6 +371,25 @@ try {
   const len3 = await b.evaluate('__ob.timeline.length');
   ok(slowAdded && heldWrites === 1 && /waiting for an answer from the backend/.test(midway) && slowCreate && slowCreate.end - slowCreate.t >= 2900 && slowDrawn && slowDrawn.t >= slowCreate.end && len3 >= slowCreate.end + QUIET_MS - 50,
     'a write whose answer takes 3 s: the recording says it is waiting for the answer, does not stop before it, and holds the list drawing the task after it', { heldWrites, midway, slowCreate, slowDrawn: slowDrawn && { t: slowDrawn.t, sub: slowDrawn.sub.slice(0, 80) }, len3 });
+
+  // ---- a run that leaves the page: Sign out on Todo (the Header's click, then Todo's card that logs out and goes to
+  // Sign in) lands on Sign in, whose Did Mount runs. Studio stays on Todo (it follows the app only after a rebuild), and
+  // Sign in's card is a run of its own, not "a signal no workflow on this page starts"
+  const signMount = files('Pages/Sign in').nodes.find((n) => n.type === 'Page')?.id;
+  const already = files('Pages/Sign in').nodes.find((n) => n.label === 'Already signed in?')?.id;
+  await b.clickSel('#recbtn'); await wait(300);
+  const signedOut = await b.evaluate(`(() => { const btn = [...${W}.document.querySelectorAll('button')].find(e => e.textContent.trim() === 'Sign out' && e.offsetParent); if (!btn) return false; btn.click(); return true; })()`);
+  await b.until(`/^Record/.test(document.getElementById('recbtn').textContent)`, 20000);
+  const left = JSON.parse(await b.evaluate(`JSON.stringify({ studio: document.getElementById('pagepick').value, app: ${W}.Noodl.Navigation._noodlRuntime.context.rootComponent.nodeScope.getNodesWithTypeRecursive('Router')[0]._internal.currentPage?.component, mount: __ob.timeline.rows.find((r) => r.link?.card?.node === ${JSON.stringify(signMount)} && r.link.card.port === 'didMount') ?? null, minor: __ob.timeline.rows.filter((r) => r.minor && r.link === null && (r.text.includes('Already signed in?'))).length, runs: __ob.timeline.rows.filter((r) => r.lane === 'workflow' && !r.minor).map((r) => r.text + ' | ' + r.sub) })`));
+  ok(signedOut && left.studio === 'Pages/Todo' && left.app === '/Pages/Sign in' && left.mount && left.mount.link.card.component === 'Pages/Sign in' && /, on Sign in · /.test(left.mount.sub) && left.mount.steps?.some((x) => x.node === already) && left.minor === 0,
+    "a recording that leaves the page: Studio still shows Todo, and Sign in's Did Mount is a run of its own card (\"…, on Sign in\"), its step the branch it reaches", { signedOut, ...left, mount: left.mount && { text: left.mount.text, sub: left.mount.sub, link: left.mount.link } });
+  if (left.mount) {
+    n0 = await shows();
+    await b.evaluate(`document.querySelector('#tlrows .tlrow[data-link=${JSON.stringify(`card:${signMount}.didMount`)}]').click()`);
+    await rebuilt(n0); await wait(600);
+    const there = JSON.parse(await b.evaluate(`JSON.stringify({ page: document.getElementById('pagepick').value, shown: !document.getElementById('workflow').hidden, title: document.querySelector('#steps .wf h2')?.textContent })`));
+    ok(there.page === 'Pages/Sign in' && there.shown && there.title === left.mount.text, "clicking that row opens Sign in and its card there", there);
+  }
 
   const problems = b.problems.filter((p) => !/Invalid connection|doesn't have a port|Failed to load resource|fonts\.g|^\[noodl\]/.test(p));
   ok(problems.length === 0, 'no exceptions in the editor page', problems.slice(0, 3));

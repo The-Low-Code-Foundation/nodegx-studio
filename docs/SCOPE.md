@@ -1081,9 +1081,13 @@ is paused: Record marks a moment on the app frame's clock and Stop reads what th
   (`drawnElements`, the instance's `getRoots()`); Design does not, so by the code a copy selected in the tree draws
   no box, and a click on it selects the group around it (P123-STU031-COPYBOX, a kit gap, filed in NodeGX's bug ledger a93f0d2ed; not fixed; not looked at on
   screen).
-- **Not built:** a recording that crosses pages (Sign in → Todo) gives card rows only for the page shown at Stop and
-  its reusables; the others' signals are minor rows. Two runs of one card that overlap are told apart only by which
-  started last. The probe's text sample is the DOM as inserted, before its values arrive ("TextTextTextLabel · 1 ·
+- **Not built:** ~~a recording that crosses pages (Sign in → Todo) gives card rows only for the page shown at Stop and
+  its reusables; the others' signals are minor rows~~ (s20: every other page a signal in the recording touched gives
+  its cards and its reusables' too, "When Sign in: Did Mount, on Sign in", and the row opens that page at its card;
+  Studio's own page stays put through a recording, since it follows the app only after a rebuild). Two runs of one card
+  that overlap are told apart only by which started last: still so (s20 worked through rules on the files alone, on paper,
+  not built: the oldest run still waiting on that node, the run that has not had that wire yet; each misplaces steps
+  of runs that do not overlap, a branch's other side or a loop. It wants the trace's `cause`, P123-STU030-SIGNALCAUSE). The probe's text sample is the DOM as inserted, before its values arrive ("TextTextTextLabel · 1 ·
   Read the run timeline"). Inputs and outputs per step, screenshots and a scrubber are STU-032.
 
 Gate: `npm run check:timeline` (`editor/timeline-check.mjs`) 24/24. Eleven on fixtures (a request's start and end
@@ -1210,7 +1214,10 @@ the step's details above the screen in one column and squeezed the copy to a thu
 - **Not built / limits.** A step that is a copy of a reusable is one step (its inside is that reusable's own run, a row
   of its own when it has a card). ~~A record's fields are named by their ports ("prop-title")~~ (s19: a `prop-` port
   with no words of its own reads as its field, everywhere `portLabel` names one; `check:timeline` 44/44 reads
-  `title "Second task, recorded"` on the step). A request the app made
+  `title "Second task, recorded"` on the step). **A run that leaves the page (s20):** `check:timeline` 46/46 (2 new):
+  Record on Todo, the Header's Sign out: Studio still shows Todo, the app is on Sign in, and Sign in's Did Mount is a run
+  of its card ("When Sign in: Did Mount, on Sign in", its step *Already signed in?*), no minor row left for it; its row
+  opens Sign in at the card. Mutant (no other page's cards) 44/45. A request the app made
   before Record and still waiting does not hold the run. An app that sends a signal on its own all the time (a
   repeating timer wired to a step) never goes quiet: Stop ends it.
 ---
