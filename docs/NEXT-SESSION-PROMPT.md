@@ -72,14 +72,14 @@ the same signal"), so the Todo page's *If Signed in* lights 2 of its 5 steps. La
 a fan-out along the way is lanes side by side (30278bb; the Todo page's *If Signed in* lights all 5 of its steps), and
 a step can be dragged where the person wants it, saved as an offset on the node (`metadata.flowAt`), *Tidy up* puts
 them back. Gates on the s24 tree: `check:editor` **200/200**, `check:timeline` **53/53**, `check:app` 54/54,
-`check:data` 80/80. Committed, **not pushed** (ask; ed40eb0, b7997bc, b8d1c35, 30278bb and the drag commit).
+`check:data` 80/80. Committed; **pushed 2026-10-23** with CCN-002 (6a60d51).
 Waiting on Richard: how the lanes and the drag feel on his app; no picture retaken (`--shots` rewrites every s2 one).
 
 **From lane 3 (P125 CCN-002, OpenNoodl c5da19b12), same evening:** Studio names the agent. `serve.mjs` marks a file the
 agent's when the watcher saw it change in the same batch as its `component.json` stamped `modifiedBy: 'noodl-mcp'`
 (`agentChanged`, `byAgent`; Studio's own save clears it); a 409 clash on it is `by: 'agent'`, the dialog says *"The agent
 changed …"*, and so does the "redrawn" toast. `check:editor` **203/203** (3 new), `check:data` 80/80, `check:timeline`
-53/53, `check:app` 54/54 on that tree. Not pushed.
+53/53, `check:app` 54/54 on that tree. Pushed with s22–s24 (Richard: "Push yes please").
 
 Next buildable, in order:
 0. STU-009 on Windows / Linux in the package workflow (only macOS was run). STU-026: nothing left that was asked.
