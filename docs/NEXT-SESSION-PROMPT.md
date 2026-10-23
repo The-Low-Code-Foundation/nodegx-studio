@@ -35,8 +35,8 @@ own hunks.
 
 Where the alpha stands (SCOPE "The alpha (0.2) — the line"): 1 Publish, 3 Import, 5 main pushed, 6 Data: done.
 2 signed, packaged on all three in CI (s20 run); notarising waits on the five secrets. 4 waits on a NodeGX npm release
-with BACKENDPUBLIC. **main is ahead of origin** by e192d83, 12b6691, the s20 and s21 commits and the other session's
-698faff, fd4c49f, 2832647, deee252: ask Richard before pushing.
+with BACKENDPUBLIC. **main pushed** to 97f3c72 on 2026-10-23 (Richard: "Push to main ok"), with the other session's
+commits up to deee252. Ask again before the next push.
 
 Next buildable, in order:
 1. When NodeGX publishes a release with BACKENDPUBLIC: bump the pins, `npm run vendor`, every gate. Check npm first
@@ -50,10 +50,13 @@ Next buildable, in order:
 The M4 timeline's remaining gap (overlapping runs) waits on NodeGX's trace `cause` (P123-STU030-SIGNALCAUSE).
 
 Waiting on Richard (ask in plain words):
-- Pushing everything since 9b0c0a7 (s20's e192d83, 12b6691, the s20/s21 docs and work, and the other session's commits).
-- His look at docs/look/s2-workflow-rejoin.png (R4 on the card, now with the no-page line on No's step), and what he
-  made of the five pictures opened for him in s20.
-- The five notarisation secrets made visible to this repository ("Working on it").
+- What he made of docs/look/s2-workflow-rejoin.png (opened in Preview for him in s21) and the five from s20.
+- The five notarisation secrets: "I'll get the secrets for you" (s21).
+- **His idea (s21): "Window ↗" in the conversation opening the desktop app when it is installed, not the browser.**
+  Not built; proposed in reply: serve.mjs (local, the user's machine) launches the app with the project folder, so
+  no URL scheme has to get past the host's openLink; a `nodegx-studio://` scheme as well, for links from elsewhere;
+  the desktop app writes where it is installed so the button can say which it opens; the hold passes to the desktop
+  window. STU-070 is the other session's (serve.mjs, editor/hosted/): wait for his answer on who builds it.
 - Unchanged from s13: how the one-run Record feels on his app; his second sitting on data; his real app export
   (STU-044's 22 missing operators, STU-053's unread keys, STU-024's 16 split elements; also whether his reusables'
   states behave per copy). Filed and open in NodeGX's ledger: P123-STU032-TEXTFLASH, P123-STU031-COPYBOX,

@@ -57,7 +57,7 @@ Studio, opens or imports an app, changes it, and publishes it.** What that needs
 | 2 | **STU-007 a downloadable build**: signed and notarised with NodeGX's Developer ID; Windows and Linux | signed locally with the Developer ID and gated 46/46 (s14); notarising waits on the five secrets being visible to this repository; Windows / Linux built and smoke-opened in CI |
 | 3 | **STU-040 Import an App…** with the report shown in the app | done (s14) |
 | 4 | **A NodeGX npm release** carrying P112-OWN020-UNWIREDSIGNAL and P123-STU008-BACKENDPUBLIC, then Studio's pins bumped and `npm run vendor` at that commit | waits on NodeGX: read 2026-10-22, `@nodegx/preview` 0.2.4 and `@nodegx/mcp` 0.2.5 are on npm (UNWIREDSIGNAL is in the 0.2.4 cut); BACKENDPUBLIC's fix (OpenNoodl 490361c22, 13:11) landed after 0.2.5 was published, so no release has it yet |
-| 5 | **main pushed** | done 2026-10-23 (Richard's yes; origin/main fb31c9f) |
+| 5 | **main pushed** | done 2026-10-23 (Richard's yes; origin/main fb31c9f); again s21, origin/main 97f3c72 ("Push to main ok") |
 | 6 | **STU-065 a development and a live database** (M6), and the Data tab it sits in (STU-060, 061, 063, 064). Richard, 2026-10-22: *"Alpha please"* | done (s15) |
 
 Not in the alpha: STU-041–043 (the converter's one home, the fidelity gate, plugins), the timeline's gaps, and R10's
