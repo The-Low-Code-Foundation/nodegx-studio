@@ -38,7 +38,11 @@ Where the alpha stands (SCOPE "The alpha (0.2) — the line"): 1 Publish, 3 Impo
 with BACKENDPUBLIC. **main pushed** to 97f3c72 on 2026-10-23 (Richard: "Push to main ok"), with the other session's
 commits up to deee252. Ask again before the next push.
 
-Next buildable, in order:
+Next buildable, in order (Richard's two rulings of s21 first; SCOPE quotes them under R4):
+A. **STU-009 projects in tabs** (desktop app, app/main.cjs: today one `win`, one `server`, one `openDir`): a tab
+   strip, a WebContentsView per project with its own serve.mjs, the welcome screen as the new tab. Ruled in.
+B. **STU-026 the flow, drawn** in the backend map's look: [look/s21-flow-mock.png](look/s21-flow-mock.png) (source
+   in the s21 scratchpad, gone: redraw from the picture). Wait for Richard's read of the mock before building it.
 1. When NodeGX publishes a release with BACKENDPUBLIC: bump the pins, `npm run vendor`, every gate. Check npm first
    (`npm view @nodegx/preview versions`).
 2. From "Not to forget": a step's In list names a record's data type by its parameter (`collectionName "Task"`).
@@ -52,11 +56,12 @@ The M4 timeline's remaining gap (overlapping runs) waits on NodeGX's trace `caus
 Waiting on Richard (ask in plain words):
 - What he made of docs/look/s2-workflow-rejoin.png (opened in Preview for him in s21) and the five from s20.
 - The five notarisation secrets: "I'll get the secrets for you" (s21).
+- His read of docs/look/s21-flow-mock.png (opened for him in s21) before STU-026 is built.
 - **His idea (s21): "Window ↗" in the conversation opening the desktop app when it is installed, not the browser.**
-  Not built; proposed in reply: serve.mjs (local, the user's machine) launches the app with the project folder, so
-  no URL scheme has to get past the host's openLink; a `nodegx-studio://` scheme as well, for links from elsewhere;
-  the desktop app writes where it is installed so the button can say which it opens; the hold passes to the desktop
-  window. STU-070 is the other session's (serve.mjs, editor/hosted/): wait for his answer on who builds it.
+  Not built; proposed: serve.mjs (local) launches the app with the project folder, a `nodegx-studio://` scheme for
+  links from elsewhere, the hold passes to the desktop window. His answer to "what if the app already shows another
+  project" was STU-009 (tabs): the project opens in a new tab. Who builds the bridge half (STU-070 is the other
+  session's) is still his to say.
 - Unchanged from s13: how the one-run Record feels on his app; his second sitting on data; his real app export
   (STU-044's 22 missing operators, STU-053's unread keys, STU-024's 16 split elements; also whether his reusables'
   states behave per copy). Filed and open in NodeGX's ledger: P123-STU032-TEXTFLASH, P123-STU031-COPYBOX,
