@@ -396,10 +396,8 @@
   .bolttip { position: fixed; z-index: 1000; max-width: 420px; background: var(--ink); color: var(--panel); font-size: 12px; line-height: 1.45; padding: 6px 9px; border-radius: var(--r); box-shadow: 0 4px 14px rgba(0,0,0,.2); pointer-events: none; }
   .bolttip b { font-weight: 600; margin-right: 6px; }
   .bolttip .tiplane { padding-left: 10px; }
-  #workflow.card { grid-template-columns: 1fr; }
+  #workflow.card { grid-template-columns: 1fr; max-width: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; }
   #workflow.card > aside { display: none; }
-  .cardnav { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-  .cardnav .back { font-weight: 500; }
   .chip.opt { background: #fefce8; color: #854d0e; border-color: #fde68a; }
   .chip button { border: 0; background: transparent; padding: 0; color: inherit; opacity: .6; }
   .chip button:hover { opacity: 1; background: transparent; }
@@ -451,41 +449,75 @@
   .events .evhead { display: flex; align-items: center; gap: 6px; padding: 10px 8px 2px; font-size: 11px; font-weight: 600; color: var(--muted); border-top: 1px solid var(--line); margin-top: 4px; }
   .events .evhead:first-child { border-top: 0; margin-top: 0; }
   .events .row[aria-selected=true] small { color: var(--accent-ink); opacity: .75; }
-  #steps { overflow: auto; padding: 24px 28px; }
-  .wf { max-width: 860px; }
-  .event-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 12px 16px; margin-bottom: 14px; display: flex; align-items: center; gap: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
-  .event-card .ic { width: 32px; height: 32px; border-radius: 8px; background: #fff7ed; color: #c2410c; display: grid; place-items: center; }
-  .event-card h2 { margin: 0; font-size: 15px; font-weight: 600; cursor: text; }
-  .event-card .named { flex: 1; min-width: 0; }
-  .event-card input.cardname { font: inherit; font-size: 15px; font-weight: 600; width: 100%; padding: 2px 6px; margin: -3px 0 -3px -7px; border: 1px solid var(--accent); border-radius: var(--r); background: var(--panel); color: inherit; }
-  .event-card small { color: var(--muted); display: block; }
-  .chain { display: flex; flex-direction: column; gap: 0; }
-  .chain .link { width: 2px; height: 14px; background: var(--line-2); margin-left: 27px; }
-  .step { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 10px 14px 10px 12px; display: grid; grid-template-columns: 30px 1fr auto; gap: 4px 10px; align-items: start; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
-  .step:hover { border-color: var(--line-2); }
-  .step .num { width: 30px; height: 30px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-ink); display: grid; place-items: center; font-weight: 600; font-size: 12px; }
-  .step.cond .num { background: #fdf4ff; color: #86198f; }
-  .step h3 { margin: 0; font-size: 13px; font-weight: 600; display: flex; gap: 8px; align-items: baseline; }
-  .step h3 span { color: var(--muted); font-weight: 400; font-size: 12px; }
-  .step .lines { grid-column: 2; color: var(--ink-2); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
-  .step .lines code { background: var(--panel-2); padding: 0 4px; border-radius: 3px; }
+  /* STU-026: a workflow drawn as NodeGX draws, in the backend map's look: steps as nodes left to right on a dark canvas,
+     wires (svg.wires, drawn from where the nodes landed) coloured by what they carry */
+  #steps { overflow: auto; padding: 0; background: #141318; background-image: radial-gradient(rgba(255,255,255,.07) 1px, transparent 1px); background-size: 22px 22px; color-scheme: dark; }
+  #steps > .empty { color: #7d8a98; padding: 24px 28px; }
+  .wf { --fg: #fff; --sub: #c4cedb; --dim: #7d8a98; --edge: #33323d; --card: rgba(35,33,41,.94); --blue: #4da3ff; --green: #45d08a; --red: #f97066; --amber: #fdb022; --pink: #f776c4; --purple: #a78bfa; --cyan: #35c3e8; --ghost: #4a4856;
+    position: relative; min-height: 100%; padding: 18px 28px 64px; color: var(--sub); }
+  .flowarea { position: relative; }
+  .flow { position: absolute; left: 0; top: 0; width: max-content; transform-origin: 0 0; }
+  .flow svg.wires { position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; overflow: visible; }
+  .flow > .chain, .flow > .lanesrow { position: relative; z-index: 1; } /* the wires run behind the nodes and their labels */
+  .zoom { display: flex; align-items: center; gap: 4px; color: var(--dim); font-size: 12px; }
+  .zoom button { padding: 3px 9px; border-radius: 14px; }
+  .zoom span { min-width: 38px; text-align: center; }
+  .wf .hint { color: var(--dim); }
+  .wf button { background: #232129; border-color: var(--edge); color: var(--sub); }
+  .wf button:hover { border-color: #4a4856; color: var(--fg); }
+  .wf button.primary { background: #1d4ed8; border-color: #2563eb; color: #fff; }
+  .wf button.danger { color: var(--red); }
+  .wf input, .wf select, .wf textarea { background: #1c1b22; color: var(--fg); border-color: #3a3946; }
+  .cardnav { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .cardnav .back { font-weight: 500; }
+  .event-card { display: flex; align-items: center; gap: 12px; margin: 0 0 22px; max-width: 980px; color: var(--fg); }
+  .event-card .ic { display: none; }
+  .event-card h2 { margin: 0; font-size: 18px; font-weight: 600; cursor: text; color: var(--fg); }
+  .event-card .named { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .event-card input.cardname { font: inherit; font-size: 18px; font-weight: 600; width: 100%; padding: 2px 6px; margin: -3px 0 -3px -7px; border: 1px solid var(--blue); border-radius: var(--r); background: #1c1b22; color: var(--fg); }
+  .event-card small { color: var(--dim); display: block; font-size: 13px; }
+  .event-card button { border-radius: 18px; padding: 5px 14px; }
+  .chain { display: flex; flex-direction: row; align-items: center; gap: 0; }
+  .chain > .link { flex: none; width: 56px; height: 2px; }
+  .evnode, .step { flex: none; position: relative; background: var(--card); border: 1.5px solid var(--edge); border-radius: 12px; color: var(--fg); box-shadow: 0 10px 34px rgba(0,0,0,.45); }
+  .evnode { width: 210px; padding: 12px 14px; border-color: var(--blue); box-shadow: 0 0 0 1px rgba(77,163,255,.25), 0 0 26px rgba(77,163,255,.35); align-self: center; }
+  .evnode b { display: flex; align-items: center; gap: 6px; font-size: 14px; } .evnode b svg.i { color: var(--blue); width: 15px; height: 15px; }
+  .evnode small { display: block; color: var(--sub); margin-top: 3px; }
+  .step { width: 250px; padding: 12px 12px 12px 12px; display: grid; grid-template-columns: auto 1fr auto; gap: 6px 8px; align-items: center; }
+  .step::before { content: ''; position: absolute; left: -1.5px; right: -1.5px; top: -1.5px; height: 4px; border-radius: 12px 12px 0 0; background: var(--kind, var(--blue)); }
+  .step.open { width: 330px; }
+  .step:hover { border-color: #4a4856; }
+  .step .num { min-width: 26px; height: 22px; padding: 0 6px; border-radius: 6px; background: rgba(255,255,255,.08); color: var(--sub); display: grid; place-items: center; font-weight: 600; font-size: 11px; }
+  .step.cond { border-color: var(--purple); box-shadow: 0 0 22px rgba(167,139,250,.28); --kind: var(--purple); }
+  .step.cond .num { color: var(--purple); }
+  .step.joined { border-color: var(--cyan); box-shadow: 0 0 22px rgba(53,195,232,.3); }
+  .step.dead { border-color: rgba(253,176,34,.7); }
+  .step h3 { margin: 0; font-size: 14px; font-weight: 600; display: flex; gap: 8px; align-items: baseline; min-width: 0; flex-wrap: wrap; }
+  .step h3 span { color: var(--dim); font-weight: 400; font-size: 12px; }
+  .step .lines { grid-column: 1 / -1; color: var(--sub); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+  .step .lines code { background: rgba(255,255,255,.07); color: var(--fg); padding: 0 5px; border-radius: 4px; }
   .step .acts { display: flex; gap: 4px; }
-  .step .settings { grid-column: 1 / -1; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 4px; }
-  .branches { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 0 0 0 0; }
-  .lanes { display: grid; gap: 14px; overflow-x: auto; }
-  .lane { border: 1px dashed var(--line-2); border-radius: var(--r-lg); padding: 8px 10px 10px; min-width: 0; }
-  .lane h4 { margin: 0 0 8px; font-size: 11px; font-weight: 600; color: var(--muted); }
-  .lanesnote { margin: 0 0 10px; }
-  .lane .branches { grid-template-columns: 1fr; }
-  .lane .addrow button { white-space: nowrap; }
-  .branch { border: 1px dashed var(--line-2); border-radius: var(--r-lg); padding: 10px; background: rgba(255,255,255,.5); }
-  .branch h4 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; display: flex; align-items: center; gap: 6px; }
-  .branch.yes h4 { color: var(--branch-yes); } .branch.no h4 { color: var(--branch-no); }
-  .branch h4::before { content: ''; width: 8px; height: 8px; border-radius: 4px; background: currentColor; }
-  .addrow { display: flex; gap: 8px; margin-top: 10px; }
-  .joinnote { display: flex; align-items: center; gap: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 2px 0; }
-  .joinrow { justify-content: center; }
-  .cond-line { grid-column: 2; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); }
+  .step .acts button { background: transparent; border-color: transparent; }
+  .step .settings { grid-column: 1 / -1; border-top: 1px solid var(--edge); margin-top: 4px; padding-top: 4px; }
+  .step .settings .field label { color: var(--sub); }
+  .branches { display: flex; flex-direction: column; gap: 34px; align-items: flex-start; }
+  .branch { display: flex; flex-direction: row; align-items: center; gap: 0; }
+  .branch h4 { margin: 0 14px 0 0; flex: none; font-size: 11px; font-weight: 600; letter-spacing: .03em; padding: 4px 9px; border-radius: 10px; background: #141318; border: 1px solid currentColor; display: flex; align-items: center; gap: 6px; }
+  .branch.yes h4 { color: var(--green); } .branch.no h4 { color: var(--red); }
+  .wf .addrow { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1.5px dashed var(--ghost); border-radius: 12px; }
+  .chain > .hint { flex: none; max-width: 230px; margin-left: 18px; }
+  .wf .addrow button { white-space: nowrap; justify-content: flex-start; }
+  .joinnote { flex: none; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: .03em; color: var(--cyan); padding: 4px 10px; border-radius: 10px; border: 1px solid rgba(53,195,232,.5); background: #141318; box-shadow: 0 0 14px rgba(53,195,232,.25); }
+  .joinnote svg.i { width: 13px; height: 13px; }
+  .lanes { display: flex; flex-direction: column; gap: 22px; }
+  .lane { border: 1px dashed var(--ghost); border-radius: 14px; padding: 10px 14px 14px; }
+  .lane h4 { margin: 0 0 10px; font-size: 11px; font-weight: 600; color: var(--dim); }
+  .lanesnote { margin: 0 0 14px; }
+  .lanesrow { display: flex; align-items: center; gap: 56px; }
+  .cond-line { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--sub); }
+  .wf .chip.expr { background: rgba(167,139,250,.14); border-color: rgba(167,139,250,.45); color: #ddd6fe; }
+  .flowlegend { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-top: 40px; padding-top: 12px; border-top: 1px solid var(--edge); max-width: 980px; font-size: 12px; color: var(--sub); }
+  .flowlegend i { display: inline-block; width: 24px; height: 0; border-top: 2.5px solid; vertical-align: middle; margin-right: 7px; }
 
   /* ---- popovers (the action picker, the source picker, the composer) ---- */
   .menu { position: fixed; background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r-lg); box-shadow: var(--shadow); padding: 6px; z-index: 50; min-width: 300px; max-width: 420px; max-height: min(64vh, 560px); overflow: auto; }
@@ -3417,6 +3449,17 @@ function triggerOf(node) {
   const ins = portsOf(node, 'input').filter((p) => p.signal);
   return (ins.find((p) => /^(do|store|navigate|fetch|login|logout|signup|send|run|set|evaluate|eval|save|delete|update|show|hide|start)$/i.test(p.name)) || ins[0])?.name;
 }
+/* ---- STU-026: the wires. renderChain records each one (what it leaves, by which port, what it reaches, what it carries);
+   they are drawn from where the nodes landed, again whenever a node changes size (settings opened, a field typed) ---- */
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const FLOW = { then: '#4da3ff', yes: '#45d08a', no: '#f97066', join: '#35c3e8', dead: '#4a4856', offer: '#4a4856' };
+const KIND_COLOUR = { nav: '#4da3ff', db: '#fdb022', state: '#f776c4', user: '#a3e635', code: '#7d8a98', bolt: '#fb923c', page: '#c084fc', branch: '#a78bfa' };
+let flowWires = [], flowRO = null;
+const wire = (src, to, kind = src?.kind, dashed = false) => { if (src) flowWires.push({ from: src.el, port: src.port, to, kind, dashed }); };
+/** A wire to where a step could go: grey, or a side's own colour when it leaves a branch with nothing on that side yet. */
+const offer = (src, to) => wire(src, to, src?.kind === 'dead' ? 'dead' : src && src.port !== 'out' ? src.kind : 'offer', true);
+/** A Go to page with no page never says Done (RouterNavigate settles only on arriving): what follows it never runs. */
+const neverDone = (s) => !s.refresh && byId[s.id]?.type === 'RouterNavigate' && !byId[s.id].parameters?.target && !conns.some((c) => c.toId === s.id && c.toProperty === 'target');
 function renderWorkflow() {
   renderEvents();
   const main = $('steps'); main.innerHTML = '';
@@ -3428,50 +3471,125 @@ function renderWorkflow() {
   if (cardBack) wf.append(h('div', { class: 'cardnav' }, h('button', { class: 'quiet back', title: 'Back to the element in Design (Esc)', onclick: backFromCard }, '← ', labelOf(cardBack.node)),
     h('button', { class: 'quiet tiny', title: 'Every workflow on this page, listed', onclick: () => { cardBack = null; renderWorkflow(); } }, 'All workflows on this page')));
   wf.append(h('div', { class: 'event-card' }, h('div', { class: 'ic' }, icon('bolt')), h('div', { class: 'named' }, cardTitle(ev), h('small', {}, `${eventTitle(ev)} · ${typeName(byId[ev.node].type)}`)),
-    h('div', { style: 'margin-left:auto;display:flex;gap:6px' }, isRenaming(ev) ? null : h('button', { class: 'quiet tiny rename', title: 'Name this workflow yourself; an empty name gives it back to its steps', onclick: () => { renaming = `${ev.node}.${ev.port}`; renderWorkflow(); } }, 'Rename'), eventSteps(ev) ? null : h('button', { class: 'quiet', onclick: () => { const i = draftEvents.findIndex((d) => d.node === ev.node && d.port === ev.port); if (i >= 0) draftEvents.splice(i, 1); selEvent = null; renderWorkflow(); } }, 'Discard'))));
+    h('div', { style: 'margin-left:auto;display:flex;gap:6px;align-items:center' }, h('div', { class: 'zoom' }, h('button', { title: 'Smaller', onclick: () => zoomFlow(-0.1) }, '−'), h('span', { class: 'zoomval' }), h('button', { title: 'Bigger', onclick: () => zoomFlow(0.1) }, '+'), h('button', { title: 'Fit the whole workflow in view', onclick: () => { flowZoom = null; fitFlow(); } }, 'Fit')), isRenaming(ev) ? null : h('button', { class: 'quiet tiny rename', title: 'Name this workflow yourself; an empty name gives it back to its steps', onclick: () => { renaming = `${ev.node}.${ev.port}`; renderWorkflow(); } }, 'Rename'), eventSteps(ev) ? null : h('button', { class: 'quiet', onclick: () => { const i = draftEvents.findIndex((d) => d.node === ev.node && d.port === ev.port); if (i >= 0) draftEvents.splice(i, 1); selEvent = null; renderWorkflow(); } }, 'Discard'))));
+  flowWires = [];
+  const flow = h('div', { class: 'flow' });
+  flow.append(document.createElementNS(SVG_NS, 'svg')); flow.firstChild.setAttribute('class', 'wires');
+  const evnode = h('div', { class: 'evnode' }, h('b', {}, icon('bolt'), `When ${portLabel(byId[ev.node], 'output', ev.port)}`), h('small', {}, `${labelOf(ev.node)} (${typeName(byId[ev.node].type)})`));
+  const start = { el: evnode, port: 'out', kind: 'then' };
   const lanes = lanesOf(ev);
-  if (!lanes) renderChain(wf, chain(ev.node, ev.port), { node: ev.node, port: ev.port }, 1);
+  if (!lanes) renderChain(flow, chain(ev.node, ev.port), { node: ev.node, port: ev.port }, 1, '', null, start, evnode);
   else {
     wf.append(h('div', { class: 'hint lanesnote' }, `${labelOf(ev.node)}'s ${portLabel(byId[ev.node], 'output', ev.port)} runs these ${lanes.length} side by side: each one runs, in no set order.`));
-    const grid = h('div', { class: 'lanes', style: `grid-template-columns:repeat(${lanes.length}, minmax(260px, 1fr))` });
-    lanes.forEach((steps, i) => { const lane = h('div', { class: 'lane' }, h('h4', {}, `Lane ${i + 1}`)); renderChain(lane, steps, { node: ev.node, port: ev.port }, 1, `${String.fromCharCode(65 + i)}`); grid.append(lane); });
-    wf.append(grid);
+    const grid = h('div', { class: 'lanes' });
+    lanes.forEach((steps, i) => { const lane = h('div', { class: 'lane' }, h('h4', {}, `Lane ${i + 1}`)); renderChain(lane, steps, { node: ev.node, port: ev.port }, 1, `${String.fromCharCode(65 + i)}`, null, start); grid.append(lane); });
+    flow.append(h('div', { class: 'lanesrow' }, evnode, grid));
   }
+  wf.append(h('div', { class: 'flowarea' }, flow));
+  wf.append(h('div', { class: 'flowlegend' }, ...[['then', 'then (when the step is done)'], ['yes', 'Yes'], ['no', 'No'], ['join', 'both sides meet'], ['dead', 'never says done']].map(([k, w]) => h('span', {}, h('i', { style: `border-color:${FLOW[k]}${k === 'dead' ? ';border-top-style:dashed' : ''}` }), w))));
   main.append(wf);
+  flowRO?.disconnect();
+  flowRO = new ResizeObserver(() => fitFlow());
+  for (const el of [main, flow, ...flow.querySelectorAll('.step, .addrow, .evnode')]) flowRO.observe(el);
+  fitFlow();
+}
+/** The flow at its zoom: fitted to the panel's width (55%–100%) until someone zooms; the area takes the scaled size, so
+    the panel scrolls to whatever does not fit. */
+let flowZoom = null, flowZ = 1;
+function fitFlow() {
+  const flow = $('steps').querySelector('.flow'); if (!flow) return;
+  const w = flow.offsetWidth, ht = flow.offsetHeight, room = $('steps').clientWidth - 56;
+  flowZ = flowZoom ?? Math.max(0.55, Math.min(1, room / Math.max(1, w)));
+  flow.style.transform = flowZ === 1 ? '' : `scale(${flowZ})`;
+  Object.assign(flow.parentElement.style, { width: `${Math.ceil(w * flowZ)}px`, height: `${Math.ceil(ht * flowZ)}px` });
+  const val = $('steps').querySelector('.zoomval'); if (val) val.textContent = `${Math.round(flowZ * 100)}%`;
+  drawWires();
+}
+const zoomFlow = (by) => { flowZoom = Math.max(0.4, Math.min(1.5, Math.round(((flowZoom ?? flowZ) + by) * 10) / 10)); fitFlow(); };
+function drawWires() {
+  const flow = $('steps').querySelector('.flow'), svg = flow?.querySelector('svg.wires');
+  if (!svg) return;
+  // rects are on screen (scaled); the svg is inside the scaled layer, so everything is divided back by the zoom
+  const R = flow.getBoundingClientRect(), z = flowZ || 1;
+  svg.setAttribute('width', flow.offsetWidth); svg.setAttribute('height', flow.offsetHeight);
+  svg.innerHTML = '<defs><filter id="flowglow" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>';
+  const add = (tag, attrs) => { const e = document.createElementNS(SVG_NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); svg.append(e); return e; };
+  for (const w of flowWires) {
+    if (!w.from.isConnected || !w.to.isConnected) continue;
+    const sc = (r) => ({ left: (r.left - R.left) / z, right: (r.right - R.left) / z, top: (r.top - R.top) / z, height: r.height / z });
+    const a = sc(w.from.getBoundingClientRect()), b = sc(w.to.getBoundingClientRect());
+    // a branch leaves by Yes near its top and by No near its bottom; everything else by the middle of its right edge
+    const x1 = a.right, y1 = a.top + (w.port === 'yes' ? Math.min(26, a.height / 3) : w.port === 'no' ? a.height - Math.min(22, a.height / 3) : a.height / 2);
+    const x2 = b.left, y2 = b.top + b.height / 2, dx = Math.max(40, (x2 - x1) / 2);
+    const colour = FLOW[w.kind] ?? FLOW.then, faint = w.dashed || w.kind === 'dead' || w.kind === 'offer';
+    add('path', { d: `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`, fill: 'none', stroke: colour, 'stroke-width': faint ? 2 : 2.5, ...(faint ? { 'stroke-dasharray': '6 6' } : { filter: 'url(#flowglow)' }),
+      'data-kind': w.kind, 'data-from': w.from.dataset.id ?? w.from.className, 'data-to': w.to.dataset.id ?? w.to.className.split(' ')[0] });
+    add('circle', { cx: x1, cy: y1, r: 5, fill: colour, stroke: '#141318', 'stroke-width': 2 });
+    if (!faint) add('circle', { cx: x2, cy: y2, r: 5, fill: colour, stroke: '#141318', 'stroke-width': 2 });
+  }
 }
 let stepCounter = 0;
-function renderChain(into, steps, from, startN, prefix = '', before = null) {
+function renderChain(into, steps, from, startN, prefix = '', before = null, src = null, lead = null) {
   const col = h('div', { class: 'chain' });
+  if (lead) col.append(lead);
+  const link = () => { if (col.children.length) col.append(h('div', { class: 'link' })); };
   let n = startN;
   let last = from;
+  let end = src; // what the next node's wire leaves from
+  let joined = false;
   for (const s of steps) {
-    if (col.children.length) col.append(h('div', { class: 'link' }));
-    col.append(stepCard(s, `${prefix}${n}`));
+    link();
+    const card = stepCard(s, `${prefix}${n}`);
+    if (joined) card.classList.add('joined');
+    col.append(card);
+    wire(end, card);
+    joined = false;
     if (s.branches) {
-      col.append(h('div', { class: 'link' }));
+      link();
       const grid = h('div', { class: 'branches' });
       // R4: a side that rejoins takes a new last step before the step both sides go on to
       const rejoin = s.rejoin ? { node: s.rejoin.id, port: s.rejoin.via } : null;
+      const ends = {};
       for (const [side, port, label] of [['yes', 'ontrue', 'Yes'], ['no', 'onfalse', 'No']]) {
         const b = h('div', { class: `branch ${side}` }, h('h4', {}, label));
-        renderChain(b, s.branches[side], { node: s.id, port }, 1, `${prefix}${n}${side === 'yes' ? 'a' : 'b'}.`, rejoin);
+        ends[side] = renderChain(b, s.branches[side], { node: s.id, port }, 1, `${prefix}${n}${side === 'yes' ? 'a' : 'b'}.`, rejoin, { el: card, port: side, kind: side });
         grid.append(b);
       }
       col.append(grid);
-      if (s.rejoin) { col.append(h('div', { class: 'link' }), h('div', { class: 'joinnote' }, icon('branch'), 'Then, after Yes or No')); last = null; n++; continue; }
+      if (s.rejoin) {
+        // the two wires meet here and go on as one to the step both sides reach
+        link();
+        const note = h('div', { class: 'joinnote', 'data-id': 'join' }, icon('branch'), 'Then, after Yes or No');
+        col.append(note);
+        for (const e of [ends.yes, ends.no]) if (e) wire(e, note, e.kind === 'dead' ? 'dead' : e.el === card ? e.kind : 'join');
+        end = { el: note, port: 'out', kind: 'join' }; joined = true;
+        last = null; n++; continue;
+      }
       // both sides end on a step that can go on: one action after both is a rejoin
       const yesEnd = chainEnd(s.branches.yes, { node: s.id, port: 'ontrue' }), noEnd = chainEnd(s.branches.no, { node: s.id, port: 'onfalse' });
-      if (yesEnd && noEnd) col.append(h('div', { class: 'addrow joinrow' }, h('button', { title: 'One step both sides go on to (R4): the end of Yes and the end of No are wired into it', onclick: (e) => addActionMenu(e, { ...yesEnd, also: noEnd }) }, icon('plus'), 'Then, after Yes or No'), h('button', { title: 'A branch both sides go on to', onclick: () => addAction('Condition', { ...yesEnd, also: noEnd }) }, icon('branch'), 'Branch after both')));
-      last = null; break;
+      if (yesEnd && noEnd) {
+        link();
+        const row = h('div', { class: 'addrow joinrow' }, h('button', { title: 'One step both sides go on to (R4): the end of Yes and the end of No are wired into it', onclick: (e) => addActionMenu(e, { ...yesEnd, also: noEnd }) }, icon('plus'), 'Then, after Yes or No'), h('button', { title: 'A branch both sides go on to', onclick: () => addAction('Condition', { ...yesEnd, also: noEnd }) }, icon('branch'), 'Branch after both'));
+        col.append(row);
+        for (const e of [ends.yes, ends.no]) if (e && e.el !== card) offer(e, row);
+      }
+      last = null; end = null; break;
     }
     const d = !s.refresh && doneOf(byId[s.id]);
     last = d ? { node: s.id, port: d } : null;
+    end = s.refresh ? null : { el: card, port: 'out', kind: neverDone(s) ? 'dead' : 'then' };
     n++;
   }
-  into.append(col);
   if (last && before) last = { ...last, before };
-  if (steps.at(-1)?.refresh) into.append(h('div', { class: 'hint', style: 'padding:8px 2px' }, 'A refresh ends the workflow: a step after it would also run every time the page data loads.'));
-  if (last) into.append(h('div', { class: 'addrow' }, h('button', { class: steps.length ? '' : 'primary', onclick: (e) => addActionMenu(e, last) }, icon('plus'), 'Add an action'), h('button', { title: 'A step that splits this workflow into a Yes and a No chain (a Condition node)', onclick: () => addAction('Condition', last) }, icon('branch'), 'Add a branch')));
+  if (steps.at(-1)?.refresh) col.append(h('div', { class: 'hint' }, 'A refresh ends the workflow: a step after it would also run every time the page data loads.'));
+  if (last) {
+    link();
+    const row = h('div', { class: 'addrow' }, h('button', { class: steps.length ? '' : 'primary', onclick: (e) => addActionMenu(e, last) }, icon('plus'), 'Add an action'), h('button', { title: 'A step that splits this workflow into a Yes and a No chain (a Condition node)', onclick: () => addAction('Condition', last) }, icon('branch'), 'Add a branch'));
+    col.append(row);
+    offer(end, row);
+  }
+  into.append(col);
+  return end;
 }
 /** Where a chain ends, for a step after it: its last step's Done, or `from` when it has none; null after a refresh or a branch. */
 function chainEnd(steps, from) {
@@ -3483,7 +3601,7 @@ function stepCard(s, n) {
   const node = byId[s.id];
   if (s.refresh) {
     const it = itemById(s.id);
-    return h('div', { class: 'step' }, h('div', { class: 'num' }, n),
+    return h('div', { class: 'step', 'data-id': s.id, style: `--kind:${KIND_COLOUR.db}` }, h('div', { class: 'num' }, n),
       h('h3', {}, 'Refresh page data', h('span', {}, it?.name ?? labelOf(s.id))),
       h('div', { class: 'acts' }, h('button', { class: 'quiet tiny danger', title: 'Stop refreshing it here (the page data stays)', onclick: () => deleteStep(s) }, icon('trash'))),
       h('div', { class: 'lines' }, h('span', {}, it ? sentence(it) : ''), h('span', { style: 'color:var(--muted)' }, 'What it asks is edited in Design → Page data.')));
@@ -3504,14 +3622,15 @@ function stepCard(s, n) {
   const ports = editablePorts(node, { wireOnly: true }).filter((p) => !['x', 'y'].includes(p.name) && !(isCond && p.name === 'condition'));
   if (!ports.length) settings.append(h('div', { class: 'hint' }, 'This action has no settings to type; its inputs come from values.'));
   for (const p of ports) settings.append(fieldFor(node, p, params[p.name], wiredIn[p.name]));
-  const openSettings = () => { settings.style.display = ''; openSteps.add(s.id); };
+  const openSettings = () => { settings.style.display = ''; card.classList.add('open'); openSteps.add(s.id); };
   // a Go to page with no page never arrives, and RouterNavigate says Done only on arriving: nothing after it runs
   if (node.type === 'RouterNavigate' && !params.target && !wiredIn.target) lines.unshift(h('span', { class: 'nopage', style: 'color:var(--warn);flex-basis:100%;display:flex;flex-wrap:wrap;gap:2px 8px;align-items:center' }, 'No page picked: it goes nowhere, and nothing after it runs.', h('button', { class: 'quiet tiny', style: 'white-space:nowrap', onclick: openSettings }, 'Pick a page…')));
-  const card = h('div', { class: `step${isCond ? ' cond' : ''}` },
+  const kind = ACTIONS.find(([t]) => t === node.type)?.[2];
+  const card = h('div', { class: `step${isCond ? ' cond' : ''}${openSteps.has(s.id) ? ' open' : ''}${neverDone(s) ? ' dead' : ''}`, 'data-id': s.id, style: kind ? `--kind:${KIND_COLOUR[kind]}` : null },
     h('div', { class: 'num' }, isCond ? icon('branch') : n),
     h('h3', {}, isCond ? 'Branch' : typeName(node.type), h('span', { title: isCond ? 'If the condition holds, Yes runs; otherwise No' : null }, isCond ? (node.label || 'if the condition holds, Yes; otherwise No') : node.label || '')),
     h('div', { class: 'acts' },
-      ports.length ? h('button', { class: 'quiet tiny', title: 'Settings', onclick: () => { const open = settings.style.display === 'none'; settings.style.display = open ? '' : 'none'; open ? openSteps.add(s.id) : openSteps.delete(s.id); } }, icon('settings')) : null,
+      ports.length ? h('button', { class: 'quiet tiny', title: 'Settings', onclick: () => { const open = settings.style.display === 'none'; settings.style.display = open ? '' : 'none'; card.classList.toggle('open', open); open ? openSteps.add(s.id) : openSteps.delete(s.id); } }, icon('settings')) : null,
       h('button', { class: 'quiet tiny danger', title: isCond ? 'Delete the branch and both chains' : 'Delete step', onclick: () => deleteStep(s) }, icon('trash'))));
   if (isCond) {
     const cw = wiredIn.condition; const src = cw && byId[cw.fromId];

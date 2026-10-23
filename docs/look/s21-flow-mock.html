@@ -1,0 +1,126 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Flow mock</title>
+<style>
+  :root { --ground: #141318; --card: rgba(35,33,41,.94); --border: #33323d; --text: #fff; --sub: #c4cedb; --dim: #7d8a98;
+    --blue: #4da3ff; --green: #45d08a; --red: #f97066; --amber: #fdb022; --pink: #f776c4; --purple: #a78bfa; --cyan: #35c3e8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.4 Inter, -apple-system, system-ui, sans-serif; background: #f6f7f9; color: #1f2430; width: 1600px; height: 1000px; overflow: hidden; display: grid; grid-template-columns: 48px 280px 1fr; grid-template-rows: 44px 1fr; }
+  header { grid-column: 1 / -1; background: #fff; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 14px; padding: 0 14px; }
+  header b { font-weight: 600; } header .st { margin-left: auto; color: #4b5563; font-size: 12px; } header .st i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #16a34a; margin-right: 6px; }
+  .rail { background: #12141a; } .rail div { width: 32px; height: 32px; border-radius: 8px; margin: 10px 8px; background: #1f2330; } .rail div.on { background: #2563eb33; outline: 1px solid #2563eb; }
+  .list { background: #fff; border-right: 1px solid #e5e7eb; padding: 14px 12px; }
+  .list .search { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; color: #9ca3af; margin-bottom: 14px; }
+  .list h5 { margin: 14px 0 6px; font: 600 11px/1 Inter, sans-serif; letter-spacing: .06em; color: #6b7280; text-transform: uppercase; }
+  .list .row { padding: 8px 10px; border-radius: 8px; } .list .row small { display: block; color: #6b7280; font-size: 11px; }
+  .list .row.on { background: #eff6ff; color: #1d4ed8; }
+  main { position: relative; background: var(--ground); overflow: hidden;
+    background-image: radial-gradient(rgba(255,255,255,.07) 1px, transparent 1px); background-size: 22px 22px; }
+  .top { position: absolute; left: 0; right: 0; top: 0; padding: 16px 24px; display: flex; align-items: baseline; gap: 14px; color: var(--text); }
+  .top h2 { margin: 0; font-size: 18px; } .top span { color: var(--dim); }
+  .top .btns { margin-left: auto; display: flex; gap: 8px; }
+  .top button { background: #232129; color: var(--sub); border: 1px solid var(--border); border-radius: 18px; padding: 6px 14px; font: inherit; }
+  .top button.hot { border-color: var(--pink); color: var(--pink); }
+  svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .node { position: absolute; width: 222px; background: var(--card); border: 1.5px solid var(--border); border-radius: 12px; color: var(--text); box-shadow: 0 10px 34px rgba(0,0,0,.45); }
+  .node .hd { display: flex; align-items: center; gap: 8px; padding: 10px 12px 6px; }
+  .node .num { font: 600 11px/1 Inter, sans-serif; padding: 4px 6px; border-radius: 6px; background: rgba(255,255,255,.08); color: var(--sub); }
+  .node .t { font-weight: 600; font-size: 14px; }
+  .node .bd { padding: 0 12px 12px; color: var(--sub); font-size: 12px; }
+  .node code { font: 12px ui-monospace, Menlo, monospace; color: #fff; background: rgba(255,255,255,.07); padding: 1px 5px; border-radius: 4px; }
+  .node .kind { position: absolute; left: -1.5px; right: -1.5px; top: -1.5px; height: 4px; border-radius: 12px 12px 0 0; }
+  .node.event { border-color: var(--blue); box-shadow: 0 0 0 1px rgba(77,163,255,.25), 0 0 26px rgba(77,163,255,.35); }
+  .node.cond { border-color: var(--purple); box-shadow: 0 0 22px rgba(167,139,250,.28); }
+  .node.join { border-color: var(--cyan); box-shadow: 0 0 22px rgba(53,195,232,.3); }
+  .node.warn { border-color: rgba(253,176,34,.7); }
+  .node .warnline { margin-top: 8px; color: var(--amber); display: flex; gap: 8px; align-items: center; }
+  .node .warnline b { font-weight: 500; border: 1px solid rgba(253,176,34,.5); border-radius: 12px; padding: 2px 8px; white-space: nowrap; }
+  .port { position: absolute; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--ground); }
+  .port.in { left: -7px; } .port.out { right: -7px; }
+  .plabel { position: absolute; right: 12px; font: 600 11px/1 Inter, sans-serif; letter-spacing: .04em; }
+  .chip { display: inline-flex; gap: 6px; align-items: center; background: rgba(167,139,250,.14); border: 1px solid rgba(167,139,250,.45); color: #ddd6fe; border-radius: 12px; padding: 2px 9px; font: 12px ui-monospace, Menlo, monospace; }
+  .add { position: absolute; width: 128px; height: 64px; border: 1.5px dashed #4a4856; border-radius: 12px; color: var(--dim); display: grid; place-items: center; font-weight: 500; }
+  .wl { position: absolute; font: 600 11px/1 Inter, sans-serif; padding: 4px 8px; border-radius: 10px; background: var(--ground); letter-spacing: .03em; }
+  .plus { position: absolute; width: 20px; height: 20px; border-radius: 50%; background: #232129; border: 1px solid var(--border); color: var(--sub); display: grid; place-items: center; font-size: 14px; line-height: 1; }
+  .legend { position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 24px; border-top: 1px solid var(--border); background: rgba(20,19,24,.92); color: var(--sub); display: flex; gap: 22px; align-items: center; font-size: 12px; }
+  .legend i { display: inline-block; width: 26px; height: 0; border-top: 2.5px solid; vertical-align: middle; margin-right: 7px; }
+  .legend .ran { margin-left: auto; color: var(--green); }
+  .note { position: absolute; left: 24px; top: 64px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; color: var(--text); max-width: 330px; }
+  .note .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); margin-right: 8px; }
+</style></head>
+<body>
+<header><b>todo-list</b><span style="color:#9ca3af">/</span><span>Sign in</span><span class="st"><i></i>App on screen · saved 12:18:09</span></header>
+<div class="rail"><div></div><div class="on"></div><div></div><div></div></div>
+<aside class="list">
+  <div class="search">Search steps and what they change</div>
+  <h5>Workflows on this page</h5>
+  <div class="row">If Already signed in<small>When the page loads · 2 steps</small></div>
+  <div class="row on">If 2 &gt; 1 → Set Sign-in card's state<small>When Sign-in card is clicked · 4 steps</small></div>
+  <div class="row">Sign in → Go to the list<small>When Password: Enter · 2 steps</small></div>
+  <div class="row">Create the account → Go to the list<small>When Create account is clicked · 3 steps</small></div>
+</aside>
+<main id="m">
+  <div class="top"><h2>If 2 &gt; 1 → Set Sign-in card's state</h2><span>When Sign-in card is clicked · Group</span>
+    <div class="btns"><button>Rename</button><button class="hot">Show the last run</button><button>Fit</button></div></div>
+  <div class="note"><span class="dot"></span><b>Both sides meet at step 2.</b> Whether Yes or No ran, step 2 runs next.</div>
+  <svg id="wires"></svg>
+
+  <div class="node event" id="ev" style="left:24px;top:330px"><div class="hd"><span class="t">⚡ When clicked</span></div>
+    <div class="bd">Sign-in card (a Group)</div><span class="port out" style="background:var(--blue);top:30px" data-p="ev.out"></span></div>
+
+  <div class="node cond" id="c1" style="left:282px;top:316px"><div class="kind" style="background:var(--purple)"></div>
+    <div class="hd"><span class="num">Step 1</span><span class="t">Only when</span></div>
+    <div class="bd"><span class="chip">ƒx 2 &gt; 1</span></div>
+    <span class="port in" style="background:var(--blue);top:44px" data-p="c1.in"></span>
+    <span class="plabel" style="top:20px;color:var(--green)">YES</span><span class="port out" style="background:var(--green);top:16px" data-p="c1.yes"></span>
+    <span class="plabel" style="top:66px;color:var(--red)">NO</span><span class="port out" style="background:var(--red);top:62px" data-p="c1.no"></span></div>
+
+  <div class="node" id="y1" style="left:566px;top:190px"><div class="kind" style="background:var(--pink)"></div>
+    <div class="hd"><span class="num">1a</span><span class="t">Set a state</span></div>
+    <div class="bd">Sign-in card's <code>state</code> → <code>"open"</code></div>
+    <span class="port in" style="background:var(--green);top:30px" data-p="y1.in"></span><span class="port out" style="background:var(--blue);top:30px" data-p="y1.out"></span></div>
+
+  <div class="node warn" id="n1" style="left:566px;top:460px"><div class="kind" style="background:var(--amber)"></div>
+    <div class="hd"><span class="num">1b</span><span class="t">Go to page</span></div>
+    <div class="bd"><div class="warnline">No page picked: nothing after it runs <b>Pick a page…</b></div></div>
+    <span class="port in" style="background:var(--red);top:30px" data-p="n1.in"></span><span class="port out" style="background:#4a4856;top:30px" data-p="n1.out"></span></div>
+
+  <div class="node join" id="s2" style="left:872px;top:330px"><div class="kind" style="background:var(--cyan)"></div>
+    <div class="hd"><span class="num">Step 2</span><span class="t">Set a state</span></div>
+    <div class="bd">Sign-in card's <code>state</code> → <code>"done"</code></div>
+    <span class="port in" style="background:var(--cyan);top:30px" data-p="s2.in"></span><span class="port out" style="background:var(--blue);top:30px" data-p="s2.out"></span></div>
+
+  <div class="add" style="left:1130px;top:346px">+ Add an action</div>
+
+  <div class="legend"><span><i style="border-color:var(--blue)"></i>then (when the step is done)</span><span><i style="border-color:var(--green)"></i>Yes</span><span><i style="border-color:var(--red)"></i>No</span><span><i style="border-color:var(--cyan)"></i>both sides meet</span><span><i style="border-color:#4a4856;border-top-style:dashed"></i>never says done</span><span class="ran">● last run: Yes → step 2 (12:08)</span></div>
+</main>
+<script>
+const m = document.getElementById('m'), svg = document.getElementById('wires'), R = m.getBoundingClientRect();
+const pt = (k) => { const e = document.querySelector(`[data-p="${k}"]`).getBoundingClientRect(); return [e.left + e.width / 2 - R.left, e.top + e.height / 2 - R.top]; };
+const NS = 'http://www.w3.org/2000/svg';
+const defs = document.createElementNS(NS, 'defs'); svg.append(defs);
+const glow = (id, c) => { defs.insertAdjacentHTML('beforeend', `<filter id="${id}" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="3.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`); };
+glow('g');
+function wire(a, b, color, { dash, ran, width = 2.5 } = {}) {
+  const [x1, y1] = pt(a), [x2, y2] = pt(b), dx = Math.max(60, (x2 - x1) * 0.5);
+  const d = `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
+  const p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); p.setAttribute('fill', 'none'); p.setAttribute('stroke', color); p.setAttribute('stroke-width', width);
+  if (dash) p.setAttribute('stroke-dasharray', '6 6'); if (ran) p.setAttribute('filter', 'url(#g)'); else p.setAttribute('opacity', .85);
+  svg.append(p);
+  if (ran) { const q = p.cloneNode(); q.setAttribute('stroke', '#fff'); q.setAttribute('stroke-width', 2); q.setAttribute('stroke-dasharray', '2 16'); q.removeAttribute('filter'); q.setAttribute('opacity', .9); svg.append(q); }
+  return p;
+}
+const label = (text, x, y, color) => { const l = document.createElement('div'); l.className = 'wl'; l.textContent = text; l.style.cssText = `left:${x}px;top:${y}px;color:${color};border:1px solid ${color}55`; m.append(l); };
+const plus = (x, y) => { const l = document.createElement('div'); l.className = 'plus'; l.textContent = '+'; l.style.cssText = `left:${x - 10}px;top:${y - 10}px`; m.append(l); };
+wire('ev.out', 'c1.in', '#4da3ff', { ran: true });
+wire('c1.yes', 'y1.in', '#45d08a', { ran: true });
+wire('c1.no', 'n1.in', '#f97066');
+wire('y1.out', 's2.in', '#35c3e8', { ran: true });
+wire('n1.out', 's2.in', '#4a4856', { dash: true });
+const [jx, jy] = pt('s2.in');
+const dot = document.createElementNS(NS, 'circle'); dot.setAttribute('cx', jx - 34); dot.setAttribute('cy', jy); dot.setAttribute('r', 5); dot.setAttribute('fill', '#35c3e8'); dot.setAttribute('filter', 'url(#g)'); svg.append(dot);
+label('Yes', 512, 262, '#45d08a'); label('No', 512, 476, '#f97066'); label('after Yes or No', 730, 300, '#35c3e8');
+wire('s2.out', 's2.out', '#4da3ff');
+const [ax, ay] = pt('s2.out'); const p2 = document.createElementNS(NS, 'path'); p2.setAttribute('d', `M${ax},${ay} L${ax + 52},${ay}`); p2.setAttribute('stroke', '#4a4856'); p2.setAttribute('stroke-width', 2); p2.setAttribute('stroke-dasharray', '4 5'); svg.append(p2);
+plus(...((a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2])(pt('ev.out'), pt('c1.in')));
+</script>
+</body></html>

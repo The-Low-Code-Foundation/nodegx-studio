@@ -866,7 +866,7 @@ tab already reads it that way). A badge is "this visual node has a wired signal 
 | STU-023 | **Names from steps.** | a card with no name reads its steps; a renamed card keeps its name |
 | STU-024 | **The importer merges split workflows** into one card per event. Where the conditions are exact opposites (A / not A) they become one Yes/No branch. Where they overlap and both can run, they stay as **two lanes that run side by side**, because folding them into either/or would change what the app does. | the real app's 16 split elements become 16 cards; a fixture with overlapping conditions keeps both lanes and both still run |
 | STU-025 | **Rejoin** (R4, taken 2026-10-23): after a branch, both sides continue into one shared next step | done (s20): made from the card, drawn once after the branch, gated in the app |
-| STU-026 | **The flow, drawn** (Richard, 2026-10-23, s21): a workflow drawn as NodeGX draws, in the backend map's look: steps as nodes on a dark canvas, left to right, coloured wires (then, Yes, No, where both sides meet), the last run lit up; Bubble's landmarks kept ("When … is clicked", Step 1, 2, "Only when") | a rejoin reads as two wires meeting at one step; every edit the card makes today is made on the drawing; mock: [look/s21-flow-mock.png](look/s21-flow-mock.png) |
+| STU-026 | **The flow, drawn** (Richard, 2026-10-23, s21): a workflow drawn as NodeGX draws, in the backend map's look: steps as nodes on a dark canvas, left to right, coloured wires (then, Yes, No, where both sides meet), the last run lit up; Bubble's landmarks kept ("When … is clicked", Step 1, 2, "Only when") | done (s21): every card drawn so, its edits unchanged; a rejoin is two wires meeting, in view at Fit; the last run lit up is not built yet. Mock: [look/s21-flow-mock.png](look/s21-flow-mock.png) |
 
 **Done (STU-020 and STU-021, 2026-10-19, s8).** An element with a workflow wears a **⚡** in Design: on the canvas, in
 its top right corner (Design mode only, not while using the app), and on its row of the element list (a row that folds
@@ -1496,6 +1496,24 @@ style system. We don't have to stay married to Bubble's style, just making sure 
 landmarks."* The "data explorer" is the backend map (Data → Map). Built as STU-026. Same day, on a desktop app that is
 already showing another project: *"If we could do the whole multiple projects in tabs concept in the NodeGX Studio that
 we intended to do in the original NodeGX repo editor, that would be a solution and also amazing."* Built as STU-009.
+Shown the mock ([look/s21-flow-mock.png](look/s21-flow-mock.png), its page [look/s21-flow-mock.html](look/s21-flow-mock.html)):
+*"It looks hot, I approve."*
+**Done (STU-026, s21).** The card is drawn on a dark canvas in the backend map's palette (`#141318`, blue then, green
+Yes, red No, cyan where both sides meet). Same DOM as before, laid out across: a chain is a row (`.chain`), a branch's
+sides are two rows (`.branch.yes` / `.branch.no`, their label a pill on the wire), the event is a node at the head
+(`.evnode`, "When Click"), the rejoin note is the point the two wires meet and go on as one, *Add an action* is a dashed
+ghost at each end. The wires are an svg under the nodes (`svg.wires`), recorded by `renderChain` as it draws (what each
+leaves, by which port, what it reaches, what it carries: `data-from`, `data-to`, `data-kind`) and drawn from where the
+nodes landed, again when any node changes size. A Go to page with no page sends a dashed grey wire (it never says
+done). A node's top strip is its kind's colour (state pink, records amber, go to page blue, people lime). The flow is
+fitted to the panel (55%–100%) until someone zooms (− / + / Fit beside Rename); the panel scrolls for the rest.
+Card mode fills the window (it had `.card`'s 1100 px frame). `check:editor` 193/193 (2 new: the wires off the svg for
+the R4 card, left to right; at Fit the step both sides meet at is in view, which the first build failed with settings
+open: it was past the panel's edge); `check:app` 46/46, `check:data` 80/80, `check:timeline` 46/46. Pictures:
+[look/s2-workflow-rejoin.png](look/s2-workflow-rejoin.png), [look/s2-workflow-card.png](look/s2-workflow-card.png)
+(lanes), [look/s2-workflow-branch.png](look/s2-workflow-branch.png). **Not built:** the last run lit up (the mock's
+*Show the last run*; the trace is there, as the timeline reads it); dragging nodes (the layout is the chain's); a "+"
+on a wire to put a step between two.
 
 **Taken.** R4 (Richard, 2026-10-23): after a branch, both sides may rejoin into one next step. His leaning first:
 *"Rejoining would be great, like n8n style, but hard to manage maybe?"*; then, asked again in s20: *"Yep for R4."*
