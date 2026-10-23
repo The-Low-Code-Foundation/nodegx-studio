@@ -44,10 +44,15 @@ strip.innerHTML = `
       font: 13px/1.3 Inter, system-ui, sans-serif; border-bottom: 1px solid #232a33; position: fixed; top: 0; left: 0;
       right: 0; height: 45px; box-sizing: border-box; z-index: 50; }
     html > body { margin-top: 45px !important; height: calc(100% - 45px) !important; }
-    #hoststrip .name { font-weight: 600; color: #eef2f6; }
-    #hoststrip .grow { flex: 1; }
+    #hoststrip .name { font-weight: 600; color: #eef2f6; white-space: nowrap; }
+    #hoststrip .grow { flex: 1; min-width: 0; }
+    #hoststrip .state { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 auto; }
+    html[data-hosted="inline"] #hoststrip .state:not(.held) { display: none; }
+    html[data-hosted="inline"] #hoststrip .grow { display: none; }
+    html[data-hosted="inline"] #hoststrip .state.held { flex: 1 1 auto; }
     #hoststrip button { font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid #2a3340; background: #141a22;
-      color: #eef2f6; cursor: pointer; min-height: 32px; }
+      color: #eef2f6; cursor: pointer; min-height: 32px; white-space: nowrap; }
+    html[data-hosted="inline"] #hoststrip button { padding: 6px 9px; }
     #hoststrip button:hover { background: #1b2430; }
     #hoststrip button.hold { background: #b42318; border-color: #d92d20; font-weight: 700; letter-spacing: .02em; }
     #hoststrip button.hold:hover { background: #d92d20; }
@@ -80,7 +85,7 @@ strip.innerHTML = `
   <button id="elemsbtn" class="toggle" title="The elements on this page and the palette" ${hosted ? '' : 'hidden'}>Elements</button>
   <button id="propsbtn" class="toggle" title="The selected element's properties" ${hosted ? '' : 'hidden'}>Properties</button>
   <button id="fullbtn" title="Studio over the whole conversation" ${hosted ? '' : 'hidden'}>Full screen</button>
-  <button id="windowbtn" title="The same Studio in your browser, beside the conversation" ${hosted ? '' : 'hidden'}>Open in a window</button>
+  <button id="windowbtn" title="The same Studio in your browser, beside the conversation" ${hosted ? '' : 'hidden'}>Window ↗</button>
 `;
 document.documentElement.insertBefore(strip, document.body ?? null);
 if (!document.body) document.addEventListener('DOMContentLoaded', () => document.documentElement.insertBefore(strip, document.body), { once: true });
