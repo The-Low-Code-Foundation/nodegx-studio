@@ -1497,7 +1497,10 @@ by `store`), and a rename moves the property, its default, the wires out of it a
 is a Variable, as before. `check:editor` 177/177 (5 new, on the gate's Probe panel with four copies on Sign in): the
 node and its default on disk, the ⚡ wire into the text, the rename to `mood` with its wire, and in the running app
 both shown copies start at the default, there are 4 records (one per copy), and set apart the two shown copies read
-"copy 0" and "copy 1". Not gated: the Set step (built on the same path as Set Variable's). **Not built:** the
+"copy 0" and "copy 1". **The Set step, gated (s20):** `check:editor` 180/180 (3 new): a workflow on the Panel's
+click in Probe panel, *Set a custom state* → *Probe text's mood*, is a Set Component Object Properties step run by
+`store`; its settings name `mood`, and "clicked" typed there is `prop-mood` on disk; on Sign in, clicking the first
+shown copy makes it read "clicked" while the second keeps "copy 1". **Not built:** the
 importer's half: a Bubble reusable's states, its elements' show / hide and display data are still global Variables
 by name, read and set by name in compiled expressions and actions (`convertReusable`, `SetCustomState`,
 `ShowElement`, `DisplayGroupData`); moving them per copy means compiling those reads to the copy's record, a larger

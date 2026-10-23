@@ -882,6 +882,28 @@ try {
     const renamed = onDisk(PANEL + 'nodes.json').nodes.find((n) => n.id === co.id);
     ok(renamed.parameters.properties === 'mood' && renamed.parameters['value-mood'] === 'each its own' && !('value-state' in renamed.parameters) && toText() === 'value-mood' && (await appText()).includes('each its own'), 'renamed to mood: the property, its default and the wire into the text follow, and the canvas still shows it', { parameters: renamed.parameters, wire: toText() });
     await clickText('#right .ptabs button', 'Visual'); await wait(250);
+    // R5's Set step: a workflow in the reusable sets the copy's own record (Set Component Object Properties, run by store)
+    await b.clickSel('[data-tab=workflow]'); await wait(300);
+    await b.clickSel('#newevent'); await wait(250);
+    await b.type('Panel click'); await wait(200);
+    await menuItem('When Panel: Click');
+    await clickText('#steps .addrow button', 'Add an action'); await wait(250);
+    await b.type('custom state'); await wait(200); await menuItem('Set a custom state');
+    await menuItem("Probe text's mood");
+    let setCo;
+    for (const t0 = Date.now(); Date.now() - t0 < 5000 && !setCo; await wait(150)) {
+      const pn = onDisk(PANEL + 'nodes.json').nodes, pc = onDisk(PANEL + 'connections.json').connections;
+      setCo = pn.find((n) => n.type === 'net.noodl.SetComponentObjectProperties' && pc.some((w) => w.fromId === 'ppRoot' && w.toId === n.id && w.toProperty === 'store'));
+    }
+    ok(setCo?.parameters?.properties === 'mood', 'Set a custom state in a reusable is a Set Component Object Properties step for mood, run by store from the Panel\'s click', { type: setCo?.type, parameters: setCo?.parameters });
+    const stepFields = await b.evaluate(`[...document.querySelectorAll('#steps .step .settings')].filter(p => p.style.display !== 'none').flatMap(p => [...p.querySelectorAll('.field label')].map(l => l.textContent))`);
+    n0 = await shows();
+    await b.evaluate(`(() => { const f = [...document.querySelectorAll('#steps .step .settings .field')].find(f => f.querySelector('label').textContent === 'mood'); const i = f.querySelector('input'); i.value = 'clicked'; i.dispatchEvent(new Event('input')); })()`);
+    let setTo;
+    for (const t0 = Date.now(); Date.now() - t0 < 5000 && setTo !== 'clicked'; await wait(150)) setTo = onDisk(PANEL + 'nodes.json').nodes.find((n) => n.id === setCo?.id)?.parameters?.['prop-mood'];
+    ok(stepFields.includes('mood') && setTo === 'clicked', 'its settings name the state (mood), and the value typed there is the step\'s prop-mood', { stepFields, setTo });
+    await rebuilt(n0);
+    await b.clickSel('[data-tab=design]'); await wait(400);
     // data made here is the reusable's, in STU-014's form
     const formIn = async (sel, value, ev = 'input') => b.evaluate(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event(${JSON.stringify(ev)}, { bubbles: true })); })()`);
     await b.clickSel('#newpagedata');
@@ -916,6 +938,11 @@ try {
     await wait(500);
     const after = JSON.parse(await b.evaluate(shownTexts));
     ok(before.length === 2 && before.every((t) => t === 'each its own') && records >= 2 && after.length === 2 && after.every((t) => /^copy \d$/.test(t)) && new Set(after).size === 2, 'on Sign in the two shown copies start at the default; each copy built has its own record, and set apart, each shown copy shows its own value', { before, records, after });
+    // the Set step, run by a click on one shown copy: that copy reads "clicked", the other keeps its own
+    await b.evaluate(`__ob.preview.elementsOf('ppText').filter(e => e.getClientRects().length)[0].click()`);
+    await wait(500);
+    const clicked = JSON.parse(await b.evaluate(shownTexts));
+    ok(clicked[0] === 'clicked' && clicked[1] === after[1], 'clicking the first shown copy runs its Set step: it reads "clicked", the second copy still reads its own', { after, clicked });
   }
   console.log('check: the Conditional tab (STU-051)');
   {
