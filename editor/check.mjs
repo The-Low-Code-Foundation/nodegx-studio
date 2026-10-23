@@ -745,7 +745,7 @@ try {
     await b.evaluate('document.activeElement && document.activeElement.blur()'); await b.key('Delete', 'Delete', 46);
     await b.until('!document.getElementById("clash").hidden', 4000).catch(() => {});
     const asked = await b.evaluate('document.getElementById("clash").hidden ? null : document.getElementById("clash-msg").textContent');
-    ok(asked?.includes('Pages/Sign in') && onDisk(SIGN + 'nodes.json').nodes.some((n) => n.id === outsideId), 'an edit to a file somebody else wrote meanwhile is not saved over it: the editor asks', asked);
+    ok(asked?.includes('Pages/Sign in') && !asked.includes('agent') && onDisk(SIGN + 'nodes.json').nodes.some((n) => n.id === outsideId), 'an edit to a file somebody else wrote meanwhile is not saved over it: the editor asks (not naming the agent: component.json was not rewritten)', asked);
     n0 = await shows(); await b.clickSel('#clash-theirs'); await rebuilt(n0);
     ok(onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === lead).parameters.text === 'Theirs' && (await appText()).includes('Theirs') && (await appText()).includes(OUTSIDE), '"Take theirs" keeps the other program\'s file and drops the editor\'s delete, on disk and on screen');
     await select(outsideId);
@@ -755,6 +755,23 @@ try {
     await b.clickSel('#clash-mine'); await wait(800);
     const after = onDisk(SIGN + 'nodes.json').nodes;
     ok(!after.some((n) => n.id === outsideId) && after.find((n) => n.id === lead).parameters.text === 'Theirs', '"Keep mine" writes the editor\'s version over theirs');
+    // CCN-002: what NodeGX's MCP server does — component.json rewritten and stamped noodl-mcp beside nodes.json
+    const agentWrite = (mutate) => {
+      const f = join(project, SIGN + 'component.json'); const c = JSON.parse(readFileSync(f, 'utf8'));
+      writeFileSync(f + '.tmp-check', JSON.stringify({ ...c, modified: new Date().toISOString(), modifiedBy: 'noodl-mcp' }, null, 2)); renameSync(f + '.tmp-check', f);
+      write(mutate);
+    };
+    agentWrite((nodes) => { nodes.find((n) => n.id === lead).parameters.text = 'The agent wrote this'; });
+    await b.until('document.getElementById("toast").textContent.includes("The agent changed")', 4000).catch(() => {});
+    ok((await b.evaluate('document.getElementById("toast").textContent')).includes('The agent changed Pages/Sign in'), 'a change the agent made is said as the agent\'s (CCN-002)', await b.evaluate('document.getElementById("toast").textContent'));
+    await select(lead);
+    agentWrite((nodes) => { nodes.find((n) => n.id === lead).parameters.text = 'The agent again'; });
+    await b.evaluate('document.activeElement && document.activeElement.blur()'); await b.key('Delete', 'Delete', 46);
+    await b.until('!document.getElementById("clash").hidden', 4000).catch(() => {});
+    const askedAgent = await b.evaluate('document.getElementById("clash").hidden ? null : document.getElementById("clash-msg").textContent');
+    ok(askedAgent?.startsWith('The agent changed Pages/Sign in'), 'a clash with the agent names the agent as the other writer (CCN-002)', askedAgent);
+    n0 = await shows(); await b.clickSel('#clash-theirs'); await rebuilt(n0);
+    ok(onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === lead)?.parameters.text === 'The agent again', '"Take the agent\'s" keeps the agent\'s file');
   }
   console.log('check: Claude Code (STU-005)');
   {

@@ -75,6 +75,12 @@ them back. Gates on the s24 tree: `check:editor` **200/200**, `check:timeline` *
 `check:data` 80/80. Committed, **not pushed** (ask; ed40eb0, b7997bc, b8d1c35, 30278bb and the drag commit).
 Waiting on Richard: how the lanes and the drag feel on his app; no picture retaken (`--shots` rewrites every s2 one).
 
+**From lane 3 (P125 CCN-002, OpenNoodl c5da19b12), same evening:** Studio names the agent. `serve.mjs` marks a file the
+agent's when the watcher saw it change in the same batch as its `component.json` stamped `modifiedBy: 'noodl-mcp'`
+(`agentChanged`, `byAgent`; Studio's own save clears it); a 409 clash on it is `by: 'agent'`, the dialog says *"The agent
+changed …"*, and so does the "redrawn" toast. `check:editor` **203/203** (3 new), `check:data` 80/80, `check:timeline`
+53/53, `check:app` 54/54 on that tree. Not pushed.
+
 Next buildable, in order:
 0. STU-009 on Windows / Linux in the package workflow (only macOS was run). STU-026: nothing left that was asked.
 1. When NodeGX publishes a release with BACKENDPUBLIC: bump the pins, `npm run vendor`, every gate. Check npm first

@@ -111,6 +111,22 @@ const diskText = (rel) => {
   const file = join(projectDir, rel);
   return existsSync(file) && statSync(file).isFile() ? readFileSync(file, 'utf8') : null;
 };
+/* CCN-002: who changed a file on disk last, when it was the agent. NodeGX's MCP server rewrites a component's three files
+   together and stamps component.json `modifiedBy: 'noodl-mcp'`; the stamp alone says only who wrote the component last
+   (an agent's file later edited in VS Code is not the agent's change), so a file counts as the agent's only when it
+   changed in the same batch as a stamped component.json. */
+const agentChanged = new Set();
+const componentJsonOf = (rel) => (rel.startsWith('components/') ? rel.replace(/[^/]+$/, 'component.json') : null);
+const stampedByAgent = (text) => { try { return JSON.parse(text ?? 'null')?.modifiedBy === 'noodl-mcp'; } catch { return false; } };
+/** Whether the change on disk to `rel` was the agent's: from the watcher's last batch, or — for a save that lands
+    before that batch settles — from a component.json on disk that Studio has not seen yet and the agent stamped. */
+const byAgent = (rel) => {
+  if (agentChanged.has(rel)) return true;
+  const cj = componentJsonOf(rel);
+  if (!cj) return false;
+  const text = diskText(cj);
+  return text !== known.get(cj) && stampedByAgent(text);
+};
 let touched = new Set();
 let settle;
 function flush() {
@@ -134,6 +150,10 @@ function flush() {
       known.set(p, t);
       changed[p] = t;
     }
+  }
+  for (const p of [...Object.keys(changed), ...removed]) {
+    const cj = componentJsonOf(p);
+    if (cj && stampedByAgent(changed[cj])) agentChanged.add(p); else agentChanged.delete(p);
   }
   if (Object.keys(changed).length || removed.length) tell({ changed, removed });
   if ('nodegx.project.json' in changed) followBackend();
@@ -388,7 +408,12 @@ const server = http.createServer(async (req, res) => {
       for (const rel of [...Object.keys(files), ...removed]) if (!under(projectDir, rel)) return json(400, { error: `refused: ${rel}` });
       if (bases && !force) {
         const conflicts = [...Object.keys(files), ...removed].filter((rel) => rel in bases).map((rel) => ({ path: rel, theirs: diskText(rel) })).filter((c) => c.theirs !== bases[c.path]);
-        if (conflicts.length) return json(409, { error: `changed outside Studio: ${conflicts.map((c) => c.path).join(', ')}`, conflicts });
+        if (conflicts.length) {
+          // CCN-002: the other writer named when it was the agent (`byAgent`, beside the watcher)
+          for (const c of conflicts) if (byAgent(c.path)) c.by = 'agent';
+          const who = conflicts.every((c) => c.by === 'agent') ? 'changed by the agent' : 'changed outside Studio';
+          return json(409, { error: `${who}: ${conflicts.map((c) => c.path).join(', ')}`, conflicts });
+        }
       }
       const written = [];
       for (const [rel, text] of Object.entries(files)) {
@@ -396,6 +421,7 @@ const server = http.createServer(async (req, res) => {
         if (!file || typeof text !== 'string') return json(400, { error: `refused: ${rel}` });
         mkdirSync(dirname(file), { recursive: true });
         known.set(rel, text); // before the write, so the watcher's echo of it matches
+        agentChanged.delete(rel);
         writeFileSync(file, text);
         written.push(rel);
       }
@@ -404,6 +430,7 @@ const server = http.createServer(async (req, res) => {
         const file = under(projectDir, rel);
         if (!file) return json(400, { error: `refused: ${rel}` });
         known.delete(rel);
+        agentChanged.delete(rel);
         if (existsSync(file)) {
           rmSync(file, { recursive: true });
           gone.push(rel);

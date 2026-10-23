@@ -1010,6 +1010,9 @@ $('undo').onclick = undo;
 /* ================= STU-002: files changed outside Studio (Claude Code through MCP, VS Code, git pull) ================= */
 const unsaved = (p) => files.read(p) !== (persisted[p] ?? null);
 const fileLabel = (p) => p.match(/^components\/(.+)\/[^/]+$/)?.[1] ?? p;
+/** CCN-002: true when the change to component `key` was the agent's — its component.json is among the changed files
+    (`texts`: path → text) and stamped by NodeGX's MCP server. The stamp alone only says who wrote the component last. */
+const agentWrote = (key, texts) => { try { return JSON.parse(texts[`components/${key}/component.json`] ?? 'null')?.modifiedBy === 'noodl-mcp'; } catch { return false; } };
 /** Takes what changed on disk into the store and redraws. A file Studio has its own unsaved edit to is left for that
     edit's save, which meets the change on the server and asks (askClash); `all` takes it anyway ("Take theirs"). */
 function takeOutside({ changed = {}, removed = [] }, { all = false } = {}) {
@@ -1038,7 +1041,8 @@ function takeOutside({ changed = {}, removed = [] }, { all = false } = {}) {
   const typing = document.activeElement?.matches?.('input, textarea, select, [contenteditable]');
   if (typing) document.activeElement.addEventListener('blur', renderAll, { once: true }); else renderAll();
   const names = [...new Set(took.map(fileLabel))];
-  toast(`${names.length === 1 ? names[0] : `${names.length} files`} changed outside Studio — redrawn`);
+  const byAgent = names.every((n) => agentWrote(n, changed));
+  toast(byAgent ? `The agent changed ${names.length === 1 ? names[0] : `${names.length} components`} — redrawn` : `${names.length === 1 ? names[0] : `${names.length} files`} changed outside Studio — redrawn`);
   window.__ob.outside = (window.__ob.outside || 0) + 1;
   return took;
 }
@@ -1046,7 +1050,11 @@ let clash = [];
 function askClash(conflicts) {
   clash = conflicts;
   const names = [...new Set(conflicts.map((c) => fileLabel(c.path)))];
-  $('clash-msg').textContent = `${names.join(', ')} changed outside Studio while you were editing ${names.length === 1 ? 'it' : 'them'}. Keep your version (theirs is overwritten), or take theirs (your last change to ${names.length === 1 ? 'it' : 'them'} is dropped)?`;
+  const it = names.length === 1 ? 'it' : 'them';
+  // CCN-002: the server marks a clash the agent made (`by: 'agent'`), so the person knows who they are choosing between
+  $('clash-msg').textContent = conflicts.every((c) => c.by === 'agent')
+    ? `The agent changed ${names.join(', ')} while you were editing ${it}. Keep your version (the agent's change is overwritten), or take the agent's (your last change to ${it} is dropped)?`
+    : `${names.join(', ')} changed outside Studio while you were editing ${it}. Keep your version (theirs is overwritten), or take theirs (your last change to ${it} is dropped)?`;
   $('clash').hidden = false;
 }
 $('clash-mine').onclick = () => { $('clash').hidden = true; persist({ force: true }); };
