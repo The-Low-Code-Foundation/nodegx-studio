@@ -15,7 +15,15 @@
  *     line and changes only when ticked.
  * A type `T` renamed: every node whose `collectionName` is `T` (sure), and code that names `'T'` in quotes (maybe).
  *
- *   fieldReaders(components, type, field)      → [{ id, key, node, label, sure, kind, what, line? }]
+ * A maybe in code that is **given the type's rows** says so (`given: true`): a wire carries the rows from a node on `T`
+ * (a query's items, a record) to that code's inputs, through components' inputs and outputs on the way (the todo app's
+ * RoutineCheck query is in Logic/Todo data, whose `checks` output the page sends into Today rows, whose Function reads
+ * it as `in-checks`). It is still a maybe (the code may read `.F` of something else it is given too), but it is where
+ * the type's own reads are, and the drawer can tick those together (Richard, 2026-10-23). Code nodes end the trace: what
+ * a Function makes of the rows is its own value.
+ *
+ *   fieldReaders(components, type, field)      → [{ id, key, node, label, sure, kind, what, line?, given? }]
+ *   givenRows(components, type)                → Set of `${key}|${node}`: the code nodes given the type's rows
  *   renameField(components, type, from, to, picked) → { changed: Map<key, files>, count }
  *   typeReaders(components, type)              → the same shape
  *   renameType(components, from, to, picked)   → the same shape
@@ -110,6 +118,33 @@ function codeReaders(key, n, mentions, kind) {
   return mentions(text).map((m) => ({ id: `${key}|${n.id}|${param}|${m.at}`, key, node: n.id, label: labelOf(n), sure: false, kind, what: 'its code', line: lineAt(text, m.at), param, at: m.at, length: m.length }));
 }
 
+/** The code nodes a wire brings `type`'s rows to, followed through components' inputs and outputs. */
+export function givenRows(components, type) {
+  const byKey = new Map(components.map((c) => [c.key, c.files]));
+  const reached = new Set(), seen = new Set();
+  const queue = [];
+  const from = (key, node, port) => { for (const w of wiresOf(byKey.get(key) || {})) if (w.fromId === node && (port === undefined ? !w.fromProperty.startsWith('prop-') : w.fromProperty === port)) queue.push([key, w]); };
+  for (const { key, files } of components) for (const n of nodesOf(files)) if (n.parameters?.collectionName === type) from(key, n.id);
+  while (queue.length) {
+    const [key, w] = queue.shift();
+    const at = `${key}|${w.toId}|${w.toProperty}`;
+    if (seen.has(at)) continue;
+    seen.add(at);
+    const t = nodesOf(byKey.get(key)).find((n) => n.id === w.toId);
+    if (!t) continue;
+    if (CODE[t.type]) { if (w.toProperty !== 'run') reached.add(`${key}|${t.id}`); continue; }
+    if (t.type === 'Component Outputs') {
+      // out of this component: on to wherever a copy of it sends that output
+      for (const c of components) for (const n of nodesOf(c.files)) if (n.type === `/${key}`) from(c.key, n.id, w.toProperty);
+    } else if (t.type.startsWith('/') && byKey.has(t.type.slice(1))) {
+      // into a copy of a component: on from that component's own input of the same name
+      const inner = t.type.slice(1);
+      for (const n of nodesOf(byKey.get(inner))) if (n.type === 'Component Inputs') from(inner, n.id, w.toProperty);
+    }
+  }
+  return reached;
+}
+
 /** Everything in the app that reads field `field` of type `type`, sure and maybe. */
 export function fieldReaders(components, type, field) {
   const out = [];
@@ -135,6 +170,8 @@ export function fieldReaders(components, type, field) {
       if (CODE[n.type]) out.push(...codeReaders(key, n, (text) => fieldMentions(text, field), 'code'));
     }
   }
+  const given = givenRows(components, type);
+  for (const r of out) if (!r.sure && given.has(`${r.key}|${r.node}`)) r.given = true;
   return out;
 }
 

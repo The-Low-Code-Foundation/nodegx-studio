@@ -119,6 +119,10 @@ const componentsOf = (dir) => {
   const r = fieldReaders(todo, 'Task', 'closingNote');
   ok(r.filter((x) => x.sure).map((x) => x.key).sort().join() === 'Commands/Add task,Commands/Close task,Commands/Reopen task' && r.filter((x) => !x.sure).every((x) => x.kind === 'code'), 'Task.closingNote: the three Record nodes that set it are sure; the code that reads a closingNote is a maybe', r.map((x) => `${x.sure ? 'sure' : 'maybe'} ${x.key}: ${x.line || x.what}`));
   ok(r.filter((x) => x.key === 'Logic/Selected task').length === 1, 'a node\'s own port (Outputs.closingNote) is never taken for a record\'s field: one mention on that line, task.closingNote', r.filter((x) => x.key === 'Logic/Selected task').map((x) => x.line));
+  // Richard's ruling, 2026-10-23: one tick for the maybes in code the type's rows are wired to (through component inputs and outputs)
+  const dates = fieldReaders(todo, 'RoutineCheck', 'date').filter((x) => !x.sure), dated = dates.filter((x) => x.given);
+  const viaChecks = (key) => { const f = todo.find((c) => c.key === key).files; const io = f.nodes.nodes.find((n) => n.type === 'Component Inputs'); return f.connections.connections.some((w) => w.fromId === io?.id && w.fromProperty === 'checks' && w.toProperty === 'in-checks'); };
+  ok(dates.length > 200 && dated.map((x) => x.key).sort().join() === 'Logic/Selected routine,Logic/Today rows' && dated.every((x) => viaChecks(x.key)) && r.filter((x) => !x.sure).every((x) => x.given), 'given the rows: of RoutineCheck.date\'s ' + dates.length + ' maybes, the 2 in code the page wires its checks into; every one of Task.closingNote\'s', dated.map((x) => `${x.key}: ${x.line}`));
   const m = fieldMentions("a.title + b?.title + c['title'] + Inputs.title + 1.title + this.title + subtitle", 'title');
   ok(m.length === 3, 'code mentions: .F, ?.F and [\'F\'], not Inputs.F, this.F or a longer word', m);
   const picked = new Set(r.filter((x) => !x.sure).map((x) => x.id));
@@ -366,7 +370,10 @@ try {
   const sureRows = await ev(`[...document.querySelectorAll('#drawer .readers li[data-reader]')].map(li => li.textContent)`);
   const maybeNodes = await ev(`[...document.querySelectorAll('#drawer .readers [data-pick-node]')].map(i => i.dataset.pickNode)`);
   ok(sureRows.length === 3 && sureRows.every((t) => t.includes('sets it')) && maybeNodes.length === 3, 'Used by: the three commands that set it, and three pieces of code that read a closingNote, each to tick', { sureRows, maybeNodes });
-  await ev(`document.querySelectorAll('#drawer .readers [data-pick-node]').forEach(i => i.click())`);
+  const givenWords = await ev(`document.querySelector('#drawer .readers label.given')?.textContent || ''`);
+  await ev(`document.querySelector('#drawer .readers [data-pick-given]').click()`);
+  const allTicked = await ev(`[...document.querySelectorAll('#drawer .readers [data-pick-node], #drawer .readers [data-pick]')].every(i => i.checked)`);
+  ok(givenWords.startsWith('Tick the 3 lines in code given Task’s rows') && allTicked, 'one tick takes every line in code given Task\'s rows, and each node\'s boxes show it', givenWords);
   await ev(`(() => { const i = document.querySelector('#drawer [data-input=name]'); i.value = 'closingWords'; i.dispatchEvent(new Event('input')); })()`); await wait(150);
   await shot('2-rename');
   await ev(`[...document.querySelectorAll('#drawer .dfoot button')].pop().click()`); await until(`document.getElementById('drawer').hidden`, 6000); await wait(2000);

@@ -570,6 +570,8 @@
   .readers h4 { margin: 0; font-size: 12.5px; font-weight: 600; }
   .readers ul { margin: 0; padding-left: 18px; font-size: 12px; display: grid; gap: 2px; }
   .readers .maybe { display: grid; gap: 2px; font-size: 12px; }
+  .readers label.given { font-size: 12px; font-weight: 500; align-items: flex-start; }
+  .readers label.given input { margin-top: 2px; }
   .readers label.line { padding-left: 22px; min-width: 0; }
   .readers label.line code { font-size: 11px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .kinds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
@@ -3748,7 +3750,7 @@ function draftOf(col, checks) {
  * STU-062: what in the app names a field or a type (rename.mjs), as a drawer section. The sure ones follow a rename; the
  * maybe ones (code, an object of no known type) are listed by node with each line, and follow only when ticked into `picked`.
  */
-function readersSection(readers, picked, name) {
+function readersSection(readers, picked, name, of = null) {
   const box = h('div', { class: 'readers', 'data-readers': readers.length });
   const where = (r) => h('span', {}, h('b', {}, r.label), h('span', { class: 'note' }, ` · ${r.key}`));
   box.append(h('h4', {}, 'Used by'));
@@ -3758,11 +3760,22 @@ function readersSection(readers, picked, name) {
   if (!maybe.length) return box;
   box.append(h('div', { class: 'note' }, `${sure.length ? 'These' : 'This app'} also use${sure.length ? '' : 's'} the name ${name}, with nothing saying it is this one: code reads ${name} of whatever it holds. Tick the ones that are, and a rename changes them too.`));
   const byNode = new Map();
-  for (const r of maybe) byNode.set(`${r.key}|${r.node}`, [...(byNode.get(`${r.key}|${r.node}`) || []), r]);
+  // code given the type's rows along the wires first (rename.mjs `given`): where this type's own reads are
+  for (const r of [...maybe].sort((a, b) => Number(!!b.given) - Number(!!a.given))) byNode.set(`${r.key}|${r.node}`, [...(byNode.get(`${r.key}|${r.node}`) || []), r]);
+  const shown = []; // each node's boxes, redrawn from `picked` after a tick elsewhere
+  const redraw = () => { for (const f of shown) f(); if (givenBox) givenBox.checked = given.every((r) => picked.has(r.id)); };
+  const given = maybe.filter((r) => r.given);
+  let givenBox = null;
+  if (given.length) {
+    const nodes = new Set(given.map((r) => `${r.key}|${r.node}`)).size;
+    givenBox = h('input', { type: 'checkbox', 'data-pick-given': of, checked: given.every((r) => picked.has(r.id)), onchange: (e) => { for (const r of given) { if (e.target.checked) picked.add(r.id); else picked.delete(r.id); } redraw(); } });
+    box.append(h('label', { class: 'c given' }, givenBox, h('span', {}, `Tick the ${given.length} line${given.length === 1 ? '' : 's'} in code given ${of}’s rows`, h('span', { class: 'note' }, ` (in ${nodes} node${nodes === 1 ? '' : 's'}: the wires bring them there from where the app reads ${of})`))));
+  }
   for (const list of byNode.values()) {
-    const ticks = list.map((r) => h('input', { type: 'checkbox', 'data-pick': r.id, checked: picked.has(r.id), onchange: (e) => { if (e.target.checked) picked.add(r.id); else picked.delete(r.id); all.checked = list.every((x) => picked.has(x.id)); } }));
-    const all = h('input', { type: 'checkbox', 'data-pick-node': `${list[0].key}|${list[0].node}`, checked: list.every((x) => picked.has(x.id)), onchange: (e) => { for (const [i, r] of list.entries()) { if (e.target.checked) picked.add(r.id); else picked.delete(r.id); ticks[i].checked = e.target.checked; } } });
-    box.append(h('div', { class: 'maybe' }, h('label', { class: 'c' }, all, where(list[0]), h('span', { class: 'note' }, ` — ${list[0].kind === 'code' ? `${list.length} place${list.length === 1 ? '' : 's'} in its code` : list[0].what}`)),
+    const ticks = list.map((r) => h('input', { type: 'checkbox', 'data-pick': r.id, checked: picked.has(r.id), onchange: (e) => { if (e.target.checked) picked.add(r.id); else picked.delete(r.id); redraw(); } }));
+    const all = h('input', { type: 'checkbox', 'data-pick-node': `${list[0].key}|${list[0].node}`, checked: list.every((x) => picked.has(x.id)), onchange: (e) => { for (const r of list) { if (e.target.checked) picked.add(r.id); else picked.delete(r.id); } redraw(); } });
+    shown.push(() => { ticks.forEach((t, i) => (t.checked = picked.has(list[i].id))); all.checked = list.every((x) => picked.has(x.id)); });
+    box.append(h('div', { class: 'maybe', 'data-given': list[0].given ? '' : undefined }, h('label', { class: 'c' }, all, where(list[0]), h('span', { class: 'note' }, ` — ${list[0].kind === 'code' ? `${list.length} place${list.length === 1 ? '' : 's'} in its code` : list[0].what}${list[0].given ? `, given ${of}’s rows` : ''}`)),
       ...list.filter((r) => r.line).map((r) => h('label', { class: 'c line', title: r.line }, ticks[list.indexOf(r)], h('code', {}, r.line)))));
   }
   return box;
@@ -3811,7 +3824,7 @@ async function fieldDrawer(t, col) {
         body.append(h('label', { class: 'c' }, h('input', { type: 'checkbox', checked: d.required, 'data-input': 'required', onchange: async (e) => { d.required = e.target.checked; if (d.required && !col.required && t.onBackend) empty = await emptyCount(t.name, col.name); draw(); } }), 'Required: every row must have it'));
         if (d.required && !col.required && empty) body.append(h('div', { class: 'note', 'data-empty': empty }, `${F.recordsWord(empty)} on the development database ${empty === 1 ? 'has' : 'have'} nothing in ${col.name}. Give each one a value first, or keep it optional.`, ' ', h('button', { class: 'quiet tiny', 'data-act': 'show-empty', onclick: showEmpty }, 'Show them in App data')));
       }
-      body.append(h('div', { class: 'note' }, `Renaming it renames it on the development database${records ? ` (${F.recordsWord(records)} keep their values)` : ''} and in the app, as below. Changing its kind converts the values it holds; ones that don’t convert are lost, and Studio says how many before it changes anything.`), readersSection(readers, picked, col.name));
+      body.append(h('div', { class: 'note' }, `Renaming it renames it on the development database${records ? ` (${F.recordsWord(records)} keep their values)` : ''} and in the app, as below. Changing its kind converts the values it holds; ones that don’t convert are lost, and Studio says how many before it changes anything.`), readersSection(readers, picked, col.name, t.name));
     }
     check();
   };

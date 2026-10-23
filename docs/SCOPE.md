@@ -59,8 +59,8 @@ Studio, opens or imports an app, changes it, and publishes it.** What that needs
 | 5 | **main pushed** | done 2026-10-23 (Richard's yes; origin/main fb31c9f) |
 | 6 | **STU-065 a development and a live database** (M6), and the Data tab it sits in (STU-060, 061, 063, 064). Richard, 2026-10-22: *"Alpha please"* | done (s15) |
 
-Not in the alpha: STU-041–043 (the converter's one home, the fidelity gate, plugins), the timeline's gaps, rulings
-R4–R6, and R10 beyond a folder on this machine.
+Not in the alpha: STU-041–043 (the converter's one home, the fidelity gate, plugins), the timeline's gaps, R4's
+rejoin, R5's states in reusables, and R10's SSH publish (ruled 2026-10-23; NodeGX's to build first).
 
 [history/](history/) is how it started (NodeGX phase 123, working title "Open Bubble"): the brief, the look, the
 first play test and every ruling taken.
@@ -1393,7 +1393,16 @@ page's table. `check:editor` 170/170, `check:app` 45/45, `check:publish` **31/31
   drawer's **Used by** lists both, the maybes by node with each line, and a maybe follows only when ticked.
 - **Why the maybes matter, measured on the todo template:** it reads every field in JavaScript (`r.title`), so for
   `RoutineCheck.date` there are 2 sure readers and 206 maybes, most of them a money item's `date`. Only a person can say
-  which `row.date` is this type's. For `Task.closingNote`: the three commands that set it (sure) and three pieces of
+  which `row.date` is this type's. **Ruled (Richard, 2026-10-23): one tick for the likely ones.** Asked whether
+  Studio should offer "tick every line in nodes that also name this type", his answer was yes. Measured first, that
+  test catches nothing on the todo app: none of the 11 nodes holding `RoutineCheck.date`'s 206 maybes names the type
+  in its code. What does catch them is where the rows go: `givenRows` (rename.mjs) follows the wires from every node on
+  the type (a query's items, a record), through components' outputs and into copies' inputs, to the code they reach.
+  The drawer offers *Tick the N lines in code given T's rows* and lists those nodes first, marked. On the todo app:
+  `RoutineCheck.date` 206 maybes → 2 given (Build Today and Read the selected thing that repeats, the two Functions
+  the page feeds `checks`), `Task.closingNote` 3 → all 3 (the three s16 found by reading), `Task.title` 33 → 21,
+  `Routine.time` 75 → 60. Still maybes: a node given several types' rows can read `.time` of another one, so it is a
+  tick the person sees, never automatic. For `Task.closingNote`: the three commands that set it (sure) and three pieces of
   code that read it (maybes); with those ticked, the app keeps working: `validate_project` 0 errors before and after,
   the list still shows, and a task added in the app after the rename is written with `closingWords` (the old column
   does not come back). Not measured: whether `validate_project` would flag a `prop-` port the type no longer has.
@@ -1463,10 +1472,28 @@ Required either way).
 
 | id | question | from |
 |---|---|---|
-| R4 | After a branch, can both sides rejoin into one next step? | phase 123 |
-| R5 | Can a custom state live inside a reusable? | phase 123 |
-| R6 | Where do option sets live — one component each, or one file? | phase 123 |
-| R10 | Where can a published app go besides a folder (GitHub Pages, Netlify, the person's own server), and where does its backend live when it is not this machine? STU-008 publishes to a folder against the bound backend until this is ruled. **Leaning (Richard, 2026-10-20):** *"Dunno yet, something like a Linux VM with SSH would be an obvious start no?"* What NodeGX has for that, read the same day: the Docker Compose self-host (`packages/nodegx-backend/deploy/`, `docs/runtime/SELF-HOSTING.md`; run on the box itself, no SSH step; P112-OWN024-DEPLOYNOSHARP open on its image), the training template's SSH runbook (`templates/digital-bricks-training/hosting/`, live on nexus-1, hardcoded to that box), and the general SSH deploy specced as phase 89 *A box of your own* (BOX-002–006, from DEP-004–006), not started. A deployed site's backend address is built into it at export (SELF-HOSTING.md), so the site and its API on one origin is the usual shape. By principle 5 the SSH deploy is NodeGX's to build (phase 89), and Studio's Publish then offers it as a second target. | STU-008, 2026-10-20 |
+| R4 | After a branch, can both sides rejoin into one next step? **Leaning (Richard, 2026-10-23):** *"Rejoining would be great, like n8n style, but hard to manage maybe?"* Wanted; what it costs in the graph and on the card is to be worked out (STU-025) and brought back before it is built. | phase 123 |
+
+**Taken.** R5 (Richard, 2026-10-23): *"Yep for custom states in reusables."* A custom state can live inside a reusable,
+each shown copy with its own value. What Studio does today there is to be read before building (custom states are
+Variable nodes that remember their element, `metadata.customState`, in whichever component they sit in).
+**Read (s19):** a Variable is one value for the whole app (`setvariablenode.ts`: the `--ndl--global-variables`
+record), so a state made today on an element inside a reusable is shared by every copy: set it in one, every copy
+shows it. The importer does the same for a Bubble reusable's states (`convertReusable`), and its elements' show / hide
+(`<label>.mounted`) and display data (`<label>.data`) are global Variables by name too. NodeGX's per-copy record is
+the **Component Object** (`net.noodl.ComponentObject`, `componentState<instance id>`), written by *Set Component Object
+Properties* (`properties`, `prop-<name>`, signal `store`) and read as `value-<name>`; both are in preview 0.2.3. One
+catch: a For Each's row component has the row's item as its Component Object, so a state there shares the item's
+field names.
+
+**Taken.** R6 (Richard, 2026-10-23): **one file per option set**, which is how they are built: each set is its own
+logic component under `Option sets/`, one Static Data node each.
+
+**Taken.** R10 (Richard, 2026-10-23): *"SSH publishing to a VM would be amazing for NodeGX, the npm package and the
+Studio."* A published app and its backend go to a Linux machine of the person's own over SSH. By principle 5 the deploy
+is NodeGX's to build (phase 89, *A box of your own*, BOX-002–006, not started), shipped in the npm package; Studio's
+Publish then offers it as a second target beside the folder. Until then STU-008 publishes to a folder. What was read
+before the ruling (2026-10-20): the Docker Compose self-host (`packages/nodegx-backend/deploy/`, `docs/runtime/SELF-HOSTING.md`; run on the box itself, no SSH step; P112-OWN024-DEPLOYNOSHARP open on its image), the training template's SSH runbook (`templates/digital-bricks-training/hosting/`, live on nexus-1, hardcoded to that box), and the general SSH deploy specced as phase 89 *A box of your own* (BOX-002–006, from DEP-004–006), not started. A deployed site's backend address is built into it at export (SELF-HOSTING.md), so the site and its API on one origin is the usual shape. By principle 5 the SSH deploy is NodeGX's to build (phase 89), and Studio's Publish then offers it as a second target.
 
 **Taken.** R7 (Richard, 2026-10-19): page data is an ordinary Query Records node at the page root, named by
 `metadata.pageData`. No new file, nothing new in the format: the NodeGX editor, the MCP server and the runtime read
