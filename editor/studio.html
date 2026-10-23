@@ -514,6 +514,8 @@
   .lane h4 { margin: 0 0 10px; font-size: 11px; font-weight: 600; color: var(--dim); }
   .lanesnote { margin: 0 0 14px; }
   .lanes.fork { flex: none; gap: 18px; }
+  .flow .step { cursor: grab; } .flow .step h3, .flow .step .num { user-select: none; }
+  .flow .step.dragging { cursor: grabbing; z-index: 5; box-shadow: 0 18px 44px rgba(0,0,0,.6); }
   .lanesrow { display: flex; align-items: center; gap: 56px; }
   .cond-line { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--sub); }
   .wf .chip.expr { background: rgba(167,139,250,.14); border-color: rgba(167,139,250,.45); color: #ddd6fe; }
@@ -3490,9 +3492,11 @@ function renderWorkflow() {
   if (cardBack) wf.append(h('div', { class: 'cardnav' }, h('button', { class: 'quiet back', title: 'Back to the element in Design (Esc)', onclick: backFromCard }, '← ', labelOf(cardBack.node)),
     h('button', { class: 'quiet tiny', title: 'Every workflow on this page, listed', onclick: () => { cardBack = null; renderWorkflow(); } }, 'All workflows on this page')));
   wf.append(h('div', { class: 'event-card' }, h('div', { class: 'ic' }, icon('bolt')), h('div', { class: 'named' }, cardTitle(ev), h('small', {}, `${eventTitle(ev)} · ${typeName(byId[ev.node].type)}`)),
-    h('div', { style: 'margin-left:auto;display:flex;gap:6px;align-items:center' }, h('button', { class: 'quiet tiny showrun', 'aria-pressed': showRun, title: runPin ? 'This is the run you opened from the timeline; hide it, and Show the last run lights the latest one again' : 'Light up what this workflow did the last time it ran in the app: the wires it crossed and the steps it ran', onclick: () => toggleLastRun() }, showRun ? (runPin ? 'Hide this run' : 'Hide the last run') : 'Show the last run'), h('div', { class: 'zoom' }, h('button', { title: 'Smaller', onclick: () => zoomFlow(-0.1) }, '−'), h('span', { class: 'zoomval' }), h('button', { title: 'Bigger', onclick: () => zoomFlow(0.1) }, '+'), h('button', { title: 'Fit the whole workflow in view', onclick: () => { flowZoom = null; fitFlow(); } }, 'Fit')), isRenaming(ev) ? null : h('button', { class: 'quiet tiny rename', title: 'Name this workflow yourself; an empty name gives it back to its steps', onclick: () => { renaming = `${ev.node}.${ev.port}`; renderWorkflow(); } }, 'Rename'), eventSteps(ev) ? null : h('button', { class: 'quiet', onclick: () => { const i = draftEvents.findIndex((d) => d.node === ev.node && d.port === ev.port); if (i >= 0) draftEvents.splice(i, 1); selEvent = null; renderWorkflow(); } }, 'Discard'))));
+    h('div', { style: 'margin-left:auto;display:flex;gap:6px;align-items:center' }, h('button', { class: 'quiet tiny showrun', 'aria-pressed': showRun, title: runPin ? 'This is the run you opened from the timeline; hide it, and Show the last run lights the latest one again' : 'Light up what this workflow did the last time it ran in the app: the wires it crossed and the steps it ran', onclick: () => toggleLastRun() }, showRun ? (runPin ? 'Hide this run' : 'Hide the last run') : 'Show the last run'), reachOf(ev).some((x) => x.metadata?.flowAt) ? h('button', { class: 'quiet tiny tidy', title: 'Put every step you moved back where the workflow lays it out', onclick: () => tidyFlow(ev) }, 'Tidy up') : null, h('div', { class: 'zoom' }, h('button', { title: 'Smaller', onclick: () => zoomFlow(-0.1) }, '−'), h('span', { class: 'zoomval' }), h('button', { title: 'Bigger', onclick: () => zoomFlow(0.1) }, '+'), h('button', { title: 'Fit the whole workflow in view', onclick: () => { flowZoom = null; fitFlow(); } }, 'Fit')), isRenaming(ev) ? null : h('button', { class: 'quiet tiny rename', title: 'Name this workflow yourself; an empty name gives it back to its steps', onclick: () => { renaming = `${ev.node}.${ev.port}`; renderWorkflow(); } }, 'Rename'), eventSteps(ev) ? null : h('button', { class: 'quiet', onclick: () => { const i = draftEvents.findIndex((d) => d.node === ev.node && d.port === ev.port); if (i >= 0) draftEvents.splice(i, 1); selEvent = null; renderWorkflow(); } }, 'Discard'))));
   flowWires = []; drawnForks.clear();
   const flow = h('div', { class: 'flow' });
+  flow.addEventListener('pointerdown', (e) => dragStep(e, flow));
+  flow.addEventListener('click', (e) => { if (performance.now() - dragEnded < 250) { e.stopPropagation(); e.preventDefault(); } }, true);
   flow.append(document.createElementNS(SVG_NS, 'svg')); flow.firstChild.setAttribute('class', 'wires');
   const evnode = h('div', { class: 'evnode' }, h('b', {}, icon('bolt'), `When ${portLabel(byId[ev.node], 'output', ev.port)}`), h('small', {}, `${labelOf(ev.node)} (${typeName(byId[ev.node].type)})`));
   const start = { el: evnode, port: 'out', kind: 'then' };
@@ -3584,12 +3588,62 @@ function wireRan(w) {
 let flowZoom = null, flowZ = 1;
 function fitFlow() {
   const flow = $('steps').querySelector('.flow'); if (!flow) return;
+  // a step moved past the layout's edge (STU-026 drag) widens the flow to it: a translate takes no room by itself
+  flow.style.minWidth = flow.style.minHeight = '';
+  const moved = flow.querySelectorAll('.step.moved');
+  if (moved.length) {
+    const F = flow.getBoundingClientRect(), z0 = F.width / Math.max(1, flow.offsetWidth);
+    let mw = 0, mh = 0;
+    for (const el of moved) { const r = el.getBoundingClientRect(); mw = Math.max(mw, (r.right - F.left) / z0 + 24); mh = Math.max(mh, (r.bottom - F.top) / z0 + 24); }
+    if (mw > flow.offsetWidth) flow.style.minWidth = `${Math.ceil(mw)}px`;
+    if (mh > flow.offsetHeight) flow.style.minHeight = `${Math.ceil(mh)}px`;
+  }
   const w = flow.offsetWidth, ht = flow.offsetHeight, room = $('steps').clientWidth - 56;
   flowZ = flowZoom ?? Math.max(0.55, Math.min(1, room / Math.max(1, w)));
   flow.style.transform = flowZ === 1 ? '' : `scale(${flowZ})`;
   Object.assign(flow.parentElement.style, { width: `${Math.ceil(w * flowZ)}px`, height: `${Math.ceil(ht * flowZ)}px` });
   const val = $('steps').querySelector('.zoomval'); if (val) val.textContent = `${Math.round(flowZ * 100)}%`;
   drawWires();
+}
+/* ---- STU-026: a step dragged where the person wants it. The layout stays the chain's; a drag saves the step's offset from
+   where the chain puts it (`metadata.flowAt`, in the flow's own pixels), so a step added before it carries it along, and a
+   step drawn on two cards is moved on both. The wires follow: they are drawn from where the nodes are. A press that moves
+   less than 4 px is a click; a press on a button, a field, a chip or the settings is theirs. Tidy up takes them all back ---- */
+let dragEnded = 0;
+function placeAt(el, id) {
+  const at = byId[id]?.metadata?.flowAt;
+  if (at && (at.dx || at.dy)) { el.style.translate = `${at.dx}px ${at.dy}px`; el.classList.add('moved'); }
+}
+function dragStep(e, flow) {
+  const card = e.target.closest?.('.step[data-id]');
+  if (!card || e.button !== 0 || e.target.closest('button, input, select, textarea, label, a, .settings, .chip, .cond-line, .lines code')) return;
+  const id = card.dataset.id, F = flow.getBoundingClientRect(), z = F.width / Math.max(1, flow.offsetWidth), x0 = e.clientX, y0 = e.clientY;
+  const at0 = byId[id]?.metadata?.flowAt ?? { dx: 0, dy: 0 };
+  // where the chain puts it, in the flow's pixels: it goes no further up or left than the flow's corner
+  const r = card.getBoundingClientRect(), home = { x: (r.left - F.left) / z - at0.dx, y: (r.top - F.top) / z - at0.dy };
+  let moved = false, at = at0, frame = 0;
+  const move = (m) => {
+    const dx = (m.clientX - x0) / z, dy = (m.clientY - y0) / z;
+    if (!moved && Math.hypot(m.clientX - x0, m.clientY - y0) < 4) return;
+    if (!moved) { moved = true; card.classList.add('dragging'); getSelection()?.removeAllRanges(); }
+    at = { dx: Math.round(Math.max(-home.x, at0.dx + dx)), dy: Math.round(Math.max(-home.y, at0.dy + dy)) };
+    card.style.translate = `${at.dx}px ${at.dy}px`;
+    if (!frame) frame = requestAnimationFrame(() => { frame = 0; drawWires(); });
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+    if (!moved) return;
+    dragEnded = performance.now(); card.classList.remove('dragging');
+    if (at.dx === at0.dx && at.dy === at0.dy) return;
+    edits(pageKey, [{ edit: 'set_metadata', component: pageKey, id, metadata: { flowAt: at.dx || at.dy ? at : undefined } }], { rebuildApp: false });
+  };
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+}
+function tidyFlow(ev) {
+  const list = reachOf(ev).filter((x) => x.metadata?.flowAt).map((x) => ({ edit: 'set_metadata', component: pageKey, id: x.id, metadata: { flowAt: undefined } }));
+  if (!list.length) return;
+  edits(pageKey, list, { rebuildApp: false });
+  toast(`${list.length === 1 ? 'The step you moved is' : `The ${list.length} steps you moved are`} back in place`);
 }
 const zoomFlow = (by) => { flowZoom = Math.max(0.4, Math.min(1.5, Math.round(((flowZoom ?? flowZ) + by) * 10) / 10)); fitFlow(); };
 function drawWires() {
@@ -3663,6 +3717,7 @@ function renderChain(into, steps, from, startN, prefix = '', before = null, src 
     }
     link();
     const card = stepCard(s, `${prefix}${n}`);
+    placeAt(card, s.id);
     if (joined) card.classList.add('joined');
     col.append(card);
     // a "+" on it puts a step between; not on the wire on from where both sides meet (it stands for two wires)

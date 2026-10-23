@@ -418,6 +418,23 @@ try {
     await shot('workflow-lastrun');
     await clickText('#steps .event-card button.showrun', 'Hide the last run'); await wait(300);
     ok((await b.evaluate(`document.querySelectorAll('#steps .flow .ran, #steps svg.wires path[data-ran], #steps svg.wires path.pulse').length`)) === 0, 'STU-026: hidden again, nothing is lit');
+    // STU-026: a step dragged where the person wants it: its offset from the layout saved on the node (in the flow's own
+    // pixels, whatever the zoom), the wire into it following it; Tidy up puts it back and the offset leaves the file
+    {
+      const sel = `#steps .flow .step[data-id="${setV.id}"]`;
+      const geo = async () => JSON.parse(await b.evaluate(`JSON.stringify((() => { const f = document.querySelector('#steps .flow'), F = f.getBoundingClientRect(), z = F.width / f.offsetWidth, r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(), p = document.querySelector('#steps svg.wires path[data-to=${JSON.stringify(setV.id)}]'); return { fx: (r.left - F.left) / z, fy: (r.top - F.top) / z, z, d: p?.getAttribute('d') ?? null, tidy: !!document.querySelector('#steps button.tidy') }; })())`));
+      const a = await geo();
+      const grip = await b.rectOf(`${sel} .num`);
+      await b.drag({ x: grip.x, y: grip.y }, { x: grip.x + 40, y: grip.y + 120 }, 14); await wait(700);
+      const m = onSign().nodes.find((n) => n.id === setV.id)?.metadata?.flowAt;
+      const c = await geo();
+      ok(m && Math.abs(m.dx - 40 / a.z) <= 2 && Math.abs(m.dy - 120 / a.z) <= 2 && Math.abs(c.fx - a.fx - m.dx) <= 2 && Math.abs(c.fy - a.fy - m.dy) <= 2 && c.d && c.d !== a.d && c.tidy && !a.tidy,
+        'STU-026: dragging a step moves it there and keeps it there: its offset on the node in the file, the wire into it redrawn to it, "Tidy up" offered', { a, c, flowAt: m });
+      await b.clickSel('#steps button.tidy'); await wait(700);
+      const t = await geo();
+      ok(onSign().nodes.find((n) => n.id === setV.id)?.metadata?.flowAt === undefined && Math.abs(t.fx - a.fx) <= 1 && Math.abs(t.fy - a.fy) <= 1 && !t.tidy,
+        'STU-026: Tidy up puts it back where the workflow lays it out, and the offset leaves the file', { t, a });
+    }
     // STU-026: a "+" on a wire puts a step between the two it joins: on the click's wire into the branch, a Set
     const beforePlus = new Set(onSign().nodes.map((n) => n.id));
     await b.clickSel(`#steps .wireplus button[data-from="${card}"][data-to="${cond.id}"]`); await wait(250);

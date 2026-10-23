@@ -887,7 +887,7 @@ tab already reads it that way). A badge is "this visual node has a wired signal 
 | STU-023 | **Names from steps.** | a card with no name reads its steps; a renamed card keeps its name |
 | STU-024 | **The importer merges split workflows** into one card per event. Where the conditions are exact opposites (A / not A) they become one Yes/No branch. Where they overlap and both can run, they stay as **two lanes that run side by side**, because folding them into either/or would change what the app does. | the real app's 16 split elements become 16 cards; a fixture with overlapping conditions keeps both lanes and both still run |
 | STU-025 | **Rejoin** (R4, taken 2026-10-23): after a branch, both sides continue into one shared next step | done (s20): made from the card, drawn once after the branch, gated in the app |
-| STU-026 | **The flow, drawn** (Richard, 2026-10-23, s21): a workflow drawn as NodeGX draws, in the backend map's look: steps as nodes on a dark canvas, left to right, coloured wires (then, Yes, No, where both sides meet), the last run lit up; Bubble's landmarks kept ("When … is clicked", Step 1, 2, "Only when") | done (s21): every card drawn so, its edits unchanged; a rejoin is two wires meeting, in view at Fit; the last run lit up and a "+" on a wire (s22); a timeline row opens its card with that run lit (s23). Mock: [look/s21-flow-mock.png](look/s21-flow-mock.png) |
+| STU-026 | **The flow, drawn** (Richard, 2026-10-23, s21): a workflow drawn as NodeGX draws, in the backend map's look: steps as nodes on a dark canvas, left to right, coloured wires (then, Yes, No, where both sides meet), the last run lit up; Bubble's landmarks kept ("When … is clicked", Step 1, 2, "Only when") | done (s21): every card drawn so, its edits unchanged; a rejoin is two wires meeting, in view at Fit; the last run lit up and a "+" on a wire (s22); a timeline row opens its card with that run lit (s23); a fan-out along the way is lanes, steps can be dragged, Tidy up (s24). Mock: [look/s21-flow-mock.png](look/s21-flow-mock.png) |
 
 **Done (STU-020 and STU-021, 2026-10-19, s8).** An element with a workflow wears a **⚡** in Design: on the canvas, in
 its top right corner (Design mode only, not while using the app), and on its row of the element list (a row that folds
@@ -1577,6 +1577,17 @@ an action (`renderChain`; lanes at the event are unchanged, `lanesOf`). Each fan
 *If Signed in* the lit run is all five of its steps (it was 2 of 5). Not at the point both sides of a branch meet (its
 wire stands for two). `check:timeline` 53/53 (1 new, 1 tightened to all five), `check:editor` 198/198, `check:app`
 54/54, `check:data` 80/80. The s23 tree fails both (2 of 5, "+ 3 more").
+**Done (s24): dragging a step.** A step can be picked up anywhere but its buttons, fields, chips and settings, and put
+where the person wants it; the wires follow (they are drawn from where the nodes are), redrawn every frame of the drag.
+The layout stays the chain's: what is saved is the step's offset from where the chain puts it, on the node
+(`metadata.flowAt {dx, dy}`, in the flow's own pixels whatever the zoom, through the existing `set_metadata` edit, so
+Undo takes it back). A step added before it carries it along; a step drawn on two cards moves on both. It goes no
+further up or left than the flow's corner; past the right or bottom edge the flow grows to it (`fitFlow`). A press
+that moves under 4 px is a click. *Tidy up* (beside the zoom, only when a step of this card was moved) puts every one
+back and takes the offsets out of the file. Not draggable: the event node and the point both sides meet (they are
+where the layout starts and joins). `check:editor` 200/200 (2 new, on the R4 card at 55% zoom: dragged 40, 120 px on
+screen it is saved as 73, 218 flow px and sits there, the wire into it redrawn, Tidy up offered; Tidy up puts it back
+to the pixel and the offset leaves the file), `check:timeline` 53/53, `check:app` 54/54, `check:data` 80/80.
 
 **Taken.** R4 (Richard, 2026-10-23): after a branch, both sides may rejoin into one next step. His leaning first:
 *"Rejoining would be great, like n8n style, but hard to manage maybe?"*; then, asked again in s20: *"Yep for R4."*

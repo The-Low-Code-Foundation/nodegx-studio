@@ -68,9 +68,15 @@ tree: `check:editor` **198/198**, `check:timeline` **52/52**; `check:app` 54/54 
 **Found:** a side of a branch that fans one signal out to several steps draws only the first ("+ 3 more wired from
 the same signal"), so the Todo page's *If Signed in* lights 2 of its 5 steps. Lanes exist only at the event.
 
+**s24 (same day)** — Richard: *"Both of those next steps would be awesome."* Both built (SCOPE, STU-026 "Done (s24)"):
+a fan-out along the way is lanes side by side (30278bb; the Todo page's *If Signed in* lights all 5 of its steps), and
+a step can be dragged where the person wants it, saved as an offset on the node (`metadata.flowAt`), *Tidy up* puts
+them back. Gates on the s24 tree: `check:editor` **200/200**, `check:timeline` **53/53**, `check:app` 54/54,
+`check:data` 80/80. Committed, **not pushed** (ask; ed40eb0, b7997bc, b8d1c35, 30278bb and the drag commit).
+Waiting on Richard: how the lanes and the drag feel on his app; no picture retaken (`--shots` rewrites every s2 one).
+
 Next buildable, in order:
-0. STU-009 on Windows / Linux in the package workflow (only macOS was run). STU-026's last left: dragging nodes;
-   a branch side's fan-out drawn as lanes (s23 finding) — ask Richard which first.
+0. STU-009 on Windows / Linux in the package workflow (only macOS was run). STU-026: nothing left that was asked.
 1. When NodeGX publishes a release with BACKENDPUBLIC: bump the pins, `npm run vendor`, every gate. Check npm first
    (`npm view @nodegx/preview versions`).
 2. (done s23: "Data type" in the In list; heads say the menu's words.)
