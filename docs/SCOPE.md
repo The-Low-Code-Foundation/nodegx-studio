@@ -32,7 +32,7 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 |---|---|---|
 | Design tab — palette, element tree, click / drag-reorder / resize on the real app, property editor, red spacing guide | works | `check:editor` |
 | Workflow tab — events, steps as the signal chain, add / delete a step, a Yes/No branch, the expression composer (chips, JavaScript, or both) | works | `check:editor` |
-| Data tab (M6) — Data types in NodeGX's words on the running backend and the project together, drift named with both ways to agree; Privacy through the backend map; App data paged, searched, edited by kind, exported and imported; option sets; the Map; a development and a live database, Deploy to live, Copy rows; a field or a type renamed with what reads it in the app, and on live as a rename; Required on a stored field, on development and live; the people with an account (`_User`) in App data | works (2026-10-22, s15; STU-062 s16; Required and User s17) | `check:data` 74/74, `check:editor` 170/170 |
+| Data tab (M6) — Data types in NodeGX's words on the running backend and the project together, drift named with both ways to agree (a type, a field, a Required); Privacy through the backend map; App data paged, searched, edited by kind, exported and imported; option sets; the Map; a development and a live database, Deploy to live, Copy rows; a field or a type renamed with what reads it in the app, and on live as a rename; Required on a stored field, on development and live; the people with an account (`_User`) in App data | works (2026-10-22, s15; STU-062 s16; Required and User s17; Required as drift s18) | `check:data` 78/78, `check:editor` 172/172 |
 | Live with outside edits — a file changed by Claude Code (MCP), VS Code or `git pull` is drawn without a reload; a clash with Studio's own edit asks | works (2026-10-19) | `check:editor` 46/46 |
 | Styles — global styles as NodeGX variants | works | `check:editor` |
 | Bubble importer — pages, elements, styles, workflows, expressions, option sets, reusables, custom states, data types, privacy rules → `nodegx.security.json`, backend workflows → cloud functions, Data-tab rows | spike, measured on a real 17-page app (0 validation errors); its searches arrive as page data (STU-013), a reusable's while that copy is shown (STU-014); its workflow conditions test only when the workflow runs (STU-013-NAVLOOP) | `check:import` 50/50 |
@@ -40,10 +40,10 @@ app is yours, it sits in git, and Claude Code can work on it alongside you throu
 | Desktop app — Electron window, a welcome screen (recent projects, NodeGX's templates, Import an app), File → Open Recent, a smoke mode; packaged for macOS as a DMG and a zip, signed ad hoc (STU-007's first cut) | first cut (2026-10-19), package (2026-10-20, s14) | `check:app` 39/39, 40/40 on the package, `smoke` |
 | The project's backend — started (or adopted) on open, stopped on close, shown in the status bar; a template that needs one gets one; Data's "Start a backend" for an app with none | works (2026-10-19) | `check:app` 34/34 |
 | Claude Code — "Connect Claude Code" in the header (and File) registers the NodeGX MCP server for the folder with the NodeGX editor's own writer and shows the command that starts a session there | works (2026-10-19) | `check:editor` 56/56 |
-| Publish — File → Publish… and the header's Publish write the app as a static site with NodeGX's own deploy (npm's production engine), into a new folder or the one this app went to last; its cloud functions go to its backend through NodeGX's `deploy_cloud_functions`; the window says where the site is, what it talks to, and that a backend on 127.0.0.1 works on this computer only | works (2026-10-20, s14) | `check:publish` 27/27, `check:app` 39/39 |
+| Publish — File → Publish… and the header's Publish write the app as a static site with NodeGX's own deploy (npm's production engine), into a new folder or the one this app went to last; its cloud functions go to its backend through NodeGX's `deploy_cloud_functions`; the window says where the site is, what it talks to, and that a backend on 127.0.0.1 works on this computer only, and that a page's own address needs the host's `index.html` fallback (s18) | works (2026-10-20, s14) | `check:publish` 34/34, `check:app` 46/46 |
 | Runs without a NodeGX checkout — the kit from npm at pinned versions (`@nodegx/preview` 0.2.3, `@nodegx/mcp` 0.2.2) and `vendor/` at one NodeGX commit; `NODEGX_REPO` for working on the kit and Studio together | works (2026-10-20, s13) | `check:vendor`, every gate on the vendored kit |
 | Page data — a search is a named item on the page (Design → Page data), read by any element as dynamic data; made or reused through one form, never twice; readers, last run and "N queries on open" counted off the app's own requests; a workflow refreshes an item | works (2026-10-19), R7 ruled | `check:pagedata` 26/26, `check:editor` 71/71 |
-| Workflows on their element (M3) — a ⚡ on every element with a workflow, on the canvas and in the element list; its steps in order on hover; its card full screen from the badge, Back (or Esc) to the element; a card named by its steps until someone renames it; the page's cards under their elements, filtered by what they change or what starts them, searched over their steps; one card per event — imported A / not A splits are one branch, overlapping ones lanes side by side | STU-020, STU-021 (2026-10-19, s8), STU-023, STU-022, STU-024 (2026-10-20, s9) work | `check:editor` 170/170, `check:import` 79/79 |
+| Workflows on their element (M3) — a ⚡ on every element with a workflow, on the canvas and in the element list; its steps in order on hover; its card full screen from the badge, Back (or Esc) to the element; a card named by its steps until someone renames it; the page's cards under their elements, filtered by what they change or what starts them, searched over their steps; one card per event — imported A / not A splits are one branch, overlapping ones lanes side by side | STU-020, STU-021 (2026-10-19, s8), STU-023, STU-022, STU-024 (2026-10-20, s9) work | `check:editor` 172/172, `check:import` 79/79 |
 
 ## The alpha (0.2) — the line
 
@@ -577,9 +577,18 @@ in `app/main.cjs`, and `lib/publish.mjs` does the work:
   deployed, a second publish finds all four `unchanged`, and one called over HTTP answers from its own Request node
   (*Unauthenticated requests not accepted*, 500) where an unknown name gets 404. `check:app` 39/39 clicks Publish in
   the real window (with its dialogs answered by the gate) and reads the site, the warning, and the remembered folder.
-- **Not in it:** a site under a sub-path (P123-STU015-BASEURL); a path-routed app's deep link needs the server to
-  answer every path with `index.html` (opening its root works on any server, which is all the gate's server does; most static hosts have a
-  setting for the fallback, and Publish does not say so yet); hosting anywhere but this machine (R10); Windows and Linux not run.
+- **Not in it:** a site under a sub-path (P123-STU015-BASEURL); ~~Publish saying that a path-routed app's deep link
+  needs the host's `index.html` fallback~~ (s18, below); hosting anywhere but this machine (R10); Windows and Linux not run.
+- **s18 (2026-10-23): a page's own address.** `settings.navigationPathType` is `"path"` in every NodeGX template and in
+  every app the importer writes, so a page has an address of its own (`/sign-in`), which reaches the server; unset or
+  `"hash"` keeps it after a `#`, which never does. For a path-routed app the publish window now says: *"Its pages have
+  addresses of their own (such as /sign-in). Opening the site’s first address works on any web server; for a link to a
+  page, or a reload on one, the server must answer every address it has no file for with index.html. Most hosts have a
+  setting for that (often called a single-page app’s fallback or rewrite)."* (`routingOf` in `lib/publish.mjs`; the
+  example is the first Page with a `urlPath`). The deploy's `index.html` loads its scripts from `%baseUrl%`, the root,
+  so the fallback is all a deep link needs. Measured, `check:publish` **34/34**: the plain static server answers
+  `/sign-in` with 404; one that answers other addresses with `index.html` opens the sign-in page there; a project
+  without the setting reads as hash. `check:app` **46/46** reads the line in the real window's report.
 
 Order: STU-002 first (it is what makes "local" feel alive, and STU-005 depends on it), then STU-003–005, then
 STU-006–007 when someone outside the team needs to run it, and STU-008 so that what they build can leave the machine.
@@ -919,7 +928,8 @@ elements in the order the element list draws them (logic after), each card by it
   Command, so "Changes Task" reads Add task → Write history → its writes. This over-counts on purpose: a write
   inside the component counts whichever of its inputs the card fires.
 - **Not read:** a write made in JavaScript (a Function node's own `fetch`) changes nothing as far as the filter
-  knows. Port names a component gives without words show as they are ("When pickList").
+  knows. ~~Port names a component gives without words show as they are ("When pickList")~~: spelled out since s18
+  ("When Pick list"), the words the node library's own ports already got (`portWords`).
 
 Gate (`check:editor`, on the todo template's Todo page, 62 cards): "Changes Task" lists exactly the 15 cards whose
 signal reaches a Task write, and "Changes todoSelected" exactly the 11 that set it, both read off the files and
@@ -943,11 +953,20 @@ event, from both ends:
   A1, A2 … B1; where the step said "+ 1 more wired from the same signal" the second lane was hidden. The todo
   template's Sign in click is such a card: Log In → Go to the list, and beside it the branch that puts the old
   error away. A branch shows its own name when it has one. Inside a lane, Yes and No stack.
-- **Not built:** a card's name and hover still read the first lane ("Sign in (+1 more) → Go to the list"). R4
+- ~~A card's name and hover still read the first lane~~ (s18): named from every lane (*"Sign in → Go to the list, and
+  Put the old error away"*; three or more: the first, "and 2 more side by side"), and the hover says each lane on a
+  line of its own ("Lane 1: …", "Lane 2: …", as the card heads them). A branch's label reads as its test only when it
+  asks ("Signed in?" → "If Signed in"); any other is its name as written, so the importer's "Only when …" no longer
+  reads "If Only when …", and a branch with no label fixed at Yes or No reads "Always No". **Not built:** R4
   (rejoin, STU-025) is untouched. More than two opposite-looking workflows: the first opposite pair merges, the
   rest stay lanes.
-- **Seen, not fixed:** "Put the old error away" is a Condition whose condition is the constant `false`, used only
-  for its value; the branch card says "Set the condition…" as though it were empty.
+- ~~Seen, not fixed: a constant-`false` Condition's card says "Set the condition…"~~ (s18): a Condition saved as a
+  fixed Yes or No with nothing wired reads *"Always No — a fixed value: only No runs"*, with *Use a value instead…*.
+
+Gate (s18, `check:editor` **172/172**, 2 new and 2 rewritten): the Sign in ⚡'s hover reads both lanes in the order the
+card draws them, with no "+1 more"; the card's name is both lanes'; the second lane's branch (the file's `condition:
+false`, nothing wired into it) reads "Always No"; Todo's Header row reads "Pick list" (Header's Component Outputs
+declares `pickList` with no display name). Mutant (all three reverted): 168/172, exactly those four fail.
 
 Gates: `check:import` (a fixture page: logged in / not logged in on one button → one Condition from the click,
 other page on Yes and third on No, labelled with "?"; logged in beside no condition → two wires, a Condition and a
@@ -1420,6 +1439,14 @@ App data's User, 3 on Required reaching live), `check:editor` 170/170, `check:ap
   field to users is still Claude Code's or the backend manager's).
 - **Found on the way:** clicking a type in App data always shows every row now (the field drawer's filter stayed on
   after App data was left and opened again).
+
+**s18 (2026-10-23): Required is drift.** `driftOf` compared types only; a field of one type that is required in the
+project and not on the development database (or the other way) is now a drift card of its own, with both ways to agree:
+*Make it required on the backend* first counts the rows with nothing in it and, when there are any, says how many and
+offers *Show them in App data* instead of asking the backend; *Make the project's optional / required* takes the
+backend's. `check:data` **78/78** (4 new: the pure `driftOf`, then on the running backend, title made optional from
+outside: named, refused while one row is empty, made required once it is gone, and the project taking the backend's
+Required either way).
 
 - **Not in it:** the files manager (`/admin/files`), auth providers and email templates, backups and restore from
   Studio, backend workflows and triggers (they belong on the Workflow tab, drawn on the map; the kit has them all), and

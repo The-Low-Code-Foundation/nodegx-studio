@@ -317,6 +317,7 @@ async function publishFlow() {
   }
   rememberSite(dir, result.site);
   const lines = [`${result.files} files in ${home(result.site)}. Serve that folder with any web server and open it in a browser.`];
+  if (result.routing.type === 'path') lines.push(`Its pages have addresses of their own${result.routing.example ? ` (such as ${result.routing.example})` : ''}. Opening the site’s first address works on any web server; for a link to a page, or a reload on one, the server must answer every address it has no file for with index.html. Most hosts have a setting for that (often called a single-page app’s fallback or rewrite).`);
   if (result.backend.endpoint) lines.push(`It talks to the ${result.backend.live ? 'live database' : 'backend'} at ${result.backend.endpoint}${result.backend.local ? ', on this computer only' : ''}.`);
   else lines.push('It has no backend: it keeps no rows.');
   const schema = result.schema;

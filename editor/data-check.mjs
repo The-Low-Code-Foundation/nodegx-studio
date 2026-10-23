@@ -8,7 +8,8 @@
  *   2. a type and its fields are made on the development backend and in the project together: a Choice is a String
  *      with the backend's one-of check, a Link a Pointer at its type; a rename takes the check with it; a kind change
  *      converts; a delete drops the column
- *   3. a field added outside Studio (as Claude Code would) is named as drift, and declared from the card
+ *   3. a field added outside Studio (as Claude Code would) is named as drift, and declared from the card; a Required the
+ *      project and the backend disagree on is drift too, agreed either way (the backend's way only once no row is empty)
  *   4. App data: 120 rows paged 50 at a time with the count, a search, a Choice edited through its select, an import
  *      checked first, rows deleted together; the importer's backend/data/ files checked and loaded
  *   5. Privacy: a type made readable by anyone, through the map: the backend lets someone not signed in find it, and
@@ -72,6 +73,7 @@ function adminOf(key) {
     get: async (p) => (await call('GET', p)).json,
     post: async (p, b) => (await call('POST', p, b)).json,
     put: async (p, b) => (await call('PUT', p, b)).json,
+    del: async (p) => (await call('DELETE', p)).json,
     anonymous: (method, p, b) => call(method, p, b, false),
     table: async (name) => ((await call('GET', '/admin/schema')).json.tables || []).find((t) => t.name === name),
     count: async (name) => (await call('GET', `/classes/${name}?count=1&limit=0`)).json.count
@@ -99,6 +101,8 @@ console.log('check: data.mjs');
   ok(list.map((t) => `${t.name}:${t.declared ? 'd' : ''}${t.onBackend ? 'b' : ''}${t.usedByApp ? 'u' : ''}`).join(' ') === 'A:db B:b C:u', 'every type once, with where it is; the backend\'s system tables left out', list.map((t) => t.name));
   const d = driftOf([{ name: 'a', type: 'String' }, { name: 'b', type: 'Number' }, { name: 'p', type: 'Pointer', targetClass: 'X' }], [{ name: 'b', type: 'String' }, { name: 'c', type: 'Date' }, { name: 'p', type: 'Pointer', targetClass: 'Y' }, { name: 'objectId', type: 'String' }]);
   ok(d.onlyProject.map((c) => c.name).join() === 'a' && d.onlyBackend.map((c) => c.name).join() === 'c' && d.retyped.map((r) => r.name).join() === 'b,p' && !d.none, 'drift: only the project, only the backend, and a different type (a Link\'s target counts)', { onlyProject: d.onlyProject, onlyBackend: d.onlyBackend, retyped: d.retyped.map((r) => r.name) });
+  const r = driftOf([{ name: 'a', type: 'String', required: true }, { name: 'b', type: 'Number' }, { name: 'c', type: 'Date', required: true }], [{ name: 'a', type: 'String' }, { name: 'b', type: 'Number', required: true }, { name: 'c', type: 'String' }]);
+  ok(r.required.map((x) => `${x.name}:${x.project}/${x.backend}`).join() === 'a:true/false,b:false/true' && driftOf([{ name: 'a', type: 'String', required: true }], [{ name: 'a', type: 'String', required: true }]).none, 'drift: a field required in one and not the other, either way (a retyped one is named as retyped only)', r.required);
   ok(toWire({ name: 'n', type: 'Number' }, '4.5').value === 4.5 && toWire({ name: 'n', type: 'Number' }, 'four').error && toWire({ name: 'b', type: 'Boolean' }, 'Yes').value === true && toWire({ name: 'd', type: 'Date' }, '2026-10-22T10:00').value.__type === 'Date' && toWire({ name: 'p', type: 'Pointer', targetClass: 'T' }, 'abc').value.className === 'T' && toWire({ name: 'x', type: 'String' }, '').value === null, 'a typed value goes to the backend in its own shape; a wrong one is refused in words; empty clears');
   ok(JSON.stringify(searchWhere([{ name: 'title', type: 'String' }, { name: 'n', type: 'Number' }], 'a.b')) === '{"$or":[{"title":{"$regex":"a\\\\.b","$options":"i"}}]}' && searchWhere([{ name: 'n', type: 'Number' }], 'x') === null, 'a search looks in the text fields only, the words taken literally');
   ok(cellWords({ type: 'Boolean' }, false) === 'No' && cellWords({ type: 'Pointer' }, { objectId: 'q1' }) === 'q1', 'a cell says Yes / No and a link\'s id');
@@ -241,6 +245,26 @@ try {
   ok(driftText.includes('not in the project: pinned (Boolean)'), 'a field added outside Studio is named as drift', driftText);
   await clickIn('#datamain .card.drift button', 'Declare them'); await settle();
   ok(declared('Note').columns.some((c) => c.name === 'pinned' && c.type === 'Boolean') && !(await ev(`!!document.querySelector('#datamain .card.drift')`)), 'Declare them: the project has it, and the card goes');
+  // s18: Required is drift too (the backend's diff never compares it): title made optional on the backend from outside
+  const setReq = (on) => dev.post('/admin/schema', { action: 'setRequired', table: 'Note', columns: { title: on } });
+  const driftNow = async () => { await ev(`document.querySelector('[data-sub=types]').click()`); await settle(); return ev(`[...document.querySelectorAll('#datamain .card.drift p')].map(p => p.textContent).join(' / ')`); };
+  await setReq(false);
+  const blank = await dev.post('/classes/Note', { state: 'open' });
+  const reqDrift = await driftNow();
+  await ev(`document.querySelector('#datamain .card.drift [data-act=required-backend]').click()`);
+  await until(`(document.querySelector('#datamain .card.drift p')?.textContent || '').includes('nothing in title')`);
+  const refused = await ev(`document.querySelector('#datamain .card.drift p').textContent`);
+  ok(reqDrift.includes('title is required in the project and optional on the development database.') && refused.startsWith('1 record on the development database has nothing in title') && !(await dev.table('Note')).columns.find((c) => c.name === 'title').required, 'Required as drift: named, and making it required on the backend first counts the rows without one and stops', { reqDrift, refused });
+  await dev.del(`/classes/Note/${blank.objectId}`);
+  await ev(`document.querySelector('#datamain .card.drift [data-act=required-backend]').click()`); await settle();
+  ok((await dev.table('Note')).columns.find((c) => c.name === 'title').required === true && !(await ev(`!!document.querySelector('#datamain .card.drift')`)), 'with that row gone, Make it required on the backend does, and the card goes');
+  await setReq(false); await driftNow();
+  await ev(`document.querySelector('#datamain .card.drift [data-act=required-project]').click()`); await settle();
+  const optionalNow = !declared('Note').columns.find((c) => c.name === 'title').required;
+  await setReq(true);
+  const otherWay = await driftNow();
+  await ev(`document.querySelector('#datamain .card.drift [data-act=required-project]').click()`); await settle();
+  ok(optionalNow && otherWay.includes('title is optional in the project and required on the development database.') && declared('Note').columns.find((c) => c.name === 'title').required === true && !(await ev(`!!document.querySelector('#datamain .card.drift')`)), 'the other way to agree: the project takes the backend\'s Required, either way', otherWay);
 
   console.log('check: STU-060 who can reach it, the map');
   await until(`!!document.querySelector('#datamain .reach')`, 15000);

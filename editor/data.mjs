@@ -34,7 +34,8 @@ export function typesOf({ declared = [], backend = [], used = new Map() }) {
 
 /**
  * Where the project's fields and the backend's disagree, for one type: fields only the backend has, fields only the
- * project has, and fields whose storage type differs (a Link's target counts as part of its type).
+ * project has, fields whose storage type differs (a Link's target counts as part of its type), and fields of one type
+ * that are required in one and not the other (the backend's diff never compares Required, so nothing else would say).
  */
 export function driftOf(projectCols = [], backendCols = []) {
   const p = new Map(own(projectCols).map((c) => [c.name, c]));
@@ -44,8 +45,9 @@ export function driftOf(projectCols = [], backendCols = []) {
     onlyBackend: [...b.values()].filter((c) => !p.has(c.name)),
     onlyProject: [...p.values()].filter((c) => !b.has(c.name)),
     retyped: [...p.values()].filter((c) => b.has(c.name) && shape(c) !== shape(b.get(c.name))).map((c) => ({ name: c.name, project: c, backend: b.get(c.name) })),
+    required: [...p.values()].filter((c) => b.has(c.name) && shape(c) === shape(b.get(c.name)) && !!c.required !== !!b.get(c.name).required).map((c) => ({ name: c.name, project: !!c.required, backend: !!b.get(c.name).required })),
     get none() {
-      return !this.onlyBackend.length && !this.onlyProject.length && !this.retyped.length;
+      return !this.onlyBackend.length && !this.onlyProject.length && !this.retyped.length && !this.required.length;
     }
   };
 }

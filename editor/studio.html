@@ -395,6 +395,7 @@
   .bolt.oncanvas { position: absolute; pointer-events: auto; z-index: 2; box-shadow: 0 1px 2px rgba(0,0,0,.18); }
   .bolttip { position: fixed; z-index: 1000; max-width: 420px; background: var(--ink); color: var(--panel); font-size: 12px; line-height: 1.45; padding: 6px 9px; border-radius: var(--r); box-shadow: 0 4px 14px rgba(0,0,0,.2); pointer-events: none; }
   .bolttip b { font-weight: 600; margin-right: 6px; }
+  .bolttip .tiplane { padding-left: 10px; }
   #workflow.card { grid-template-columns: 1fr; }
   #workflow.card > aside { display: none; }
   .cardnav { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
@@ -1341,8 +1342,9 @@ function portsOf(node, plug) {
       const comp = store.readComponent(key).files;
       const ioType = plug === 'input' ? 'Component Inputs' : 'Component Outputs';
       // an input with no name of its own reads as what it feeds inside ("Why it did not work" · Text), not its port name cut off
+      // any other port with no name of its own is its port name spelled out ("When Pick list", not "When pickList")
       const inner = (ioId, port) => { if (plug !== 'input') return null; const w = comp.connections.connections.filter((c) => c.fromId === ioId && c.fromProperty === port); const t = w.length === 1 && comp.nodes.nodes.find((x) => x.id === w[0].toId); const tp = t && libPorts(t.type).find((q) => q.name === w[0].toProperty); return tp ? { of: t.label || typeName(t.type), label: tp.displayName || tp.name, type: tp.type } : null; };
-      for (const n of comp.nodes.nodes) if (n.type === ioType) for (const p of n.ports || []) if (!seen.has(p.name)) { const i = p.displayName ? null : inner(n.id, p.name); seen.set(p.name, { name: p.name, label: p.displayName || i?.label || p.name, type: tname(i?.type ?? p.type), raw: i ? { type: i.type } : undefined, signal: tname(p.type) === 'signal', group: 'Component', of: i?.of }); }
+      for (const n of comp.nodes.nodes) if (n.type === ioType) for (const p of n.ports || []) if (!seen.has(p.name)) { const i = p.displayName ? null : inner(n.id, p.name); seen.set(p.name, { name: p.name, label: p.displayName || i?.label || portWords(p.name), type: tname(i?.type ?? p.type), raw: i ? { type: i.type } : undefined, signal: tname(p.type) === 'signal', group: 'Component', of: i?.of }); }
     } catch { /* unknown component */ }
   }
   for (const p of libPorts(node.type)) if (p.plug === plug || p.plug === 'input/output') if (!seen.has(p.name)) seen.set(p.name, { name: p.name, label: p.displayName && p.displayName !== p.name ? p.displayName : portWords(p.name), type: tname(p.type), signal: tname(p.type) === 'signal', raw: p });
@@ -3144,7 +3146,9 @@ function stepWords(s, short = false) {
   if (s.refresh) return `Refresh ${itemById(s.id)?.name ?? labelOf(s.id)}`;
   if (s.branches) {
     const side = (list) => list.map((x) => stepWords(x)).join(' → ') || 'nothing';
-    const test = node.label ? `If ${node.label.replace(/\?$/, '')}` : 'Branch';
+    // a label that asks ("Signed in?") is the test; any other ("Only when …", "Put the old error away") is the branch's own name
+    const fixed = typeof p.condition === 'boolean' && !conns.some((c) => c.toId === s.id && c.toProperty === 'condition');
+    const test = node.label ? (/\?$/.test(node.label) ? `If ${node.label.replace(/\?$/, '')}` : node.label) : fixed ? `Always ${p.condition ? 'Yes' : 'No'}` : 'Branch';
     return short ? test : `${test}: Yes → ${side(s.branches.yes)}; No → ${side(s.branches.no)}`;
   }
   const more = !short && s.siblings.length ? ` (+${s.siblings.length} more)` : '';
@@ -3155,14 +3159,18 @@ function stepWords(s, short = false) {
   if (words && p.collectionName) return `${words} (${p.collectionName})${more}`;
   return (words || typeName(node.type)) + more;
 }
-const eventSummary = (ev) => chain(ev.node, ev.port).map((s) => stepWords(s)).join(' → ');
+/** The card's steps in words, one line per lane: a card that runs lanes side by side (STU-024) is all of them, not its first. */
+const laneSummaries = (ev) => (lanesOf(ev) ?? [chain(ev.node, ev.port)]).map((steps) => steps.map((s) => stepWords(s)).join(' → '));
+const eventSummary = (ev) => { const l = laneSummaries(ev); return l.length > 1 ? l.map((w, i) => `Lane ${i + 1}: ${w}`).join(' · ') : l[0]; };
 /* ---- STU-023: a card is named by what it does, from its steps, until someone names it. The name is kept on the element
    the event starts at (metadata.cardNames, by port), so it follows the element and comes back with Undo; nothing else reads it ---- */
 const givenName = (ev) => byId[ev.node]?.metadata?.cardNames?.[ev.port] || '';
 function stepsName(ev) {
-  const words = chain(ev.node, ev.port).map((s) => stepWords(s, true));
-  if (!words.length) return 'No steps yet';
-  return (words.length > 3 ? [words[0], words[1], '…', words.at(-1)] : words).join(' → ');
+  const lanes = (lanesOf(ev) ?? [chain(ev.node, ev.port)]).map((steps) => steps.map((s) => stepWords(s, true))).filter((w) => w.length);
+  if (!lanes.length) return 'No steps yet';
+  const one = (words) => (words.length > 3 ? [words[0], words[1], '…', words.at(-1)] : words).join(' → ');
+  if (lanes.length === 1) return one(lanes[0]);
+  return lanes.length === 2 ? `${one(lanes[0])}, and ${one(lanes[1])}` : `${one(lanes[0])}, and ${lanes.length - 1} more side by side`;
 }
 const cardName = (ev) => givenName(ev) || stepsName(ev);
 /** An empty name gives the card back to its steps. */
@@ -3184,9 +3192,10 @@ function cardTitle(ev) {
   return input;
 }
 function hideBoltTip() { document.getElementById('bolttip')?.remove(); }
+const laneLines = (ev) => { const l = laneSummaries(ev); return l.length > 1 ? l.map((w, i) => h('div', { class: 'tiplane' }, `Lane ${i + 1}: ${w}`)) : [l[0]]; };
 function showBoltTip(anchor, evs) {
   hideBoltTip();
-  const tip = h('div', { class: 'bolttip', id: 'bolttip', role: 'tooltip' }, ...evs.map((ev) => h('div', {}, h('b', {}, portLabel(byId[ev.node], 'output', ev.port)), givenName(ev) ? `${givenName(ev)}: ` : '', eventSummary(ev))));
+  const tip = h('div', { class: 'bolttip', id: 'bolttip', role: 'tooltip' }, ...evs.map((ev) => h('div', {}, h('b', {}, portLabel(byId[ev.node], 'output', ev.port)), givenName(ev) ? `${givenName(ev)}: ` : '', ...laneLines(ev))));
   document.body.append(tip);
   const r = anchor.getBoundingClientRect();
   tip.style.left = `${Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8))}px`;
@@ -3429,9 +3438,12 @@ function stepCard(s, n) {
   if (isCond) {
     const cw = wiredIn.condition; const src = cw && byId[cw.fromId];
     const pCond = { name: 'condition', displayName: 'Condition' };
-    const line = h('div', { class: 'cond-line' }, 'If ');
+    const fixed = !src && typeof params.condition === 'boolean';
+    const line = h('div', { class: 'cond-line' }, fixed ? 'Always ' : 'If ');
     if (src && isComposed(src)) line.append(h('span', { class: 'chip expr', style: 'cursor:pointer', onclick: (e) => openComposer(e, node, pCond, src) }, icon('fx'), composedPreview(src)), h('button', { class: 'quiet tiny', onclick: (e) => openComposer(e, node, pCond, src) }, 'Edit'));
     else if (src) line.append(sourceChip(cw.fromId, cw.fromProperty), h('button', { class: 'quiet tiny', onclick: () => edits(pageKey, [{ edit: 'disconnect', component: pageKey, from: { node: cw.fromId, port: cw.fromProperty }, to: { node: node.id, port: 'condition' } }]) }, icon('x')));
+    // a condition saved as a fixed Yes or No (the todo app's "Put the old error away" is a constant false, read for its value): said, not offered as empty
+    else if (fixed) line.append(h('span', { class: 'chip' }, params.condition ? 'Yes' : 'No'), h('span', { style: 'color:var(--muted)' }, `a fixed value: only ${params.condition ? 'Yes' : 'No'} runs`), h('button', { class: 'quiet tiny', onclick: (e) => sourceMenu(e, node, pCond) }, 'Use a value instead…'));
     else line.append(h('button', { class: 'primary tiny', onclick: (e) => sourceMenu(e, node, pCond) }, icon('bolt'), 'Set the condition…'), h('span', { style: 'color:var(--muted)' }, '(a Yes / No value, or an expression)'));
     card.append(line);
   } else card.append(h('div', { class: 'lines' }, ...(lines.length ? lines : [h('span', { style: 'color:var(--muted)' }, 'No settings yet')]), s.siblings.length ? h('span', { style: 'color:var(--muted)' }, `+ ${s.siblings.length} more wired from the same signal`) : null));
@@ -3683,6 +3695,18 @@ function syncCards(main, t) {
   for (const r of d.retyped) card(`${r.name} is ${r.project.type}${r.project.targetClass ? ` → ${r.project.targetClass}` : ''} in the project and ${r.backend.type}${r.backend.targetClass ? ` → ${r.backend.targetClass}` : ''} on the development database.`,
     h('button', { onclick: async () => { if (!confirm(`Change ${r.name} on the development database to ${r.project.type}? Values that don’t convert are lost.`)) return; await onBackend(`${r.name} was not changed`, () => schemaAct({ action: 'changeColumnType', table: t.name, column: r.name, type: r.project.type })); renderData(); } }, `Make the backend’s ${r.project.type}`),
     h('button', { onclick: () => { editProject((list) => { const cols = list.find((x) => x.name === t.name).columns; cols[cols.findIndex((x) => x.name === r.name)] = projectColumn(r.backend); }); renderData(); } }, `Make the project’s ${r.backend.type}`));
+  // Required, which the backend's own diff never compares: made required on the backend only when no row is without a value
+  const word = (on) => (on ? 'required' : 'optional');
+  for (const r of d.required) card(`${r.name} is ${word(r.project)} in the project and ${word(r.backend)} on the development database.`,
+    h('button', { 'data-act': 'required-backend', onclick: async (e) => {
+      if (r.project) {
+        const empty = await emptyCount(t.name, r.name);
+        if (empty) return e.target.closest('.card').querySelector('p').replaceChildren(`${F.recordsWord(empty)} on the development database ${empty === 1 ? 'has' : 'have'} nothing in ${r.name}, so it can’t be made required there yet. Give each one a value first, or make the project’s optional. `,
+          h('button', { class: 'quiet tiny', 'data-act': 'show-empty', onclick: () => { env = 'development'; dataSub = 'app'; Object.assign(app, { type: t.name, skip: 0, q: '', order: '-createdAt', picked: new Set(), missing: r.name }); renderData(); } }, 'Show them in App data'));
+      }
+      await onBackend(`${r.name} was not made ${word(r.project)}`, () => schemaAct({ action: 'setRequired', table: t.name, columns: { [r.name]: r.project } })); renderData();
+    } }, `Make it ${word(r.project)} on the backend`),
+    h('button', { 'data-act': 'required-project', onclick: () => { editProject((list) => { const c = list.find((x) => x.name === t.name).columns.find((x) => x.name === r.name); if (r.backend) c.required = true; else delete c.required; }); renderData(); } }, `Make the project’s ${word(r.backend)}`));
 }
 async function whoCanReach(card, type) {
   const say = (...kids) => { card.lastChild.replaceWith(h('div', {}, ...kids)); };

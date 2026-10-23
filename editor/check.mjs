@@ -571,15 +571,20 @@ try {
       const at = await b.evaluate(`(() => { const r = document.querySelector('#overlay .bolt.oncanvas[data-node=${JSON.stringify(signInBtn)}]').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
       await b.click(at.x, at.y); await wait(400);
       const card1 = JSON.parse(await b.evaluate(`JSON.stringify({ shown: !document.getElementById('workflow').hidden, full: document.getElementById('workflow').classList.contains('card'), list: document.querySelector('#workflow > aside').offsetWidth, title: document.querySelector('#steps .event-card h2')?.textContent, trigger: document.querySelector('#steps .event-card small')?.textContent, steps: [...(document.querySelector('#steps .lanes .lane') || document).querySelectorAll('#steps .step h3 span')].map(s => s.textContent), lanes: [...document.querySelectorAll('#steps .lanes > .lane')].map(l => [...l.querySelectorAll('.step h3 span')].map(s => s.textContent)), branchLane: [...document.querySelectorAll('#steps .lanes > .lane')].map(l => !!l.querySelector(':scope > .chain > .step.cond')), back: document.querySelector('#steps .cardnav .back')?.textContent })`));
-      ok(card1.steps.length >= 2 && tip.includes(`Click${card1.steps.slice(0, 1)} (+1 more) → ${card1.steps.slice(1).join(' → ')}`), 'STU-020: hovering the Sign in ⚡ names its steps in the order its card draws them', { tip, steps: card1.steps });
+      // s18: both lanes, each in the order its card draws it (before, the hover read the first lane and "(+1 more)")
+      ok(card1.steps.length >= 2 && card1.lanes.length === 2 && tip.includes(`ClickLane 1: ${card1.lanes[0].join(' → ')}Lane 2: ${card1.lanes[1][0]}`) && !tip.includes('more'), 'STU-020: hovering the Sign in ⚡ names its steps in the order its card draws them, lane by lane', { tip, lanes: card1.lanes });
       ok(card1.shown && card1.full && card1.list === 0 && /^When Sign in: Click/.test(card1.trigger || '') && /Sign in/.test(card1.back || ''), 'STU-021: clicking the ⚡ on the canvas opens that event\'s card full screen (no list beside it), with the way back', card1);
       // STU-023: a card nobody named reads its steps (up to three; past that the first two, "…", the last)
       const fromSteps = (card1.steps.length > 3 ? [card1.steps[0], card1.steps[1], '…', card1.steps.at(-1)] : card1.steps).join(' → ');
-      ok(card1.steps.length >= 2 && card1.title === fromSteps, 'STU-023: the Sign in click\'s card, never named, is named by its steps', { title: card1.title, steps: card1.steps });
+      ok(card1.steps.length >= 2 && card1.title === `${fromSteps}, and ${card1.lanes[1]?.[0]}`, 'STU-023: the Sign in click\'s card, never named, is named by its steps, both lanes', { title: card1.title, lanes: card1.lanes });
       // STU-024: the Sign in click is wired to two first steps (Log In, and the branch that puts the old error away): two lanes,
       // side by side, read off the file (wires from the button's Click into a signal input), not off Studio
       const firstSteps = onDisk(SIGN + 'connections.json').connections.filter((w) => w.fromId === signInBtn && w.fromProperty === 'onClick' && /^(login|eval|do|signup|navigate|run)$/.test(w.toProperty)); // the runtime's signal inputs these node types take
       ok(firstSteps.length === 2 && card1.lanes.length === 2 && card1.lanes[0][0] === card1.steps[0] && JSON.stringify(card1.branchLane) === '[false,true]', 'STU-024: an event wired to two first steps (Log In, and the branch that puts the old error away) shows two lanes side by side, each its own chain', { wires: firstSteps.map((w) => w.toProperty), lanes: card1.lanes, branchLane: card1.branchLane });
+      // s18: the second lane's branch is a Condition saved as a constant false, wired from nothing: it says so, not "Set the condition…"
+      const clear = sign.nodes.nodes.find((n) => n.label === 'Put the old error away');
+      const fixedLine = await b.evaluate(`[...document.querySelectorAll('#steps .lanes > .lane')][1]?.querySelector('.step.cond .cond-line')?.textContent || ''`);
+      ok(clear?.parameters?.condition === false && !sign.connections.connections.some((w) => w.toId === clear.id && w.toProperty === 'condition') && /^Always No/.test(fixedLine) && !/Set the condition/.test(fixedLine), 'a branch fixed at No (the file\'s constant false, nothing wired) says it always runs No, not that it has no condition', fixedLine);
       await shot('workflow-card');
       await b.clickSel('#steps .cardnav .back'); await wait(400);
       const back1 = JSON.parse(await b.evaluate(`JSON.stringify({ design: !document.getElementById('design').hidden, name: document.querySelector('#right .head input')?.value, box: !!document.querySelector('#overlay .box.sel') })`));
@@ -1091,6 +1096,10 @@ try {
     const visual = JSON.parse(await b.evaluate(`JSON.stringify(__ob.visualIds ?? null)`));
     const inOrder = visual ? heads.filter((id) => visual.includes(id)).every((id, i, a) => i === 0 || visual.indexOf(a[i - 1]) < visual.indexOf(id)) : null;
     ok(heads.length > 1 && new Set(heads).size === heads.length && inOrder !== false, 'STU-022: the cards sit under their element, each element once, in the page\'s order', { heads: heads.length, inOrder });
+    // s18: a port its component names without words is spelled out: Header's Component Outputs has pickList and no display name
+    const pickPort = files('Todo/Header').nodes.find((n) => n.type === 'Component Outputs')?.ports?.find((p) => p.name === 'pickList');
+    const pickRow = await b.evaluate(`[...document.querySelectorAll('#events .row')].find(r => r.dataset.port === 'pickList')?.textContent || ''`);
+    ok(pickPort && !pickPort.displayName && /Pick list/.test(pickRow) && !/pickList/.test(pickRow), 'a component\'s port with no words of its own reads spelled out ("Pick list"), not as its name', pickRow);
     await shot('workflow-index');
     outsideWrite(keptWires);
     await b.until(`__ob.store.readComponent(${JSON.stringify(TODO)}).files.connections.connections.length === ${JSON.parse(keptWires).connections.length}`, 5000).catch(() => {}); await wait(600);

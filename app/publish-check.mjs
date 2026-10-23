@@ -5,9 +5,11 @@
  *
  *   1. a copy of the todo template, its backend started (under a backends folder of the gate's own)
  *   2. the folders Publish refuses, each left as it was: inside the project, one holding other files, another app's site
- *   3. published: the production engine, the marker, the backend named and said to be this machine's only
+ *   3. published: the production engine, the marker, the backend named and said to be this machine's only; the pages'
+ *      own addresses named (navigationPathType "path")
  *   4. the done-when: the site served by a plain static server, opened in a browser — an account made, a todo added,
- *      the row on the backend; then signed out, the page reloaded, signed in again, and the todo is there
+ *      the row on the backend; then signed out, the page reloaded, signed in again, and the todo is there; a page's own
+ *      address 404s on that server and opens on one that answers every other address with index.html
  *   5. published again into the same folder: the last publish's files are replaced, a file the person put there stays
  *   6. an app with cloud functions (the importer's backend-workflow fixtures): published, its four functions deployed
  *      to its backend by NodeGX's deploy_cloud_functions, a second publish finds them unchanged, and one answers
@@ -28,7 +30,7 @@ const tmp = mkdtempSync(join(tmpdir(), 'nodegx-studio-publish-check-'));
 process.env.NODEGX_BACKENDS_DIR = join(tmp, 'backends'); // before the kit loads: nothing is written to ~/.noodl
 const { createFromTemplate, importApp } = await import('./actions.mjs');
 const backend = await import('../lib/backend.mjs');
-const { publish, claimSiteFolder, MARKER } = await import('../lib/publish.mjs');
+const { publish, claimSiteFolder, routingOf, MARKER } = await import('../lib/publish.mjs');
 const lives = await import('../lib/live.mjs');
 
 const results = [];
@@ -43,13 +45,14 @@ async function rows(up, collection) {
   return (await r.json()).results ?? [];
 }
 
-/** Any static file server: a file, or index.html for a folder. Nothing about NodeGX in it. */
-function serveStatic(root) {
+/** Any static file server: a file, or index.html for a folder. Nothing about NodeGX in it. `fallback`: index.html for a path with no file, as a host's single-page setting does. */
+function serveStatic(root, { fallback = false } = {}) {
   const types = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.css': 'text/css', '.svg': 'image/svg+xml' };
   const server = http.createServer((req, res) => {
     let p = join(root, decodeURIComponent(req.url.split('?')[0]));
     if (!p.startsWith(root)) p = null;
     else if (!existsSync(p) || statSync(p).isDirectory()) p = existsSync(join(p, 'index.html')) ? join(p, 'index.html') : null;
+    if (!p && fallback && !extname(req.url.split('?')[0])) p = join(root, 'index.html');
     if (!p) { res.writeHead(404); return res.end('not found'); }
     res.writeHead(200, { 'content-type': types[extname(p)] || 'application/octet-stream' });
     createReadStream(p).pipe(res);
@@ -94,6 +97,10 @@ try {
   ok(!existsSync(join(site, 'components')) && !existsSync(join(site, 'nodegx.project.json')) && !existsSync(join(site, 'docs')), 'and none of the project\'s source');
   ok(JSON.stringify(r.exposed) === '["nodegx.security.json"]' && existsSync(join(site, 'nodegx.security.json')), 'the access policy the engine also copies is named to the person (P123-STU008-BACKENDPUBLIC)', r.exposed);
   ok(r.functions.status === 'none', 'the todo app has no cloud functions to deploy', r.functions);
+  const hashed = join(tmp, 'hashed');
+  mkdirSync(hashed);
+  writeFileSync(join(hashed, 'nodegx.project.json'), JSON.stringify({ name: 'Hashed', settings: {} }));
+  ok(r.routing.type === 'path' && r.routing.example === '/sign-in' && routingOf(hashed).type === 'hash', 'the todo app\'s pages have paths of their own, named with one (an app without navigationPathType keeps them after a #)', r.routing);
 
   console.log('4. the site, served statically and used in a browser');
   const served = await serveStatic(site);
@@ -121,6 +128,12 @@ try {
   await signIn('Sign in');
   ok(await b.until(`/Buy bread/.test(document.body.innerText)`, 20000), 'after a reload, signing in again shows the todo, read back from the backend');
   ok(b.problems.length === 0, 'the page threw nothing and logged no error', b.problems);
+  const deep = await fetch(`${served.url}sign-in`);
+  ok(deep.status === 404, 'a plain static server answers a page\'s own address with 404: what the publish window warns about', deep.status);
+  const hosted = await serveStatic(site, { fallback: true });
+  await b.goto(`${hosted.url}sign-in`);
+  ok(await b.until(`location.pathname === '/sign-in' && !!document.querySelector('input[type=password]')`, 30000), 'a server that answers every other address with index.html opens that page from its own address');
+  hosted.close();
   await b.close(); b = null;
   served.close();
 
