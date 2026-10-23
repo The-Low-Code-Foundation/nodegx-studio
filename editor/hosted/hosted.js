@@ -85,6 +85,7 @@ strip.innerHTML = `
   <button class="hold" id="holdbtn" title="Nothing is written to the project until you release it">HOLD</button>
   <button id="elemsbtn" class="toggle" title="The elements on this page and the palette" ${hosted ? '' : 'hidden'}>Elements</button>
   <button id="propsbtn" class="toggle" title="The selected element's properties" ${hosted ? '' : 'hidden'}>Properties</button>
+  <button id="dockbtn" title="Studio docked beside the conversation (picture-in-picture), where it stays while the chat scrolls" hidden>Dock</button>
   <button id="fullbtn" title="Studio over the whole conversation" ${hosted ? '' : 'hidden'}>Full screen</button>
   <button id="windowbtn" title="The same Studio in your browser, beside the conversation" ${hosted ? '' : 'hidden'}>Window ↗</button>
 `;
@@ -157,6 +158,14 @@ $('fullbtn').addEventListener('click', async () => {
   if (!app) return;
   try { await app.requestDisplayMode({ mode: 'fullscreen' }); } catch (e) { say(`full screen refused: ${e.message}`); }
 });
+// Richard, run 6: "when you follow up with a new message, you have to scroll back up to the original output to see
+// the editor … can it open in the artifact pane at the right side?" The spec's third mode, `pip`, is a docked panel
+// that stays while the conversation scrolls. Whether this host offers it is in the hostContext it sends at the
+// handshake: the button shows only then, and the modes are named in the strip's title so a person can read them.
+$('dockbtn').addEventListener('click', async () => {
+  if (!app) return;
+  try { await app.requestDisplayMode({ mode: 'pip' }); } catch (e) { say(`dock refused: ${e.message}`); }
+});
 $('windowbtn').addEventListener('click', async () => {
   if (!app) return;
   try { await app.openLink({ url: ORIGIN + '/' }); } catch (e) { say(`could not open a window: ${e.message}`); }
@@ -197,7 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // 2. The handshake.
 if (hosted) {
-  app = new App({ name: 'NodeGX Studio', version: '0.1.0' }, { availableDisplayModes: ['inline', 'fullscreen'] }, { autoResize: false });
+  app = new App({ name: 'NodeGX Studio', version: '0.1.0' }, { availableDisplayModes: ['inline', 'fullscreen', 'pip'] }, { autoResize: false });
   app.onhostcontextchanged = (ctx) => { if (ctx.displayMode) fitTo(ctx.displayMode); };
   app.ontoolresult = () => { /* open_studio's result is for the model; the page reads the project itself */ };
   fitTo('inline');
@@ -205,6 +214,9 @@ if (hosted) {
     () => {
       const ctx = app.getHostContext() ?? {};
       fitTo(ctx.displayMode ?? 'inline');
+      const modes = ctx.availableDisplayModes ?? [];
+      if (modes.includes('pip')) $('dockbtn').hidden = false;
+      strip.title = `Host: ${app.getHostVersion()?.name ?? ctx.userAgent ?? '?'} · display modes it offers: ${modes.join(', ') || 'not stated'} · now: ${ctx.displayMode ?? '?'}`;
       say(`in the conversation (${ctx.hostInfo?.name ?? ctx.userAgent ?? 'host'}) — the agent writes, you watch; HOLD stops it`);
       readHold().then(drawHold);
     },
