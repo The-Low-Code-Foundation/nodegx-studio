@@ -310,15 +310,47 @@ async function backendMap() {
 const mapWords = (words) =>
   `<!doctype html><meta charset="utf-8"><body style="margin:0;height:100vh;display:grid;place-items:center;background:#141318;color:#c4cedb;font:15px system-ui,sans-serif"><p style="max-width:460px;text-align:center">${words.replace(/[<&]/g, (c) => (c === '<' ? '&lt;' : '&amp;'))}</p>`;
 
+// STU-070: Studio inside a conversation. A host that renders MCP Apps (Claude Desktop) draws `/panel` at its own sandbox
+// origin, so every request the page then makes is cross-origin: answered with CORS, and a preflight with 204. The
+// server listens on loopback only, so "any origin" is any page on this computer, which is what it was already.
+const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'content-type' };
+const HOLD_FILE = '.nodegx-hold.json';
+/** The hold: a file in the project folder the MCP server reads before every write. A dotfile, so the page's store and the watcher never see it as a project file. */
+const holdOf = () => {
+  const at = join(projectDir, HOLD_FILE);
+  if (!existsSync(at)) return { held: false };
+  try { return { held: true, ...JSON.parse(readFileSync(at, 'utf8')) }; } catch { return { held: true, at: statSync(at).mtime.toISOString(), note: '' }; }
+};
+/** studio.html for a foreign origin: Studio's own absolute origin on the one script tag, the runtime base, the module imports, and the bridge in the head. */
+const panelHtml = (origin) =>
+  readFileSync(join(here, 'studio.html'), 'utf8')
+    // studio.html has no <head> tag of its own: the bridge goes in before its first script, so it runs first
+    .replace(/<script\b/i, (tag) => `<script>window.__STUDIO_ORIGIN=${JSON.stringify(origin)}</script><script type="module" src="${origin}/hosted/hosted.js"></script>${tag}`)
+    .replace(/(src|href)="\/(?!\/)/g, `$1="${origin}/`)
+    .replace(/runtimeBase:\s*'\/runtime\/'/g, `runtimeBase: '${origin}/runtime/'`)
+    .replace(/(import\(|from\s+)(['"])\/(?!\/)/g, `$1$2${origin}/`);
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const send = (status, body, type) => {
-    res.writeHead(status, { 'content-type': type ?? types['.json'], 'cache-control': 'no-store' });
+    res.writeHead(status, { 'content-type': type ?? types['.json'], 'cache-control': 'no-store', ...CORS });
     res.end(body);
   };
   const json = (status, value) => send(status, JSON.stringify(value));
   try {
+    if (req.method === 'OPTIONS') { res.writeHead(204, CORS); return res.end(); }
     if (url.pathname === '/') return send(200, readFileSync(join(here, 'studio.html')), types['.html']);
+    if (url.pathname === '/panel') return send(200, panelHtml(`http://127.0.0.1:${server.address().port}`), types['.html']);
+    if (url.pathname === '/api/hold' && req.method === 'GET') return json(200, holdOf());
+    if (url.pathname === '/api/hold' && req.method === 'POST') {
+      const { held, note = '' } = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const at = join(projectDir, HOLD_FILE);
+      if (held) writeFileSync(at, JSON.stringify({ by: 'NodeGX Studio', at: new Date().toISOString(), note: String(note).slice(0, 500) }, null, 2) + '\n');
+      else if (existsSync(at)) rmSync(at);
+      const hold = holdOf();
+      for (const client of clients.keys()) client.write(`data: ${JSON.stringify({ hold })}\n\n`);
+      return json(200, hold);
+    }
     if (url.pathname === '/preview.js') return send(200, readFileSync(bundle), types['.js']);
     if (url.pathname === '/phrasebook.json') { // read on the first ask (require caches it): a phrasebook edit shows after a restart
       try { const { rows } = createRequire(import.meta.url)(kit.phrasebook); return json(200, Object.fromEntries(TYPES.map((t) => [t, phrasesFor(rows, t)]))); }
@@ -338,7 +370,7 @@ const server = http.createServer(async (req, res) => {
       return json(200, { dir: projectDir, name: projectDir.split(sep).pop(), files, backend, live });
     }
     if (url.pathname === '/api/events') {
-      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive', ...CORS });
       res.write(': watching the project folder\n\n');
       // the page connects after it has drawn, which a backend may have finished starting before: it hears where it is now
       res.write(`data: ${JSON.stringify({ backend, live })}\n\n`);
@@ -490,7 +522,7 @@ const server = http.createServer(async (req, res) => {
     // asks for a project image `assets/x.png` as /runtime/assets/x.png: what the runtime folder does not have is the project's
     const asset = under(projectDir, decodeURIComponent(url.pathname.startsWith('/runtime/') ? rel : url.pathname.slice(1)));
     if (asset && existsSync(asset) && statSync(asset).isFile()) return send(200, readFileSync(asset), types[extname(asset)] ?? 'application/octet-stream');
-    res.writeHead(404);
+    res.writeHead(404, CORS);
     res.end();
   } catch (err) {
     json(500, { error: err.message });
