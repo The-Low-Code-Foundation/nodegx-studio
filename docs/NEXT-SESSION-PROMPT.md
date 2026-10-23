@@ -36,8 +36,8 @@ output in a file (s18 lost a run's detail by piping it through `grep -v ok`).
 
 Where the alpha stands (SCOPE "The alpha (0.2) — the line"): 1 Publish, 3 Import, 6 Data done. 2 signed with the
 Developer ID; notarising waits on the five secrets; Windows / Linux built and smoke-opened in CI. 4 waits on a NodeGX
-npm release with BACKENDPUBLIC; Studio still pins preview 0.2.3, mcp 0.2.2. 5 main is ahead of origin/main (bc5fb85)
-by the backend map, M6, s16, s17 and s18.
+npm release with BACKENDPUBLIC; Studio still pins preview 0.2.3, mcp 0.2.2. 5 done: main pushed by Richard's
+yes, 2026-10-23 (origin/main = fb31c9f).
 
 Next buildable, in order:
 1. When NodeGX publishes a release with BACKENDPUBLIC: bump the pins, `npm run vendor`, every gate. Check npm first
@@ -51,8 +51,8 @@ Next buildable, in order:
    reads "Branch"; the composed condition ("If 1 > 2") would say more.
 
 Waiting on Richard (ask in plain words):
-- Whether main can be pushed (now five sessions ahead), then whether the package workflow should run once by hand.
-- The five notarisation secrets made visible to this repository.
+- Whether the package workflow should run once by hand now that main is pushed.
+- The five notarisation secrets made visible to this repository (Richard, 2026-10-23: "I'll get on it").
 - His look at the s18 card (docs/look/s2-workflow-card.png: the Sign in click, both lanes in its name, Lane 2's
   "Always No") and the branch-label rule (a label is a test only when it asks). His look at s17's
   docs/look/stu-061-required.png and stu-063-users.png, and at stu-062-rename.png with its question: the todo app reads
