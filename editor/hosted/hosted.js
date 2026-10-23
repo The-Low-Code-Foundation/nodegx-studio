@@ -38,8 +38,12 @@ const strip = document.createElement('div');
 strip.id = 'hoststrip';
 strip.innerHTML = `
   <style>
+    /* Fixed, not in the flow: Studio scrolls the root element when it focuses or reveals something, and a strip in
+       the flow above <body> went to y = -45 with it (measured). The body is pushed down by the strip's height. */
     #hoststrip { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #0b0e12; color: #c4cedb;
-      font: 13px/1.3 Inter, system-ui, sans-serif; border-bottom: 1px solid #232a33; position: relative; z-index: 50; }
+      font: 13px/1.3 Inter, system-ui, sans-serif; border-bottom: 1px solid #232a33; position: fixed; top: 0; left: 0;
+      right: 0; height: 45px; box-sizing: border-box; z-index: 50; }
+    html > body { margin-top: 45px !important; height: calc(100% - 45px) !important; }
     #hoststrip .name { font-weight: 600; color: #eef2f6; }
     #hoststrip .grow { flex: 1; }
     #hoststrip button { font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid #2a3340; background: #141a22;
@@ -52,12 +56,29 @@ strip.innerHTML = `
     #hoststrip .state.held { color: #fda29b; font-weight: 600; }
     #hoststrip input { font: inherit; padding: 5px 8px; border-radius: 6px; border: 1px solid #2a3340; background: #0f141b;
       color: #eef2f6; width: 220px; }
+    #hoststrip button.toggle[aria-pressed="true"] { background: #2a3340; border-color: #4da3ff; }
+    html[data-hosted="inline"] #hoststrip input { width: 140px; }
+    /* Inline in a conversation the panel is ~740 px wide: Studio's three columns (260 | stage | 360) leave the stage
+       nothing. So inline is the stage, and the two side panels come on their own buttons; Full screen is Studio. */
+    html[data-hosted="inline"] #design { grid-template-columns: minmax(0, 1fr); }
+    html[data-hosted="inline"] #design > aside:not(.right), html[data-hosted="inline"] #right { display: none; }
+    html[data-hosted="inline"][data-side="elements"] #design { grid-template-columns: 240px minmax(0, 1fr); }
+    html[data-hosted="inline"][data-side="elements"] #design > aside:not(.right) { display: block; }
+    html[data-hosted="inline"][data-side="props"] #design { grid-template-columns: minmax(0, 1fr) 320px; }
+    html[data-hosted="inline"][data-side="props"] #right { display: block; }
+    html[data-hosted="inline"] #widthseg, html[data-hosted="inline"] #recbtn, html[data-hosted="inline"] #reportpill,
+    html[data-hosted="inline"] #agentpill { display: none; }
+    html[data-hosted="inline"] header { padding: 0 8px; gap: 6px; }
+    html[data-hosted="inline"] #stage { padding: 8px; }
+    html[data-hosted="inline"] #appwrap { min-height: 0; height: calc(100% - 4px); width: 100%; }
   </style>
   <span class="name">NodeGX Studio</span>
   <span class="state" id="hoststate">${hosted ? 'connecting to the conversation…' : 'open in a browser; the agent is not told about holds from here'}</span>
   <span class="grow"></span>
   <input id="holdnote" placeholder="what you saw (optional)" title="A sentence the agent reads when it is refused">
   <button class="hold" id="holdbtn" title="Nothing is written to the project until you release it">HOLD</button>
+  <button id="elemsbtn" class="toggle" title="The elements on this page and the palette" ${hosted ? '' : 'hidden'}>Elements</button>
+  <button id="propsbtn" class="toggle" title="The selected element's properties" ${hosted ? '' : 'hidden'}>Properties</button>
   <button id="fullbtn" title="Studio over the whole conversation" ${hosted ? '' : 'hidden'}>Full screen</button>
   <button id="windowbtn" title="The same Studio in your browser, beside the conversation" ${hosted ? '' : 'hidden'}>Open in a window</button>
 `;
@@ -127,8 +148,30 @@ function fitTo(mode) {
   const inline = mode !== 'fullscreen';
   document.documentElement.style.height = inline ? `${INLINE_HEIGHT}px` : '';
   document.documentElement.style.overflow = 'hidden';
+  document.documentElement.dataset.hosted = inline ? 'inline' : 'full';
   if (app && inline) app.sendSizeChanged({ width: Math.ceil(window.innerWidth), height: INLINE_HEIGHT }).catch(() => {});
 }
+
+// The side panels, inline: one at a time, on the strip's buttons; the properties panel comes up by itself when an
+// element is picked (Studio fills #right then), and goes when the pick is cleared.
+const sideButtons = { elements: $('elemsbtn'), props: $('propsbtn') };
+function showSide(which) {
+  const root = document.documentElement;
+  if (which) root.dataset.side = which; else delete root.dataset.side;
+  for (const [k, b] of Object.entries(sideButtons)) b.setAttribute('aria-pressed', String(k === which));
+}
+sideButtons.elements.addEventListener('click', () => showSide(document.documentElement.dataset.side === 'elements' ? null : 'elements'));
+sideButtons.props.addEventListener('click', () => showSide(document.documentElement.dataset.side === 'props' ? null : 'props'));
+document.addEventListener('DOMContentLoaded', () => {
+  const right = document.getElementById('right');
+  if (!right) return;
+  new MutationObserver(() => {
+    if (document.documentElement.dataset.hosted !== 'inline') return;
+    const picked = !right.querySelector(':scope > .empty');
+    if (picked && document.documentElement.dataset.side !== 'props') showSide('props');
+    else if (!picked && document.documentElement.dataset.side === 'props') showSide(null);
+  }).observe(right, { childList: true });
+}, { once: true });
 
 // 2. The handshake.
 if (hosted) {
