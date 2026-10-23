@@ -483,6 +483,8 @@
   .branch.yes h4 { color: var(--branch-yes); } .branch.no h4 { color: var(--branch-no); }
   .branch h4::before { content: ''; width: 8px; height: 8px; border-radius: 4px; background: currentColor; }
   .addrow { display: flex; gap: 8px; margin-top: 10px; }
+  .joinnote { display: flex; align-items: center; gap: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 2px 0; }
+  .joinrow { justify-content: center; }
   .cond-line { grid-column: 2; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); }
 
   /* ---- popovers (the action picker, the source picker, the composer) ---- */
@@ -3365,7 +3367,10 @@ function renderEvents() {
       h('span', {}, cardName(ev)), h('small', {}, `When ${portLabel(byId[ev.node], 'output', ev.port)} · ${eventSteps(ev)} step(s)`)));
   }
 }
-/** The chain from a signal: follow the first wired target, then its Done, and so on; a Condition ends the chain with two of its own. */
+/**
+ * The chain from a signal: follow the first wired target, then its Done, and so on; a Condition ends the chain with two of
+ * its own, unless both sides go on into one step (R4, rejoin): then the chain carries on from that step, after the branch.
+ */
 function chain(node, port, visited = new Set(), only = null) {
   const steps = [];
   while (true) {
@@ -3379,7 +3384,19 @@ function chain(node, port, visited = new Set(), only = null) {
     visited.add(next.toId);
     const step = { id: next.toId, via: next.toProperty, from: { node, port }, siblings: outs.slice(1) };
     steps.push(step);
-    if (byId[next.toId].type === 'Condition') { step.branches = { yes: chain(next.toId, 'ontrue', visited), no: chain(next.toId, 'onfalse', visited) }; break; }
+    if (byId[next.toId].type === 'Condition') {
+      // R4: the first step both sides reach on their own line is where they rejoin; each side stops before it, the chain goes on from it
+      const yes = chain(next.toId, 'ontrue', new Set(visited)), no = chain(next.toId, 'onfalse', new Set(visited));
+      const noIds = new Set(no.map((x) => x.id)), at = yes.findIndex((x) => noIds.has(x.id));
+      if (at < 0) { step.branches = { yes: chain(next.toId, 'ontrue', visited), no: chain(next.toId, 'onfalse', visited) }; break; }
+      const join = yes[at], cutNo = no.findIndex((x) => x.id === join.id);
+      step.branches = { yes: yes.slice(0, at), no: no.slice(0, cutNo) };
+      step.rejoin = { id: join.id, via: join.via };
+      for (const x of [...step.branches.yes, ...step.branches.no]) (function mark(y) { visited.add(y.id); if (y.branches) [...y.branches.yes, ...y.branches.no].forEach(mark); })(x);
+      only = { fromId: join.from.node, fromProperty: join.from.port, toId: join.id, toProperty: join.via };
+      node = join.from.node; port = join.from.port;
+      continue;
+    }
     // a refresh ends the chain: a step hung on the item's "fetched" would run on every run of it, page open included
     if (isPageDataNode(byId[next.toId])) { step.refresh = true; break; }
     const d = doneOf(byId[next.toId]); if (!d) break;
@@ -3420,7 +3437,7 @@ function renderWorkflow() {
   main.append(wf);
 }
 let stepCounter = 0;
-function renderChain(into, steps, from, startN, prefix = '') {
+function renderChain(into, steps, from, startN, prefix = '', before = null) {
   const col = h('div', { class: 'chain' });
   let n = startN;
   let last = from;
@@ -3430,12 +3447,18 @@ function renderChain(into, steps, from, startN, prefix = '') {
     if (s.branches) {
       col.append(h('div', { class: 'link' }));
       const grid = h('div', { class: 'branches' });
+      // R4: a side that rejoins takes a new last step before the step both sides go on to
+      const rejoin = s.rejoin ? { node: s.rejoin.id, port: s.rejoin.via } : null;
       for (const [side, port, label] of [['yes', 'ontrue', 'Yes'], ['no', 'onfalse', 'No']]) {
         const b = h('div', { class: `branch ${side}` }, h('h4', {}, label));
-        renderChain(b, s.branches[side], { node: s.id, port }, 1, `${prefix}${n}${side === 'yes' ? 'a' : 'b'}.`);
+        renderChain(b, s.branches[side], { node: s.id, port }, 1, `${prefix}${n}${side === 'yes' ? 'a' : 'b'}.`, rejoin);
         grid.append(b);
       }
       col.append(grid);
+      if (s.rejoin) { col.append(h('div', { class: 'link' }), h('div', { class: 'joinnote' }, icon('branch'), 'Then, after Yes or No')); last = null; n++; continue; }
+      // both sides end on a step that can go on: one action after both is a rejoin
+      const yesEnd = chainEnd(s.branches.yes, { node: s.id, port: 'ontrue' }), noEnd = chainEnd(s.branches.no, { node: s.id, port: 'onfalse' });
+      if (yesEnd && noEnd) col.append(h('div', { class: 'addrow joinrow' }, h('button', { title: 'One step both sides go on to (R4): the end of Yes and the end of No are wired into it', onclick: (e) => addActionMenu(e, { ...yesEnd, also: noEnd }) }, icon('plus'), 'Then, after Yes or No'), h('button', { title: 'A branch both sides go on to', onclick: () => addAction('Condition', { ...yesEnd, also: noEnd }) }, icon('branch'), 'Branch after both')));
       last = null; break;
     }
     const d = !s.refresh && doneOf(byId[s.id]);
@@ -3443,8 +3466,15 @@ function renderChain(into, steps, from, startN, prefix = '') {
     n++;
   }
   into.append(col);
+  if (last && before) last = { ...last, before };
   if (steps.at(-1)?.refresh) into.append(h('div', { class: 'hint', style: 'padding:8px 2px' }, 'A refresh ends the workflow: a step after it would also run every time the page data loads.'));
   if (last) into.append(h('div', { class: 'addrow' }, h('button', { class: steps.length ? '' : 'primary', onclick: (e) => addActionMenu(e, last) }, icon('plus'), 'Add an action'), h('button', { title: 'A step that splits this workflow into a Yes and a No chain (a Condition node)', onclick: () => addAction('Condition', last) }, icon('branch'), 'Add a branch')));
+}
+/** Where a chain ends, for a step after it: its last step's Done, or `from` when it has none; null after a refresh or a branch. */
+function chainEnd(steps, from) {
+  const s = steps.at(-1); if (!s) return from;
+  if (s.refresh || s.branches) return null;
+  const d = doneOf(byId[s.id]); return d ? { node: s.id, port: d } : null;
 }
 function stepCard(s, n) {
   const node = byId[s.id];
@@ -3498,7 +3528,12 @@ function deleteStep(s) {
   const doomed = [s.id];
   if (s.branches) for (const side of ['yes', 'no']) (function walk(list) { for (const x of list) { doomed.push(x.id); if (x.branches) { walk(x.branches.yes); walk(x.branches.no); } } })(s.branches[side]);
   for (const id of [...doomed]) for (const e of nodes) if (isComposed(e) && e.metadata.composedFor.node === id) doomed.push(e.id); // its composed expressions go with it
-  edits(pageKey, doomed.map((id) => ({ edit: 'remove_node', component: pageKey, id })));
+  // what ran it goes on to what came after it: a step's next step, or the step a branch's sides rejoined at (R4). Every wire
+  // in, so a step two sides rejoin at hands both of them on
+  const into = conns.filter((c) => c.toId === s.id && isSignalPort(node, 'input', c.toProperty) && !doomed.includes(c.fromId));
+  const after = s.branches ? (s.rejoin ? [{ node: s.rejoin.id, port: s.rejoin.via }] : []) : conns.filter((c) => c.fromId === s.id && c.fromProperty === doneOf(node) && byId[c.toId] && isSignalPort(byId[c.toId], 'input', c.toProperty)).map((c) => ({ node: c.toId, port: c.toProperty }));
+  const heal = into.flatMap((c) => after.filter((t) => !conns.some((w) => w.fromId === c.fromId && w.fromProperty === c.fromProperty && w.toId === t.node && w.toProperty === t.port)).map((t) => ({ edit: 'connect', component: pageKey, from: { node: c.fromId, port: c.fromProperty }, to: t })));
+  edits(pageKey, [...doomed.map((id) => ({ edit: 'remove_node', component: pageKey, id })), ...heal]);
   toast(s.branches ? 'Deleted the branch and its chains' : `Deleted the ${typeName(node.type)} step`);
 }
 const ACTIONS = [
@@ -3530,6 +3565,7 @@ function addActionMenu(e, from) {
 }
 /** Which page data item the step runs again: a wire into its Do, never a second query (STU-012). */
 function refreshMenu(e, from) {
+  if (from.before || from.also) return toast('A refresh ends the workflow: add it after the steps both sides go on to.');
   if (!pageItems.length) return toast('This page has no page data to refresh: make it in Design → Page data.');
   const menu = popover(e);
   menu.append(h('div', { class: 'h' }, 'Refresh which page data?'));
@@ -3556,7 +3592,16 @@ function addAction(type, from, params = {}, label) {
   if (type === 'Condition') params = { ...params, 'runOnChange-condition': false }; // a branch tests when its chain reaches it (stepOnly)
   const n = nodes.filter((n) => !isVisualType(n.type) && !isHelperNode(n)).length;
   const [id] = edits(pageKey, [{ edit: 'add_node', component: pageKey, type, label, x: 700 + (n % 3) * 220, y: 200 + Math.floor(n / 3) * 90, parameters: Object.keys(params).length ? params : undefined }], { redraw: false });
-  edits(pageKey, [{ edit: 'connect', component: pageKey, from: { node: from.node, port: from.port }, to: { node: id, port: trig } }]);
+  const wire = [{ edit: 'connect', component: pageKey, from: { node: from.node, port: from.port }, to: { node: id, port: trig } }];
+  // R4: the end of the other side goes into the same step (a rejoin made); a step added at the end of a side that rejoins
+  // goes between that side's end and the step both go on to
+  if (from.also) wire.push({ edit: 'connect', component: pageKey, from: { node: from.also.node, port: from.also.port }, to: { node: id, port: trig } });
+  if (from.before) {
+    wire.push({ edit: 'disconnect', component: pageKey, from: { node: from.node, port: from.port }, to: from.before });
+    const outs = type === 'Condition' ? ['ontrue', 'onfalse'] : [doneOf(byId[id] || { id, type, parameters: params })].filter(Boolean);
+    for (const o of outs) wire.push({ edit: 'connect', component: pageKey, from: { node: id, port: o }, to: from.before });
+  }
+  edits(pageKey, wire);
   if (!events().some((ev) => ev.node === selEvent.node && ev.port === selEvent.port)) draftEvents.length = 0;
   if (type !== 'Condition') openSteps.add(id);
   renderWorkflow();

@@ -864,7 +864,7 @@ tab already reads it that way). A badge is "this visual node has a wired signal 
 | STU-022 | **The tree as the index**, with the filters (by effect, by trigger kind) and a search over step names and targets. | "changes Org" lists exactly the cards with a step writing Org |
 | STU-023 | **Names from steps.** | a card with no name reads its steps; a renamed card keeps its name |
 | STU-024 | **The importer merges split workflows** into one card per event. Where the conditions are exact opposites (A / not A) they become one Yes/No branch. Where they overlap and both can run, they stay as **two lanes that run side by side**, because folding them into either/or would change what the app does. | the real app's 16 split elements become 16 cards; a fixture with overlapping conditions keeps both lanes and both still run |
-| STU-025 | **Rejoin** (open ruling R4): after a branch, may both sides continue into one shared next step? | ruling R4 taken and built or closed |
+| STU-025 | **Rejoin** (R4, taken 2026-10-23): after a branch, both sides continue into one shared next step | done (s20): made from the card, drawn once after the branch, gated in the app |
 
 **Done (STU-020 and STU-021, 2026-10-19, s8).** An element with a workflow wears a **⚡** in Design: on the canvas, in
 its top right corner (Design mode only, not while using the app), and on its row of the element list (a row that folds
@@ -961,8 +961,8 @@ event, from both ends:
   Put the old error away"*; three or more: the first, "and 2 more side by side"), and the hover says each lane on a
   line of its own ("Lane 1: …", "Lane 2: …", as the card heads them). A branch's label reads as its test only when it
   asks ("Signed in?" → "If Signed in"); any other is its name as written, so the importer's "Only when …" no longer
-  reads "If Only when …", and a branch with no label fixed at Yes or No reads "Always No". **Not built:** R4
-  (rejoin, STU-025) is untouched. More than two opposite-looking workflows: the first opposite pair merges, the
+  reads "If Only when …", and a branch with no label fixed at Yes or No reads "Always No". ~~**Not built:** R4
+  (rejoin, STU-025) is untouched~~ (built s20, below). More than two opposite-looking workflows: the first opposite pair merges, the
   rest stay lanes.
 - ~~Seen, not fixed: a constant-`false` Condition's card says "Set the condition…"~~ (s18): a Condition saved as a
   fixed Yes or No with nothing wired reads *"Always No — a fixed value: only No runs"*, with *Use a value instead…*.
@@ -1490,6 +1490,27 @@ Required either way).
 **Taken.** R4 (Richard, 2026-10-23): after a branch, both sides may rejoin into one next step. His leaning first:
 *"Rejoining would be great, like n8n style, but hard to manage maybe?"*; then, asked again in s20: *"Yep for R4."*
 Built as STU-025.
+**Done (STU-025, s20).** In the graph a rejoin is what NodeGX already runs: the end of Yes and the end of No both wired
+into one step's signal. On the card (`chain` in studio.html) the first step on both sides' own lines is where they
+rejoin: each column stops before it and the chain goes on from it, so the card draws it once, under "Then, after Yes
+or No", numbered after the branch, and the card's name, its step count and its summaries read it as the next step
+with no change of their own. Under a branch whose sides both end on a step that can go on, the card offers *Then,
+after Yes or No* (an action) and *Branch after both*: one new step, both ends wired into it. An action added at the
+end of a side that rejoins goes between that side's end and the shared step (a branch added there sends both its
+sides on to it); a refresh there is refused (a refresh ends the workflow). Deleting a step now hands what ran it on to
+what came after it, every wire in (before s20 the steps after a deleted one were left in the file and fell off the
+card); deleting a branch that rejoins wires what ran it into the shared step; one Undo takes either back.
+`check:editor` 187/187 (7 new, on the gate's "Check the card" branch): the join row offered, one step with both ends
+wired in, drawn once as step 2 and naming the card "If 1 > 2 → Set Sign-in card's state"; a step added at the end of
+No goes between; in the app, with the condition edited to 2 > 1 in the composer, a click runs Yes's Set and then the
+shared step and none of No's; deleting the added step wires No's end straight back; deleting the branch wires the
+click into the shared step; Undo restores it. Mutant (no rejoin read on the card) 182/187: the five that draw and edit it
+fail; making it and running it pass either way, the wires being the same. `check:app` 46/46, `check:data` 80/80,
+`check:timeline` 46/46. [look/s2-workflow-rejoin.png](look/s2-workflow-rejoin.png).
+Found on the way: a Go to page with no target never says Done in the app (RouterNavigate settles only on arriving),
+so a step after it does not run; the card does not say so. **Not built:** lanes side by side (STU-024) that reach one
+step are not drawn as a rejoin; a rejoin reached only inside a nested branch on one side is drawn as before (the shared
+step in the first column it is met in).
 
 **Taken.** R5 (Richard, 2026-10-23): *"Yep for custom states in reusables."* A custom state can live inside a reusable,
 each shown copy with its own value. What Studio does today there is to be read before building (custom states are

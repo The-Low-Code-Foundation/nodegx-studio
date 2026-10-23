@@ -364,6 +364,50 @@ try {
     await b.evaluate(`__ob.preview.elementsOf(${JSON.stringify(card)})[0].click()`); await wait(500);
     const clicked = await branchTrace();
     ok(clicked.includes('onClick > eval') && clicked.includes('onfalse > navigate') && !clicked.includes('ontrue > do'), 'a click on the card in the app runs the branch: 1 > 2 is false, so No\'s Go to page runs', clicked);
+    // R4 (Richard, 2026-10-23: "Yep for R4"): both sides rejoin into one step. Made from the card, drawn once after the branch
+    const onSign = () => ({ nodes: onDisk(SIGN + 'nodes.json').nodes, wires: onDisk(SIGN + 'connections.json').connections });
+    const intoDo = (g, id) => g.wires.filter((w) => w.toId === id && w.toProperty === 'do').map((w) => w.fromId).sort();
+    const joinOffered = await b.evaluate(`[...document.querySelectorAll('#steps .joinrow button')].map(b => b.textContent)`);
+    const before = new Set(onSign().nodes.map((n) => n.id));
+    await clickText('#steps .joinrow button', 'Then, after Yes or No'); await wait(250);
+    await b.type('custom state'); await wait(200); await menuItem('Set a custom state');
+    await menuItem("Sign-in card's state");
+    let joined;
+    for (const t0 = Date.now(); Date.now() - t0 < 5000 && !joined; await wait(150)) { const g = onSign(); joined = g.nodes.find((n) => !before.has(n.id) && n.type === 'Set Variable'); if (joined && intoDo(g, joined.id).length < 2) joined = null; }
+    ok(joinOffered.join() === 'Then, after Yes or No,Branch after both' && joined && intoDo(onSign(), joined.id).join() === [setV.id, noNav.id].sort().join(), 'R4: under a branch whose sides both end, "Then, after Yes or No" adds one step, the end of Yes and the end of No both wired into it', { joinOffered, joined: joined?.id, into: joined && intoDo(onSign(), joined.id) });
+    const drawn = JSON.parse(await b.evaluate(`JSON.stringify({ note: document.querySelector('#steps .wf > .chain > .joinnote')?.textContent, after: [...document.querySelectorAll('#steps .wf > .chain > .step')].map(s => s.querySelector('.num').textContent), yes: document.querySelectorAll('#steps .branch.yes .step').length, no: document.querySelectorAll('#steps .branch.no .step').length, offered: document.querySelectorAll('#steps .joinrow').length, title: document.querySelector('#steps .event-card h2')?.textContent })`));
+    ok(drawn.note === 'Then, after Yes or No' && drawn.after.length === 2 && drawn.after[1] === '2' && drawn.yes === 1 && drawn.no === 1 && drawn.offered === 0 && drawn.title === "If 1 > 2 → Set Sign-in card's state", 'R4: the card draws it once, after the branch (step 2, under "Then, after Yes or No"), not in either column, and names itself by it', drawn);
+    // a step added at the end of No goes between No's end and the step both go on to
+    await clickText('#steps .branch.no .addrow button', 'Add an action'); await wait(250);
+    await b.type('custom state'); await wait(200); await menuItem('Set a custom state');
+    await menuItem("Sign-in card's state");
+    let inNo;
+    for (const t0 = Date.now(); Date.now() - t0 < 5000 && !inNo; await wait(150)) { const g = onSign(); inNo = g.nodes.find((n) => !before.has(n.id) && n.id !== joined?.id && n.type === 'Set Variable'); if (inNo && !intoDo(g, joined?.id).includes(inNo.id)) inNo = null; }
+    const g1 = onSign();
+    ok(inNo && intoDo(g1, inNo.id).join() === noNav.id && intoDo(g1, joined.id).join() === [setV.id, inNo.id].sort().join(), 'R4: an action added at the end of No goes between Go to page and the joined step: No\'s end now runs it, and it runs the joined step', { inNo: inNo?.id, intoNo: inNo && intoDo(g1, inNo.id), intoJoined: intoDo(g1, joined?.id) });
+    // in the app (No's Go to page has no target, so it never says done): the condition edited to 2 > 1 in the composer, a
+    // click takes Yes, whose Set hands on to the joined step
+    await clickText('#steps .step.cond .cond-line button', 'Edit'); await wait(250);
+    await b.evaluate(`[...document.querySelectorAll('.composer .seg button')].find(b => b.dataset.m === 'js').click()`); await wait(100);
+    await b.evaluate(`(() => { const t = document.querySelector('.composer textarea'); t.focus(); t.select(); })()`); await b.type('2 > 1');
+    const nYes = await shows();
+    await clickText('.composer .foot button', 'Save'); await rebuilt(nYes); await wait(800);
+    await b.evaluate(`__ob.preview.elementsOf(${JSON.stringify(card)})[0].click()`); await wait(800);
+    const ran = JSON.parse(await b.evaluate(`JSON.stringify(__ob.preview.frame.contentWindow.Noodl.Navigation._noodlRuntime.context.getTraceEvents(0).filter(e => e.kind === 'signal' && [${JSON.stringify(setV.id)}, ${JSON.stringify(inNo?.id)}, ${JSON.stringify(joined?.id)}].includes(e.toNode)).map(e => e.fromNode + ' > ' + e.toNode))`));
+    ok(ran.includes(`${cond.id} > ${setV.id}`) && ran.includes(`${setV.id} > ${joined?.id}`) && !ran.some((t) => t.endsWith(`> ${inNo?.id}`)), 'R4, in the app: with the condition 2 > 1, a click runs Yes\'s Set, then the joined step; No\'s steps do not run', ran);
+    // deleting a step heals the chain around it: No's end goes on to the joined step again
+    await b.evaluate(`[...document.querySelectorAll('#steps .branch.no .step')].pop().querySelector('.acts button.danger').click()`); await wait(600);
+    const g2 = onSign();
+    ok(!g2.nodes.some((n) => n.id === inNo?.id) && intoDo(g2, joined?.id).join() === [setV.id, noNav.id].sort().join(), 'R4: deleting that step wires No\'s Go to page straight into the joined step again', { intoJoined: intoDo(g2, joined?.id) });
+    // deleting the branch keeps the step both went on to: the click runs it; Undo puts the branch back
+    await b.evaluate(`document.querySelector('#steps .step.cond .acts button.danger').click()`); await wait(600);
+    const g3 = onSign();
+    const clickInto = g3.wires.filter((w) => w.fromId === card && w.toId === joined?.id).length;
+    ok(!g3.nodes.some((n) => [cond.id, setV.id, noNav.id].includes(n.id)) && clickInto === 1, 'R4: deleting the branch takes both sides with it and wires the click into the step they rejoined at', { clickInto, left: g3.nodes.filter((n) => [cond.id, setV.id, noNav.id].includes(n.id)).map((n) => n.id) });
+    await b.clickSel('#undo'); await wait(800);
+    const g4 = onSign();
+    ok([cond.id, setV.id, noNav.id].every((id) => g4.nodes.some((n) => n.id === id)) && intoDo(g4, joined?.id).join() === [setV.id, noNav.id].sort().join() && !g4.wires.some((w) => w.fromId === card && w.toId === joined?.id), 'R4: one Undo puts the branch, its sides and the rejoin back', { intoJoined: intoDo(g4, joined?.id) });
+    await shot('workflow-rejoin');
   }
   console.log('check: Data');
   await b.clickSel('[data-tab=data]'); await wait(300);
