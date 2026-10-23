@@ -406,6 +406,30 @@ try {
     await b.evaluate(`__ob.preview.elementsOf(${JSON.stringify(card)})[0].click()`); await wait(800);
     const ran = JSON.parse(await b.evaluate(`JSON.stringify(__ob.preview.frame.contentWindow.Noodl.Navigation._noodlRuntime.context.getTraceEvents(0).filter(e => e.kind === 'signal' && [${JSON.stringify(setV.id)}, ${JSON.stringify(inNo?.id)}, ${JSON.stringify(joined?.id)}].includes(e.toNode)).map(e => e.fromNode + ' > ' + e.toNode))`));
     ok(ran.includes(`${cond.id} > ${setV.id}`) && ran.includes(`${setV.id} > ${joined?.id}`) && !ran.some((t) => t.endsWith(`> ${inNo?.id}`)), 'R4, in the app: with the condition 2 > 1, a click runs Yes\'s Set, then the joined step; No\'s steps do not run', ran);
+    // STU-026: that run, lit up on the card (Show the last run), read off the same trace: the wires it crossed and the
+    // steps it ran, and none of No's
+    await clickText('#steps .event-card button.showrun', 'Show the last run'); await wait(400);
+    const lit = JSON.parse(await b.evaluate(`JSON.stringify({ ran: [...document.querySelectorAll('#steps .flow .step.ran')].map(s => s.dataset.id), ev: !!document.querySelector('#steps .evnode.ran'), note: !!document.querySelector('#steps .joinnote.ran'), on: [...document.querySelectorAll('#steps svg.wires path[data-ran]')].map(p => p.dataset.from + '>' + p.dataset.to), pulses: document.querySelectorAll('#steps svg.wires path.pulse').length, say: document.querySelector('#steps .flowlegend .lastrun')?.textContent })`));
+    const crossed = [`evnode>${cond.id}`, `${cond.id}>${setV.id}`, `${setV.id}>join`, `join>${joined?.id}`];
+    ok(lit.ev && lit.note && [cond.id, setV.id, joined?.id].every((id) => lit.ran.includes(id)) && ![noNav.id, inNo?.id].some((id) => lit.ran.includes(id)) && crossed.every((x) => lit.on.includes(x)) && lit.on.length === crossed.length && lit.pulses === crossed.length && /3 steps · took Yes$/.test(lit.say || ''),
+      'STU-026: "Show the last run" lights what the click ran: the click into the branch, Yes, both sides meeting and the step they meet at, each wire it crossed pulsing; No\'s steps stay dark; under the flow, "3 steps · took Yes"', { lit, crossed });
+    await shot('workflow-lastrun');
+    await clickText('#steps .event-card button.showrun', 'Hide the last run'); await wait(300);
+    ok((await b.evaluate(`document.querySelectorAll('#steps .flow .ran, #steps svg.wires path[data-ran], #steps svg.wires path.pulse').length`)) === 0, 'STU-026: hidden again, nothing is lit');
+    // STU-026: a "+" on a wire puts a step between the two it joins: on the click's wire into the branch, a Set
+    const beforePlus = new Set(onSign().nodes.map((n) => n.id));
+    await b.clickSel(`#steps .wireplus button[data-from="${card}"][data-to="${cond.id}"]`); await wait(250);
+    await b.type('custom state'); await wait(200); await menuItem('Set a custom state');
+    await menuItem("Sign-in card's state");
+    let between;
+    for (const t0 = Date.now(); Date.now() - t0 < 5000 && !between; await wait(150)) { const g = onSign(); between = g.nodes.find((n) => !beforePlus.has(n.id) && n.type === 'Set Variable'); if (between && !g.wires.some((w) => w.fromId === between.id && w.toId === cond.id)) between = null; }
+    const g5 = onSign();
+    const firstStep = await b.evaluate(`document.querySelector('#steps .flow > .chain > .step')?.dataset.id`);
+    ok(between && intoDo(g5, between.id).join() === card && g5.wires.filter((w) => w.toId === cond.id && w.toProperty === 'eval').map((w) => w.fromId).join() === between.id && firstStep === between.id,
+      'STU-026: the "+" on the wire from the click into the branch puts the new step between them: the click runs it, it runs the branch, and the card draws it first', { between: between?.id, into: between && intoDo(g5, between.id), intoBranch: g5.wires.filter((w) => w.toId === cond.id).map((w) => `${w.fromId}.${w.fromProperty}`), firstStep });
+    await b.evaluate(`document.querySelector('#steps .flow > .chain > .step[data-id="${between?.id}"] .acts button.danger')?.click()`); await wait(600);
+    const g6 = onSign();
+    ok(!g6.nodes.some((n) => n.id === between?.id) && g6.wires.some((w) => w.fromId === card && w.toId === cond.id && w.toProperty === 'eval'), 'STU-026: deleting it wires the click straight into the branch again', g6.wires.filter((w) => w.toId === cond.id).map((w) => `${w.fromId}.${w.fromProperty}`));
     // deleting a step heals the chain around it: No's end goes on to the joined step again
     await b.evaluate(`[...document.querySelectorAll('#steps .branch.no .step')].pop().querySelector('.acts button.danger').click()`); await wait(600);
     const g2 = onSign();

@@ -31,7 +31,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { browser } from './cdp.mjs';
-import { buildTimeline, msText, shotAt, stepValues } from './timeline.mjs';
+import { buildTimeline, lastRunOf, msText, shotAt, stepValues } from './timeline.mjs';
 import { runOver, lastActivity, QUIET_MS } from './runwatch.mjs';
 import { kit } from '../lib/nodegx.mjs';
 
@@ -132,6 +132,23 @@ console.log('timeline: fixtures');
   }
   const late = buildTimeline({ t0: 0, t1: 3000, log: [{ kind: 'request', method: 'POST', path: '/classes/Event', body: {}, t0: 2000, t1: 2100, status: 201 }], label, pageNode, asker });
   ok(late.from > 1900 && late.from < 2000 && late.rows[0].text === 'The app creates an Event', 'recorded from now, the axis starts at the first thing that happened; a word starting with a vowel takes "an"', { from: late.from, text: late.rows[0]?.text });
+  // STU-026: a card's last run, lit up on the card: the wires it crossed, the steps it ran, the side its branch took
+  {
+    const both = [{ node: 'btn', port: 'onClick', reach: new Set(['cond', 'yes1', 'no1', 'after']) }, { node: 'other', port: 'onClick', reach: new Set(['after', 'more']) }];
+    const tr = [
+      { seq: 1, t: 10, kind: 'signal', fromNode: 'btn', fromPort: 'onClick', toNode: 'cond', toPort: 'eval' },
+      { seq: 2, t: 10, kind: 'signal', fromNode: 'cond', fromPort: 'onfalse', toNode: 'no1', toPort: 'do' },
+      { seq: 3, t: 50, kind: 'signal', fromNode: 'btn', fromPort: 'onClick', toNode: 'cond', toPort: 'eval' },
+      { seq: 4, t: 50, kind: 'signal', fromNode: 'cond', fromPort: 'ontrue', toNode: 'yes1', toPort: 'do' },
+      { seq: 5, t: 52, kind: 'signal', fromNode: 'yes1', fromPort: 'done', toNode: 'after', toPort: 'do' },
+      { seq: 6, t: 80, kind: 'signal', fromNode: 'other', fromPort: 'onClick', toNode: 'after', toPort: 'do' },
+      { seq: 7, t: 81, kind: 'signal', fromNode: 'after', fromPort: 'done', toNode: 'more', toPort: 'do' }
+    ];
+    const lr = lastRunOf(tr, both, { node: 'btn', port: 'onClick' });
+    ok(lr && [...lr.edges].join() === 'btn>cond,cond>yes1,yes1>after' && [...lr.ran].sort().join() === 'after,btn,cond,yes1' && lr.sides.cond === 'yes' && lr.steps === 3 && lr.t === 50,
+      "a card's last run is its latest one (Yes, not the No before it): the wires it crossed and the steps it ran; another card's run through a shared step is not it", lr && { edges: [...lr.edges], ran: [...lr.ran], sides: lr.sides });
+    ok(lastRunOf(tr.slice(5), both, { node: 'btn', port: 'onClick' }) === null && lastRunOf([], [], { node: 'btn', port: 'onClick', reach: new Set() }) === null, 'a card that has not run in what the trace holds has no last run');
+  }
 }
 
 // ---------------- the drive

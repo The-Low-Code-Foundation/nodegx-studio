@@ -518,6 +518,21 @@
   .wf .chip.expr { background: rgba(167,139,250,.14); border-color: rgba(167,139,250,.45); color: #ddd6fe; }
   .flowlegend { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-top: 40px; padding-top: 12px; border-top: 1px solid var(--edge); max-width: 980px; font-size: 12px; color: var(--sub); }
   .flowlegend i { display: inline-block; width: 24px; height: 0; border-top: 2.5px solid; vertical-align: middle; margin-right: 7px; }
+  /* the last run, lit up: what it crossed glows with a white pulse running along it; what it did not run is faded */
+  .wf button.showrun[aria-pressed=true] { background: rgba(69,208,138,.14); border-color: var(--green); color: var(--green); }
+  .flowlegend .lastrun { margin-left: auto; color: var(--dim); }
+  .flowlegend .lastrun.ran { color: var(--green); }
+  .flow.showrun .step:not(.ran), .flow.showrun .evnode:not(.ran), .flow.showrun .joinnote:not(.ran) { opacity: .45; }
+  .flow .step.ran, .flow .evnode.ran { box-shadow: 0 0 0 1.5px var(--green), 0 0 26px rgba(69,208,138,.35); }
+  .flow .step.ran::after, .flow .evnode.ran::after { content: 'ran'; position: absolute; top: -9px; right: 12px; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 8px; background: var(--green); color: #0b2a19; }
+  .flow svg.wires path.pulse { animation: flowpulse .9s linear infinite; }
+  @keyframes flowpulse { to { stroke-dashoffset: -18; } }
+  @media (prefers-reduced-motion: reduce) { .flow svg.wires path.pulse { animation: none; } }
+  /* a "+" on a wire puts a step between the two it joins */
+  .flow .wireplus { position: absolute; left: 0; top: 0; z-index: 2; pointer-events: none; }
+  .wf .flow .wireplus button { position: absolute; pointer-events: auto; width: 20px; height: 20px; padding: 0; margin: -10px 0 0 -10px; border-radius: 50%; display: grid; place-items: center; background: #1c1b22; border: 1.5px solid #6b6878; color: var(--sub); opacity: .85; }
+  .wf .flow .wireplus button:hover { opacity: 1; border-color: var(--blue); color: var(--fg); transform: scale(1.15); }
+  .wf .flow .wireplus button svg.i { width: 11px; height: 11px; }
 
   /* ---- popovers (the action picker, the source picker, the composer) ---- */
   .menu { position: fixed; background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r-lg); box-shadow: var(--shadow); padding: 6px; z-index: 50; min-width: 300px; max-width: 420px; max-height: min(64vh, 560px); overflow: auto; }
@@ -828,7 +843,7 @@ import { OPERATORS, createEdits, updateEdits, removeEdits, readItems, readFrom, 
 import * as F from './fields.js';
 import { typesOf, driftOf, projectColumn, cellWords, editText, toWire, searchWhere, rowLabel, pageWords, rowsQuery } from './data.mjs';
 import { fieldReaders, typeReaders, renameField, renameType, appFields } from './rename.mjs';
-import { LANES, buildTimeline, msText, shotAt, stepValues } from './timeline.mjs';
+import { LANES, buildTimeline, lastRunOf, msText, shotAt, stepValues } from './timeline.mjs';
 import { runOver, lastActivity, watchSignals, runtimeTimers, runTimers } from './runwatch.mjs';
 
 const $ = (id) => document.getElementById(id);
@@ -3455,7 +3470,8 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const FLOW = { then: '#4da3ff', yes: '#45d08a', no: '#f97066', join: '#35c3e8', dead: '#4a4856', offer: '#4a4856' };
 const KIND_COLOUR = { nav: '#4da3ff', db: '#fdb022', state: '#f776c4', user: '#a3e635', code: '#7d8a98', bolt: '#fb923c', page: '#c084fc', branch: '#a78bfa' };
 let flowWires = [], flowRO = null;
-const wire = (src, to, kind = src?.kind, dashed = false) => { if (src) flowWires.push({ from: src.el, port: src.port, to, kind, dashed }); };
+/** `edge`: the graph wire it draws ({ from: { node, port }, to: { node, port } }), where a step can go between the two. */
+const wire = (src, to, kind = src?.kind, dashed = false, edge = null) => { if (src) flowWires.push({ from: src.el, port: src.port, to, kind, dashed, edge }); };
 /** A wire to where a step could go: grey, or a side's own colour when it leaves a branch with nothing on that side yet. */
 const offer = (src, to) => wire(src, to, src?.kind === 'dead' ? 'dead' : src && src.port !== 'out' ? src.kind : 'offer', true);
 /** A Go to page with no page never says Done (RouterNavigate settles only on arriving): what follows it never runs. */
@@ -3471,7 +3487,7 @@ function renderWorkflow() {
   if (cardBack) wf.append(h('div', { class: 'cardnav' }, h('button', { class: 'quiet back', title: 'Back to the element in Design (Esc)', onclick: backFromCard }, '← ', labelOf(cardBack.node)),
     h('button', { class: 'quiet tiny', title: 'Every workflow on this page, listed', onclick: () => { cardBack = null; renderWorkflow(); } }, 'All workflows on this page')));
   wf.append(h('div', { class: 'event-card' }, h('div', { class: 'ic' }, icon('bolt')), h('div', { class: 'named' }, cardTitle(ev), h('small', {}, `${eventTitle(ev)} · ${typeName(byId[ev.node].type)}`)),
-    h('div', { style: 'margin-left:auto;display:flex;gap:6px;align-items:center' }, h('div', { class: 'zoom' }, h('button', { title: 'Smaller', onclick: () => zoomFlow(-0.1) }, '−'), h('span', { class: 'zoomval' }), h('button', { title: 'Bigger', onclick: () => zoomFlow(0.1) }, '+'), h('button', { title: 'Fit the whole workflow in view', onclick: () => { flowZoom = null; fitFlow(); } }, 'Fit')), isRenaming(ev) ? null : h('button', { class: 'quiet tiny rename', title: 'Name this workflow yourself; an empty name gives it back to its steps', onclick: () => { renaming = `${ev.node}.${ev.port}`; renderWorkflow(); } }, 'Rename'), eventSteps(ev) ? null : h('button', { class: 'quiet', onclick: () => { const i = draftEvents.findIndex((d) => d.node === ev.node && d.port === ev.port); if (i >= 0) draftEvents.splice(i, 1); selEvent = null; renderWorkflow(); } }, 'Discard'))));
+    h('div', { style: 'margin-left:auto;display:flex;gap:6px;align-items:center' }, h('button', { class: 'quiet tiny showrun', 'aria-pressed': showRun, title: 'Light up what this workflow did the last time it ran in the app: the wires it crossed and the steps it ran', onclick: () => toggleLastRun() }, showRun ? 'Hide the last run' : 'Show the last run'), h('div', { class: 'zoom' }, h('button', { title: 'Smaller', onclick: () => zoomFlow(-0.1) }, '−'), h('span', { class: 'zoomval' }), h('button', { title: 'Bigger', onclick: () => zoomFlow(0.1) }, '+'), h('button', { title: 'Fit the whole workflow in view', onclick: () => { flowZoom = null; fitFlow(); } }, 'Fit')), isRenaming(ev) ? null : h('button', { class: 'quiet tiny rename', title: 'Name this workflow yourself; an empty name gives it back to its steps', onclick: () => { renaming = `${ev.node}.${ev.port}`; renderWorkflow(); } }, 'Rename'), eventSteps(ev) ? null : h('button', { class: 'quiet', onclick: () => { const i = draftEvents.findIndex((d) => d.node === ev.node && d.port === ev.port); if (i >= 0) draftEvents.splice(i, 1); selEvent = null; renderWorkflow(); } }, 'Discard'))));
   flowWires = [];
   const flow = h('div', { class: 'flow' });
   flow.append(document.createElementNS(SVG_NS, 'svg')); flow.firstChild.setAttribute('class', 'wires');
@@ -3486,12 +3502,72 @@ function renderWorkflow() {
     flow.append(h('div', { class: 'lanesrow' }, evnode, grid));
   }
   wf.append(h('div', { class: 'flowarea' }, flow));
-  wf.append(h('div', { class: 'flowlegend' }, ...[['then', 'then (when the step is done)'], ['yes', 'Yes'], ['no', 'No'], ['join', 'both sides meet'], ['dead', 'never says done']].map(([k, w]) => h('span', {}, h('i', { style: `border-color:${FLOW[k]}${k === 'dead' ? ';border-top-style:dashed' : ''}` }), w))));
+  wf.append(h('div', { class: 'flowlegend' }, ...[['then', 'then (when the step is done)'], ['yes', 'Yes'], ['no', 'No'], ['join', 'both sides meet'], ['dead', 'never says done']].map(([k, w]) => h('span', {}, h('i', { style: `border-color:${FLOW[k]}${k === 'dead' ? ';border-top-style:dashed' : ''}` }), w)), h('span', { class: 'lastrun' })));
   main.append(wf);
   flowRO?.disconnect();
   flowRO = new ResizeObserver(() => fitFlow());
   for (const el of [main, flow, ...flow.querySelectorAll('.step, .addrow, .evnode')]) flowRO.observe(el);
+  if (showRun) runLit = readLastRun(ev);
+  applyRun();
   fitFlow();
+}
+/* ---- STU-026: the last run, lit up. Read off the runtime's trace (armed when the app opens, nothing to press first), with
+   the timeline's own reading of runs (./timeline.mjs runsOf): this card's latest run, every other card on the component
+   taken into account so a step another card ran is not this one's. Read again while shown, when the trace has more ---- */
+let showRun = false, runLit = null, runPoll = null, runSeen = null;
+function toggleLastRun() {
+  showRun = !showRun; runLit = null; runSeen = null;
+  clearInterval(runPoll); runPoll = showRun ? setInterval(pollLastRun, 400) : null;
+  renderWorkflow();
+}
+const appContext = () => { try { return preview.frame.contentWindow.Noodl.Navigation._noodlRuntime.context; } catch { return null; } };
+/** This card's last run: { run, at } (`at` the wall clock it started), or { none } saying why there is none. */
+function readLastRun(ev) {
+  const ctx = appContext();
+  if (!ctx?.getTraceEvents) return { none: 'The app is not open, so there is no run to show.' };
+  const trace = ctx.getTraceEvents(0) || [];
+  runSeen = { ctx, seq: trace.at(-1)?.seq ?? 0 };
+  const cards = events().map((e) => ({ node: e.node, port: e.port, reach: new Set(reachOf(e).map((n) => n.id)) }));
+  const run = lastRunOf(trace, cards, ev);
+  if (!run) return { none: 'Not run since the app opened: use it in the app and its run lights up here.' };
+  let at = null; try { at = new Date(Date.now() - (preview.frame.contentWindow.performance.now() - run.t)); } catch { /* the frame went */ }
+  return { run, at };
+}
+function pollLastRun() {
+  if (!showRun || tab !== 'workflow' || !selEvent || !$('steps').querySelector('.flow')) return;
+  const ctx = appContext();
+  // a new copy of the app (a rebuild) has a trace of its own; the same one is read again only when it has more
+  if (ctx && runSeen?.ctx === ctx && !(ctx.getTraceEvents(runSeen.seq) || []).length) return;
+  if (!ctx && runLit?.none && !runSeen) return;
+  const next = readLastRun(selEvent);
+  if (next.run?.seq === runLit?.run?.seq && !!next.none === !!runLit?.none) return;
+  runLit = next; applyRun(); drawWires();
+}
+/** Marks what the run ran (the event, its steps, the point both sides of a branch met) and says it under the flow. */
+function applyRun() {
+  const flow = $('steps').querySelector('.flow'); if (!flow) return;
+  const run = showRun ? runLit?.run : null;
+  flow.classList.toggle('showrun', !!run);
+  for (const el of flow.querySelectorAll('.step[data-id], .evnode, .joinnote')) {
+    const id = el.classList.contains('evnode') ? selEvent?.node : el.dataset.join ?? el.dataset.id;
+    el.classList.toggle('ran', !!run && run.ran.has(id));
+  }
+  const say = $('steps').querySelector('.flowlegend .lastrun'); if (!say) return;
+  say.classList.toggle('ran', !!run);
+  if (!showRun) { say.textContent = ''; return; }
+  if (!run) { say.textContent = runLit?.none ?? ''; return; }
+  const sides = Object.values(run.sides).map((s) => (s === 'yes' ? 'Yes' : 'No'));
+  say.textContent = `● Last run${runLit.at ? ` at ${runLit.at.toLocaleTimeString()}` : ''} · ${run.steps} step${run.steps === 1 ? '' : 's'}${sides.length ? ` · took ${sides.join(', then ')}` : ''}`;
+}
+/** Did the last run cross this drawn wire? Null when no run is shown. */
+function wireRan(w) {
+  const run = showRun ? runLit?.run : null; if (!run) return null;
+  const id = (el) => (el.classList.contains('evnode') ? selEvent?.node : el.dataset.join ?? el.dataset.id);
+  const a = id(w.from), b = id(w.to);
+  if (!a || !b) return false;
+  // out of the point both sides meet: the run reached the step they meet at
+  if (w.from.dataset.join) return run.ran.has(b);
+  return run.edges.has(`${a}>${b}`);
 }
 /** The flow at its zoom: fitted to the panel's width (55%–100%) until someone zooms; the area takes the scaled size, so
     the panel scrolls to whatever does not fit. */
@@ -3514,6 +3590,10 @@ function drawWires() {
   svg.setAttribute('width', flow.offsetWidth); svg.setAttribute('height', flow.offsetHeight);
   svg.innerHTML = '<defs><filter id="flowglow" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>';
   const add = (tag, attrs) => { const e = document.createElementNS(SVG_NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); svg.append(e); return e; };
+  let plus = flow.querySelector('.wireplus');
+  if (!plus) { plus = h('div', { class: 'wireplus' }); flow.append(plus); }
+  plus.innerHTML = '';
+  const pulses = [];
   for (const w of flowWires) {
     if (!w.from.isConnected || !w.to.isConnected) continue;
     const sc = (r) => ({ left: (r.left - R.left) / z, right: (r.right - R.left) / z, top: (r.top - R.top) / z, height: r.height / z });
@@ -3522,11 +3602,23 @@ function drawWires() {
     const x1 = a.right, y1 = a.top + (w.port === 'yes' ? Math.min(26, a.height / 3) : w.port === 'no' ? a.height - Math.min(22, a.height / 3) : a.height / 2);
     const x2 = b.left, y2 = b.top + b.height / 2, dx = Math.max(40, (x2 - x1) / 2);
     const colour = FLOW[w.kind] ?? FLOW.then, faint = w.dashed || w.kind === 'dead' || w.kind === 'offer';
-    add('path', { d: `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`, fill: 'none', stroke: colour, 'stroke-width': faint ? 2 : 2.5, ...(faint ? { 'stroke-dasharray': '6 6' } : { filter: 'url(#flowglow)' }),
-      'data-kind': w.kind, 'data-from': w.from.dataset.id ?? w.from.className, 'data-to': w.to.dataset.id ?? w.to.className.split(' ')[0] });
-    add('circle', { cx: x1, cy: y1, r: 5, fill: colour, stroke: '#141318', 'stroke-width': 2 });
-    if (!faint) add('circle', { cx: x2, cy: y2, r: 5, fill: colour, stroke: '#141318', 'stroke-width': 2 });
+    const ran = wireRan(w), d = `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
+    add('path', { d, fill: 'none', stroke: colour, 'stroke-width': faint ? 2 : ran ? 3.5 : 2.5, ...(faint ? { 'stroke-dasharray': '6 6' } : { filter: 'url(#flowglow)' }),
+      ...(ran === false ? { opacity: 0.3 } : {}), ...(ran ? { 'data-ran': '1' } : {}),
+      'data-kind': w.kind, 'data-from': w.from.dataset.id ?? w.from.className.split(' ')[0], 'data-to': w.to.dataset.id ?? w.to.className.split(' ')[0] });
+    add('circle', { cx: x1, cy: y1, r: 5, fill: colour, stroke: '#141318', 'stroke-width': 2, ...(ran === false ? { opacity: 0.3 } : {}) });
+    if (!faint) add('circle', { cx: x2, cy: y2, r: 5, fill: colour, stroke: '#141318', 'stroke-width': 2, ...(ran === false ? { opacity: 0.3 } : {}) });
+    if (ran) pulses.push(d);
+    // the curve's middle (t = ½), where a "+" puts a step between the two it joins
+    if (w.edge && w.kind !== 'dead') {
+      const mx = (x1 + 3 * (x1 + dx) + 3 * (x2 - dx) + x2) / 8, my = (y1 + y2) / 2;
+      const { from, to } = w.edge;
+      plus.append(h('button', { style: `left:${mx}px;top:${my}px`, 'data-from': from.node, 'data-to': to.node, title: `Put a step here, between ${from.node === selEvent?.node ? `the ${portLabel(byId[from.node], 'output', from.port)}` : labelOf(from.node)} and ${labelOf(to.node)}`,
+        onclick: (e) => addActionMenu(e, { node: from.node, port: from.port, before: to }) }, icon('plus')));
+    }
   }
+  // the run's pulse, a white dash running along each wire it crossed, over the wires (not counted among them: no data-kind)
+  for (const d of pulses) add('path', { d, fill: 'none', stroke: '#fff', 'stroke-width': 2, 'stroke-dasharray': '2 16', opacity: 0.9, class: 'pulse' });
 }
 let stepCounter = 0;
 function renderChain(into, steps, from, startN, prefix = '', before = null, src = null, lead = null) {
@@ -3542,7 +3634,8 @@ function renderChain(into, steps, from, startN, prefix = '', before = null, src 
     const card = stepCard(s, `${prefix}${n}`);
     if (joined) card.classList.add('joined');
     col.append(card);
-    wire(end, card);
+    // a "+" on it puts a step between; not on the wire on from where both sides meet (it stands for two wires)
+    wire(end, card, undefined, false, joined ? null : { from: s.from, to: { node: s.id, port: s.via } });
     joined = false;
     if (s.branches) {
       link();
@@ -3559,7 +3652,7 @@ function renderChain(into, steps, from, startN, prefix = '', before = null, src 
       if (s.rejoin) {
         // the two wires meet here and go on as one to the step both sides reach
         link();
-        const note = h('div', { class: 'joinnote', 'data-id': 'join' }, icon('branch'), 'Then, after Yes or No');
+        const note = h('div', { class: 'joinnote', 'data-id': 'join', 'data-join': s.rejoin.id }, icon('branch'), 'Then, after Yes or No');
         col.append(note);
         for (const e of [ends.yes, ends.no]) if (e) wire(e, note, e.kind === 'dead' ? 'dead' : e.el === card ? e.kind : 'join');
         end = { el: note, port: 'out', kind: 'join' }; joined = true;
@@ -3690,7 +3783,8 @@ function addActionMenu(e, from) {
 }
 /** Which page data item the step runs again: a wire into its Do, never a second query (STU-012). */
 function refreshMenu(e, from) {
-  if (from.before || from.also) return toast('A refresh ends the workflow: add it after the steps both sides go on to.');
+  if (from.also) return toast('A refresh ends the workflow: add it after the steps both sides go on to.');
+  if (from.before) return toast('A refresh ends the workflow, so it cannot go between two steps: add it at the end.');
   if (!pageItems.length) return toast('This page has no page data to refresh: make it in Design → Page data.');
   const menu = popover(e);
   menu.append(h('div', { class: 'h' }, 'Refresh which page data?'));
@@ -3730,7 +3824,7 @@ function addAction(type, from, params = {}, label) {
   if (!events().some((ev) => ev.node === selEvent.node && ev.port === selEvent.port)) draftEvents.length = 0;
   if (type !== 'Condition') openSteps.add(id);
   renderWorkflow();
-  toast(type === 'Condition' ? 'Added a branch: set its condition, then add actions under Yes and No' : `Added ${label || typeName(type)} after ${labelOf(from.node)}`);
+  toast(type === 'Condition' ? 'Added a branch: set its condition, then add actions under Yes and No' : `Added ${label || typeName(type)} ${from.before && !from.also ? `between ${labelOf(from.node)} and ${labelOf(from.before.node)}` : `after ${labelOf(from.node)}`}`);
 }
 $('newevent').onclick = (e) => {
   closeMenu();

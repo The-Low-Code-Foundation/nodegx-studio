@@ -51,9 +51,18 @@ tabs concept… that would be a solution and also amazing."* Mock shown: *"It lo
   and takes no input (the header's Publish silently did nothing until this). Picture: [look/stu-009-tabs.png](look/stu-009-tabs.png),
   composed from the strip's and the tab's own CDP screenshots (no screen capture).
 
+**s22 (2026-10-23, same day): STU-026's last run lit up, and a "+" on a wire** (SCOPE, STU-026 "Done (s22)").
+*Show the last run* beside the zoom: the trace (armed at boot, no Record) read by the timeline's own `runsOf` (moved
+out of `buildTimeline`) and `lastRunOf`; what ran wears *ran*, the wires it crossed glow and pulse, the rest fades,
+"Last run at … · 3 steps · took Yes" under the flow. A "+" at the middle of each one-wire-in-the-graph wire puts a step
+between (`addAction`'s `before`). Gates on the s22 tree: `check:editor` **197/197**, `check:timeline` **48/48**,
+`check:app` 54/54, `check:data` 80/80. Committed, **not pushed** (ask first). Picture:
+[look/s2-workflow-lastrun.png](look/s2-workflow-lastrun.png); the three s2-workflow-{branch,card,rejoin} pictures were
+retaken (they show the "+").
+
 Next buildable, in order:
-0. STU-026's last run lit up (the mock's *Show the last run*: the runtime trace, as the timeline reads it), and a "+"
-   on a wire to put a step between two; STU-009 on Windows / Linux in the package workflow (only macOS was run).
+0. STU-009 on Windows / Linux in the package workflow (only macOS was run). STU-026's last left: dragging nodes; the
+   lit run in the timeline's own card link (open the card from a timeline row with its run shown).
 1. When NodeGX publishes a release with BACKENDPUBLIC: bump the pins, `npm run vendor`, every gate. Check npm first
    (`npm view @nodegx/preview versions`).
 2. From "Not to forget": a step's In list names a record's data type by its parameter (`collectionName "Task"`).
@@ -67,8 +76,8 @@ The M4 timeline's remaining gap (overlapping runs) waits on NodeGX's trace `caus
 Waiting on Richard (ask in plain words):
 - What he made of docs/look/s2-workflow-rejoin.png (opened in Preview for him in s21) and the five from s20.
 - The five notarisation secrets: "I'll get the secrets for you" (s21).
-- His look at the drawn flow in the app (docs/look/s2-workflow-rejoin.png, s2-workflow-card.png) and at the tabs
-  (docs/look/stu-009-tabs.png).
+- His look at the drawn flow in the app (docs/look/s2-workflow-rejoin.png, s2-workflow-card.png), the lit last run
+  (s2-workflow-lastrun.png) and at the tabs (docs/look/stu-009-tabs.png).
 - **His idea (s21): "Window ↗" in the conversation opening the desktop app when it is installed, not the browser.**
   Not built; proposed: serve.mjs (local) launches the app with the project folder, a `nodegx-studio://` scheme for
   links from elsewhere, the hold passes to the desktop window. His answer to "what if the app already shows another

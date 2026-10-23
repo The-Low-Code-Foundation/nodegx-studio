@@ -90,24 +90,7 @@ export function buildTimeline({ t0, t1, fromOpen = false, trace = [], log = [], 
   }
 
   // ---- workflows: a card's event starts a run; a signal into a node that card reaches, from one already in the run, is a step
-  const cardBy = new Map(cards.map((c) => [`${c.node}.${c.port}`, c]));
-  const runs = [], loose = [];
-  // a signal into a component goes on out of its Component Inputs as two values, true then false (the runtime's
-  // componentinstance.ts): the true out of a card's event is that card's event (a command's "do")
-  const signals = trace.filter((e) => inside(e.t) && (e.kind === 'signal' || (e.kind === 'value' && e.value === 'true' && cardBy.has(`${e.fromNode}.${e.fromPort}`)))).sort((a, b) => a.seq - b.seq);
-  for (const e of signals) {
-    const card = cardBy.get(`${e.fromNode}.${e.fromPort}`);
-    if (card) {
-      // one event wired to two first steps sends two signals in the same millisecond: lanes of one run (STU-024)
-      const last = runs.findLast((r) => r.card === card);
-      if (last && e.t - last.t < 1) { last.steps.add(e.toNode); last.nodes.add(e.toNode); last.signals.push(e); last.end = Math.max(last.end, e.t); continue; }
-      runs.push({ card, t: e.t, end: e.t, steps: new Set([e.toNode]), nodes: new Set([card.node, e.toNode]), signals: [e] });
-      continue;
-    }
-    const run = runs.findLast((r) => r.card.reach.has(e.toNode) && r.nodes.has(e.fromNode));
-    if (run) { run.steps.add(e.toNode); run.nodes.add(e.toNode); run.signals.push(e); run.end = e.t; continue; }
-    loose.push(e);
-  }
+  const { runs, loose } = runsOf(trace, cards, inside);
   const values = stepValues(trace, t1);
   for (const r of runs) {
     const n = r.steps.size;
@@ -147,6 +130,47 @@ export function buildTimeline({ t0, t1, fromOpen = false, trace = [], log = [], 
   const first = rows.length ? rows[0].t : 0;
   const from = !fromOpen && first > 200 ? Math.max(0, first - (span - first) * 0.04) : 0;
   return { rows, length: t1 - t0, from, span, loose: loose.length, runs: runs.length };
+}
+
+/**
+ * The trace's signals read into runs of the cards (the timeline's workflows lane, and a card's last run lit up, STU-026):
+ * a card's event starts a run; a signal into a node that card reaches, from one already in the run, is a step of it;
+ * the rest are `loose`. A run is { card, t, end, steps: Set<id>, nodes: Set<id>, signals } on the frame's clock.
+ */
+export function runsOf(trace, cards, inside = () => true) {
+  const cardBy = new Map(cards.map((c) => [`${c.node}.${c.port}`, c]));
+  const runs = [], loose = [];
+  // a signal into a component goes on out of its Component Inputs as two values, true then false (the runtime's
+  // componentinstance.ts): the true out of a card's event is that card's event (a command's "do")
+  const signals = trace.filter((e) => inside(e.t) && (e.kind === 'signal' || (e.kind === 'value' && e.value === 'true' && cardBy.has(`${e.fromNode}.${e.fromPort}`)))).sort((a, b) => a.seq - b.seq);
+  for (const e of signals) {
+    const card = cardBy.get(`${e.fromNode}.${e.fromPort}`);
+    if (card) {
+      // one event wired to two first steps sends two signals in the same millisecond: lanes of one run (STU-024)
+      const last = runs.findLast((r) => r.card === card);
+      if (last && e.t - last.t < 1) { last.steps.add(e.toNode); last.nodes.add(e.toNode); last.signals.push(e); last.end = Math.max(last.end, e.t); continue; }
+      runs.push({ card, t: e.t, end: e.t, steps: new Set([e.toNode]), nodes: new Set([card.node, e.toNode]), signals: [e] });
+      continue;
+    }
+    const run = runs.findLast((r) => r.card.reach.has(e.toNode) && r.nodes.has(e.fromNode));
+    if (run) { run.steps.add(e.toNode); run.nodes.add(e.toNode); run.signals.push(e); run.end = e.t; continue; }
+    loose.push(e);
+  }
+  return { runs, loose };
+}
+
+/**
+ * A card's last run, for drawing it lit (STU-026): the wires it crossed (`from>to`, node ids), the nodes it ran, and
+ * which side each branch took. `cards` are every card on the component, so a signal another card's run sent is not
+ * read as this one's; `card` is the one asked about (matched by node and port). Null: no run in what the trace holds.
+ */
+export function lastRunOf(trace, cards, card) {
+  const mine = cards.find((c) => c.node === card.node && c.port === card.port) ?? card;
+  const run = runsOf(trace, cards.includes(mine) ? cards : [...cards, mine]).runs.findLast((r) => r.card === mine);
+  if (!run) return null;
+  const sides = {};
+  for (const e of run.signals) if (e.fromPort === 'ontrue' || e.fromPort === 'onfalse') sides[e.fromNode] = e.fromPort === 'ontrue' ? 'yes' : 'no';
+  return { t: run.t, end: run.end, seq: run.signals.at(-1).seq, edges: new Set(run.signals.map((e) => `${e.fromNode}>${e.toNode}`)), ran: run.nodes, steps: run.steps.size, sides };
 }
 
 /**

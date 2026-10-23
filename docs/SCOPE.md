@@ -887,7 +887,7 @@ tab already reads it that way). A badge is "this visual node has a wired signal 
 | STU-023 | **Names from steps.** | a card with no name reads its steps; a renamed card keeps its name |
 | STU-024 | **The importer merges split workflows** into one card per event. Where the conditions are exact opposites (A / not A) they become one Yes/No branch. Where they overlap and both can run, they stay as **two lanes that run side by side**, because folding them into either/or would change what the app does. | the real app's 16 split elements become 16 cards; a fixture with overlapping conditions keeps both lanes and both still run |
 | STU-025 | **Rejoin** (R4, taken 2026-10-23): after a branch, both sides continue into one shared next step | done (s20): made from the card, drawn once after the branch, gated in the app |
-| STU-026 | **The flow, drawn** (Richard, 2026-10-23, s21): a workflow drawn as NodeGX draws, in the backend map's look: steps as nodes on a dark canvas, left to right, coloured wires (then, Yes, No, where both sides meet), the last run lit up; Bubble's landmarks kept ("When … is clicked", Step 1, 2, "Only when") | done (s21): every card drawn so, its edits unchanged; a rejoin is two wires meeting, in view at Fit; the last run lit up is not built yet. Mock: [look/s21-flow-mock.png](look/s21-flow-mock.png) |
+| STU-026 | **The flow, drawn** (Richard, 2026-10-23, s21): a workflow drawn as NodeGX draws, in the backend map's look: steps as nodes on a dark canvas, left to right, coloured wires (then, Yes, No, where both sides meet), the last run lit up; Bubble's landmarks kept ("When … is clicked", Step 1, 2, "Only when") | done (s21): every card drawn so, its edits unchanged; a rejoin is two wires meeting, in view at Fit; the last run lit up and a "+" on a wire (s22). Mock: [look/s21-flow-mock.png](look/s21-flow-mock.png) |
 
 **Done (STU-020 and STU-021, 2026-10-19, s8).** An element with a workflow wears a **⚡** in Design: on the canvas, in
 its top right corner (Design mode only, not while using the app), and on its row of the element list (a row that folds
@@ -1532,9 +1532,24 @@ Card mode fills the window (it had `.card`'s 1100 px frame). `check:editor` 193/
 the R4 card, left to right; at Fit the step both sides meet at is in view, which the first build failed with settings
 open: it was past the panel's edge); `check:app` 46/46, `check:data` 80/80, `check:timeline` 46/46. Pictures:
 [look/s2-workflow-rejoin.png](look/s2-workflow-rejoin.png), [look/s2-workflow-card.png](look/s2-workflow-card.png)
-(lanes), [look/s2-workflow-branch.png](look/s2-workflow-branch.png). **Not built:** the last run lit up (the mock's
-*Show the last run*; the trace is there, as the timeline reads it); dragging nodes (the layout is the chain's); a "+"
-on a wire to put a step between two.
+(lanes), [look/s2-workflow-branch.png](look/s2-workflow-branch.png). **Not built:** dragging nodes (the layout is the
+chain's).
+**Done (s22): the last run lit up, and a "+" on a wire.** *Show the last run* (beside the zoom) reads the runtime's
+trace, armed since the app opened (no Record needed), with the timeline's own reading of runs (`runsOf`, moved out of
+`buildTimeline` in timeline.mjs; `lastRunOf` on top of it, every card on the component passed so a step another card
+ran is not this one's). What ran wears a green *ran* badge, every wire it crossed glows thicker with a white pulse
+running along it, the rest fades; under the flow: *Last run at 16:17:10 · 3 steps · took Yes*, or why there is none
+(the app not open; not run since the app opened). While shown it reads the trace again every 400 ms, and only when
+the trace has grown or the app was rebuilt. A "+" sits at the middle of every wire that is one wire in the graph (the
+event's, a step's Done, a branch's Yes and No); it opens the action menu and the step goes between the two
+(`addAction`'s `before`, as R4 already used). Not on a "never says done" wire, nor on the wire on from where both
+sides meet (it stands for two). A refresh is refused there: it ends the workflow. `check:editor` 197/197 (4 new, on the
+R4 card after its Yes run in the app: lit exactly the four wires it crossed and its three steps, No's dark, "3 steps ·
+took Yes"; hidden, nothing lit; a "+" on the click's wire puts a Set between the click and the branch, drawn first;
+deleting it heals). First run 196/197: the event node's wire read `data-from="evnode ran"` (the whole class name);
+it now takes the first class, as `data-to` did. `check:timeline` 48/48 (2 new fixtures: the latest run, not the No
+before it; another card's run through a shared step is not it), `check:app` 54/54, `check:data` 80/80. No mutant run.
+Picture: [look/s2-workflow-lastrun.png](look/s2-workflow-lastrun.png).
 
 **Taken.** R4 (Richard, 2026-10-23): after a branch, both sides may rejoin into one next step. His leaning first:
 *"Rejoining would be great, like n8n style, but hard to manage maybe?"*; then, asked again in s20: *"Yep for R4."*
