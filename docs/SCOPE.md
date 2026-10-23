@@ -381,6 +381,21 @@ Electron's own Node; `npm run smoke -- <dir>` opens a project headless and exits
 | STU-007 | **Packaged and signed.** electron-builder for macOS (signed, notarised), Windows and Linux, on NodeGX's release workflow. | a downloadable build opens a project on all three |
 | STU-008 | **Publish.** File → **Publish…** writes the app as a static site with NodeGX's own deploy — `@nodegx/preview`'s `nodegx-deploy`, the `deployToFolder` the NodeGX editor's *Deploy to Folder* runs, with the production engine npm ships (1.7 MB; a checkout's development engine is refused) — to a folder the person picks, and deploys the app's cloud functions to its backend when it has any (NodeGX's `deploy_cloud_functions`). The window then says where the site is and which backend it talks to; an app bound to a backend on 127.0.0.1 works on this machine only, and says so before it is published. Where else a site and its backend can go is R10. A site under a sub-path waits on P123-STU015-BASEURL. The deploy must carry P123-S2-VARIANTLOST's fix: npm's 0.2.3 `nodegx-deploy` does (STU-006). | the todo template's copy published to a folder, served by any static server and opened in a browser: sign in, add a todo, and the row is on the backend |
 | STU-009 | **Projects in tabs** (Richard, 2026-10-23, s21): several projects open in one window, a tab each, the welcome screen as the new tab. Each tab is its own `serve.mjs` and page, as one project is today, so none of the NodeGX editor's singleton problem (ECO-003) applies | done (s21): a tab per project, its own server and backend; closing one stops them, the other keeps working ([look/stu-009-tabs.png](look/stu-009-tabs.png)) |
+| STU-071 | **Publish to a server of your own** (R10, Richard 2026-10-23). Publish asks *where*: a folder on this computer (STU-008, unchanged) or a Linux server the person owns. The server path is NodeGX's own `deploy_to_vm` (P26 DEP-002 s4), called through the MCP server as `deploy_cloud_functions` already is: the app, its backend, its cloud functions, its access rules and its function secrets, one origin, https with an address. Studio's part is the question (`app/server.html`: server, address, name, port, ssh key and port), checking the answers before the slow call (`serverRequest`), remembering them per project (`published-servers.json`) and saying the result. | the todo app published from Studio to the throwaway VM container and opened at its address; until NodeGX releases `deploy_to_vm`, the server path says so |
+
+**Built (STU-071, 2026-10-23, opennoodl-d7 from the OpenNoodl side).** `lib/publish.mjs` `publishToServer`,
+`serverRequest`, `serverAppName`; `app/main.cjs` asks *Where should the app go?* (folder first, so a gate's path pick
+still chooses it; a server last used is the default), then the form; the folder path's "backend on this computer"
+warning now points at the server path instead of saying it is not built. Gate `npm run check:server` (16/16, no window,
+no server): the offered name, every refusal before NodeGX is called, the exact arguments and the 20-minute timeout, and
+the pinned `@nodegx/mcp` 0.2.2 run for real, which answers *MCP error -32602: Tool deploy_to_vm not found* and is said as
+*This copy of NodeGX cannot publish to a server yet: deploy_to_vm arrives with the next NodeGX release*. Driven in the
+app (hidden window, a todo copy): that sentence came back through File → Publish, the answers were remembered, a blank
+server was asked again. **Not yet run:** a real ship from Studio. It needs a NodeGX release carrying `deploy_to_vm`
+(OpenNoodl 0aff68e6b) and the throwaway VM container from DEP-002 s4's drive recipe. 🔴 `check:app` is **26/30 at HEAD f1cc559 too**,
+with or without this change, run in a clean worktree, 2026-10-23 22:40: 3b's Publish never answers in 120 s
+(`window.__ob.published` unset), so the folder rows and the rest of the gate do not run. Driven directly, the folder
+path publishes (11 files, the backend warning asked first, the `/sign-in` sentence). Filed as P123-STU008-APPCHECKPUBLISH.
 
 **Done (STU-009, s21).** Richard: *"If we could do the whole multiple projects in tabs concept in the NodeGX Studio
 that we intended to do in the original NodeGX repo editor, that would be a solution and also amazing."* NodeGX's

@@ -15,9 +15,10 @@
  * already shows it.
  *
  * For the gate (app/check.mjs): NODEGX_STUDIO_USER_DATA puts the recent list somewhere else, `--hidden` keeps the
- * window off screen, and NODEGX_STUDIO_TEST_PICKS (a JSON array of paths) answers the open / save dialogs in order.
+ * window off screen, and NODEGX_STUDIO_TEST_PICKS (a JSON array of paths) answers the open / save dialogs in order;
+ * an object in it answers Publish's server form (STU-071), and chooses the server path.
  */
-const { app, BrowserWindow, WebContentsView, Menu, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, WebContentsView, Menu, dialog, ipcMain, nativeTheme, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 
@@ -32,6 +33,7 @@ const actionsUrl = require('node:url').pathToFileURL(path.join(__dirname, 'actio
 const publishUrl = require('node:url').pathToFileURL(path.join(__dirname, '..', 'lib', 'publish.mjs')).href;
 const recentFile = () => path.join(app.getPath('userData'), 'recent-projects.json');
 const sitesFile = () => path.join(app.getPath('userData'), 'published-sites.json');
+const serversFile = () => path.join(app.getPath('userData'), 'published-servers.json');
 const testPicks = process.env.NODEGX_STUDIO_TEST_PICKS ? JSON.parse(process.env.NODEGX_STUDIO_TEST_PICKS) : null;
 
 // STU-009: one Studio at a time. A second launch (Window ↗ in a conversation, which NodeGX runs as `open -n -a` on macOS
@@ -407,12 +409,29 @@ async function publishFlow(tab) {
   if (!dir) return { error: 'Open a project first: Publish writes the open app as a site.' };
   const pub = await import(publishUrl);
   const asked = [];
+  // STU-071: a folder on this computer, or a server of the person's own (R10). Under the gate a pick that is an object
+  // is the server form's answers, so the server path is chosen; a path (or nothing) keeps the folder, as before.
+  const lastServer = readServers()[dir];
+  const where = testPicks
+    ? testPicks[0] && typeof testPicks[0] === 'object' ? 1 : 0
+    : await ask(asked, {
+        type: 'question',
+        message: 'Where should the app go?',
+        detail:
+          'A folder holds the site, to put on any web host; its backend stays where it is now.\n\n' +
+          `A server of your own (Linux, over ssh) gets the app, its backend, its data and its cloud functions, so anyone who can reach it can use the app.${lastServer ? `\n\nLast time: ${lastServer.host}.` : ''}`,
+        buttons: ['A Folder on This Computer…', 'A Server of Your Own…', 'Cancel'],
+        defaultId: lastServer ? 1 : 0,
+        cancelId: 2
+      });
+  if (where === 2) return { cancelled: true, asked };
+  if (where === 1) return publishToServerFlow(dir, pub, asked);
   const target = pub.backendTargetOf(dir);
   if (target.local) {
     const answer = await ask(asked, {
       type: 'info',
       message: target.live ? 'This app’s live database runs on this computer' : 'This app’s backend runs on this computer',
-      detail: `The site will talk to ${target.live ? 'the live database at ' : ''}${target.endpoint}, which only this computer can reach, and only while Studio (or the NodeGX editor) runs that backend. Publish it to try it in a browser here; putting the app and its backend somewhere others can reach is not built yet.`,
+      detail: `The site will talk to ${target.live ? 'the live database at ' : ''}${target.endpoint}, which only this computer can reach, and only while Studio (or the NodeGX editor) runs that backend. Publish it to try it in a browser here; to put the app and its backend where others can reach them, publish to a server of your own instead.`,
       buttons: ['Continue', 'Cancel'],
       cancelId: 1
     });
@@ -457,6 +476,98 @@ async function publishFlow(tab) {
   if (testPicks) return summary;
   const { response } = await dialog.showMessageBox(win, { type: fns.status === 'failed' ? 'warning' : 'info', message: result.replaced ? 'The site was published again' : 'The app is published', detail: lines.join('\n\n'), buttons: ['Show the Site’s Folder', 'Done'], defaultId: 1, cancelId: 1 });
   if (response === 0) shell.showItemInFolder(result.index);
+  return summary;
+}
+
+/* ---------------------------------------------------------------- STU-071: Publish to a server (R10) */
+
+/** The server each project was last published to, with the answers the person typed (`{ [projectDir]: answers }`). */
+const readServers = () => {
+  try {
+    return JSON.parse(require('node:fs').readFileSync(serversFile(), 'utf8'));
+  } catch {
+    return {};
+  }
+};
+const rememberServer = (dir, answers) => {
+  const fs = require('node:fs');
+  fs.mkdirSync(path.dirname(serversFile()), { recursive: true });
+  fs.writeFileSync(serversFile(), JSON.stringify({ ...readServers(), [dir]: answers }, null, 2) + '\n');
+};
+
+/** "Which server?" (app/server.html), a sheet on the Studio window. Resolves with the answers, or null on Cancel. */
+function askServer(fill) {
+  if (testPicks) return Promise.resolve(testPicks.shift() ?? null);
+  return new Promise((resolve) => {
+    const sheet = new BrowserWindow({
+      parent: win,
+      modal: true,
+      width: 480,
+      height: 560,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      show: false,
+      title: 'Publish to a server',
+      backgroundColor: nativeTheme.shouldUseDarkColors ? '#14171c' : '#eef0f3', // server.html's --bg, no flash before it paints
+      webPreferences: { preload: path.join(__dirname, 'server-preload.cjs') }
+    });
+    let settled = false;
+    const done = (answers) => {
+      if (settled) return;
+      settled = true;
+      ipcMain.removeListener('server:ready', onReady);
+      ipcMain.removeListener('server:answer', onAnswer);
+      if (!sheet.isDestroyed()) sheet.close();
+      resolve(answers);
+    };
+    const mine = (event) => event.sender === sheet.webContents;
+    const onReady = (event) => {
+      if (!mine(event)) return;
+      sheet.webContents.send('server:fill', fill);
+      sheet.show();
+    };
+    const onAnswer = (event, answers) => mine(event) && done(answers);
+    ipcMain.on('server:ready', onReady);
+    ipcMain.on('server:answer', onAnswer);
+    sheet.on('closed', () => done(null));
+    sheet.setMenu?.(null);
+    sheet.loadFile(path.join(__dirname, 'server.html'));
+  });
+}
+
+/**
+ * The app onto a server by NodeGX's deploy_to_vm (lib/publish.mjs `publishToServer`). Asks again, with the reason, until
+ * the answers are ones NodeGX would take; remembers them before the ship so a failed one keeps what was typed.
+ */
+async function publishToServerFlow(dir, pub, asked) {
+  let answers = readServers()[dir] ?? { app: pub.serverAppName(dir), port: String(pub.DEFAULT_SERVER_PORT) };
+  let problem = null;
+  for (;;) {
+    asked.push('Publish to a server of your own');
+    answers = await askServer({ answers, problem });
+    if (!answers) return { cancelled: true, asked };
+    ({ problem } = pub.serverRequest(answers));
+    if (!problem) break;
+    if (testPicks) return { error: problem, asked };
+  }
+  rememberServer(dir, answers);
+  let result;
+  try {
+    result = await pub.publishToServer(dir, answers);
+  } catch (err) {
+    if (!testPicks) dialog.showErrorBox('The app was not published', err.message);
+    throw err;
+  }
+  const lines = [result.url ? `It is at ${result.url}` : `It runs on ${result.host} without a public address. To see it from here: ${result.see}`];
+  lines.push(`${result.build.files} files, ${result.build.functions.length ? `${result.build.functions.length} cloud function${result.build.functions.length === 1 ? '' : 's'} (${result.build.functions.join(', ')})` : 'no cloud functions'}, ${result.build.rules === 'project' ? 'the project’s access rules' : 'the access rules already on the server'}.`);
+  if (result.secrets.length) lines.push(`Function secrets sent: ${result.secrets.join(', ')} (their values never leave this computer any other way).`);
+  if (result.next) lines.push(result.next);
+  const summary = { ...result, target: 'server', asked, said: lines };
+  if (testPicks) return summary;
+  const buttons = result.url ? ['Open It', 'Done'] : ['Done'];
+  const { response } = await dialog.showMessageBox(win, { type: 'info', message: `The app is on ${result.host}`, detail: lines.join('\n\n'), buttons, defaultId: 0, cancelId: buttons.length - 1 });
+  if (result.url && response === 0) shell.openExternal(result.url);
   return summary;
 }
 

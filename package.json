@@ -23,6 +23,7 @@
     "check:import": "node import/check.mjs",
     "check:app": "node app/check.mjs",
     "check:publish": "node app/publish-check.mjs",
+    "check:server": "node app/server-publish-check.mjs",
     "smoke": "node app/launch.mjs --smoke",
     "check:dictionary": "node import/dictionary-check.mjs",
     "check:phrases": "node editor/phrases-check.mjs",

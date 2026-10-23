@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Publish to a server</title>
+<!--
+  STU-071 — Publish's second target (R10): which server the app goes to. NodeGX's deploy_to_vm does the rest; this only
+  asks. app/main.cjs opens it as a sheet on the Studio window and fills it (server-preload.cjs).
+-->
+<style>
+  :root {
+    --bg: #eef0f3; --panel: #ffffff; --panel-2: #f7f8fa; --line: #e3e6eb; --line-2: #d3d7de; --ink: #171b22; --ink-2: #3d4452; --muted: #717886;
+    --accent: #1f5eff; --accent-ink: #1446c7; --danger: #dc2626; --r: 6px;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: Inter, -apple-system, "Segoe UI", system-ui, sans-serif; font-size: 13px; line-height: 1.45; color: var(--ink);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14171c; --panel: #1b1f26; --panel-2: #222731; --line: #2b313c; --line-2: #3a414e; --ink: #e8ebf0; --ink-2: #c3c9d3; --muted: #8b93a1; --accent: #4f7dff; --accent-ink: #3a66e6; --danger: #f87171; }
+  }
+  body { margin: 0; background: var(--bg); }
+  form { padding: 18px 20px 16px; }
+  h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+  .lead { color: var(--ink-2); margin: 0 0 14px; }
+  label { display: block; font-weight: 500; margin: 10px 0 4px; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  input { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r); padding: 6px 8px; width: 100%; box-sizing: border-box; }
+  input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  input.mono { font-family: var(--mono); font-size: 12px; }
+  .pair { display: grid; grid-template-columns: 1fr 110px; gap: 10px; }
+  details { margin-top: 12px; color: var(--ink-2); }
+  summary { cursor: pointer; color: var(--muted); }
+  .problem { color: var(--danger); margin: 12px 0 0; min-height: 1em; }
+  .buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  button { font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--line-2); background: var(--panel); border-radius: var(--r); padding: 6px 12px; }
+  button:hover { background: var(--panel-2); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 500; }
+  button.primary:hover { background: var(--accent-ink); }
+</style>
+</head>
+<body>
+<form id="form" autocomplete="off">
+  <h1>Publish to a server of your own</h1>
+  <p class="lead">The app, its data and its cloud functions go to a Linux server you own, over ssh. Ship again with the same name to update it; its data stays.</p>
+
+  <label for="host">Server</label>
+  <input id="host" class="mono" placeholder="root@203.0.113.7" spellcheck="false" required>
+  <div class="hint">As user@host, or a Host name from your ~/.ssh/config. It must already accept this computer’s ssh key: Studio cannot type a password.</div>
+
+  <label for="domain">Address <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+  <input id="domain" class="mono" placeholder="app.example.com" spellcheck="false">
+  <div class="hint">A name whose DNS points at the server: it is served over https. Without one the app answers on the server only.</div>
+
+  <div class="pair">
+    <div>
+      <label for="app">Name on the server</label>
+      <input id="app" class="mono" spellcheck="false" required>
+    </div>
+    <div>
+      <label for="port">Port</label>
+      <input id="port" class="mono" inputmode="numeric" required>
+    </div>
+  </div>
+
+  <details>
+    <summary>ssh key and port</summary>
+    <label for="sshKey">ssh key file</label>
+    <input id="sshKey" class="mono" placeholder="ssh’s default" spellcheck="false">
+    <label for="sshPort">ssh port</label>
+    <input id="sshPort" class="mono" placeholder="22" inputmode="numeric">
+  </details>
+
+  <p class="problem" id="problem" role="alert"></p>
+  <div class="buttons">
+    <button type="button" id="cancel">Cancel</button>
+    <button type="submit" class="primary" id="go">Publish</button>
+  </div>
+</form>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const FIELDS = ['host', 'domain', 'app', 'port', 'sshKey', 'sshPort'];
+  window.serverForm.onFill(({ answers, problem }) => {
+    for (const f of FIELDS) $(f).value = answers?.[f] ?? '';
+    if (answers?.sshKey || answers?.sshPort) document.querySelector('details').open = true;
+    $('problem').textContent = problem ?? '';
+    (answers?.host ? $('go') : $('host')).focus();
+  });
+  $('form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    window.serverForm.submit(Object.fromEntries(FIELDS.map((f) => [f, $(f).value.trim()])));
+  });
+  $('cancel').onclick = () => window.serverForm.cancel();
+  addEventListener('keydown', (e) => { if (e.key === 'Escape') window.serverForm.cancel(); });
+  window.serverForm.ready();
+</script>
+</body>
+</html>
