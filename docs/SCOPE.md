@@ -905,8 +905,10 @@ the hover, before the steps); the event (*"When Sign in: Click · Button"*) is t
   new format, and the runtime never reads it. A step can be deleted or moved without touching it.
 - **Not built:** the importer names no card. Bubble's run-mode bundle carries no workflow name (0 of the template's
   14 workflows; `event_color` on one); if Richard's paid export does, it goes into `cardNames`.
-- **Seen, not fixed:** a branch made in Studio has no label, so a card whose first step is one reads "Branch"; the
-  composed condition (*"If 1 > 2"*) would say more.
+- ~~Seen, not fixed: a branch made in Studio has no label, so a card whose first step is one reads "Branch"~~ (s19):
+  with no label, a branch says its condition: what is composed there (*"If 1 > 2"*, cut at 48 characters) or the value
+  wired in (*"If Sign-in card's state"*); "Branch" only when nothing is. `check:editor` reads the emptied card's name
+  as "If 1 > 2".
 
 Gate (`check:editor`): a new workflow with no steps reads "No steps yet", its event under it; Rename → "Check the
 card" is in the head, the list row and on disk on the element; after a branch and two steps it is still the name;

@@ -353,7 +353,7 @@ try {
     await b.evaluate(`document.querySelector('#steps .event-card input.cardname').value = ''`);
     await b.key('Enter', 'Enter', 13); await wait(400);
     const unnamed = await cardHead();
-    ok(/^(If |Branch)/.test(unnamed.name || '') && !Object.values(namesOnDisk()).includes('Check the card'), 'STU-023: an emptied name gives the card back to its steps, and the name leaves the file', { unnamed, onDisk: namesOnDisk() });
+    ok(/^If 1 > 2/.test(unnamed.name || '') && !Object.values(namesOnDisk()).includes('Check the card'), 'STU-023: an emptied name gives the card back to its steps, and the name leaves the file; the branch made here has no label, so it reads its composed condition ("If 1 > 2"), not "Branch"', { unnamed, onDisk: namesOnDisk() });
     // STU-013-NAVLOOP: NodeGX re-tests a Condition when its value changes, Evaluate wired or not. A branch tests when its
     // event reaches it: its value arriving as the app opens must not send No's "Go to page" (the runtime's own trace says)
     ok(nodes.find((n) => n.id === cond.id)?.parameters?.['runOnChange-condition'] === false, 'the branch is written to test only when its event reaches it (run on change off)', nodes.find((n) => n.id === cond.id)?.parameters);

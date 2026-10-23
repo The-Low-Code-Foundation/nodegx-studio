@@ -3185,7 +3185,10 @@ function stepWords(s, short = false) {
     const side = (list) => list.map((x) => stepWords(x)).join(' → ') || 'nothing';
     // a label that asks ("Signed in?") is the test; any other ("Only when …", "Put the old error away") is the branch's own name
     const fixed = typeof p.condition === 'boolean' && !conns.some((c) => c.toId === s.id && c.toProperty === 'condition');
-    const test = node.label ? (/\?$/.test(node.label) ? `If ${node.label.replace(/\?$/, '')}` : node.label) : fixed ? `Always ${p.condition ? 'Yes' : 'No'}` : 'Branch';
+    // with no label, a branch made in Studio says its condition: what is composed there, or the value wired in
+    const wire = conns.find((c) => c.toId === s.id && c.toProperty === 'condition'), src = wire && byId[wire.fromId];
+    const asked = !src ? null : isComposed(src) ? composedPreview(src) : chipText(wire.fromId, wire.fromProperty);
+    const test = node.label ? (/\?$/.test(node.label) ? `If ${node.label.replace(/\?$/, '')}` : node.label) : fixed ? `Always ${p.condition ? 'Yes' : 'No'}` : asked ? `If ${asked.length > 48 ? `${asked.slice(0, 47)}…` : asked}` : 'Branch';
     return short ? test : `${test}: Yes → ${side(s.branches.yes)}; No → ${side(s.branches.no)}`;
   }
   const more = !short && s.siblings.length ? ` (+${s.siblings.length} more)` : '';
