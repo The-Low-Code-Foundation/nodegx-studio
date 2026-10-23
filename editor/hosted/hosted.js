@@ -87,7 +87,7 @@ strip.innerHTML = `
   <button id="propsbtn" class="toggle" title="The selected element's properties" ${hosted ? '' : 'hidden'}>Properties</button>
   <button id="dockbtn" title="Studio docked beside the conversation (picture-in-picture), where it stays while the chat scrolls" hidden>Dock</button>
   <button id="fullbtn" title="Studio over the whole conversation" ${hosted ? '' : 'hidden'}>Full screen</button>
-  <button id="windowbtn" title="The same Studio in your browser, beside the conversation" ${hosted ? '' : 'hidden'}>Window ↗</button>
+  <button id="windowbtn" title="Studio in its own window: the desktop app if it is installed, otherwise your browser" ${hosted ? '' : 'hidden'}>Window ↗</button>
 `;
 document.documentElement.insertBefore(strip, document.body ?? null);
 if (!document.body) document.addEventListener('DOMContentLoaded', () => document.documentElement.insertBefore(strip, document.body), { once: true });
@@ -166,8 +166,16 @@ $('dockbtn').addEventListener('click', async () => {
   if (!app) return;
   try { await app.requestDisplayMode({ mode: 'pip' }); } catch (e) { say(`dock refused: ${e.message}`); }
 });
+// P125 CCN-006 (Richard, 2026-10-23): the desktop app when this machine has it, so the window outlives the agent's
+// host; the browser otherwise. NodeGX's proxy answers `/__nodegx/open-app` by launching the app on the project's
+// folder ({ opened: false } when it is not installed). Studio serving the panel itself has no such path: a 404 here,
+// and the browser.
 $('windowbtn').addEventListener('click', async () => {
   if (!app) return;
+  try {
+    const r = await fetch('/__nodegx/open-app', { method: 'POST' });
+    if (r.ok && (await r.json()).opened) { say('opened in NodeGX Studio, the desktop app'); return; }
+  } catch { /* no proxy: the browser */ }
   try { await app.openLink({ url: ORIGIN + '/' }); } catch (e) { say(`could not open a window: ${e.message}`); }
 });
 
