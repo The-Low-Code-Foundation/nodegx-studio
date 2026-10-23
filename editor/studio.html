@@ -368,6 +368,8 @@
   .box.hov .tag { background: var(--hover); color: #052e16; }
   /* inside a copy of a reusable (P123-STU031-COPYBOX), and the copy being edited on its page (P123-STU-REUSABLENAV) */
   .box.hov.deep { border-style: dashed; }
+  /* the rest of what one selection draws (a For Each's rows after the first): boxed, not named again */
+  .box.more .tag { display: none; }
   .box.ctx { border: 1.5px dashed var(--accent); background: color-mix(in srgb, var(--accent) 4%, transparent); }
   .handle { position: absolute; width: 9px; height: 9px; background: #fff; border: 1.5px solid var(--sel); border-radius: 2px; pointer-events: auto; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
   .handle.e { right: -5px; top: calc(50% - 5px); cursor: ew-resize; }
@@ -1538,8 +1540,11 @@ $('previewmode').onchange = () => { $('overlay').classList.toggle('preview', $('
  */
 let elMap = new Map(), rtMap = new Map();
 const appRoot = () => { try { return preview.frame?.contentWindow?.Noodl?.Navigation?._noodlRuntime?.context?.rootComponent ?? null; } catch { return null; } };
-/** What a runtime node draws: its own element, or for a copy, its roots' (a copy draws through its reusable). */
-const drawnBy = (n, depth = 0) => { const el = n?.getDOMElement?.(); return el ? [el] : depth < 6 ? (n?.getRoots?.() || []).flatMap((r) => drawnBy(r, depth + 1)) : []; };
+/**
+ * What a runtime node draws: its own element, or for a copy, its roots' (a copy draws through its reusable); for a For
+ * Each, which draws nothing of its own, its rows' (`_internal.itemNodes`, a copy each), so Esc up from a row boxes them.
+ */
+const drawnBy = (n, depth = 0) => { const el = n?.getDOMElement?.(); return el ? [el] : depth < 6 ? [...(n?.getRoots?.() || []), ...(n?._internal?.itemNodes || [])].flatMap((r) => drawnBy(r, depth + 1)) : []; };
 /** The runtime scope that draws page `key`: the scope one of its own top nodes lives in. */
 function scopeOfPage(key) {
   const root = appRoot(); if (!root) return null;
@@ -1716,6 +1721,8 @@ function draw() {
       const b = box(r, 'sel', `${labelOf(sel)}`, `${Math.round(r.width)} × ${Math.round(r.height)}`);
       if (editing) for (const dir of ['e', 's', 'se']) b.append(h('div', { class: `handle ${dir}`, 'data-dir': dir, onmousedown: (e) => startResize(e, dir) }));
       overlay.append(b);
+      // a For Each draws its rows: the first carries the name and the handles, every other row is boxed too
+      for (const el of elementsHere(sel).slice(1)) { const q = el.getBoundingClientRect(); if (q.width && q.height) overlay.append(box(q, 'sel more')); }
     }
   }
   // STU-020: every element with a workflow wears a ⚡ in its top right corner (on top of the boxes, so it stays clickable)
@@ -5236,14 +5243,18 @@ function timelineNaming() {
   const keyOf = (id) => where.get(id)?.key;
   return { label, pageNode, asker, settings, nodeOf, keyOf };
 }
-/** What a node draws in the app. The preview maps none to a copy of a reusable: a copy draws through its roots. */
+/**
+ * What a node draws in the app. The preview maps none to a copy of a reusable: a copy draws through its roots. A For
+ * Each draws no element of its own either: its rows do (the runtime's `_internal.itemNodes`, a copy each), so Esc up
+ * from a row to its For Each boxes every row.
+ */
 function drawnElements(id) {
   const own = preview.elementsOf(id); if (own.length) return own;
   let copies = [];
   try { copies = preview.frame.contentWindow.Noodl.Navigation._noodlRuntime.context.rootComponent.nodeScope.getNodesWithIdRecursive(id); } catch { return []; }
   const out = [];
   const through = (n, depth) => { for (const r of n.getRoots?.() || []) { const el = r.getDOMElement?.(); if (el) out.push(el); else if (depth < 6) through(r, depth + 1); } };
-  for (const c of copies) through(c, 0);
+  for (const c of copies) { through(c, 0); for (const row of c._internal?.itemNodes || []) out.push(...drawnBy(row)); }
   return out;
 }
 /**

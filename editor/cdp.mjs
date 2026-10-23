@@ -52,7 +52,16 @@ export async function attach({ port, width, height, onClose, match = () => true 
     if (msg.id && waiting.has(msg.id)) { const { ok, no } = waiting.get(msg.id); waiting.delete(msg.id); msg.error ? no(new Error(msg.error.message)) : ok(msg.result); }
     else for (const l of listeners) l(msg);
   };
-  const send = (method, params = {}) => new Promise((ok, no) => { const id = ++seq; waiting.set(id, { ok, no }); ws.send(JSON.stringify({ id, method, params })); });
+  // P125 — every call has an answer or an error: a page whose main thread is stuck never answers Runtime.evaluate, and
+  // `until`'s own limit is only read between answers, so `check:editor` once sat in `rebuilt(n0)` for good after a step
+  // failed under load. 60 s is twice the longest wait the gate asks for (`rebuilt`, 30 s of short evaluates).
+  const SEND_MS = 60000;
+  const send = (method, params = {}) => new Promise((ok, no) => {
+    const id = ++seq;
+    const timer = setTimeout(() => { waiting.delete(id); no(new Error(`CDP ${method} had no answer in ${SEND_MS / 1000} s: the page's main thread is stuck${params.expression ? ` (on ${String(params.expression).slice(0, 120)})` : ''}`)); }, SEND_MS);
+    waiting.set(id, { ok: (v) => { clearTimeout(timer); ok(v); }, no: (e) => { clearTimeout(timer); no(e); } });
+    ws.send(JSON.stringify({ id, method, params }));
+  });
   const problems = [];
   listeners.add((m) => {
     if (m.method === 'Runtime.exceptionThrown') problems.push((m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text).split('\n')[0]);

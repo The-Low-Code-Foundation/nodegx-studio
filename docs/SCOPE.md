@@ -882,7 +882,10 @@ a reusable opened from the picker; from a page, the NodeGX way:
 - **A click there edits it in its reusable, on the page** (`host = { key: page, path: [{ key, via, row? }] }`): the
   app keeps showing the page (`previewFiles` starts there), the copy being edited is outlined, the property panel is
   the reusable's node. Elements are read in THAT copy's runtime scope, so the third of three StepItems is the one boxed.
-  A click outside it edits that instead; Esc (nothing selected) goes up one level with the copy selected.
+  A click outside it edits that instead; Esc (nothing selected) goes up one level with the copy selected. Up from a
+  row, the For Each is selected and every row it draws is boxed (the first named, with the handles): a For Each draws
+  no element of its own, so before this nothing was boxed (`drawnBy` reads its `_internal.itemNodes`; puppy page:
+  6 boxes, HEAD 0).
 - **The element list stays the page's** (`renderHostOutline`): crumbs "← Home › FeaturedPuppies › PuppyCard", the
   page's rows and the copies on the way in grey, the reusable being edited unfolded and marked with its own rows,
   every other copy folded. A copy row's chevron (or ⤢, or a double-click) unfolds it in place on a page; on the
