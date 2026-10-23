@@ -513,6 +513,7 @@
   .lane { border: 1px dashed var(--ghost); border-radius: 14px; padding: 10px 14px 14px; }
   .lane h4 { margin: 0 0 10px; font-size: 11px; font-weight: 600; color: var(--dim); }
   .lanesnote { margin: 0 0 14px; }
+  .lanes.fork { flex: none; gap: 18px; }
   .lanesrow { display: flex; align-items: center; gap: 56px; }
   .cond-line { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--sub); }
   .wf .chip.expr { background: rgba(167,139,250,.14); border-color: rgba(167,139,250,.45); color: #ddd6fe; }
@@ -3206,7 +3207,9 @@ function events() {
   return list;
 }
 const eventTitle = (ev) => `When ${labelOf(ev.node)}: ${portLabel(byId[ev.node], 'output', ev.port)}`;
-const countSteps = (steps) => steps.reduce((n, s) => n + 1 + (s.branches ? countSteps(s.branches.yes) + countSteps(s.branches.no) : 0), 0);
+// a fan-out's other wires count as the lanes the card draws, each wire once (a loop back into it counts nothing more)
+const countSteps = (steps, seen = new Set()) => steps.reduce((n, s) => n + 1 + (s.branches ? countSteps(s.branches.yes, seen) + countSteps(s.branches.no, seen) : 0)
+  + (s.siblings ?? []).filter((c) => !seen.has(forkKey(c)) && seen.add(forkKey(c))).reduce((m, c) => m + countSteps(chain(s.from.node, s.from.port, new Set(), c), seen), 0), 0);
 /* ---- STU-024: an event wired to more than one first step runs them all, side by side (two Bubble workflows on one click whose
    conditions overlap). Each is a lane: the chain from that one wire. One lane: null ---- */
 function lanesOf(ev) {
@@ -3488,7 +3491,7 @@ function renderWorkflow() {
     h('button', { class: 'quiet tiny', title: 'Every workflow on this page, listed', onclick: () => { cardBack = null; renderWorkflow(); } }, 'All workflows on this page')));
   wf.append(h('div', { class: 'event-card' }, h('div', { class: 'ic' }, icon('bolt')), h('div', { class: 'named' }, cardTitle(ev), h('small', {}, `${eventTitle(ev)} · ${typeName(byId[ev.node].type)}`)),
     h('div', { style: 'margin-left:auto;display:flex;gap:6px;align-items:center' }, h('button', { class: 'quiet tiny showrun', 'aria-pressed': showRun, title: runPin ? 'This is the run you opened from the timeline; hide it, and Show the last run lights the latest one again' : 'Light up what this workflow did the last time it ran in the app: the wires it crossed and the steps it ran', onclick: () => toggleLastRun() }, showRun ? (runPin ? 'Hide this run' : 'Hide the last run') : 'Show the last run'), h('div', { class: 'zoom' }, h('button', { title: 'Smaller', onclick: () => zoomFlow(-0.1) }, '−'), h('span', { class: 'zoomval' }), h('button', { title: 'Bigger', onclick: () => zoomFlow(0.1) }, '+'), h('button', { title: 'Fit the whole workflow in view', onclick: () => { flowZoom = null; fitFlow(); } }, 'Fit')), isRenaming(ev) ? null : h('button', { class: 'quiet tiny rename', title: 'Name this workflow yourself; an empty name gives it back to its steps', onclick: () => { renaming = `${ev.node}.${ev.port}`; renderWorkflow(); } }, 'Rename'), eventSteps(ev) ? null : h('button', { class: 'quiet', onclick: () => { const i = draftEvents.findIndex((d) => d.node === ev.node && d.port === ev.port); if (i >= 0) draftEvents.splice(i, 1); selEvent = null; renderWorkflow(); } }, 'Discard'))));
-  flowWires = [];
+  flowWires = []; drawnForks.clear();
   const flow = h('div', { class: 'flow' });
   flow.append(document.createElementNS(SVG_NS, 'svg')); flow.firstChild.setAttribute('class', 'wires');
   const evnode = h('div', { class: 'evnode' }, h('b', {}, icon('bolt'), `When ${portLabel(byId[ev.node], 'output', ev.port)}`), h('small', {}, `${labelOf(ev.node)} (${typeName(byId[ev.node].type)})`));
@@ -3628,6 +3631,7 @@ function drawWires() {
   for (const d of pulses) add('path', { d, fill: 'none', stroke: '#fff', 'stroke-width': 2, 'stroke-dasharray': '2 16', opacity: 0.9, class: 'pulse' });
 }
 let stepCounter = 0;
+const drawnForks = new Set(), forkKey = (c) => `${c.fromId}.${c.fromProperty}>${c.toId}.${c.toProperty}`;
 function renderChain(into, steps, from, startN, prefix = '', before = null, src = null, lead = null) {
   const col = h('div', { class: 'chain' });
   if (lead) col.append(lead);
@@ -3635,8 +3639,28 @@ function renderChain(into, steps, from, startN, prefix = '', before = null, src 
   let n = startN;
   let last = from;
   let end = src; // what the next node's wire leaves from
-  let joined = false;
-  for (const s of steps) {
+  let joined = false, forked = false;
+  for (const [i, s] of steps.entries()) {
+    // one signal into several steps along the way (a branch's Yes into four): each one a lane side by side, the first
+    // going on with the rest of this chain. Not on from where both sides meet: its wire stands for two
+    // each wire drawn as a lane once (`drawnForks`, emptied per card): a loop back into a fan-out draws its step, not the loop again
+    const fresh = joined ? [] : (s.siblings ?? []).filter((c) => !drawnForks.has(forkKey(c)));
+    if (fresh.length) {
+      for (const c of fresh) drawnForks.add(forkKey(c));
+      link();
+      const grid = h('div', { class: 'lanes fork' });
+      const lists = [[{ ...s, siblings: [] }, ...steps.slice(i + 1)], ...fresh.map((c) => chain(s.from.node, s.from.port, new Set(), c))];
+      let first = null;
+      lists.forEach((list, k) => {
+        const lane = h('div', { class: 'lane' }, h('h4', {}, `Side by side ${String.fromCharCode(65 + k)}`));
+        const e = renderChain(lane, list, s.from, n, `${prefix}${String.fromCharCode(65 + k)}`, k ? null : before, end);
+        if (!k) first = e;
+        grid.append(lane);
+      });
+      col.append(grid);
+      last = null; end = first; forked = true;
+      break;
+    }
     link();
     const card = stepCard(s, `${prefix}${n}`);
     if (joined) card.classList.add('joined');
@@ -3681,7 +3705,7 @@ function renderChain(into, steps, from, startN, prefix = '', before = null, src 
     n++;
   }
   if (last && before) last = { ...last, before };
-  if (steps.at(-1)?.refresh) col.append(h('div', { class: 'hint' }, 'A refresh ends the workflow: a step after it would also run every time the page data loads.'));
+  if (!forked && steps.at(-1)?.refresh) col.append(h('div', { class: 'hint' }, 'A refresh ends the workflow: a step after it would also run every time the page data loads.'));
   if (last) {
     link();
     const row = h('div', { class: 'addrow' }, h('button', { class: steps.length ? '' : 'primary', onclick: (e) => addActionMenu(e, last) }, icon('plus'), 'Add an action'), h('button', { title: 'A step that splits this workflow into a Yes and a No chain (a Condition node)', onclick: () => addAction('Condition', last) }, icon('branch'), 'Add a branch'));

@@ -1567,6 +1567,16 @@ in*, Yes runs four steps and the card draws one, so its lit run shows 2 of the r
 too (`stepTypeName`); and a record's data type reads *Data type* wherever a port is named (`portLabel`), so the
 timeline's In list says `Data type "Task" (set)`, not `collectionName`. `check:editor` 198/198 (1 new, 1 tightened
 from `/Log In/i` to the exact head), `check:timeline` 52/52 (1 new). Both fail on the s22 tree by their exact text.
+**Done (s24): a fan-out along the way is lanes.** Richard on the s23 finding and dragging: *"Both of those next steps
+would be awesome."* One signal into several steps after the event (a branch's Yes into four, a step's Done into two)
+was drawn as its first step with *+ 3 more wired from the same signal*; it is now lanes side by side (*Side by side A,
+B, …*), each wired from where the signal leaves, the first going on with the rest of the chain, each with its own Add
+an action (`renderChain`; lanes at the event are unchanged, `lanesOf`). Each fanned wire is drawn once per card
+(`drawnForks`), so a loop back into a fan-out cannot draw forever; the card's step count counts the lanes
+(`countSteps`). A step two lanes both reach is drawn in both and, with a run shown, lit in both. On the Todo page's
+*If Signed in* the lit run is all five of its steps (it was 2 of 5). Not at the point both sides of a branch meet (its
+wire stands for two). `check:timeline` 53/53 (1 new, 1 tightened to all five), `check:editor` 198/198, `check:app`
+54/54, `check:data` 80/80. The s23 tree fails both (2 of 5, "+ 3 more").
 
 **Taken.** R4 (Richard, 2026-10-23): after a branch, both sides may rejoin into one next step. His leaning first:
 *"Rejoining would be great, like n8n style, but hard to manage maybe?"*; then, asked again in s20: *"Yep for R4."*

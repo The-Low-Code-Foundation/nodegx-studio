@@ -307,12 +307,15 @@ try {
     await b.evaluate(`document.querySelector('#tlrows .tlrow[data-link=${JSON.stringify(openRow.link)}]').click()`); await wait(600);
     const card = JSON.parse(await b.evaluate(`JSON.stringify({ shown: !document.getElementById('workflow').hidden, title: document.querySelector('#steps .wf h2')?.textContent })`));
     ok(card.shown && card.title === openRow.text, 'clicking the workflow row opens its card', card);
-    // STU-026: with that run lit up, read off the recording: of the steps the card draws, those its row lists (a side's
-    // second wire from one signal is "+ n more", not drawn: Yes here has 4, the card draws 1), and it says it is the recorded one
-    const lit = JSON.parse(await b.evaluate(`JSON.stringify({ ran: [...document.querySelectorAll('#steps .flow .step.ran')].map(s => s.dataset.id).sort(), drawn: [...document.querySelectorAll('#steps .flow .step[data-id]')].map(s => s.dataset.id), want: [...new Set(__ob.timeline.rows.find(r => r.lane === 'workflow' && r.link?.card && 'card:' + r.link.card.node + '.' + r.link.card.port === ${JSON.stringify(openRow.link)} && Math.round(r.t) === ${openRow.t})?.steps.map(x => x.node) ?? [])].sort(), ev: !!document.querySelector('#steps .evnode.ran'), say: document.querySelector('#steps .flowlegend .lastrun')?.textContent, btn: document.querySelector('#steps button.showrun')?.textContent })`));
-    const drawnRan = lit.drawn.filter((id) => lit.want.includes(id)).sort();
-    ok(lit.ran.length > 0 && lit.ran.join() === drawnRan.join() && lit.ev && /^● The recorded run at .+ · \d+ steps?/.test(lit.say) && lit.btn === 'Hide this run',
-      'the card opens with that run lit up: the drawn steps its row lists wear "ran", no other, and under the flow "The recorded run at …"', lit);
+    // STU-026: with that run lit up, read off the recording: every step its row lists (Yes sends one signal into four:
+    // four lanes side by side, s24), no other, and it says it is the recorded one
+    const lit = JSON.parse(await b.evaluate(`JSON.stringify({ ran: [...document.querySelectorAll('#steps .flow .step.ran')].map(s => s.dataset.id).sort(), drawn: [...document.querySelectorAll('#steps .flow .step[data-id]')].map(s => s.dataset.id), lanes: [...document.querySelectorAll('#steps .branch.yes .lanes.fork > .lane')].map(l => [...l.querySelectorAll('.step[data-id]')].map(s => s.dataset.id).join('+')), fromYes: [...document.querySelectorAll('#steps svg.wires path[data-from=tdAuth][data-kind=yes]')].map(p => p.dataset.to).sort(), more: /more wired from the same signal/.test(document.getElementById('steps').textContent), want: [...new Set(__ob.timeline.rows.find(r => r.lane === 'workflow' && r.link?.card && 'card:' + r.link.card.node + '.' + r.link.card.port === ${JSON.stringify(openRow.link)} && Math.round(r.t) === ${openRow.t})?.steps.map(x => x.node) ?? [])].sort(), ev: !!document.querySelector('#steps .evnode.ran'), say: document.querySelector('#steps .flowlegend .lastrun')?.textContent, btn: document.querySelector('#steps button.showrun')?.textContent })`));
+    // (Projects' lane goes on: its Changed refreshes the list, so that refresh is drawn there too, and lights in both places)
+    const heads = lit.lanes.map((l) => l.split('+')[0]).sort();
+    ok(lit.lanes.length === 4 && heads.join() === lit.fromYes.join() && lit.lanes.includes('tdProjects+tdData') && !lit.more,
+      "Yes's one signal into four steps is four lanes side by side, each wired from the branch's Yes; no \"+ 3 more\"", { lanes: lit.lanes, fromYes: lit.fromYes, more: lit.more });
+    ok([...new Set(lit.ran)].join() === lit.want.join() && lit.want.length === 5 && lit.ev && /^● The recorded run at .+ · \d+ steps?/.test(lit.say) && lit.btn === 'Hide this run',
+      'the card opens with that run lit up: all five steps its row lists wear "ran", no other, and under the flow "The recorded run at …"', lit);
     await b.evaluate(`document.querySelector('#steps button.showrun').click()`); await wait(300);
     const hid = JSON.parse(await b.evaluate(`JSON.stringify({ ran: document.querySelectorAll('#steps .flow .ran').length, btn: document.querySelector('#steps button.showrun')?.textContent })`));
     ok(hid.ran === 0 && hid.btn === 'Show the last run', 'Hide this run puts it out', hid);
