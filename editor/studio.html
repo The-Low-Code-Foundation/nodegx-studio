@@ -1439,7 +1439,7 @@ function stepOnly(node, port) {
 }
 const exprNames = (text) => { try { return text ? expressionPorts(String(text)) : []; } catch { return []; } };
 // a record's field port (`prop-title`) is made at run time from its fields: it reads as the field
-const portLabel = (node, plug, name) => portsOf(node, plug).find((p) => p.name === name)?.label || (/^prop-./.test(name) ? name.slice(5) : name);
+const portLabel = (node, plug, name) => portsOf(node, plug).find((p) => p.name === name)?.label || (/^prop-./.test(name) ? name.slice(5) : name === 'collectionName' ? 'Data type' : name);
 const isSignalPort = (node, plug, name) => { const p = portsOf(node, plug).find((p) => p.name === name); return p ? p.signal : /^(on[A-Z]|did|do$|navigate$|store$|fetch$|login$|logout$|send$|eval$)/.test(name) && !/changed$/i.test(name); };
 
 /* ================= pages ================= */
@@ -3728,7 +3728,7 @@ function stepCard(s, n) {
   const kind = ACTIONS.find(([t]) => t === node.type)?.[2];
   const card = h('div', { class: `step${isCond ? ' cond' : ''}${openSteps.has(s.id) ? ' open' : ''}${neverDone(s) ? ' dead' : ''}`, 'data-id': s.id, style: kind ? `--kind:${KIND_COLOUR[kind]}` : null },
     h('div', { class: 'num' }, isCond ? icon('branch') : n),
-    h('h3', {}, isCond ? 'Branch' : typeName(node.type), h('span', { title: isCond ? 'If the condition holds, Yes runs; otherwise No' : null }, isCond ? (node.label || 'if the condition holds, Yes; otherwise No') : node.label || '')),
+    h('h3', {}, isCond ? 'Branch' : stepTypeName(node.type), h('span', { title: isCond ? 'If the condition holds, Yes runs; otherwise No' : null }, isCond ? (node.label || 'if the condition holds, Yes; otherwise No') : node.label || '')),
     h('div', { class: 'acts' },
       ports.length ? h('button', { class: 'quiet tiny', title: 'Settings', onclick: () => { const open = settings.style.display === 'none'; settings.style.display = open ? '' : 'none'; card.classList.toggle('open', open); open ? openSteps.add(s.id) : openSteps.delete(s.id); } }, icon('settings')) : null,
       h('button', { class: 'quiet tiny danger', title: isCond ? 'Delete the branch and both chains' : 'Delete step', onclick: () => deleteStep(s) }, icon('trash'))));
@@ -3759,13 +3759,16 @@ function deleteStep(s) {
   const after = s.branches ? (s.rejoin ? [{ node: s.rejoin.id, port: s.rejoin.via }] : []) : conns.filter((c) => c.fromId === s.id && c.fromProperty === doneOf(node) && byId[c.toId] && isSignalPort(byId[c.toId], 'input', c.toProperty)).map((c) => ({ node: c.toId, port: c.toProperty }));
   const heal = into.flatMap((c) => after.filter((t) => !conns.some((w) => w.fromId === c.fromId && w.fromProperty === c.fromProperty && w.toId === t.node && w.toProperty === t.port)).map((t) => ({ edit: 'connect', component: pageKey, from: { node: c.fromId, port: c.fromProperty }, to: t })));
   edits(pageKey, [...doomed.map((id) => ({ edit: 'remove_node', component: pageKey, id })), ...heal]);
-  toast(s.branches ? 'Deleted the branch and its chains' : `Deleted the ${typeName(node.type)} step`);
+  toast(s.branches ? 'Deleted the branch and its chains' : `Deleted the ${stepTypeName(node.type)} step`);
 }
 const ACTIONS = [
   ['RouterNavigate', 'Go to page', 'nav'], ['NewDbModelProperties', 'Create a new record', 'db'], ['SetDbModelProperties', 'Make changes to a record', 'db'], ['DeleteDbModelProperties', 'Delete a record', 'db'],
   ['@refresh', 'Refresh page data', 'db'], ['Set Variable', 'Set a custom state or variable', 'state'], ['Condition', 'Branch (Yes / No)', 'branch'], ['net.noodl.user.LogIn', 'Log the user in', 'user'], ['net.noodl.user.LogOut', 'Log the user out', 'user'],
   ['net.noodl.user.SignUp', 'Sign the user up', 'user'], ['Send Event', 'Send an event', 'bolt'], ['JavaScriptFunction', 'Run JavaScript', 'code'], ['Timer', 'Wait (timer)', 'bolt'], ['Navigate To Path', 'Go to a URL path', 'nav'], ['Show Popup', 'Show a popup', 'page']
 ];
+/** A step's kind as the action menu says it ("Go to page", "Log the user in"); a variable's set, whose menu line covers
+    two things, and anything not in the menu keep the node type's name. */
+const stepTypeName = (type) => (type === 'Set Variable' ? null : ACTIONS.find(([t]) => t === type)?.[1]) ?? typeName(type);
 function addActionMenu(e, from) {
   closeMenu();
   const menu = popover(e);

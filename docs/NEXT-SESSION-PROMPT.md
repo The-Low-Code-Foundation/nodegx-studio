@@ -60,13 +60,20 @@ between (`addAction`'s `before`). Gates on the s22 tree: `check:editor` **197/19
 [look/s2-workflow-lastrun.png](look/s2-workflow-lastrun.png); the three s2-workflow-{branch,card,rejoin} pictures were
 retaken (they show the "+").
 
+**s23 (2026-10-23, same day)** (SCOPE, STU-026 "Done (s23)"): a timeline row opens its card with THAT run lit
+(`lastRunOf(…, t)`, the recording keeps trace/cards/clock; "The recorded run at …", *Hide this run*), b7997bc. Then
+item 2 below: step heads say the menu's words ("Go to page"), a record's type reads "Data type". Gates on the s23
+tree: `check:editor` **198/198**, `check:timeline` **52/52**; `check:app` 54/54 and `check:data` 80/80 on b7997bc
+(the last commit touched only words they do not read). Committed, **not pushed** (ask first; s22's ed40eb0 too).
+**Found:** a side of a branch that fans one signal out to several steps draws only the first ("+ 3 more wired from
+the same signal"), so the Todo page's *If Signed in* lights 2 of its 5 steps. Lanes exist only at the event.
+
 Next buildable, in order:
-0. STU-009 on Windows / Linux in the package workflow (only macOS was run). STU-026's last left: dragging nodes; the
-   lit run in the timeline's own card link (open the card from a timeline row with its run shown).
+0. STU-009 on Windows / Linux in the package workflow (only macOS was run). STU-026's last left: dragging nodes;
+   a branch side's fan-out drawn as lanes (s23 finding) — ask Richard which first.
 1. When NodeGX publishes a release with BACKENDPUBLIC: bump the pins, `npm run vendor`, every gate. Check npm first
    (`npm view @nodegx/preview versions`).
-2. From "Not to forget": a step's In list names a record's data type by its parameter (`collectionName "Task"`).
-   Also seen in s21: a Go to page step's head says "Navigate" (the type's name), not "Go to page" as the menu does.
+2. (done s23: "Data type" in the In list; heads say the menu's words.)
 3. R5's remaining limits: a state on an element inside a reusable read from the page, and a state in a reusable nested
    in one converted before it, are reported, not wired. A Toggle of an element in another component is "set to shown".
 4. M6's small follow-ups, if wanted: `_User` in Data types; Export of people once the backend's `_User` export is read

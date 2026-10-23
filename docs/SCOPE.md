@@ -1562,6 +1562,11 @@ and no other, then *Hide this run* puts it out). No mutant run: the sentence and
 **Found, not built:** a side of a branch that sends one signal to several steps draws only the first; the rest are
 *+ 3 more wired from the same signal* on that step (lanes are drawn only at the event). On the Todo page's *If Signed
 in*, Yes runs four steps and the card draws one, so its lit run shows 2 of the run's 5 steps.
+**Done (s23), two words:** a step's head is what the action menu called it (*Go to page*, not the node type's
+*Navigate*; *Log the user in*; a variable's set and anything not in the menu keep the type's name), the delete toast
+too (`stepTypeName`); and a record's data type reads *Data type* wherever a port is named (`portLabel`), so the
+timeline's In list says `Data type "Task" (set)`, not `collectionName`. `check:editor` 198/198 (1 new, 1 tightened
+from `/Log In/i` to the exact head), `check:timeline` 52/52 (1 new). Both fail on the s22 tree by their exact text.
 
 **Taken.** R4 (Richard, 2026-10-23): after a branch, both sides may rejoin into one next step. His leaning first:
 *"Rejoining would be great, like n8n style, but hard to manage maybe?"*; then, asked again in s20: *"Yep for R4."*

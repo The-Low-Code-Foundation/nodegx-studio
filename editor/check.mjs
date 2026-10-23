@@ -280,7 +280,7 @@ try {
   ok(events.includes(signInBtn) && events.includes(createBtn), 'the sign-in page lists its button events', events);
   await b.evaluate(`${evRow(signInBtn)}.click()`); await wait(300);
   const steps = await b.evaluate('[...document.querySelectorAll("#steps .step h3")].map(r => r.firstChild.textContent)');
-  ok(steps.length >= 1 && /Log In/i.test(steps[0]), 'the Sign in click\'s first step is the Log In action', steps);
+  ok(steps.length >= 1 && steps[0] === 'Log the user in', 'the Sign in click\'s first step is the Log In action, headed as the action menu says it ("Log the user in")', steps);
   await b.clickSel('#steps .step .acts button'); await wait(200);
   const fields = await b.evaluate(`[...document.querySelectorAll('#steps .step .settings')].filter(p => p.style.display !== 'none').flatMap(p => [...p.querySelectorAll('.field label')].map(l => l.textContent))`);
   ok(fields.length > 0, 'a step opens its settings as fields', fields.slice(0, 6));
@@ -323,6 +323,8 @@ try {
     ok(noNav && yesEmpty, 'an action added in the No column is a Navigate wired from the Condition\'s On False; the Yes column is still empty', { noNav: !!noNav, yesEmpty });
     const noPage = () => b.evaluate(`document.querySelector('#steps .branch.no .step .nopage')?.textContent ?? null`);
     const said = await noPage();
+    const navHead = await b.evaluate(`document.querySelector('#steps .branch.no .step h3')?.firstChild.textContent ?? null`);
+    ok(navHead === 'Go to page', 'the step is headed as the menu said it, "Go to page" (not the node type\'s "Navigate")', navHead);
     ok(/No page picked: it goes nowhere, and nothing after it runs/.test(said || ''), 'a Go to page with no page says on its step that it goes nowhere and nothing after it runs (RouterNavigate says Done only on arriving)', said);
     await clickText('#steps .branch.yes .addrow button', 'Add an action'); await wait(250);
     await b.type('custom state'); await wait(200); await menuItem('Set a custom state');
