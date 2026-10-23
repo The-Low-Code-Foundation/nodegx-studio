@@ -99,6 +99,13 @@
   header .status.backend.off::before { background: var(--line-2); }
   /* the pills keep their words; the long status line beside them is what gives way when the header is short of room */
   header .status.backend { flex: none; }
+  /* P123-STU-TOPBAROVERFLOW: what the header has no room for (the panel in a chat) goes into "⋯", never off the edge */
+  header { position: relative; }
+  header .seg { flex: none; } /* the width buttons were clipped ("Phone" gone) rather than moved */
+  header .more { flex: none; padding: 3px 9px; font-size: 16px; line-height: 1; letter-spacing: 1px; }
+  header #moremenu { position: absolute; top: calc(100% + 4px); right: 8px; z-index: 70; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); min-width: 190px; max-width: calc(100vw - 24px); }
+  header #moremenu[hidden] { display: none; }
+  header #moremenu .status.backend { border-left: 0; padding-left: 0; }
   /* ---- STU-040: the import report, beside the app ---- */
   #reportpanel { position: fixed; top: 44px; right: 0; bottom: 0; width: min(640px, calc(100vw - 48px)); background: var(--panel); border-left: 1px solid var(--line); box-shadow: var(--shadow); z-index: 40; display: flex; flex-direction: column; }
   #reportpanel .rhead { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
@@ -327,6 +334,11 @@
   .tree .row:hover .into { opacity: 1; } .tree .into:hover { background: var(--line); color: var(--ink); }
   .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 2px 4px 6px; font-size: 12px; color: var(--muted); }
   .crumbs button { padding: 1px 6px; font-size: 12px; } .crumbs b { color: var(--ink); font-weight: 600; }
+  /* P123-STU-REUSABLENAV: the page around a reusable edited on it, and that reusable, unfolded and marked */
+  .crumbs.inside { position: sticky; top: 0; z-index: 1; background: var(--panel); }
+  .tree .row.outside { color: var(--muted); }
+  .tree .row.outside.way { color: var(--ink-2); font-weight: 500; }
+  .tree .editing { border-left: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); border-radius: 0 var(--r) var(--r) 0; margin: 1px 0 3px; }
   .tree .chev { width: 14px; height: 14px; flex: none; display: grid; place-items: center; cursor: pointer; border-radius: 3px; }
   .tree .chev:hover { background: var(--line); }
   .tree .chev::before { content: ''; width: 5px; height: 5px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); }
@@ -354,6 +366,9 @@
   .box.sel { border: 1.5px solid var(--sel); }
   .box .tag { position: absolute; left: -1px; top: -22px; background: var(--sel); color: #fff; font-size: 11px; font-weight: 500; padding: 2px 7px; border-radius: 4px 4px 0 0; white-space: nowrap; display: flex; gap: 6px; align-items: center; }
   .box.hov .tag { background: var(--hover); color: #052e16; }
+  /* inside a copy of a reusable (P123-STU031-COPYBOX), and the copy being edited on its page (P123-STU-REUSABLENAV) */
+  .box.hov.deep { border-style: dashed; }
+  .box.ctx { border: 1.5px dashed var(--accent); background: color-mix(in srgb, var(--accent) 4%, transparent); }
   .handle { position: absolute; width: 9px; height: 9px; background: #fff; border: 1.5px solid var(--sel); border-radius: 2px; pointer-events: auto; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
   .handle.e { right: -5px; top: calc(50% - 5px); cursor: ew-resize; }
   .handle.s { bottom: -5px; left: calc(50% - 5px); cursor: ns-resize; }
@@ -731,6 +746,8 @@
     <button class="status backend off" id="agentpill" title="Claude Code and this app">Claude Code</button>
     <button class="status backend" id="reportpill" hidden title="What the import converted, and what it could not">Import report</button>
     <button class="primary" id="publishbtn" hidden title="Publish the app as a site, written by NodeGX's own deploy">Publish</button>
+    <button class="quiet more" id="morebtn" hidden title="More: what the header has no room for" aria-haspopup="true">⋯</button>
+    <div id="moremenu" hidden></div>
   </header>
 
   <main>
@@ -1277,12 +1294,16 @@ function firstCopyValues(key, declared) {
   }
   return {};
 }
-/** What the preview is given: the project's files, and while a reusable is open, the canvas page holding one copy of it. */
+/**
+ * What the preview is given: the project's files, and while a reusable is open on its own, the canvas page holding one
+ * copy of it. A reusable edited on its page (`host`) is shown on that page: the app starts there.
+ */
 function previewFiles() {
   const all = files.entries();
-  if (!registry()[pageKey]) return all;
+  const shownKey = host ? host.key : pageKey;
+  if (!registry()[shownKey]) return all;
   const out = { ...all };
-  const page = isPage(pageKey);
+  const page = isPage(shownKey);
   if (!page) {
     const target = store.readComponent(pageKey).files.nodes.nodes;
     // a copy takes only what its reusable declares (STU-014-INSTANCEHIDE): an imported reusable's shown/hidden comes from its copy
@@ -1302,7 +1323,7 @@ function previewFiles() {
   // Every router that lists what Studio shows starts there (and lists the canvas while a reusable is open), so the app
   // opens on it: no start page drawn first, none of its queries asked, no navigation after a rebuild. Navigating after
   // the app started raced its own redirects (STU-015-PAGENAV and the gate runs it cost, SCOPE.md).
-  const target = '/' + (page ? pageKey : CANVAS);
+  const target = '/' + (page ? shownKey : CANVAS);
   for (const [path, text] of Object.entries(all)) {
     if (!path.endsWith('/nodes.json') || !text.includes('"Router"')) continue;
     const doc = JSON.parse(text);
@@ -1325,6 +1346,14 @@ function startPageKey() {
   return undefined;
 }
 let pageKey = startPageKey() ?? pageKeys()[0] ?? Object.keys(registry())[0];
+/**
+ * P123-STU-REUSABLENAV — a reusable edited on its page. Richard, 2026-10-23: "in the NodeGX full editor … the left menu
+ * shows what's visible on the page … the full page of components still shows, just your reusable is now 'unfolded'".
+ * While `host` is set, `pageKey` is the reusable being edited and `host.key` the page on screen; `host.path` is the copies
+ * from that page down to the one being edited, each `{ key, via }` (`via`: the copy's node id in the component above it)
+ * or, for a row a For Each draws, `{ key, via: the For Each's id, row }`. File ids, so a path outlives a rebuild.
+ */
+let host = null;
 function pageShownByApp() {
   const w = preview.frame?.contentWindow; if (!w) return undefined;
   const loc = w.location.hash ? w.location.hash.replace(/^#\/?/, '') : w.location.pathname.replace(/^\/runtime\/?/, '').replace(/^\//, '');
@@ -1346,6 +1375,8 @@ function followApp(component) {
 let nodes = [], conns = [], byId = {}, visualIds = [], depthOf = {}, legacyName = '';
 let pageItems = [], selItem = null; // the page's data items (STU-010), and the one open in the right panel
 function readGraph() {
+  // a page or a reusable gone from under the path (an undo, a rename, the agent): back to the reusable on its own
+  if (host && (!isPage(host.key) || !registry()[pageKey] || host.path[host.path.length - 1]?.key !== pageKey)) host = null;
   const stored = store.readComponent(pageKey);
   const comp = stored.files;
   legacyName = stored.legacyName;
@@ -1456,13 +1487,15 @@ const isSignalPort = (node, plug, name) => { const p = portsOf(node, plug).find(
 /* ================= pages ================= */
 function renderPagePick() {
   const sel = $('pagepick'); sel.innerHTML = '';
-  for (const k of pageKeys()) sel.append(h('option', { value: k, selected: k === pageKey }, k.replace(/^Pages\//, '')));
+  // a reusable edited on its page: the picker says the page, which is what is on screen and in the list
+  const shownKey = host ? host.key : pageKey;
+  for (const k of pageKeys()) sel.append(h('option', { value: k, selected: k === shownKey }, k.replace(/^Pages\//, '')));
   const reus = reusableKeys();
-  if (reus.length) sel.append(h('optgroup', { label: 'Reusable elements' }, ...reus.map((k) => h('option', { value: k, selected: k === pageKey }, k))));
-  $('pagedata-title').textContent = isPage(pageKey) ? 'Page data' : 'Data';
+  if (reus.length) sel.append(h('optgroup', { label: 'Reusable elements' }, ...reus.map((k) => h('option', { value: k, selected: k === shownKey }, k))));
+  $('pagedata-title').textContent = isPage(pageKey) ? 'Page data' : host ? `Data of ${pageKey.split('/').pop()}` : 'Data';
   $('newpagedata').title = isPage(pageKey) ? 'A search the page runs once, named, that any element can read' : 'A search this reusable makes while a copy of it is shown, named, that any of its elements can read';
-  $('elements-title').textContent = isPage(pageKey) ? 'Elements on this page' : 'Elements in this reusable';
-  $('renamereusable').hidden = !reus.includes(pageKey);
+  $('elements-title').textContent = isPage(shownKey) ? 'Elements on this page' : 'Elements in this reusable';
+  $('renamereusable').hidden = !!host || !reus.includes(pageKey);
 }
 $('renamereusable').onclick = (e) => renameReusableMenu(e);
 /**
@@ -1488,7 +1521,7 @@ async function followSoon() {
 /** Design (and Workflow) on another page or reusable: the app is rebuilt starting there (`previewFiles`). */
 function openComponent(key) {
   if (!registry()[key]) return;
-  pageKey = key; sel = null; selEvent = null; selItem = null; treeRoot = null; readGraph();
+  host = null; pageKey = key; sel = null; selEvent = null; selItem = null; treeRoot = null; readGraph();
   renderAll();
   rebuild(0);
 }
@@ -1498,18 +1531,122 @@ $('appwrap').style.width = '100%';
 $('previewmode').onchange = () => { $('overlay').classList.toggle('preview', $('previewmode').checked); draw(); };
 
 /* ================= the elements the app draws, by node ================= */
-let elMap = new Map();
-function mapElements() {
-  elMap = new Map();
-  for (const id of visualIds) for (const el of preview.elementsOf(id)) elMap.set(el, id);
+/**
+ * `elMap`: the elements of what Design edits (the page, or the reusable), by its node ids. `rtMap`: every element the app
+ * draws, by the runtime node drawing it, so a point inside a copy of a reusable is that copy's element, not the page's
+ * (P123-STU031-COPYBOX: the preview maps no element to a copy, and every hover on a page made of copies boxed the page).
+ */
+let elMap = new Map(), rtMap = new Map();
+const appRoot = () => { try { return preview.frame?.contentWindow?.Noodl?.Navigation?._noodlRuntime?.context?.rootComponent ?? null; } catch { return null; } };
+/** What a runtime node draws: its own element, or for a copy, its roots' (a copy draws through its reusable). */
+const drawnBy = (n, depth = 0) => { const el = n?.getDOMElement?.(); return el ? [el] : depth < 6 ? (n?.getRoots?.() || []).flatMap((r) => drawnBy(r, depth + 1)) : []; };
+/** The runtime scope that draws page `key`: the scope one of its own top nodes lives in. */
+function scopeOfPage(key) {
+  const root = appRoot(); if (!root) return null;
+  let c; try { c = store.readComponent(key).files.nodes; } catch { return null; }
+  const tops = c.visualRoots?.length ? c.visualRoots : c.nodes.filter((n) => n.parent == null).map((n) => n.id);
+  for (const id of tops) for (const n of root.nodeScope.getNodesWithIdRecursive(id)) if (n.nodeScope?.componentOwner?.name === '/' + key) return n.nodeScope;
+  return null;
 }
+/** The copy a path step names, in the scope of the component above it. */
+function copyIn(scope, step) {
+  if (!scope) return null;
+  if (step.row === undefined) { const n = scope.nodes[step.via]; return n?.nodeScope ? n : null; }
+  return Object.values(scope.nodes).filter((n) => n._forEachModel !== undefined && n.name === '/' + step.key)[step.row] ?? null;
+}
+/** The runtime scope drawing what Design edits while a reusable is edited on its page; null otherwise. */
+function hostScope() {
+  if (!host) return null;
+  let s = scopeOfPage(host.key);
+  for (const step of host.path) s = copyIn(s, step)?.nodeScope ?? null;
+  return s;
+}
+/** The copies between the page on screen (scope `top`) and runtime node `n`, outermost first; null when `n` is not on it. */
+function pathTo(n, top, topKey) {
+  const steps = [];
+  for (let scope = n.nodeScope; scope !== top;) {
+    const owner = scope?.componentOwner, up = owner?.parentNodeScope;
+    if (!owner || !up || !String(owner.name).startsWith('/')) return null;
+    if (owner._forEachModel !== undefined) steps.unshift({ key: owner.name.slice(1), via: null, row: Object.values(up.nodes).filter((x) => x._forEachModel !== undefined && x.name === owner.name).indexOf(owner) });
+    else steps.unshift({ key: owner.name.slice(1), via: owner.id });
+    scope = up;
+  }
+  // a row's step names the For Each that draws it, read off the component above
+  let above = topKey;
+  for (const s of steps) {
+    if (s.via === null) { try { s.via = store.readComponent(above).files.nodes.nodes.find((x) => x.type === 'For Each' && x.parameters?.template === '/' + s.key)?.id ?? null; } catch { /* unreadable: no via */ } }
+    above = s.key;
+  }
+  return steps;
+}
+const samePath = (a, b) => a.length === b.length && a.every((s, i) => s.key === b[i].key && s.via === b[i].via && s.row === b[i].row);
+/** The elements a node of what Design edits draws: in the copy being edited when there is one, else wherever it is. */
+function elementsHere(id) {
+  if (!host) return drawnElements(id);
+  const n = hostScope()?.nodes[id];
+  return n ? drawnBy(n) : [];
+}
+let deepMemo = new Map();
+function mapElements() {
+  elMap = new Map(); rtMap = new Map(); deepMemo = new Map();
+  for (const id of visualIds) for (const el of elementsHere(id)) elMap.set(el, id);
+  const root = appRoot();
+  if (root) for (const n of root.nodeScope.getAllNodesRecursive()) { const el = n.getDOMElement?.(); if (el && !rtMap.has(el)) rtMap.set(el, n); }
+}
+/**
+ * What is under a point. `{ id, el }` for an element of what Design edits; `{ deep: { path, id, label }, el }` for one
+ * inside a copy (or, while a reusable is edited on its page, anywhere outside it): a click there edits it where it is.
+ */
 function hitAt(x, y) {
   const doc = preview.frame?.contentDocument; if (!doc) return null;
   let el = doc.elementFromPoint(x, y);
-  while (el && !elMap.has(el)) el = el.parentElement;
-  return el ? { id: elMap.get(el), el } : null;
+  while (el && !elMap.has(el) && !rtMap.has(el)) el = el.parentElement;
+  if (!el) return null;
+  if (elMap.has(el)) return { id: elMap.get(el), el };
+  // a mouse move asks many times over the same element: its place is read once per mapping (the files parse each time)
+  if (!deepMemo.has(el)) deepMemo.set(el, deepTarget(rtMap.get(el)));
+  const deep = deepMemo.get(el);
+  if (deep) return { deep, el };
+  // not on the page on screen (the app's own frame, a popup): the nearest element of what Design edits, as before
+  for (let up = el.parentElement; up; up = up.parentElement) if (elMap.has(up)) return { id: elMap.get(up), el: up };
+  return null;
 }
-const elOf = (id) => preview.elementsOf(id)[0];
+/** Where runtime node `n` is, from the page on screen: the copies down to it and its id in the last one's reusable. */
+function deepTarget(n) {
+  const topKey = host ? host.key : pageKey;
+  if (!n || !isPage(topKey)) return null;
+  const top = scopeOfPage(topKey); if (!top) return null;
+  const path = pathTo(n, top, topKey); if (!path) return null;
+  const key = path.length ? path[path.length - 1].key : topKey;
+  let node; try { node = store.readComponent(key).files.nodes.nodes.find((x) => x.id === n.id); } catch { return null; }
+  if (!node) return null;
+  const label = [...path.map((s) => s.key.split('/').pop()), node.label || typeName(node.type)].join(' › ');
+  return { path, id: n.id, key, label };
+}
+/**
+ * Edit a node where it stands on the page: in its reusable, the page still on screen and in the list (`host`). An empty
+ * path is the page itself. Nothing is rebuilt: the app on screen is already the page.
+ */
+function editAt(path, id) {
+  const topKey = host ? host.key : pageKey;
+  if (path.length) { host = { key: topKey, path }; pageKey = path[path.length - 1].key; }
+  else { host = null; pageKey = topKey; }
+  sel = null; selEvent = null; selItem = null; treeRoot = null;
+  readGraph(); mapElements();
+  hover = null; hoverDeep = null;
+  sel = id && byId[id] ? id : null;
+  renderAll();
+  if (path.length) toast(`Editing ${pageKey.split('/').pop()} here on ${topKey.replace(/^Pages\//, '')}: a change to it changes every copy`);
+}
+/** Up one level from the copy being edited: the component above it, with that copy (or the For Each drawing it) selected. */
+function editUp(levels = 1) {
+  if (!host) return;
+  const keep = Math.max(0, host.path.length - levels);
+  editAt(host.path.slice(0, keep), host.path[keep].via);
+}
+window.__ob.editAt = editAt;
+window.__ob.host = () => host;
+const elOf = (id) => elementsHere(id)[0];
 const rectOf = (id) => elOf(id)?.getBoundingClientRect();
 let frameHooked = null;
 function hookFrame() {
@@ -1523,6 +1660,7 @@ preview.onTrace(({ dictionary }) => { if (dictionary) { mapElements(); draw(); }
 
 /* ================= selection, hover, the overlay: boxes, the spacing guide, the handles ================= */
 let sel = null, hover = null, pending = null;
+let hoverDeep = null; // { el, label, path, id }: an element inside a copy, under the pointer (hitAt's `deep`)
 let gesture = null; // { kind: 'maybe-drag' | 'drag' | 'resize', ... }
 const overlay = $('overlay');
 // s4 (P123-S4-CANVASSCROLL): a wheel over the app while editing scrolls the app, as Bubble's canvas does. The overlay sits on the
@@ -1567,6 +1705,10 @@ function draw() {
   if (rebuilding) return;
   const editing = !$('previewmode').checked;
   if (hover && hover !== sel && byId[hover]) { const r = rectOf(hover); if (r) { if (editing) drawSpacing(hover, false); overlay.append(box(r, 'hov', labelOf(hover))); } }
+  // inside a copy: the element hovered, named by the copies it is in ("Hero › Title"); a click edits it there
+  if (hoverDeep?.el?.isConnected) { const r = hoverDeep.el.getBoundingClientRect(); overlay.append(box(r, 'hov deep', hoverDeep.label)); }
+  // a reusable edited on its page: the copy being edited, outlined, so it reads as "inside this one"
+  if (host && editing) for (const el of elementsHere(visualIds[0])) { const r = el.getBoundingClientRect(); overlay.append(h('div', { class: 'box ctx', style: `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px` })); }
   if (sel && byId[sel]) {
     const r = rectOf(sel);
     if (r) {
@@ -1590,20 +1732,22 @@ function draw() {
   }
 }
 const box = (r, cls, tag, size) => h('div', { class: `box ${cls}`, style: `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px` }, h('div', { class: 'tag' }, tag, size ? h('span', { style: 'opacity:.75;font-weight:400' }, size) : null));
-function select(id) { sel = id; hover = null; if (id) selItem = null; renderTree(); renderPageData(); renderProps(); draw(); }
+function select(id) { sel = id; hover = null; hoverDeep = null; if (id) selItem = null; renderTree(); renderPageData(); renderProps(); draw(); }
 
 overlay.addEventListener('mousemove', (e) => {
   if (gesture) return onGestureMove(e);
   if (e.target.closest?.('.bolt')) return; // offsetX is the badge's own, not the overlay's; the element under it stays hovered
   const hit = hitAt(e.offsetX, e.offsetY);
   const id = hit?.id ?? null;
-  if (id !== hover) { hover = id; draw(); }
+  const deep = hit?.deep ? { el: hit.el, ...hit.deep } : null;
+  if (id !== hover || deep?.el !== hoverDeep?.el) { hover = id; hoverDeep = deep; draw(); }
 });
-overlay.addEventListener('mouseleave', () => { if (!gesture) { hover = null; draw(); } });
+overlay.addEventListener('mouseleave', () => { if (!gesture) { hover = null; hoverDeep = null; draw(); } });
 overlay.addEventListener('mousedown', (e) => {
   if (e.target.classList.contains('handle')) return;
   const hit = hitAt(e.offsetX, e.offsetY);
-  if (pending) return placePending(hit);
+  if (pending) return placePending(hit?.deep ? null : hit);
+  if (hit?.deep) { editAt(hit.deep.path, hit.deep.id); return; }
   if (!hit) { select(null); return; }
   select(hit.id);
   if (hit.id === pageRootId()) return;
@@ -1614,6 +1758,8 @@ window.addEventListener('keydown', (e) => {
   const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
   if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !inField) { e.preventDefault(); undo(); return; }
   if (e.key === 'Escape' && tab === 'workflow' && cardBack && !inField && !document.querySelector('.menu')) { backFromCard(); return; }
+  // Esc with nothing selected, inside a copy on its page: up one level, the copy selected (as the NodeGX editor's breadcrumb)
+  if (e.key === 'Escape' && !inField && host && !sel && !pending && !document.querySelector('.menu') && tab === 'design') { editUp(); return; }
   if (e.key === 'Escape') { closeMenu(); if (!inField) { pending = null; overlay.classList.remove('adding'); for (const b of $('palette').querySelectorAll('button')) b.setAttribute('aria-pressed', 'false'); select(null); } }
   if (inField) return;
   if ((e.key === 'Delete' || e.key === 'Backspace') && sel && sel !== pageRootId() && $('design').hidden === false) { e.preventDefault(); removeNode(sel); }
@@ -1787,7 +1933,11 @@ const wordsOf = (n) => { const t = n.parameters?.text ?? n.parameters?.label; re
 // component's own nodes; the crumbs lead back. Selecting an element outside it leaves it.
 let treeRoot = null;
 const within = (id, root) => { for (let p = id; p !== undefined && byId[p]; p = byId[p].parent) if (p === root) return true; return false; };
-function renderOutline(tree) {
+function renderOutline(tree, base = 0) {
+  // a copy unfolds where it stands while the app on screen is a page (P123-STU-REUSABLENAV); a reusable on its own canvas
+  // keeps "open it on its own" (STU-015)
+  const unfolds = isPage(host ? host.key : pageKey);
+  const below = host ? host.path : [];
   if (sel && sel !== treeRevealed) { for (let p = byId[sel]?.parent; p !== undefined && byId[p]; p = byId[p].parent) treeOpen.add(p); treeRevealed = sel; if (treeRoot && !within(sel, treeRoot)) treeRoot = null; }
   if (treeRoot && !byId[treeRoot]) treeRoot = null;
   const rootId = treeRoot || visualIds[0];
@@ -1807,9 +1957,15 @@ function renderOutline(tree) {
     const words = wordsOf(n), nStates = statesOf(id).length;
     const goIn = (e) => { e.stopPropagation(); treeRoot = id; for (const c of chain) treeOpen.add(c); renderTree(); };
     const reusable = !kids.length && n.type.startsWith('/') && reusableKeys().includes(n.type.slice(1)) ? n.type.slice(1) : null;
-    const goReusable = (e) => { e.stopPropagation(); openComponent(reusable); };
-    tree.append(h('div', { class: 'row', 'aria-selected': chain.includes(sel), style: `padding-left:${4 + d * 14}px`, onclick: () => { select(id); elOf(id)?.scrollIntoView({ block: 'nearest' }); }, ondblclick: d > 0 && kids.length ? goIn : reusable ? goReusable : undefined, onmouseenter: () => { hover = id; draw(); }, onmouseleave: () => { hover = null; draw(); } },
-      kids.length ? h('span', { class: `chev${open ? ' open' : ''}`, onclick: toggle }) : h('span', { class: 'chev none' }),
+    const rows = !kids.length && n.type === 'For Each' && typeof n.parameters?.template === 'string' && n.parameters.template.startsWith('/') ? n.parameters.template.slice(1) : null;
+    const goReusable = (e) => { e.stopPropagation(); if (!unfolds) return openComponent(reusable); editAt([...below, { key: reusable, via: id }], null); };
+    const goRows = (e) => { e.stopPropagation(); editAt([...below, { key: rows, via: id, row: 0 }], null); };
+    tree.append(h('div', { class: 'row', 'aria-selected': chain.includes(sel), style: `padding-left:${4 + (d + base) * 14}px`, onclick: () => { select(id); elOf(id)?.scrollIntoView({ block: 'nearest' }); }, ondblclick: d > 0 && kids.length ? goIn : reusable ? goReusable : undefined, onmouseenter: () => { hover = id; draw(); }, onmouseleave: () => { hover = null; draw(); } },
+      kids.length ? h('span', { class: `chev${open ? ' open' : ''}`, onclick: toggle })
+        // a copy (or a list's rows) is folded: its chevron unfolds it here, to edit inside it on the page
+        : unfolds && reusable ? h('span', { class: 'chev', title: `Unfold ${reusable.split('/').pop()}: edit what it holds here, on the page`, onclick: goReusable })
+        : unfolds && rows && componentDraws(rows) ? h('span', { class: 'chev', title: `Unfold a row: edit ${rows.split('/').pop()} here, on the page`, onclick: goRows })
+        : h('span', { class: 'chev none' }),
       icon(glyphOf(n.type)),
       h('span', { class: 'segs' }, seg(id, 0)),
       // the wrappers folded into this row: one small mark, named on hover, each still selectable (the selected one is spelled out)
@@ -1823,15 +1979,64 @@ function renderOutline(tree) {
       h('span', { class: 't' }, kids.length && !open ? String(countIn(tail)) : (words ? '' : n.label ? typeName(n.type) : '')),
       // at the row's end, so a click on the row's middle selects and never opens
       d > 0 && kids.length ? h('span', { class: 'into', title: `Open inside ${labelOf(id)}: list only what it holds (or double-click)`, onclick: goIn }, '⤢')
-        : reusable ? h('span', { class: 'into', title: `Open the reusable ${reusable} on its own (or double-click)`, onclick: goReusable }, '⤢') : null));
+        : reusable ? h('span', { class: 'into', title: unfolds ? `Edit inside ${reusable.split('/').pop()} here, on the page (or double-click)` : `Open the reusable ${reusable} on its own (or double-click)`, onclick: goReusable }, '⤢') : null));
     if (open) for (const k of kids) rowFor(k, d + 1);
   };
   if (rootId) rowFor(rootId, 0);
 }
+/**
+ * P123-STU-REUSABLENAV: a reusable edited on its page is listed IN the page. The page's rows and the copies on the way
+ * down are the page's (a click there edits that, Esc or ← goes up); the copy being edited is unfolded and marked, its
+ * rows the reusable's own; every other copy stays folded and unfolds where it stands.
+ */
+const hostOpen = new Set(); // `${component}:${node}` rows opened outside the copy being edited
+function scopeAt(path) { let s = scopeOfPage(host.key); for (const st of path) s = copyIn(s, st)?.nodeScope ?? null; return s; }
+function renderHostOutline(tree) {
+  const page = host.key.replace(/^Pages\//, '');
+  const crumbs = h('div', { class: 'crumbs inside' },
+    h('button', { class: 'quiet', title: `Back to ${page} (Esc)`, onclick: () => editUp(host.path.length) }, '←'),
+    h('button', { class: 'quiet', title: `Edit ${page}`, onclick: () => editUp(host.path.length) }, page));
+  host.path.forEach((s, i) => {
+    const name = s.key.split('/').pop();
+    crumbs.append('›', i === host.path.length - 1 ? h('b', { title: `Editing the reusable ${name}: a change here changes every copy` }, name) : h('button', { class: 'quiet', onclick: () => editUp(host.path.length - 1 - i) }, name));
+  });
+  tree.append(crumbs);
+  hostRows(tree, host.key, 0, 0);
+}
+function hostRows(tree, key, level, depth) {
+  let c; try { c = store.readComponent(key).files.nodes; } catch { return; }
+  const all = Object.fromEntries(c.nodes.map((n) => [n.id, n]));
+  const step = host.path[level], here = host.path.slice(0, level);
+  const onWay = new Set(); for (let p = step?.via; p != null && all[p]; p = all[p].parent) onWay.add(p);
+  const row = (id, d) => {
+    const n = all[id]; if (!n) return;
+    const kids = (n.children || []).filter((k) => all[k]);
+    const copyOf = n.type.startsWith('/') && componentDraws(n.type.slice(1)) ? n.type.slice(1) : null;
+    const rowsOf = n.type === 'For Each' && String(n.parameters?.template ?? '').startsWith('/') ? n.parameters.template.slice(1) : null;
+    const way = onWay.has(id), open = way || d === 0 || hostOpen.has(`${key}:${id}`);
+    const label = n.label || typeName(n.type);
+    const unfold = (e) => { e.stopPropagation(); editAt([...here, copyOf ? { key: copyOf, via: id } : { key: rowsOf, via: id, row: 0 }], null); };
+    const chev = kids.length && !way ? h('span', { class: `chev${open ? ' open' : ''}`, onclick: (e) => { e.stopPropagation(); const k = `${key}:${id}`; if (hostOpen.has(k)) hostOpen.delete(k); else hostOpen.add(k); renderTree(); } })
+      : (copyOf || rowsOf) && !way ? h('span', { class: 'chev', title: `Unfold ${(copyOf || rowsOf).split('/').pop()}: edit what it holds here`, onclick: unfold })
+      : h('span', { class: `chev${way ? ' open' : ' none'}` });
+    tree.append(h('div', { class: `row outside${way ? ' way' : ''}`, style: `padding-left:${4 + (depth + d) * 14}px`, title: `${label} — in ${key.split('/').pop()}; click to edit it there`,
+      onclick: () => editAt(here, id), ondblclick: copyOf || rowsOf ? unfold : undefined,
+      onmouseenter: () => { const el = drawnBy(scopeAt(here)?.nodes[id])[0]; hoverDeep = el ? { el, label } : null; draw(); }, onmouseleave: () => { hoverDeep = null; draw(); } },
+      chev, icon(glyphOf(n.type)), h('span', { class: 'segs' }, h('span', { class: 'seg' }, label)), h('span', { class: 't' }, n.label ? typeName(n.type) : '')));
+    if (way && step.via === id) {
+      if (level + 1 === host.path.length) { const box = h('div', { class: 'editing', title: `Editing ${pageKey.split('/').pop()}: a change here changes every copy` }); tree.append(box); renderOutline(box, depth + d + 1); }
+      else hostRows(tree, step.key, level + 1, depth + d + 1);
+      return;
+    }
+    if (open) for (const k of kids) row(k, d + 1);
+  };
+  const tops = c.visualRoots?.length ? c.visualRoots : c.nodes.filter((n) => n.parent == null && (n.children?.length || isVisualType(n.type))).map((n) => n.id);
+  for (const t of tops) row(t, 0);
+}
 function renderTree() {
   const tree = $('tree'); tree.innerHTML = '';
   const q = $('treesearch').value.trim().toLowerCase();
-  if (!q) return renderOutline(tree);
+  if (!q) return host ? renderHostOutline(tree) : renderOutline(tree);
   for (const id of visualIds) {
     const n = byId[id];
     if (q && !labelOf(id).toLowerCase().includes(q) && !typeName(n.type).toLowerCase().includes(q)) continue;
@@ -5350,6 +5555,43 @@ function renderAll() {
   if (tab === 'data') renderData();
   if (tab === 'styles') renderStyles();
 }
+/**
+ * P123-STU-TOPBAROVERFLOW — Richard, 2026-10-23: "Some of the items on the top bar … are hidden when the screen is too
+ * small, like when the studio is in the chat … Need to have a three dot menu." What does not fit goes into "⋯", the
+ * least used first; the menu lists them in the header's order. The elements themselves move, so their handlers and
+ * state go with them; each has a comment left where it stood, and every fit puts them all back before measuring.
+ */
+const HEADER_FOLD = ['reportpill', 'agentpill', 'backendpill', 'recbtn', 'widthseg', 'previewmode-l', 'publishbtn']; // first to go first
+function setupHeaderFold() {
+  const header = document.querySelector('header'), menu = $('moremenu'), more = $('morebtn');
+  const slots = new Map(HEADER_FOLD.map((id) => { const c = document.createComment(id); $(id).after(c); return [id, c]; }));
+  const inOrder = [...header.children].filter((c) => slots.has(c.id)).map((c) => c.id);
+  const shown = (el) => !el.hidden && getComputedStyle(el).display !== 'none';
+  const over = () => { const edge = header.getBoundingClientRect().right - 6; return [...header.children].some((c) => c !== menu && shown(c) && c.getBoundingClientRect().right > edge); };
+  let fitting = false;
+  const mo = new MutationObserver(() => requestAnimationFrame(fit));
+  function fit() {
+    if (fitting) return; fitting = true;
+    try {
+      for (const id of HEADER_FOLD) slots.get(id).before($(id));
+      more.hidden = true;
+      if (over()) {
+        more.hidden = false;
+        for (const id of HEADER_FOLD) { if (!over()) break; menu.append($(id)); }
+        for (const id of inOrder) if ($(id).parentNode === menu) menu.append($(id));
+      }
+      if (![...menu.children].some(shown)) { more.hidden = true; menu.hidden = true; }
+    } finally { mo.takeRecords(); fitting = false; }
+  }
+  more.onclick = (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; };
+  document.addEventListener('mousedown', (e) => { if (!menu.hidden && !menu.contains(e.target) && !more.contains(e.target)) menu.hidden = true; });
+  new ResizeObserver(() => requestAnimationFrame(fit)).observe(header);
+  // a pill's words change its width, a tab hides the width buttons: refit; the fit's own moves are dropped (takeRecords)
+  mo.observe(header, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden', 'style', 'class'] });
+  fit();
+  window.__ob.fitHeader = fit;
+}
+setupHeaderFold();
 readGraph();
 renderPagePick();
 renderPalette(); renderTree();

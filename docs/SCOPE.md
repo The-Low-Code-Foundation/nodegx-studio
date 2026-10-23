@@ -869,6 +869,26 @@ copies ask it once each and the two hidden ones not at all. One gate flake of th
   at the time the machine's load average was 64–88 (three video encodes and another session), and under that load the
   committed code fails the same three gate checks as the fix (control): two steps that read the file 500 ms after a
   click, and the clash test, which races an outside write against an edit by design. Re-run when the machine is quiet.
+
+**Changed (P125, 2026-10-23, from Richard's puppy run in Claude Desktop): a reusable is edited ON its page.** Richard:
+*"When you hover over components, because they're inside reusables, you don't see them highlighted … In the NodeGX
+full editor … the left menu shows what's visible on the page and you just have the reusable you're editing
+highlighted … your reusable is now 'unfolded' and the other reusables remain folded."* Bubble's way (above) is kept for
+a reusable opened from the picker; from a page, the NodeGX way:
+- **Hover inside a copy** boxes that element, dashed, named by the copies it is in ("FeaturedPuppies › Heading"), rows
+  of a For Each included ("FeaturedPuppies › PuppyCard › Badge label"). Before, every point on a page made of copies
+  fell through to the page's root (P123-STU031-COPYBOX, seen on screen). The canvas maps every element the app draws
+  to its runtime node; `nodeScope.componentOwner` → `parentNodeScope` walks up to the page.
+- **A click there edits it in its reusable, on the page** (`host = { key: page, path: [{ key, via, row? }] }`): the
+  app keeps showing the page (`previewFiles` starts there), the copy being edited is outlined, the property panel is
+  the reusable's node. Elements are read in THAT copy's runtime scope, so the third of three StepItems is the one boxed.
+  A click outside it edits that instead; Esc (nothing selected) goes up one level with the copy selected.
+- **The element list stays the page's** (`renderHostOutline`): crumbs "← Home › FeaturedPuppies › PuppyCard", the
+  page's rows and the copies on the way in grey, the reusable being edited unfolded and marked with its own rows,
+  every other copy folded. A copy row's chevron (or ⤢, or a double-click) unfolds it in place on a page; on the
+  reusable canvas ⤢ still opens it on its own. Bug P123-STU-REUSABLENAV.
+- **The header folds** what has no room into "⋯" (P123-STU-TOPBAROVERFLOW): reports, agent, backend, Record, the
+  widths, Use the app, Publish, the least used first; the panel inline no longer hides four of them outright.
 ---
 
 ## M3 — Workflows that live on their element

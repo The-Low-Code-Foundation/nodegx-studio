@@ -72,8 +72,7 @@ strip.innerHTML = `
     html[data-hosted="inline"][data-side="elements"] #design > aside:not(.right) { display: block; }
     html[data-hosted="inline"][data-side="props"] #design { grid-template-columns: minmax(0, 1fr) 320px; }
     html[data-hosted="inline"][data-side="props"] #right { display: block; }
-    html[data-hosted="inline"] #widthseg, html[data-hosted="inline"] #recbtn, html[data-hosted="inline"] #reportpill,
-    html[data-hosted="inline"] #agentpill { display: none; }
+    /* the header's controls are not hidden inline: what has no room goes into Studio's own "⋯" (P123-STU-TOPBAROVERFLOW) */
     html[data-hosted="inline"] header { padding: 0 8px; gap: 6px; }
     html[data-hosted="inline"] #stage { padding: 8px; }
     html[data-hosted="inline"] #appwrap { min-height: 0; height: calc(100% - 4px); width: 100%; }
