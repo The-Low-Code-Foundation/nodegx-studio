@@ -35,8 +35,8 @@ own hunks.
 
 Where the alpha stands (SCOPE "The alpha (0.2) — the line"): 1 Publish, 3 Import, 5 main pushed, 6 Data: done.
 2 signed, packaged on all three in CI (s20 run); notarising waits on the five secrets. 4 waits on a NodeGX npm release
-with BACKENDPUBLIC. **main pushed** to 97f3c72 on 2026-10-23 (Richard: "Push to main ok"), with the other session's
-commits up to deee252. Ask again before the next push.
+with BACKENDPUBLIC. **main pushed** to 93b7ef2 on 2026-10-23 (Richard: "yep commit and push please"), STU-026 and STU-009
+with it, and the other session's 65b1623. Ask again before the next push.
 
 **s21, later the same day.** Richard on the rejoin picture: *"Meh it's not clear that you're rejoining… I'd have liked
 a bit more of a Noodl / NodeGX style connector system"*; on tabs: *"If we could do the whole multiple projects in
@@ -69,7 +69,6 @@ Waiting on Richard (ask in plain words):
 - The five notarisation secrets: "I'll get the secrets for you" (s21).
 - His look at the drawn flow in the app (docs/look/s2-workflow-rejoin.png, s2-workflow-card.png) and at the tabs
   (docs/look/stu-009-tabs.png).
-- Pushing everything after 97f3c72 (STU-026, STU-009, the docs; the other session's 65b1623 rides along).
 - **His idea (s21): "Window ↗" in the conversation opening the desktop app when it is installed, not the browser.**
   Not built; proposed: serve.mjs (local) launches the app with the project folder, a `nodegx-studio://` scheme for
   links from elsewhere, the hold passes to the desktop window. His answer to "what if the app already shows another
