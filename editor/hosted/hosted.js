@@ -29,7 +29,15 @@ const abs = (u) =>
 const nativeFetch = window.fetch.bind(window);
 window.fetch = (input, init) => nativeFetch(typeof input === 'string' ? abs(input) : input instanceof URL ? input : input, init);
 const NativeEventSource = window.EventSource;
-window.EventSource = function (url, init) { return new NativeEventSource(abs(url), init); };
+// Every stream the page opens is kept, so a panel that goes quiet can close them (P125-PUPPY2-THREEPANELS), and
+// Studio's own /api/events is where this bridge hears the hold and which panel is live: one stream per panel, not two.
+const streams = new Set();
+window.EventSource = function (url, init) {
+  const es = new NativeEventSource(abs(url), init);
+  streams.add(es);
+  if (String(url).includes('/api/events')) es.addEventListener('message', (ev) => onStudioEvent(ev.data));
+  return es;
+};
 window.EventSource.prototype = NativeEventSource.prototype;
 const nativeOpen = XMLHttpRequest.prototype.open;
 XMLHttpRequest.prototype.open = function (method, url, ...rest) { return nativeOpen.call(this, method, abs(url), ...rest); };
@@ -60,6 +68,14 @@ strip.innerHTML = `
     #hoststrip button.release { background: #1570ef; border-color: #2f8aff; font-weight: 600; }
     #hoststrip .state { color: #9aa7b8; }
     #hoststrip .state.held { color: #fda29b; font-weight: 600; }
+    #hoststrip .state.lifted { color: #a6f4c5; }
+    html[data-hosted="inline"] #hoststrip .state.lifted { display: block; flex: 1 1 auto; }
+    /* P125-PUPPY2-THREEPANELS: a quiet panel is its strip and nothing else — no app, no connection, 45 px. */
+    #wakebtn { display: none; }
+    html[data-quiet] body { display: none !important; }
+    html[data-quiet] #hoststrip > :not(.name):not(.state):not(#wakebtn) { display: none !important; }
+    html[data-quiet] #hoststrip .state { display: block !important; flex: 1 1 auto; color: #9aa7b8; }
+    html[data-quiet] #wakebtn { display: inline-block; }
     #hoststrip input { font: inherit; padding: 5px 8px; border-radius: 6px; border: 1px solid #2a3340; background: #0f141b;
       color: #eef2f6; width: 220px; }
     #hoststrip button.toggle[aria-pressed="true"] { background: #2a3340; border-color: #4da3ff; }
@@ -86,6 +102,7 @@ strip.innerHTML = `
   <button id="propsbtn" class="toggle" title="The selected element's properties" ${hosted ? '' : 'hidden'}>Properties</button>
   <button id="dockbtn" title="Studio docked beside the conversation (picture-in-picture), where it stays while the chat scrolls" hidden>Dock</button>
   <button id="fullbtn" title="Studio over the whole conversation" ${hosted ? '' : 'hidden'}>Full screen</button>
+  <button id="wakebtn" title="Studio is live in the newest answer; this brings it back to this one">Bring it back here</button>
   <button id="windowbtn" title="Studio in its own window: the desktop app if it is installed, otherwise your browser" ${hosted ? '' : 'hidden'}>Window ↗</button>
 `;
 document.documentElement.insertBefore(strip, document.body ?? null);
@@ -97,7 +114,63 @@ const holdBtn = $('holdbtn');
 const noteEl = $('holdnote');
 
 let app = null;
-const say = (text, held = false) => { stateEl.textContent = text; stateEl.classList.toggle('held', held); };
+const say = (text, held = false, lifted = false) => {
+  stateEl.textContent = text; stateEl.classList.toggle('held', held); stateEl.classList.toggle('lifted', lifted);
+};
+
+/* P125-PUPPY2-THREEPANELS — one live panel. A host keeps every panel an open_studio call drew, and each live one holds
+   a connection to Studio: three held all six of the browser's connections to that origin and every panel's app stopped
+   loading (and HOLD's own request queued). Each call's result names its panel (`panelId`, `issuedAt`); the newest is
+   live, and the others go quiet: their streams closed, the app's frame gone, the strip alone with "Bring it back here".
+   A panel that is not the newest when it mounts (a conversation reopened, a host remounting an old answer) never
+   starts Studio at all. A host that sends no result: the panel names itself, as of when it mounted. */
+let quiet = null; // null, 'fresh' (Studio never started here) or 'booted'
+let releaseStudio = null; // resolves __studioReady for a fresh quiet panel the person brings back
+let me = null;
+let resolveMe;
+const identity = new Promise((resolve) => { resolveMe = resolve; });
+setTimeout(() => resolveMe({ id: `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, seq: Date.now() }), 2500);
+function takeResult(result) {
+  for (const c of result?.content ?? []) {
+    if (c?.type !== 'text') continue;
+    try { const d = JSON.parse(c.text); if (d?.panelId) return resolveMe({ id: d.panelId, seq: Number(d.issuedAt) || 0 }); } catch { /* not JSON */ }
+  }
+}
+async function claim(wake = false) {
+  me = me ?? (await identity);
+  try {
+    const r = await fetch('/api/panel', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...me, wake }) });
+    if (!r.ok) return true; // a Studio without panels: every panel is live, as before
+    return (await r.json()).you;
+  } catch { return true; }
+}
+function goQuiet(how) {
+  if (quiet) return;
+  quiet = how;
+  for (const es of streams) es.close();
+  streams.clear();
+  if (how === 'booted') { try { window.__ob?.preview?.dispose(); } catch { /* the frame goes with the page anyway */ } }
+  document.documentElement.dataset.quiet = how;
+  say('Studio is live in a newer answer below.');
+  fitTo(document.documentElement.dataset.hosted === 'full' ? 'fullscreen' : 'inline');
+  if (document.documentElement.dataset.hosted === 'full') app?.requestDisplayMode({ mode: 'inline' }).catch(() => {});
+  // Ask the host to take this panel away. Not measured in Claude Desktop: if it ignores it, the strip stays.
+  try { app?.requestTeardown?.(); } catch { /* the quiet strip is the fallback */ }
+}
+async function wake() {
+  await claim(true);
+  if (quiet === 'booted') { location.reload(); return; }
+  quiet = null;
+  delete document.documentElement.dataset.quiet;
+  fitTo('inline');
+  readHold().then(drawHold);
+  releaseStudio?.();
+}
+function onStudioEvent(data) {
+  let d; try { d = JSON.parse(data); } catch { return; }
+  if (d.hold) drawHold(d.hold);
+  if (d.panel && me && d.panel.live !== me.id) goQuiet('booted');
+}
 
 // Studio's own module awaits this (the /panel rewrite puts `await window.__studioReady` at its top): served through
 // NodeGX's proxy, the origin answers 503 until the agent's open_studio has started Studio, and a page that asked
@@ -107,7 +180,11 @@ window.__studioReady = (async () => {
   for (let i = 0; i < 120; i++) {
     try {
       const r = await fetch('/api/hold');
-      if (r.ok) return;
+      if (r.ok) {
+        if (!hosted || (await claim())) return;
+        goQuiet('fresh');
+        return new Promise((resolve) => { releaseStudio = resolve; });
+      }
     } catch { /* not up yet */ }
     say(i === 0 ? 'Studio is starting…' : `Studio is starting… (${i}s)`);
     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -127,6 +204,7 @@ async function readHold() {
 }
 
 function drawHold(h) {
+  if (quiet) return;
   if (h.held) {
     holdBtn.textContent = 'Release';
     holdBtn.className = 'release';
@@ -134,7 +212,9 @@ function drawHold(h) {
   } else {
     holdBtn.textContent = 'HOLD';
     holdBtn.className = 'hold';
-    say(hosted && app ? 'in the conversation — the agent writes, you watch; HOLD stops it' : stateEl.textContent);
+    // shown while it is news (a quarter of an hour), then the strip says what it always says
+    if (h.lifted?.by === 'agent' && Date.now() - Date.parse(h.lifted.at) < 15 * 60_000) say(`The agent lifted your hold at ${new Date(h.lifted.at).toLocaleTimeString()}, because you asked${h.lifted.words ? `: “${h.lifted.words}”` : ''}`, false, true);
+    else say(hosted && app ? 'in the conversation — the agent writes, you watch; HOLD stops it' : stateEl.textContent);
   }
 }
 
@@ -153,6 +233,7 @@ holdBtn.addEventListener('click', async () => {
   }
 });
 
+$('wakebtn').addEventListener('click', () => { wake(); });
 $('fullbtn').addEventListener('click', async () => {
   if (!app) return;
   try { await app.requestDisplayMode({ mode: 'fullscreen' }); } catch (e) { say(`full screen refused: ${e.message}`); }
@@ -205,12 +286,14 @@ if (hosted) {
 // reports, and the SDK's own measure reads Studio's max-content (303 px in the fake host: the empty stage), so the
 // page names its height itself: 640 inline, and in full screen the host's viewport.
 const INLINE_HEIGHT = 640;
+const QUIET_HEIGHT = 45;
 function fitTo(mode) {
   const inline = mode !== 'fullscreen';
-  document.documentElement.style.height = inline ? `${INLINE_HEIGHT}px` : '';
+  const height = quiet ? QUIET_HEIGHT : INLINE_HEIGHT;
+  document.documentElement.style.height = inline ? `${height}px` : '';
   document.documentElement.style.overflow = 'hidden';
   document.documentElement.dataset.hosted = inline ? 'inline' : 'full';
-  if (app && inline) app.sendSizeChanged({ width: Math.ceil(window.innerWidth), height: INLINE_HEIGHT }).catch(() => {});
+  if (app && inline) app.sendSizeChanged({ width: Math.ceil(window.innerWidth), height }).catch(() => {});
 }
 
 // The side panels, inline: one at a time, on the strip's buttons; the properties panel comes up by itself when an
@@ -238,7 +321,8 @@ document.addEventListener('DOMContentLoaded', () => {
 if (hosted) {
   app = new App({ name: 'NodeGX Studio', version: '0.1.0' }, { availableDisplayModes: ['inline', 'fullscreen', 'pip'] }, { autoResize: false });
   app.onhostcontextchanged = (ctx) => { if (ctx.displayMode) fitTo(ctx.displayMode); };
-  app.ontoolresult = () => { /* open_studio's result is for the model; the page reads the project itself */ };
+  // open_studio's result is for the model; the page reads only which panel this is (its panelId)
+  app.ontoolresult = (result) => takeResult(result);
   fitTo('inline');
   app.connect().then(
     () => {
@@ -248,7 +332,7 @@ if (hosted) {
       if (modes.includes('pip')) $('dockbtn').hidden = false;
       strip.title = `Host: ${app.getHostVersion()?.name ?? ctx.userAgent ?? '?'} · display modes it offers: ${modes.join(', ') || 'not stated'} · now: ${ctx.displayMode ?? '?'}`;
       say(`in the conversation (${ctx.hostInfo?.name ?? ctx.userAgent ?? 'host'}) — the agent writes, you watch; HOLD stops it`);
-      readHold().then(drawHold);
+      if (!quiet) readHold().then(drawHold);
     },
     (e) => { app = null; say(`not connected to the conversation (${e.message}); HOLD still works through the file`); readHold().then(drawHold); }
   );
@@ -256,10 +340,5 @@ if (hosted) {
   readHold().then(drawHold);
 }
 
-// The project's hold can change from elsewhere (a `rm .nodegx-hold.json`, a second Studio): follow the events.
-try {
-  const es = new EventSource('/api/events?client=hosted-' + Math.random().toString(36).slice(2));
-  es.addEventListener('message', (ev) => {
-    try { const d = JSON.parse(ev.data); if (d.hold) drawHold(d.hold); } catch { /* not ours */ }
-  });
-} catch { /* no events, no follow */ }
+// The project's hold can change from elsewhere (the agent's release_hold, a second Studio): heard on Studio's own
+// /api/events stream (onStudioEvent above). This bridge used to open a second stream for it; one per panel is enough.

@@ -335,10 +335,14 @@ const mapWords = (words) =>
 // server listens on loopback only, so "any origin" is any page on this computer, which is what it was already.
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'content-type' };
 const HOLD_FILE = '.nodegx-hold.json';
+let livePanel = { id: '', seq: -1 };
 /** The hold: a file in the project folder the MCP server reads before every write. A dotfile, so the page's store and the watcher never see it as a project file. */
+/** P125-PUPPY2: who lifted the last hold, and on which words (the agent's `release_hold` passes the person's message). Kept
+    in memory: it is something to show, not a state of the project. */
+let lifted = null;
 const holdOf = () => {
   const at = join(projectDir, HOLD_FILE);
-  if (!existsSync(at)) return { held: false };
+  if (!existsSync(at)) return lifted ? { held: false, lifted } : { held: false };
   try { return { held: true, ...JSON.parse(readFileSync(at, 'utf8')) }; } catch { return { held: true, at: statSync(at).mtime.toISOString(), note: '' }; }
 };
 /** studio.html for a foreign origin: Studio's own absolute origin on the one script tag, the runtime base, the module
@@ -368,13 +372,27 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/panel') return send(200, panelHtml(`http://127.0.0.1:${server.address().port}`), types['.html']);
     if (url.pathname === '/api/hold' && req.method === 'GET') return json(200, holdOf());
     if (url.pathname === '/api/hold' && req.method === 'POST') {
-      const { held, note = '' } = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const { held, note = '', by, words } = JSON.parse((await readBody(req)).toString('utf8') || '{}');
       const at = join(projectDir, HOLD_FILE);
-      if (held) writeFileSync(at, JSON.stringify({ by: 'NodeGX Studio', at: new Date().toISOString(), note: String(note).slice(0, 500) }, null, 2) + '\n');
-      else if (existsSync(at)) rmSync(at);
+      if (held) { writeFileSync(at, JSON.stringify({ by: 'NodeGX Studio', at: new Date().toISOString(), note: String(note).slice(0, 500) }, null, 2) + '\n'); lifted = null; }
+      else {
+        if (existsSync(at)) { rmSync(at); lifted = { by: by === 'agent' ? 'agent' : 'you', at: new Date().toISOString(), ...(words ? { words: String(words).slice(0, 300) } : {}) }; }
+      }
       const hold = holdOf();
       for (const client of clients.keys()) client.write(`data: ${JSON.stringify({ hold })}\n\n`);
       return json(200, hold);
+    }
+    // P125-PUPPY2-THREEPANELS: one live panel per conversation. A host keeps every panel an open_studio call drew, and
+    // each live one holds an event stream: three held all six of the browser's connections to this origin, and every
+    // panel's app stopped loading. The panel of the newest call (`seq`, its issuedAt) is live; the others hear
+    // `{ panel }` and go quiet (hosted.js). `wake` is the person's "Bring it back here" on an older one.
+    if (url.pathname === '/api/panel' && req.method === 'POST') {
+      const { id, seq = 0, wake } = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      if (typeof id !== 'string' || !id) return json(400, { error: 'a panel id' });
+      if (wake) { livePanel = { id, seq: Math.max(livePanel.seq, Date.now()) }; }
+      else if (id !== livePanel.id && Number(seq) >= livePanel.seq) livePanel = { id, seq: Number(seq) };
+      for (const client of clients.keys()) client.write(`data: ${JSON.stringify({ panel: { live: livePanel.id } })}\n\n`);
+      return json(200, { live: livePanel.id, you: livePanel.id === id });
     }
     if (url.pathname === '/preview.js') return send(200, readFileSync(bundle), types['.js']);
     if (url.pathname === '/phrasebook.json') { // read on the first ask (require caches it): a phrasebook edit shows after a restart
