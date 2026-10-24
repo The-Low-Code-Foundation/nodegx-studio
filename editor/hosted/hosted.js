@@ -178,6 +178,29 @@ $('windowbtn').addEventListener('click', async () => {
   try { await app.openLink({ url: ORIGIN + '/' }); } catch (e) { say(`could not open a window: ${e.message}`); }
 });
 
+// The backend map is a page of its own that Data frames (#mapframe, src /backend-map/). The host lets this page fetch
+// from Studio's origin but names no frame origin for it (Claude restricts `frameDomains`), so in a conversation the
+// frame would stay blank: the map opens in a window instead. The timeline's screen is a srcdoc frame and stays.
+if (hosted) {
+  const mapCard = () => {
+    const box = document.getElementById('data-map');
+    if (!box || box.querySelector('.hostedmap')) return;
+    const card = document.createElement('div');
+    card.className = 'hostedmap';
+    card.innerHTML = '<p>The backend map opens in its own window: who can reach which rows, run as each person.</p><button type="button">Open the map ↗</button>';
+    card.querySelector('button').addEventListener('click', async () => {
+      try { await app?.openLink({ url: ORIGIN + '/backend-map/' }); } catch (e) { say(`could not open the map: ${e.message}`); }
+    });
+    box.append(card);
+  };
+  const style = document.createElement('style');
+  style.textContent = `#data-map #mapframe { display: none; }
+    #data-map .hostedmap { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; height: 100%; padding: 24px; text-align: center; }
+    #data-map .hostedmap button { font: inherit; padding: 8px 14px; border-radius: 8px; cursor: pointer; }`;
+  document.documentElement.append(style);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mapCard, { once: true }); else mapCard();
+}
+
 // Studio lays itself out to the viewport. Inline in a conversation the host sizes the frame from what the page
 // reports, and the SDK's own measure reads Studio's max-content (303 px in the fake host: the empty stage), so the
 // page names its height itself: 640 inline, and in full screen the host's viewport.

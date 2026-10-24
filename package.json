@@ -12,6 +12,7 @@
     "start": "node app/launch.mjs",
     "serve": "node editor/serve.mjs",
     "vendor": "node scripts/vendor.mjs",
+    "mcpb": "node scripts/mcpb.mjs",
     "check:vendor": "node scripts/vendor.mjs --check",
     "check": "node scripts/vendor.mjs --check && node editor/rules-check.mjs && node editor/phrases-check.mjs && node editor/pagedata-check.mjs && node editor/reusable-check.mjs && node editor/check.mjs && node editor/data-check.mjs && node editor/timeline-check.mjs && node import/check.mjs && node import/dictionary-check.mjs && node app/check.mjs && node app/publish-check.mjs",
     "check:editor": "node editor/check.mjs",
