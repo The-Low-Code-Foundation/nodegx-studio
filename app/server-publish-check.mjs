@@ -12,14 +12,14 @@
  *
  *   node app/server-publish-check.mjs     PASS n/n and exit 0, or the failing lines and exit 1
  */
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const tmp = mkdtempSync(join(tmpdir(), 'nodegx-studio-server-check-'));
 process.env.NODEGX_BACKENDS_DIR = join(tmp, 'backends'); // before the kit loads: nothing is written to ~/.noodl
 const { createFromTemplate } = await import('./actions.mjs');
-const { serverAppName, serverRequest, publishToServer, DEFAULT_SERVER_PORT } = await import('../lib/publish.mjs');
+const { serverAppName, serverRequest, publishToServer, mcpServerEnv, DEFAULT_SERVER_PORT } = await import('../lib/publish.mjs');
 const { kit } = await import('../lib/nodegx.mjs');
 
 const results = [];
@@ -47,6 +47,8 @@ try {
   ok(keyed.ssh_key === join(homedir(), '.ssh/box') && keyed.ssh_port === 2222, 'an ssh key (~ expanded: no shell reads it) and port go as ssh_key and ssh_port', keyed);
 
   console.log('3. the call');
+  const engine = mcpServerEnv().NODEGX_DEPLOY_CLI;
+  ok(engine === kit.deployEngine && existsSync(engine), 'the MCP server is handed Studio\'s own deploy engine, so a Finder-opened app with no npx on its PATH can ship', engine);
   const calls = [];
   const answer = { ok: true, app: 'todos', host: 'root@203.0.113.7', url: 'https://todo.example.com', build: { files: 41, functions: [], rules: 'project' }, provision: [], secrets: [], health: 200, appStatus: 200, next: '' };
   const got = await publishToServer(dir, { ...base, domain: 'todo.example.com' }, { call: async (...a) => (calls.push(a), answer) });
