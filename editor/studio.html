@@ -2137,7 +2137,8 @@ const CONTENT_PORTS = ['text', 'label', 'src', 'alt', 'placeholder', 'startValue
 const CONFIGURE_PORTS = ['type', 'maxLength', 'inputMode', 'enterKeyHint', 'textToInsert', 'placeHolderOpacity', 'textOverflow', 'wordBreak', 'useLabel', 'labelSpacing', 'srcSet', 'useIcon', 'iconSpacing', 'iconPlacement', 'iconSize', 'iconColor'];
 /** A Configure setting's own words and control, where the port's name says little ("Type", "Value"). */
 const CONFIGURE_AS = { type: 'Content format', maxLength: 'Max length', inputMode: 'Keyboard', enterKeyHint: 'Enter key says', textToInsert: 'Text to insert', placeHolderOpacity: 'Placeholder opacity', labelSpacing: 'Label spacing', startValue: 'Initial content' };
-const INTERACTION_PORTS = ['mounted', 'visible', 'enabled', 'keepsFocus'];
+// repeatWhileSaving (NodeGX 0.2.6, a Button's Click / a Text Input's Enter): a press that starts a save is taken once
+const INTERACTION_PORTS = ['mounted', 'visible', 'enabled', 'keepsFocus', 'repeatWhileSaving'];
 const INTERACTION_GROUPS = new Set(['Drop Zone', 'File Drop', 'Drag Source', 'Scroll To Index', 'Scroll Into View', 'Scroll To Element']);
 /** A colour as Bubble writes it: a token's name, or #RRGGBB and its opacity. */
 function colourName(v) {
@@ -2273,7 +2274,7 @@ function renderBubblePanel(right, node) {
       ...mine.map((ev) => h('div', { class: 'row wf', onclick: () => openCard(ev) }, icon('workflow'), cardName(ev), h('span', { class: 't' }, `When ${portLabel(byId[ev.node], 'output', ev.port)} · ${eventSteps(ev)} steps`))),
       h('div', { class: 'hint' }, mine.length ? 'Open one to change its steps.' : 'No workflow starts at this element. Add one in Workflow.')]));
     add(section('Visibility', [has('visible') ? plain('visible') : null, has('mounted') ? plain('mounted') : null]));
-    add(section('Options', [...['enabled', 'keepsFocus'].filter(has).map(plain), ...ports.filter((p) => p.name.startsWith('runOnChange-')).map((p) => (claimed.add(p.name), fieldFor(node, { ...p, displayName: `A change to ${(CONFIGURE_AS[p.name.slice('runOnChange-'.length)] || P[p.name.slice('runOnChange-'.length)]?.displayName || p.displayName).toLowerCase()} runs what it feeds` }, params[p.name], wiredIn[p.name])))]));
+    add(section('Options', [...['enabled', 'keepsFocus', 'repeatWhileSaving'].filter(has).map(plain), ...ports.filter((p) => p.name.startsWith('runOnChange-')).map((p) => (claimed.add(p.name), fieldFor(node, { ...p, displayName: `A change to ${(CONFIGURE_AS[p.name.slice('runOnChange-'.length)] || P[p.name.slice('runOnChange-'.length)]?.displayName || p.displayName).toLowerCase()} runs what it feeds` }, params[p.name], wiredIn[p.name])))]));
     const more = new Map();
     for (const p of ports) if (INTERACTION_GROUPS.has(p.group)) { if (!more.has(p.group)) more.set(p.group, []); more.get(p.group).push(p); }
     for (const [g, ps] of more) { if (secOpen[g] === undefined) secOpen[g] = ps.some((p) => params[p.name] !== undefined); add(section(g, ps.map((p) => plain(p.name)))); }

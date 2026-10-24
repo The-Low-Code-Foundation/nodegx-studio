@@ -688,8 +688,17 @@ var DOCS_BRIEF = "docs/BRIEF.md";
 var GITIGNORE_BLOCK = [
   "",
   "# Machine-specific MCP registration: absolute paths to this install of NodeGX.",
-  "# Each developer gets their own, written when the project is created or opened.",
+  // P112-OWN023-READONLYOPEN: "created or opened" read as "the MCP server writes on open" to a careful agent, which
+  // then refused open_project on a read-only task. The editor writes it on open; the server never does.
+  "# Each developer gets their own, written when the project is created or opened in the NodeGX editor.",
   ".mcp.json",
+  ""
+].join("\n");
+var HOLD_FILE = ".nodegx-hold.json";
+var GITIGNORE_HOLD_BLOCK = [
+  "",
+  "# A pause on this machine: NodeGX Studio writes it while the person holds the agent, and removes it on release.",
+  HOLD_FILE,
   ""
 ].join("\n");
 function renderMcpJson(serverName, registration) {
@@ -844,15 +853,20 @@ async function backfillAgentConfig(host, options) {
 }
 async function ignoreMcpJson(host) {
   const existing = await host.exists(AGENT_CONFIG_PATHS.gitignore) ? await host.read(AGENT_CONFIG_PATHS.gitignore) : "";
-  const alreadyIgnored = existing.split(/\r?\n/).map((line) => line.trim()).some((line) => line === ".mcp.json" || line === "/.mcp.json");
-  if (alreadyIgnored) {
+  const lines = new Set(existing.split(/\r?\n/).map((line) => line.trim()));
+  const ignored = (name) => lines.has(name) || lines.has("/" + name);
+  const blocks = [
+    ...ignored(".mcp.json") ? [] : [GITIGNORE_BLOCK],
+    ...ignored(HOLD_FILE) ? [] : [GITIGNORE_HOLD_BLOCK]
+  ];
+  if (blocks.length === 0) {
     return {
       path: AGENT_CONFIG_PATHS.gitignore,
       outcome: "kept-existing",
-      reason: ".mcp.json was already ignored."
+      reason: `.mcp.json and ${HOLD_FILE} were already ignored.`
     };
   }
-  await host.write(AGENT_CONFIG_PATHS.gitignore, existing.replace(/\s*$/, "") + GITIGNORE_BLOCK);
+  await host.write(AGENT_CONFIG_PATHS.gitignore, existing.replace(/\s*$/, "") + blocks.map((b) => b.replace(/\n$/, "")).join("\n") + "\n");
   return { path: AGENT_CONFIG_PATHS.gitignore, outcome: "written" };
 }
 // Annotate the CommonJS export names for ESM import in node:

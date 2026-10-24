@@ -6,8 +6,9 @@
  *   1. the name Studio offers for the app on the server, from the project's own
  *   2. the answers NodeGX would refuse, refused here first in the person's words; what it takes, passed as it takes it
  *   3. the call: `deploy_to_vm` through the MCP server, with exactly those arguments and a timeout a first ship fits in
- *   4. an MCP server without the tool (the pinned @nodegx/mcp, run for real): said as "this NodeGX cannot yet", not as
- *      a server problem; a refusal from the tool comes back in its own words
+ *   4. the pinned @nodegx/mcp (0.2.6 carries deploy_to_vm), run for real against a server nobody answers for
+ *      (203.0.113.7, TEST-NET-3): its refusal reaches the person as its sentence, never "[object Object]"; a refusal
+ *      from the tool comes back in its own words
  *
  *   node app/server-publish-check.mjs     PASS n/n and exit 0, or the failing lines and exit 1
  */
@@ -56,9 +57,9 @@ try {
   const bad = await refused(publishToServer(dir, { ...base, host: '' }, { call: async () => { throw new Error('called'); } }));
   ok(/Which server\?/.test(bad), 'answers it would refuse never reach NodeGX', bad);
 
-  console.log('4. an MCP server without the tool, and the tool’s own refusal');
+  console.log('4. the MCP server Studio runs, for real, and the tool’s own refusal');
   const said = await refused(publishToServer(dir, base));
-  ok(/cannot publish to a server yet/.test(said) && /next NodeGX release/.test(said), `the MCP server Studio runs (${kit.from}) without deploy_to_vm: said as that`, said);
+  ok(/203\.0\.113\.7/.test(said) && !/object Object|cannot publish to a server yet/.test(said), `the MCP server Studio runs (${kit.from}) has deploy_to_vm, and a server that does not answer is said in its words`, said);
   const own = await refused(publishToServer(dir, base, { call: async () => { throw new Error('root@203.0.113.7 refused the login. This tool cannot type a password…'); } }));
   ok(/refused the login/.test(own), 'a refusal from deploy_to_vm comes back in its own words', own);
 } catch (err) {

@@ -573,6 +573,7 @@ async function startBackend(config, options = {}) {
     String(process.pid)
   ];
   if (options.projectDir) args.push("--project-dir", options.projectDir);
+  args.push("--enforce-rules");
   const child = (0, import_child_process2.spawn)(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"], detached: false });
   const logRing = [];
   const appendLog = (stream, chunk) => {
@@ -849,6 +850,14 @@ async function provisionBackend(request) {
       );
     }
   }
+  let enforced = null;
+  try {
+    const { json } = await client.request("GET", "/admin/permissions");
+    if (json && typeof json === "object" && typeof json.enforced === "boolean") {
+      enforced = json.enforced;
+    }
+  } catch {
+  }
   return {
     backendId: started.backendId,
     name: started.name,
@@ -857,6 +866,7 @@ async function provisionBackend(request) {
     pid: started.pid,
     reused,
     adopted,
+    enforced,
     collections: created,
     // A reuse that could not happen is a fact about this provision, so it rides
     // out with the warnings rather than only in a field a caller may not read.

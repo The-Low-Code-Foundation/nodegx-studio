@@ -95,7 +95,8 @@ try {
   const index = readdirSync(site).find((f) => /^index-.*\.js$/.test(f));
   ok(index && readFileSync(join(site, index), 'utf8').includes(`"endpoint":"${up.endpoint}"`), 'the site carries the project\'s backend binding');
   ok(!existsSync(join(site, 'components')) && !existsSync(join(site, 'nodegx.project.json')) && !existsSync(join(site, 'docs')), 'and none of the project\'s source');
-  ok(JSON.stringify(r.exposed) === '["nodegx.security.json"]' && existsSync(join(site, 'nodegx.security.json')), 'the access policy the engine also copies is named to the person (P123-STU008-BACKENDPUBLIC)', r.exposed);
+  // P123-STU008-BACKENDPUBLIC, fixed in @nodegx/preview 0.2.5: the engine leaves the policy out, so there is nothing to name
+  ok(r.exposed.length === 0 && !existsSync(join(site, 'nodegx.security.json')), 'and not the access policy (the engine leaves it out since @nodegx/preview 0.2.5)', r.exposed);
   ok(r.functions.status === 'none', 'the todo app has no cloud functions to deploy', r.functions);
   const hashed = join(tmp, 'hashed');
   mkdirSync(hashed);
@@ -164,7 +165,7 @@ try {
   const c1 = await publish(cloudApp, join(tmp, 'sites', 'Imported site'));
   const fns = c1.functions.result?.functions ?? [];
   ok(c1.functions.status === 'deployed' && fns.length === 4 && fns.every((f) => f.status === 'deployed'), 'its four cloud functions are deployed to its backend by NodeGX\'s deploy_cloud_functions', fns.map((f) => `${f.name} ${f.status}`));
-  ok(c1.exposed.includes('backend/triggers.imported.json'), 'the importer\'s proposed triggers, which the engine also copies, are named to the person', c1.exposed);
+  ok(c1.exposed.length === 0 && !existsSync(join(tmp, 'sites', 'Imported site', 'backend')), 'and the importer\'s backend folder (its proposed triggers) is not in the site', c1.exposed);
   const c2 = await publish(cloudApp, join(tmp, 'sites', 'Imported site'));
   ok(c2.functions.status === 'deployed' && c2.functions.result.changed === false && c2.functions.result.functions.every((f) => f.status === 'unchanged'), 'publishing again finds them unchanged on the backend', c2.functions.result?.functions?.map((f) => f.status));
   const callFn = async (name) => { const res = await fetch(`${cup.endpoint}/functions/${name}`, { method: 'POST', headers: { 'X-Parse-Application-Id': cup.id, 'X-Parse-Master-Key': secretOf(cup.id), 'content-type': 'application/json' }, body: '{}' }); return { status: res.status, answer: (await res.text()).slice(0, 160) }; };

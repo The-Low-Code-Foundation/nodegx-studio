@@ -54,9 +54,9 @@ Studio, opens or imports an app, changes it, and publishes it.** What that needs
 | | what | state |
 |---|---|---|
 | 1 | **STU-008 Publish** to a folder | done (s14) |
-| 2 | **STU-007 a downloadable build**: signed and notarised with NodeGX's Developer ID; Windows and Linux | signed locally with the Developer ID and gated 46/46 (s14); notarising waits on the five secrets being visible to this repository; Windows / Linux built and smoke-opened in CI |
+| 2 | **STU-007 a downloadable build**: signed and notarised with NodeGX's Developer ID; Windows and Linux | done 2026-10-24: the five secrets on this repository (Richard), the package workflow run 40075070236 on 2f9b321 says `notarization successful`, `spctl` *source=Notarized Developer ID*, and the stapler validates; Windows / Linux built and smoke-opened in the same run |
 | 3 | **STU-040 Import an App…** with the report shown in the app | done (s14) |
-| 4 | **A NodeGX npm release** carrying P112-OWN020-UNWIREDSIGNAL and P123-STU008-BACKENDPUBLIC, then Studio's pins bumped and `npm run vendor` at that commit | waits on NodeGX: read 2026-10-22, `@nodegx/preview` 0.2.4 and `@nodegx/mcp` 0.2.5 are on npm (UNWIREDSIGNAL is in the 0.2.4 cut); BACKENDPUBLIC's fix (OpenNoodl 490361c22, 13:11) landed after 0.2.5 was published, so no release has it yet |
+| 4 | **A NodeGX npm release** carrying P112-OWN020-UNWIREDSIGNAL and P123-STU008-BACKENDPUBLIC, then Studio's pins bumped and `npm run vendor` at that commit | done 2026-10-24: pins `@nodegx/mcp` 0.2.6, `@nodegx/preview` 0.2.5, `@nodegx/backend-map` 0.1.1 (published 2026-10-23 night), vendor/ from a clean NodeGX worktree at the release commit 2cac89c05. Every gate green on it (editor 204, data 80, timeline 53, import 94, app 54, publish 34, server 16, rules 20, phrases 85, pagedata 33, reusable 12). What the bump changed: Repeat While Saving placed in Options; publish's two BACKENDPUBLIC rows now assert the site carries neither file; a tool's refusal no longer reaches the person as "[object Object]" |
 | 5 | **main pushed** | done 2026-10-23 (Richard's yes; origin/main fb31c9f); again s21, origin/main 97f3c72 ("Push to main ok") |
 | 6 | **STU-065 a development and a live database** (M6), and the Data tab it sits in (STU-060, 061, 063, 064). Richard, 2026-10-22: *"Alpha please"* | done (s15) |
 

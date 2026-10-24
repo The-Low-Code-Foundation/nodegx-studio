@@ -652,6 +652,9 @@ try {
     await clickText('#right .ptabs button', 'Interaction'); await wait(250);
     const wfs = await b.evaluate(`[...document.querySelectorAll('#right .row.wf')].map(r => r.textContent)`);
     ok(wfs.length >= 1 && wfs.every((t) => /When /.test(t)), 'the Interaction tab lists the workflows that start at the element', wfs);
+    // NodeGX 0.2.6: a Button's press that starts a save is taken once; the opt-out sits in Options beside Enabled
+    const options = await b.evaluate(`[...(${sec('Options')}?.querySelectorAll('.field > label') ?? [])].map(l => l.textContent)`);
+    ok(options.includes('Repeat While Saving'), 'the Interaction tab\'s Options holds Repeat While Saving', options);
     {
       // STU-020: the elements that should wear a ⚡, read off the file and the runtime's own node library (not Studio's
       // reading of events): a drawn element with a wire into another node's signal input. Email's Text Changed goes only
