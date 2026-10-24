@@ -924,13 +924,25 @@ function takeBackend(next) {
 let agentState = null;
 const AGENT_PILL = { connected: ['Claude Code', ''], none: ['Connect Claude Code', 'off'] };
 function showAgent() {
-  const [text, kind] = AGENT_PILL[agentState?.state] ?? ['Claude Code', 'busy'];
+  // P125-CCN006-AGENTPILL: opened by an agent through NodeGX's proxy, the pill names that agent, not this folder's Claude Code
+  const [text, kind] = agentState?.via ? [`${agentState.via} is working on this`, ''] : AGENT_PILL[agentState?.state] ?? ['Claude Code', 'busy'];
   const pill = $('agentpill');
   pill.textContent = text; pill.className = `status backend ${agentState ? kind : 'off'}`;
   window.__ob.agent = agentState;
 }
+/** The agent whose server opened this page, from NodeGX's proxy (`/__nodegx/status`); null when Studio runs on its own. */
+async function agentVia() {
+  try {
+    const r = await fetch('/__nodegx/status');
+    if (!r.ok || !(r.headers.get('content-type') || '').includes('json')) return null;
+    const j = await r.json();
+    return j && j.ok && typeof j.client === 'string' && j.client ? j.client : null;
+  } catch { return null; }
+}
 async function loadAgent() {
   try { agentState = await (await fetch('/api/agent')).json(); } catch (err) { agentState = { state: 'unavailable', reason: err.message }; }
+  const via = await agentVia();
+  if (via) agentState = { ...agentState, via };
   showAgent();
   return agentState;
 }
@@ -948,6 +960,10 @@ async function openAgent() {
   panel.replaceChildren(...agentPanel(s));
 }
 function agentPanel(s) {
+  const via = s.via ? [h('h4', {}, `${s.via} is working on this app`), h('p', {}, `${s.via} opened Studio through the NodeGX server: what it changes appears here as it happens, and HOLD stops it.`)] : [];
+  return [...via, ...folderAgentPanel(s)];
+}
+function folderAgentPanel(s) {
   const name = h('code', {}, s.name ?? s.serverName);
   const startHere = [h('p', {}, 'Start a session in the app’s folder:'), h('pre', { id: 'agentcmd' }, s.command), h('div', { class: 'acts' }, copyButton(s.command), h('span', { class: 'note' }, 'Claude Code asks you once to approve the server.'))];
   switch (s.state) {
@@ -4635,10 +4651,11 @@ async function renderPrivacy() {
   const rule = W.tableRule(map.config, t.name);
   const cur = { read: W.readRule(rule.permissions), change: W.changeRule(rule.permissions), creatorOwns: rule.creatorOwns };
   const edit = { ...cur };
-  const choices = W.audienceChoices(roles);
-  const known = (v) => typeof v === 'string' && choices.some((c) => c.value === v);
+  // P123-S6-CREATOREDITS: changing rows also offers "only the person who made it" (a map from before it has none)
+  const choicesFor = (key) => (key === 'change' && W.changeChoices ? W.changeChoices(roles) : W.audienceChoices(roles));
+  const known = (v, key = 'read') => typeof v === 'string' && choicesFor(key).some((c) => c.value === v);
   const pick = (key, label) => h('label', { class: 'f', style: 'display:grid;gap:4px;max-width:520px;margin-bottom:12px' }, h('b', {}, label),
-    h('select', { 'data-rule': key, onchange: (e) => { edit[key] = e.target.value; say(); } }, ...(known(cur[key]) ? [] : [h('option', { value: '' }, `${W.ruleWords(cur[key])} (as it is)`)]), ...choices.map((c) => h('option', { value: c.value, selected: cur[key] === c.value }, `${c.words} — ${c.long}`))));
+    h('select', { 'data-rule': key, onchange: (e) => { edit[key] = e.target.value; say(); } }, ...(known(cur[key], key) ? [] : [h('option', { value: '' }, `${W.ruleWords(cur[key])} (as it is)`)]), ...choicesFor(key).map((c) => h('option', { value: c.value, selected: cur[key] === c.value }, `${c.words} — ${c.long}`))));
   const words = h('div', { class: 'note', style: 'margin:8px 0' });
   const make = h('button', { class: 'primary', 'data-act': 'make', onclick: async () => {
     make.disabled = true;
@@ -4648,8 +4665,8 @@ async function renderPrivacy() {
   } }, 'Make it so');
   const say = () => {
     const changed = JSON.stringify(edit) !== JSON.stringify(cur);
-    make.disabled = !changed || !known(edit.read) || !known(edit.change);
-    words.textContent = known(edit.read) && known(edit.change) ? `Reading ${t.name}’s rows: ${W.ruleWords(edit.read)}. Adding, changing or deleting them: ${W.ruleWords(edit.change)}.${edit.creatorOwns ? ' And whoever made a row may always read and change that row.' : ''}` : 'Choose both.';
+    make.disabled = !changed || !known(edit.read) || !known(edit.change, 'change');
+    words.textContent = known(edit.read) && known(edit.change, 'change') ? `Reading ${t.name}’s rows: ${W.ruleWords(edit.read)}. Adding, changing or deleting them: ${W.ruleWords(edit.change)}.${edit.creatorOwns ? ' And whoever made a row may always read and change that row.' : ''}` : 'Choose both.';
   };
   main.append(h('h2', {}, t.name, h('span', { class: 'badge' }, rule.own ? 'its own rule' : 'the app’s standard rule'), h('span', { class: 'acts' }, h('button', { onclick: () => openOnMap(t.name) }, icon('map'), 'See it on the map'))),
     h('div', { class: 'card' }, pick('read', 'Looking at rows (finding and reading)'), pick('change', 'Adding, changing or deleting rows'),
