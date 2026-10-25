@@ -1755,7 +1755,7 @@ function draw() {
   }
 }
 const box = (r, cls, tag, size) => h('div', { class: `box ${cls}`, style: `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px` }, h('div', { class: 'tag' }, tag, size ? h('span', { style: 'opacity:.75;font-weight:400' }, size) : null));
-function select(id) { sel = id; hover = null; hoverDeep = null; if (id) selItem = null; renderTree(); renderPageData(); renderProps(); draw(); }
+function select(id) { sel = id; hover = null; hoverDeep = null; if (id) selItem = null; renderTree(); renderPageData(); renderProps(); draw(); document.dispatchEvent(new CustomEvent('studio:select', { detail: { id: id ?? null } })); }
 
 overlay.addEventListener('mousemove', (e) => {
   if (gesture) return onGestureMove(e);

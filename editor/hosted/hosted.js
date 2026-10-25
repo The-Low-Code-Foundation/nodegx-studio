@@ -88,6 +88,13 @@ strip.innerHTML = `
     html[data-hosted="inline"][data-side="elements"] #design > aside:not(.right) { display: block; }
     html[data-hosted="inline"][data-side="props"] #design { grid-template-columns: minmax(0, 1fr) 320px; }
     html[data-hosted="inline"][data-side="props"] #right { display: block; }
+    #propsclose { display: none; }
+    html[data-hosted="inline"][data-side="props"] #design { position: relative; }
+    html[data-hosted="inline"][data-side="props"] #propsclose {
+      display: block; position: absolute; top: 8px; right: 320px; z-index: 30; width: 22px; height: 44px; padding: 0;
+      border-radius: 8px 0 0 8px; border: 1px solid var(--line, #3b3a37); border-right: 0; background: var(--panel, #262624);
+      color: inherit; font-size: 16px; line-height: 1; cursor: pointer;
+    }
     /* the header's controls are not hidden inline: what has no room goes into Studio's own "⋯" (P123-STU-TOPBAROVERFLOW) */
     html[data-hosted="inline"] header { padding: 0 8px; gap: 6px; }
     html[data-hosted="inline"] #stage { padding: 8px; }
@@ -296,25 +303,42 @@ function fitTo(mode) {
   if (app && inline) app.sendSizeChanged({ width: Math.ceil(window.innerWidth), height }).catch(() => {});
 }
 
-// The side panels, inline: one at a time, on the strip's buttons; the properties panel comes up by itself when an
-// element is picked (Studio fills #right then), and goes when the pick is cleared.
+// The side panels, inline: one at a time, on the strip's buttons. The properties panel comes up by itself when a
+// DIFFERENT element is picked, and goes when the pick is cleared; the strip's Properties (or Hide properties) and the
+// tab on the panel's edge put it away, and it stays away until the next pick.
+// 🔴 P125-STU-PROPSPIN (Richard's Muddy Paws run, 2026-10-25: "we should be able to hide the props panel once finished
+// editing"): it used to open on any redraw of #right while something was picked, and Studio redraws #right after
+// every edit and every refresh, so closing it never held and the page stayed squeezed to a phone's width.
 const sideButtons = { elements: $('elemsbtn'), props: $('propsbtn') };
 function showSide(which) {
   const root = document.documentElement;
   if (which) root.dataset.side = which; else delete root.dataset.side;
   for (const [k, b] of Object.entries(sideButtons)) b.setAttribute('aria-pressed', String(k === which));
+  sideButtons.props.textContent = which === 'props' ? 'Hide properties' : 'Properties';
 }
 sideButtons.elements.addEventListener('click', () => showSide(document.documentElement.dataset.side === 'elements' ? null : 'elements'));
 sideButtons.props.addEventListener('click', () => showSide(document.documentElement.dataset.side === 'props' ? null : 'props'));
+let lastPick = null;
+document.addEventListener('studio:select', (e) => {
+  const id = e.detail?.id ?? null;
+  const fresh = id !== lastPick;
+  lastPick = id;
+  if (document.documentElement.dataset.hosted !== 'inline') return;
+  if (id && fresh && document.documentElement.dataset.side !== 'props') showSide('props');
+  else if (!id && document.documentElement.dataset.side === 'props') showSide(null);
+});
 document.addEventListener('DOMContentLoaded', () => {
   const right = document.getElementById('right');
   if (!right) return;
-  new MutationObserver(() => {
-    if (document.documentElement.dataset.hosted !== 'inline') return;
-    const picked = !right.querySelector(':scope > .empty');
-    if (picked && document.documentElement.dataset.side !== 'props') showSide('props');
-    else if (!picked && document.documentElement.dataset.side === 'props') showSide(null);
-  }).observe(right, { childList: true });
+  // The panel's own way out, inline: a tab on its left edge (outside #right, which Studio empties on every redraw).
+  const close = document.createElement('button');
+  close.id = 'propsclose';
+  close.type = 'button';
+  close.title = 'Hide the properties';
+  close.setAttribute('aria-label', 'Hide the properties');
+  close.textContent = '›';
+  close.addEventListener('click', () => showSide(null));
+  right.parentElement.append(close);
 }, { once: true });
 
 // 2. The handshake.
