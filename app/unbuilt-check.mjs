@@ -6,6 +6,8 @@
  *      words and the earlier ones) is unbuilt; one word changed, or one node added, and it is built (known-firing pairs)
  *   2. the endings are NodeGX's own, when a NodeGX checkout is beside Studio (NODEGX_REPO, or ../OpenNoodl)
  *   3. app/main.cjs asks before either route writes anything, and both done windows say the deploy's warnings
+ *   4. (P112-OWN023-DEPLOYLOOPBACK, ruled 2026-10-26) a backend on this computer makes "A Server of Your Own" the
+ *      default, so the backend goes with the app unless the person picks the folder (which then says why it won't work)
  *
  *   node app/unbuilt-check.mjs     PASS n/n and exit 0, or the failing lines and exit 1
  */
@@ -74,6 +76,11 @@ try {
   const server = main.slice(main.indexOf('async function publishToServerFlow('));
   ok(/for \(const warning of result\.warnings \?\? \[\]\) lines\.push/.test(server.slice(0, server.indexOf('\nfunction menu('))), 'the server’s done window says them too');
   ok(/result\.next\.replace\(AGENT_SAY_WARNINGS, ''\)/.test(server), 'and drops deploy_to_vm’s line to the agent');
+
+  console.log('4. a backend on this computer goes with the app by default');
+  ok(/const backendHere = pub\.backendTargetOf\(dir\)\.local;/.test(flow), 'Publish reads whether the backend is here');
+  ok(/defaultId: lastServer \|\| backendHere \? 1 : 0,/.test(flow), 'and then defaults to A Server of Your Own');
+  ok(flow.indexOf('if (target.local) {') > flow.indexOf("if (where === 1) return publishToServerFlow"), 'the folder route still says a backend here works on this computer only');
 } finally {
   rmSync(tmp, { recursive: true, force: true });
 }

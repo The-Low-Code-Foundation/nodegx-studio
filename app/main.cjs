@@ -412,6 +412,10 @@ async function publishFlow(tab) {
   // STU-071: a folder on this computer, or a server of the person's own (R10). Under the gate a pick that is an object
   // is the server form's answers, so the server path is chosen; a path (or nothing) keeps the folder, as before.
   const lastServer = readServers()[dir];
+  // NodeGX P112-OWN023-DEPLOYLOOPBACK (ruled 2026-10-26: "when the DB is local, then you push to a VM, you push the DB
+  // too"): an app whose backend runs on this computer goes to a server with it by default; a folder is the choice that
+  // leaves it behind, and says so below before anything is written.
+  const backendHere = pub.backendTargetOf(dir).local;
   const where = testPicks
     ? testPicks[0] && typeof testPicks[0] === 'object' ? 1 : 0
     : await ask(asked, {
@@ -419,9 +423,9 @@ async function publishFlow(tab) {
         message: 'Where should the app go?',
         detail:
           'A folder holds the site, to put on any web host; its backend stays where it is now.\n\n' +
-          `A server of your own (Linux, over ssh) gets the app, its backend, its data and its cloud functions, so anyone who can reach it can use the app.${lastServer ? `\n\nLast time: ${lastServer.host}.` : ''}`,
+          `A server of your own (Linux, over ssh) gets the app, its backend, its data and its cloud functions, so anyone who can reach it can use the app.${backendHere ? ' This app’s backend runs on this computer, so that is the way to put both where others can reach them.' : ''}${lastServer ? `\n\nLast time: ${lastServer.host}.` : ''}`,
         buttons: ['A Folder on This Computer…', 'A Server of Your Own…', 'Cancel'],
-        defaultId: lastServer ? 1 : 0,
+        defaultId: lastServer || backendHere ? 1 : 0,
         cancelId: 2
       });
   if (where === 2) return { cancelled: true, asked };
