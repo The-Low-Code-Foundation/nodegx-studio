@@ -267,26 +267,65 @@ $('windowbtn').addEventListener('click', async () => {
 });
 
 // The backend map is a page of its own that Data frames (#mapframe, src /backend-map/). The host lets this page fetch
-// from Studio's origin but names no frame origin for it (Claude restricts `frameDomains`), so in a conversation the
-// frame would stay blank: the map opens in a window instead. The timeline's screen is a srcdoc frame and stays.
+// from Studio's origin but names no frame origin for it (Claude restricts `frameDomains`), so a frame that loads a URL
+// stays blank. P127 BKO-002: the map is drawn the way the app preview is, into a frame with no src, written from
+// Studio's /backend-map/ with a <base> there. Such a frame is this page's own origin, so the host's frame rule never
+// applies, and the map's own requests (its script, api/map, the runs feed) go to Studio, which answers them with CORS.
+// Studio's renderMap sets `src`; here that setter draws instead. Each new focus (#t:<type>, read once when the map
+// starts) is a fresh frame, so the old map's timers go with it. The card that opens it in a window is what is left
+// when the drawing fails, with the reason. The timeline's screen is a srcdoc frame and stays.
 if (hosted) {
-  const mapCard = () => {
+  let drawn = null;
+  const card = (why) => {
     const box = document.getElementById('data-map');
-    if (!box || box.querySelector('.hostedmap')) return;
-    const card = document.createElement('div');
-    card.className = 'hostedmap';
-    card.innerHTML = '<p>The backend map opens in its own window: who can reach which rows, run as each person.</p><button type="button">Open the map ↗</button>';
-    card.querySelector('button').addEventListener('click', async () => {
+    if (!box) return;
+    box.querySelector('.hostedmap')?.remove();
+    const el = document.createElement('div');
+    el.className = 'hostedmap';
+    el.innerHTML = '<p>The backend map could not be drawn here, so it opens in its own window: who can reach which rows, run as each person.</p><p class="why"></p><button type="button">Open the map ↗</button>';
+    el.querySelector('.why').textContent = why;
+    el.querySelector('button').addEventListener('click', async () => {
       try { await app?.openLink({ url: ORIGIN + '/backend-map/' }); } catch (e) { say(`could not open the map: ${e.message}`); }
     });
-    box.append(card);
+    box.append(el);
+    document.getElementById('mapframe')?.setAttribute('data-failed', '');
   };
+  const take = (frame) => {
+    Object.defineProperty(frame, 'src', { configurable: true, get: () => drawn ?? '', set: (want) => { drawMap(frame, String(want)); } });
+  };
+  async function drawMap(old, want) {
+    if (want === drawn) return;
+    drawn = want;
+    try {
+      const r = await nativeFetch(ORIGIN + '/backend-map/');
+      if (!r.ok) throw new Error(`Studio answered ${r.status} for the map`);
+      const hash = new URL(want, ORIGIN + '/').hash;
+      const head = `<base href="${ORIGIN}/backend-map/">` + (hash ? `<script>history.replaceState(null, '', location.href.split('#')[0] + ${JSON.stringify(hash)})</script>` : ''); // not the bare hash: it would resolve against <base>, Studio's origin, and be refused
+      const page = (await r.text()).replace(/<head[^>]*>/i, (tag) => tag + head);
+      if (drawn !== want) return; // a newer focus came in while this one was fetched
+      const frame = document.createElement('iframe');
+      frame.id = old.id;
+      frame.title = old.title;
+      take(frame);
+      old.replaceWith(frame);
+      document.querySelector('#data-map .hostedmap')?.remove();
+      const doc = frame.contentDocument;
+      doc.open();
+      doc.write(page.includes('<base ') ? page : head + page);
+      doc.close();
+    } catch (e) {
+      drawn = null;
+      card(e.message);
+    }
+  }
   const style = document.createElement('style');
-  style.textContent = `#data-map #mapframe { display: none; }
+  style.textContent = `#data-map #mapframe[data-failed] { display: none; }
     #data-map .hostedmap { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; height: 100%; padding: 24px; text-align: center; }
+    #data-map .hostedmap .why { opacity: .7; font-size: 12px; }
     #data-map .hostedmap button { font: inherit; padding: 8px 14px; border-radius: 8px; cursor: pointer; }`;
   document.documentElement.append(style);
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mapCard, { once: true }); else mapCard();
+  const start = () => { const f = document.getElementById('mapframe'); if (f) take(f); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true }); else start();
 }
 
 // Studio lays itself out to the viewport. Inline in a conversation the host sizes the frame from what the page

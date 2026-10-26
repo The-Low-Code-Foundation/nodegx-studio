@@ -542,6 +542,9 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/backend-map/')) {
       const map = await backendMap();
       if (map.words) return send(200, mapWords(map.words), types['.html']);
+      // P127-BKO002-HOSTEDPRIVACY: the map's handler writes its own headers, and in a conversation Privacy and the map
+      // ask it across origins like every other route here. Set first, so they join whatever it writes.
+      for (const [k, v] of Object.entries(CORS)) res.setHeader(k, v);
       return map.handle(req, res, url.pathname.slice('/backend-map'.length));
     }
     if (url.pathname.startsWith('/api/backend/') || url.pathname.startsWith('/api/live/')) {
