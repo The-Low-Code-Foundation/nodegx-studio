@@ -425,6 +425,18 @@ async function publishFlow(tab) {
         cancelId: 2
       });
   if (where === 2) return { cancelled: true, asked };
+  // P26-SKELSHIP (NodeGX, ruled 2026-10-26): never refused; asked, on both routes, before anything is written.
+  const unbuilt = pub.unbuiltPagesOf(dir);
+  if (unbuilt.length) {
+    const answer = await ask(asked, {
+      type: 'warning',
+      message: 'Nothing is built in this app yet',
+      detail: pub.unbuiltQuestion(unbuilt),
+      buttons: ['Publish Anyway', 'Cancel'],
+      cancelId: 1
+    });
+    if (answer !== 0) return { cancelled: true, asked };
+  }
   if (where === 1) return publishToServerFlow(dir, pub, asked);
   const target = pub.backendTargetOf(dir);
   if (target.local) {
@@ -461,6 +473,8 @@ async function publishFlow(tab) {
   }
   rememberSite(dir, result.site);
   const lines = [`${result.files} files in ${home(result.site)}. Serve that folder with any web server and open it in a browser.`];
+  // What NodeGX's deploy warned about (a page nobody built, a wire that goes nowhere): said, not only returned.
+  for (const warning of result.warnings ?? []) lines.push(`⚠️ ${warning}`);
   if (result.routing.type === 'path') lines.push(`Its pages have addresses of their own${result.routing.example ? ` (such as ${result.routing.example})` : ''}. Opening the site’s first address works on any web server; for a link to a page, or a reload on one, the server must answer every address it has no file for with index.html. Most hosts have a setting for that (often called a single-page app’s fallback or rewrite).`);
   if (result.backend.endpoint) lines.push(`It talks to the ${result.backend.live ? 'live database' : 'backend'} at ${result.backend.endpoint}${result.backend.local ? ', on this computer only' : ''}.`);
   else lines.push('It has no backend: it keeps no rows.');
@@ -474,7 +488,7 @@ async function publishFlow(tab) {
   if (result.exposed.length) lines.push(`Also published, and readable by anyone who can open the site: ${result.exposed.join(', ')}. The app does not need them; a .noodlignore in the project with those names keeps them out.`);
   const summary = { ...result, asked, said: lines };
   if (testPicks) return summary;
-  const { response } = await dialog.showMessageBox(win, { type: fns.status === 'failed' ? 'warning' : 'info', message: result.replaced ? 'The site was published again' : 'The app is published', detail: lines.join('\n\n'), buttons: ['Show the Site’s Folder', 'Done'], defaultId: 1, cancelId: 1 });
+  const { response } = await dialog.showMessageBox(win, { type: fns.status === 'failed' || result.warnings?.length ? 'warning' : 'info', message: result.replaced ? 'The site was published again' : 'The app is published', detail: lines.join('\n\n'), buttons: ['Show the Site’s Folder', 'Done'], defaultId: 1, cancelId: 1 });
   if (response === 0) shell.showItemInFolder(result.index);
   return summary;
 }
@@ -494,6 +508,9 @@ const rememberServer = (dir, answers) => {
   fs.mkdirSync(path.dirname(serversFile()), { recursive: true });
   fs.writeFileSync(serversFile(), JSON.stringify({ ...readServers(), [dir]: answers }, null, 2) + '\n');
 };
+
+/** The opening deploy_to_vm gives `next` when it has warnings (NodeGX P26-SKELSHIP), addressed to an agent. */
+const AGENT_SAY_WARNINGS = /^Before anything else, tell the person what each line of `warnings` says\. /;
 
 /** "Which server?" (app/server.html), a sheet on the Studio window. Resolves with the answers, or null on Cancel. */
 function askServer(fill) {
@@ -560,13 +577,16 @@ async function publishToServerFlow(dir, pub, asked) {
     throw err;
   }
   const lines = [result.url ? `It is at ${result.url}` : `It runs on ${result.host} without a public address. To see it from here: ${result.see}`];
+  for (const warning of result.warnings ?? []) lines.push(`⚠️ ${warning}`);
   lines.push(`${result.build.files} files, ${result.build.functions.length ? `${result.build.functions.length} cloud function${result.build.functions.length === 1 ? '' : 's'} (${result.build.functions.join(', ')})` : 'no cloud functions'}, ${result.build.rules === 'project' ? 'the project’s access rules' : 'the access rules already on the server'}.`);
   if (result.secrets.length) lines.push(`Function secrets sent: ${result.secrets.join(', ')} (their values never leave this computer any other way).`);
-  if (result.next) lines.push(result.next);
+  // deploy_to_vm's `next` is for an agent: with warnings it opens by telling the agent to say them, which this window
+  // has just done.
+  if (result.next) lines.push(result.next.replace(AGENT_SAY_WARNINGS, ''));
   const summary = { ...result, target: 'server', asked, said: lines };
   if (testPicks) return summary;
   const buttons = result.url ? ['Open It', 'Done'] : ['Done'];
-  const { response } = await dialog.showMessageBox(win, { type: 'info', message: `The app is on ${result.host}`, detail: lines.join('\n\n'), buttons, defaultId: 0, cancelId: buttons.length - 1 });
+  const { response } = await dialog.showMessageBox(win, { type: result.warnings?.length ? 'warning' : 'info', message: `The app is on ${result.host}`, detail: lines.join('\n\n'), buttons, defaultId: 0, cancelId: buttons.length - 1 });
   if (result.url && response === 0) shell.openExternal(result.url);
   return summary;
 }
