@@ -858,6 +858,7 @@
 <script type="module">
 import { hasSpec, specs, drawnPorts, portProjectFromStore, portContextFor, expressionPorts } from './specs.js';
 import { applyEdit } from './edits.mjs';
+import { layoutTips } from './layouttips.mjs';
 import { extractReusable } from './reusable.mjs';
 import { readRule, rulesOf, withoutArm, withValue, withCondition, addArm, valueOf, literal, SHOWING } from './rules.mjs';
 import { TYPES, TYPE_WORDS, dictionaryType, applyPhrase } from './phrases.mjs';
@@ -1245,10 +1246,15 @@ function rebuild(delay = 120) {
   }, delay);
 }
 
-/** Why the app is not on screen, as Bubble's issue checker lists it: every error with its component and node, and a fix where the editor can make one. */
+/**
+ * Why the app is not on screen, as Bubble's issue checker lists it: every error with its component and node, and a fix
+ * where the editor can make one. With the app on screen, the layout warnings NodeGX's validator gives (layouttips.mjs:
+ * words that wrap in a pill, a row of words swallowing a column's height), each with the fix it names.
+ */
 function showProblems(s) {
   const box = $('problems');
-  if (!s || s.status === 'ok') { box.hidden = true; box.innerHTML = ''; return; }
+  if (s?.status === 'ok') { showLayoutTips(box, s.report?.diagnostics); return; }
+  if (!s) { box.hidden = true; box.innerHTML = ''; return; }
   const errors = (s.report?.diagnostics || []).filter((d) => d.severity === 'error');
   box.hidden = false; box.innerHTML = '';
   box.append(h('h4', {}, errors.length ? `The app is not shown: ${errors.length} problem(s) in the project files` : `The app is not shown: ${s.message || s.status}`));
@@ -1260,6 +1266,25 @@ function showProblems(s) {
     ul.append(li);
   }
   if (errors.length) box.append(ul);
+}
+
+function showLayoutTips(box, diagnostics) {
+  const tips = layoutTips(diagnostics, (component) => {
+    const hit = store.resolve(component);
+    return hit ? store.readComponent(hit.key).files.nodes.nodes : [];
+  });
+  box.innerHTML = '';
+  box.hidden = !tips.length;
+  if (!tips.length) return;
+  box.append(h('h4', {}, `Layout: ${tips.length} thing${tips.length === 1 ? '' : 's'} will look wrong`));
+  const ul = h('ul', {});
+  for (const tip of tips) {
+    const li = h('li', { 'data-code': tip.code }, tip.text, h('small', {}, tip.where));
+    const hit = store.resolve(tip.component);
+    if (hit) li.append(' ', h('button', { class: 'tiny', onclick: () => { edits(hit.key, tip.edits); toast(`${tip.fix}: done`); } }, tip.fix));
+    ul.append(li);
+  }
+  box.append(ul);
 }
 
 /* ================= the graph of the current page, read from the files ================= */
