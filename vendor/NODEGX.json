@@ -8,7 +8,7 @@
   "built": "2026-10-24T07:41:41.238Z",
   "esbuild": "0.25.12",
   "npm": {
-    "@nodegx/backend-map": "0.1.1",
+    "@nodegx/backend-map": "0.1.2",
     "@nodegx/mcp": "0.2.6",
     "@nodegx/preview": "0.2.5"
   },

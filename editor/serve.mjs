@@ -48,13 +48,14 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, watch, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { fieldsBundle, kit, nodegxRepo, studioRoot } from '../lib/nodegx.mjs';
 import * as backends from '../lib/backend.mjs';
 import * as lives from '../lib/live.mjs';
 import * as agent from '../lib/agent.mjs';
 import { createRequire } from 'node:module';
 import { TYPES, phrasesFor } from './phrases.mjs';
+import { CLOUD, scriptTableNames } from './fngraph.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const flag = (name) => {
@@ -327,6 +328,39 @@ async function backendMap() {
   }
   return mapNow;
 }
+/**
+ * P127 BKO-004: what each cloud function reads and writes, in the map's own reading (`analyseProject`: record nodes,
+ * scripts, and the helpers a function places). The tables a script names are the project's own and, with a backend
+ * up, the backend's. Read from the files on disk at each ask; nothing is run. The map's package exports only its
+ * server, so its reader is imported by file; without it the answer says so and names no touches.
+ */
+async function functionTouches() {
+  let lib;
+  try {
+    const pkg = createRequire(import.meta.url).resolve('@nodegx/backend-map/package.json');
+    lib = await import(pathToFileURL(join(dirname(pkg), 'lib', 'project.mjs')).href);
+  } catch {
+    return { functions: [], words: 'The backend map isn’t installed in this copy of Studio, so what each function reads and writes is not said.' };
+  }
+  const project = lib.openProject(projectDir);
+  let rules = null; try { rules = JSON.parse(readFileSync(join(projectDir, 'nodegx.security.json'), 'utf8')); } catch { /* none */ }
+  const names = new Set(lib.projectTables(project, rules, lib.analyseProject(project, [])).keys());
+  // and the tables the functions' own scripts name in a records call: all there is to go on with no backend up
+  const reg = project.store.readRegistry();
+  for (const key of project.store.componentKeys()) {
+    if (!key.startsWith(CLOUD)) continue;
+    try { for (const n of project.store.filesOf(key, reg.components[key]).nodes.nodes) for (const t of scriptTableNames(n.parameters?.functionScript ?? '')) names.add(t); } catch { /* skip */ }
+  }
+  if (isUp(backend)) {
+    try {
+      const token = await backends.adminTokenOf(backend.id);
+      const r = await fetch(`${backend.endpoint.replace(/\/$/, '')}/admin/schema`, { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) for (const t of (await r.json()).tables ?? []) names.add(t.name);
+    } catch { /* the project's own names will do */ }
+  }
+  const app = lib.analyseProject(project, [...names]);
+  return { functions: [...app.functions, ...app.helpers].map((f) => ({ key: f.component, touches: f.touches })) };
+}
 const mapWords = (words) =>
   `<!doctype html><meta charset="utf-8"><body style="margin:0;height:100vh;display:grid;place-items:center;background:#141318;color:#c4cedb;font:15px system-ui,sans-serif"><p style="max-width:460px;text-align:center">${words.replace(/[<&]/g, (c) => (c === '<' ? '&lt;' : '&amp;'))}</p>`;
 
@@ -515,6 +549,7 @@ const server = http.createServer(async (req, res) => {
       }
     }
     if (url.pathname === '/api/images') return json(200, projectImages(projectDir));
+    if (url.pathname === '/api/functions') { try { return json(200, await functionTouches()); } catch (e) { return json(200, { functions: [], words: `What each function reads and writes could not be read: ${e.message}` }); } }
     if (url.pathname === '/api/asset' && req.method === 'POST') {
       const name = url.searchParams.get('name') || '';
       if (!IMAGES.includes(extname(name).toLowerCase())) return json(400, { error: `not an image: ${name}` });

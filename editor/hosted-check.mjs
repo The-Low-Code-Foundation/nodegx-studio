@@ -11,6 +11,8 @@
  *   2. Map draws the map itself, not the "Open the map" card: Studio's `/backend-map/` written into a src-less frame
  *      (the way the app preview is drawn), so no frame origin is needed
  *   3. "See it on the map" opens the map on that type (`#t:<type>`), and the map's live feed answers
+ *   4. (BKO-004) a cloud function the agent made opens on Workflow as its graph, says what it touches (asked across
+ *      origins) and, once it has run on the backend, its last run
  *
  *   node editor/hosted-check.mjs            PASS n/n and exit 0, or the failing lines and exit 1
  *   node editor/hosted-check.mjs --shots    also writes ../docs/look/bko-002-*.png
@@ -23,6 +25,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { browser } from './cdp.mjs';
+import { AGENT_FN, makeFunctionAsAgent } from './agentmade-check.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const shots = process.argv.includes('--shots');
@@ -92,6 +95,10 @@ try {
   const row = await fetch(bound.endpoint + '/classes/Task', { method: 'POST', headers: { 'X-Parse-Application-Id': bound.appId, 'X-Parse-Master-Key': adminToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Water the plants' }) });
   ok(row.status < 300, 'a task on the backend, so Task is one of its tables', row.status);
 
+  // BKO-004: the agent makes a cloud function (the kit's MCP server; the NodeGX checkout holds the example it sends)
+  const repo = process.env.NODEGX_REPO ? process.env.NODEGX_REPO : join(here, '..', '..', 'OpenNoodl');
+  let agentMade = true; try { await makeFunctionAsAgent(project, kit.mcpServer, repo, bound.instanceId); } catch (e) { agentMade = false; ok(false, 'the agent makes a cloud function and deploys it', e.message); }
+
   const panel = await (await fetch(studio + '/panel')).text();
   const hostPort = await freePort();
   host = http.createServer((req, res) => {
@@ -112,7 +119,7 @@ try {
   };
   const ready = await until(`(${P}?.title || '').startsWith('ready')`, 90000);
   ok(ready, 'the panel, drawn from another origin than Studio\'s, comes up', await ev(`${P}?.title`));
-  const shot = async (name) => { if (shots) { await wait(600); await b.screenshot(join(here, '..', 'docs', 'look', `bko-002-${name}.png`)); } };
+  const shot = async (name) => { if (shots) { await wait(600); await b.screenshot(name.startsWith('bko-004') ? join(here, '..', '..', 'OpenNoodl', 'dev-docs', 'tasks', 'phase-127-the-backend-in-the-open', 'look', `${name}.png`) : join(here, '..', 'docs', 'look', `bko-002-${name}.png`)); } };
 
   console.log('check: BKO-002 Privacy in the conversation');
   await click('[data-tab=data]'); await wait(400);
@@ -144,6 +151,41 @@ try {
     const feed = await until(`(() => { const t = ${F}?.contentDocument?.getElementById('tickerNote')?.textContent || ''; return t && !/^listening to the backend/.test(t) ? t : false; })()`, 15000);
     ok(feed, 'the map\'s live feed of what just ran answers inside the frame', feed || await ev(`${F}?.contentDocument?.getElementById('tickerNote')?.textContent ?? null`));
     await shot('map-on-task');
+  }
+
+  if (agentMade) {
+    console.log('check: BKO-004 a cloud function in the conversation');
+    await click('[data-tab=workflow]');
+    await click(`#fnlist .row[data-fn="${AGENT_FN}"]`);
+    const read = `(() => { const v = ${P}.querySelector('#steps .fnview'); if (!v || v.querySelector('.fnfacts .touches').textContent.startsWith('Reading') || v.querySelector('.fnfacts .run').textContent.startsWith('Reading')) return false;
+      const cards = [...v.querySelectorAll('.fnflow .step')]; return { key: v.dataset.fn, cards: cards.length, sized: cards.every((c) => c.getBoundingClientRect().width > 60 && c.getBoundingClientRect().height > 30),
+      wires: [...v.querySelectorAll('svg.wires path[data-kind]')].map((p) => p.dataset.kind), touches: v.querySelector('.fnfacts .touches').textContent, run: v.querySelector('.fnfacts .run').textContent }; })()`;
+    const fn = await until(read, 15000);
+    ok(fn && fn.key === AGENT_FN && fn.cards === 5 && fn.sized && fn.wires.length === 10 && fn.wires.includes('signal') && fn.wires.includes('value'), 'inside the conversation, List Role Members draws as its graph: 5 cards, 10 wires, signals and values', fn);
+    ok(fn && !/could not be read|isn’t installed/.test(fn.touches), 'what it reads and writes is asked of Studio across origins, and answered', fn?.touches);
+    ok(fn && /Not run on this backend yet/.test(fn.run), 'before it has run, its last run says so', fn?.run);
+    await shot('bko-004-hosted-function');
+    // it runs once on the backend, as a caller would call it; opened again, its last run is said
+    const called = await fetch(`${bound.endpoint}/functions/${encodeURIComponent('List Role Members')}`, { method: 'POST', headers: { 'X-Parse-Application-Id': bound.appId, 'X-Parse-Master-Key': adminToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'nobody', page: 0 }) });
+    const calledText = await called.text();
+    await click(`#fnlist .row[data-fn="__cloud__/List Role Members"]`); await wait(300);
+    await click(`#fnlist .row[data-fn="${AGENT_FN}"]`);
+    const again = await until(`(() => { const t = ${P}.querySelector('#steps .fnview .fnfacts .run')?.textContent || ''; return t.startsWith('●') ? t : false; })()`, 15000);
+    ok(again, 'after one call on the backend, its last run is said: when, how it ended, how long', again || { status: called.status, body: calledText.slice(0, 200), run: await ev(`${P}.querySelector('#steps .fnview .fnfacts .run')?.textContent`) });
+    await shot('bko-004-hosted-function-ran');
+
+    // the map's "Open its steps" (published with @nodegx/backend-map 0.1.3): its frame posts the function, Studio opens
+    // it and Back goes to the map. Said here as the map says it, so Studio's half is graded before the map is out; a
+    // message from anywhere else is not obeyed
+    await click('[data-tab=data]'); await wait(300);
+    await click('[data-sub=map]'); await wait(600);
+    await ev(`${P}.defaultView.postMessage({ nodegx: 'open-function', component: ${JSON.stringify(AGENT_FN)} }, '*')`); await wait(500);
+    ok(await ev(`!${P}.querySelector('#workflow:not([hidden]) .fnview')`), 'a message to open a function from anywhere but the map\'s frame is not obeyed');
+    await ev(`${P}.getElementById('mapframe').contentWindow.eval("parent.postMessage({ nodegx: 'open-function', component: ${JSON.stringify(AGENT_FN).replace(/"/g, "'")} }, '*')")`);
+    const fromMap = await until(`${P}.querySelector('#workflow:not([hidden]) .fnview')?.dataset.fn`, 8000);
+    ok(fromMap === AGENT_FN, 'from the map\'s frame, "Open its steps" opens the function on Workflow', fromMap);
+    await click('#steps .fnview .cardnav .back');
+    ok(await until(`!${P}.getElementById('data').hidden && ${P}.querySelector('[data-sub=map][aria-selected=true]') && !${P}.getElementById('data-map').hidden`, 8000), 'Back goes to the map');
   }
 } catch (e) {
   ok(false, 'the gate ran to the end', e.message);

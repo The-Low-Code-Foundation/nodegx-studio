@@ -475,7 +475,20 @@
   .flowarea { position: relative; }
   .flow { position: absolute; left: 0; top: 0; width: max-content; transform-origin: 0 0; }
   .flow svg.wires { position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; overflow: visible; }
-  .flow > .chain, .flow > .lanesrow { position: relative; z-index: 1; } /* the wires run behind the nodes and their labels */
+  .flow > .chain, .flow > .lanesrow, .flow > .fncols { position: relative; z-index: 1; } /* the wires run behind the nodes and their labels */
+  /* P127 BKO-004: a cloud function drawn as its graph, a column per step from where it starts, the answers last; read only */
+  .fncols { display: flex; align-items: flex-start; gap: 72px; padding: 4px 0; }
+  .fncol { display: flex; flex-direction: column; gap: 22px; }
+  .fnflow .step { cursor: default; width: 240px; }
+  .fnflow .step.fnstart { border-color: var(--blue); box-shadow: 0 0 0 1px rgba(77,163,255,.25), 0 0 26px rgba(77,163,255,.35); }
+  .fnflow .step.fnanswer { border-color: rgba(69,208,138,.7); }
+  .fnflow .step.fnrefuse { border-color: rgba(249,112,102,.7); }
+  .fnflow .step.fnloose { border-style: dashed; }
+  .fnflow .step .lines code { white-space: pre-wrap; word-break: break-word; }
+  .fnfacts { display: flex; flex-direction: column; gap: 4px; margin: -12px 0 20px; font-size: 13px; color: var(--sub); max-width: 980px; }
+  .fnfacts .touch { display: inline-block; margin-right: 6px; padding: 1px 8px; border-radius: 10px; border: 1px solid rgba(253,176,34,.45); color: #fde68a; }
+  .fnfacts .run.ran { color: var(--green); } .fnfacts .run.refused { color: var(--red); }
+  .wf .fnopen, .wf button.fnopen { color: var(--blue); }
   .zoom { display: flex; align-items: center; gap: 4px; color: var(--dim); font-size: 12px; }
   .zoom button { padding: 3px 9px; border-radius: 14px; }
   .zoom span { min-width: 38px; text-align: center; }
@@ -775,6 +788,8 @@
         <div class="wffilters"><select id="wfeffect" aria-label="What it does"></select><select id="wftrigger" aria-label="What starts it"></select></div>
         <h3 class="sec"><span id="wfcount">Workflows on this page</span> <button class="tiny primary" id="newevent"><svg class="i"><use href="#i-plus"/></svg>New</button></h3>
         <div class="events list" id="events"></div>
+        <h3 class="sec" id="fnsec">On the backend</h3>
+        <div class="events list" id="fnlist"></div>
       </aside>
       <div id="steps"><div class="empty">Pick a workflow on the left.</div></div>
     </section>
@@ -868,6 +883,7 @@ import { typesOf, driftOf, projectColumn, cellWords, editText, toWire, searchWhe
 import { fieldReaders, typeReaders, renameField, renameType, appFields } from './rename.mjs';
 import { LANES, buildTimeline, lastRunOf, msText, shotAt, stepValues } from './timeline.mjs';
 import { runOver, lastActivity, watchSignals, runtimeTimers, runTimers } from './runwatch.mjs';
+import { CLOUD, REQUEST, RESPONSE, functionList, functionLayout, helperKey, requestAsks, responseWords, touchesWords } from './fngraph.mjs';
 
 const $ = (id) => document.getElementById(id);
 const h = (tag, attrs = {}, ...kids) => {
@@ -1805,7 +1821,8 @@ window.addEventListener('mouseup', (e) => { if (gesture) endGesture(e); });
 window.addEventListener('keydown', (e) => {
   const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
   if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !inField) { e.preventDefault(); undo(); return; }
-  if (e.key === 'Escape' && tab === 'workflow' && cardBack && !inField && !document.querySelector('.menu')) { backFromCard(); return; }
+  if (e.key === 'Escape' && tab === 'workflow' && selFn && fnBack.length && !inField && !document.querySelector('.menu')) { backFromFn(); return; }
+  if (e.key === 'Escape' && tab === 'workflow' && !selFn && cardBack && !inField && !document.querySelector('.menu')) { backFromCard(); return; }
   // Esc with nothing selected, inside a copy on its page: up one level, the copy selected (as the NodeGX editor's breadcrumb)
   if (e.key === 'Escape' && !inField && host && !sel && !pending && !document.querySelector('.menu') && tab === 'design') { editUp(); return; }
   if (e.key === 'Escape') { closeMenu(); if (!inField) { pending = null; overlay.classList.remove('adding'); for (const b of $('palette').querySelectorAll('button')) b.setAttribute('aria-pressed', 'false'); select(null); } }
@@ -3666,6 +3683,7 @@ $('wfsearch').oninput = (e) => { wfFilter.q = e.target.value.trim(); renderEvent
 $('wfeffect').onchange = (e) => { wfFilter.effect = e.target.value; renderEvents(); };
 $('wftrigger').onchange = (e) => { wfFilter.trigger = e.target.value; renderEvents(); };
 function renderEvents() {
+  renderFnList();
   const box = $('events'); box.innerHTML = '';
   const all = workflowIndex();
   fillWfFilters(all);
@@ -3680,10 +3698,160 @@ function renderEvents() {
   for (const c of shown) { if (!byElement.has(c.ev.node)) byElement.set(c.ev.node, []); byElement.get(c.ev.node).push(c); }
   for (const id of [...byElement.keys()].sort((a, b) => (order.get(a) ?? Infinity) - (order.get(b) ?? Infinity))) {
     box.append(h('div', { class: 'evhead', 'data-node': id }, icon(glyphOf(byId[id].type)), labelOf(id)));
-    for (const { ev } of byElement.get(id)) box.append(h('div', { class: 'row', 'data-node': ev.node, 'data-port': ev.port, 'aria-selected': selEvent && selEvent.node === ev.node && selEvent.port === ev.port, onclick: () => { selEvent = ev; renderWorkflow(); } },
+    for (const { ev } of byElement.get(id)) box.append(h('div', { class: 'row', 'data-node': ev.node, 'data-port': ev.port, 'aria-selected': !selFn && selEvent && selEvent.node === ev.node && selEvent.port === ev.port, onclick: () => { selEvent = ev; selFn = null; fnBack = []; renderWorkflow(); } },
       h('span', {}, cardName(ev)), h('small', {}, `When ${portLabel(byId[ev.node], 'output', ev.port)} · ${eventSteps(ev)} step(s)`)));
   }
 }
+/* ---- P127 BKO-004: a cloud function, opened as its graph. Workflow lists every function under "On the backend", a step
+   that runs one opens it, and a function opens a helper it places. Drawn from ./fngraph.mjs's layout in the workflow's
+   look: a column per step from "When this function is called", the answers last, a wire for every value and signal.
+   Read only: Design does not open a cloud function, so a change is the agent's. `fnBack`: where it was opened from, for Back (Esc) ---- */
+let selFn = null, fnBack = [], fnTouches = null, fnRun = null;
+const fnNodesOf = (key) => store.readComponent(key).files.nodes.nodes;
+const fnName = (key) => key.slice(CLOUD.length);
+// a function's nodes are not the page's, so portsOf (which reads a port in the page's context) does not know the cloud
+// nodes' ports: their specs are read directly, then the library's ports
+const specPort = (type, plug, port) => specs[type]?.[plug === 'input' ? 'inputs' : 'outputs']?.[port];
+const fnPortLabel = (n, plug, port) => specPort(n.type, plug, port)?.displayName || (/^(pm|in|out)-./.test(port) ? port.replace(/^(pm|in|out)-/, '') : portLabel(n, plug, port));
+/** A wire carries a signal when either end says so: a script's own outputs are unknown until it runs, the Response's `send` is not. */
+function fnSignal(from, to, c) {
+  const ends = [specPort(from.type, 'output', c.fromProperty), specPort(to.type, 'input', c.toProperty)].filter(Boolean);
+  if (ends.length) return ends.some((p) => tname(p.type) === 'signal');
+  return isSignalPort(from, 'output', c.fromProperty) || isSignalPort(to, 'input', c.toProperty);
+}
+function loadFnTouches() {
+  if (fnTouches?.pending) return;
+  fnTouches = { pending: true, byKey: new Map() };
+  fetch('/api/functions').then((r) => r.json()).then((j) => { fnTouches = { byKey: new Map(j.functions.map((f) => [f.key, f.touches])), words: j.words }; })
+    .catch((e) => { fnTouches = { byKey: new Map(), words: `What each function reads and writes could not be read: ${e.message}` }; })
+    .finally(() => { if (tab === 'workflow' && selFn) renderWorkflow(); });
+}
+function renderFnList() {
+  const box = $('fnlist'); box.innerHTML = '';
+  const q = wfFilter.q.toLowerCase();
+  const all = functionList(Object.keys(registry()), fnNodesOf);
+  const shown = all.filter((f) => !q || f.name.toLowerCase().includes(q));
+  $('fnsec').textContent = shown.length < all.length ? `On the backend: ${shown.length} of ${all.length}` : 'On the backend';
+  if (!all.length) return box.append(h('div', { class: 'hint' }, 'No cloud functions in this app yet: the steps that run on the backend, out of reach of the device.'));
+  for (const f of shown) box.append(h('div', { class: 'row', 'data-fn': f.key, 'aria-selected': selFn === f.key, onclick: () => openFunction(f.key) },
+    h('span', {}, f.name), h('small', {}, `${f.endpoint ? 'Called from the app' : 'A part other functions use'} · ${f.steps} step${f.steps === 1 ? '' : 's'}`)));
+}
+/** `from`: { kind: 'card', ev, cardBack, title } (a step that runs it), { kind: 'fn', key } (a function placing a helper) or { kind: 'map' } (the map's panel); none from the list. */
+function openFunction(key, from = null) {
+  if (!registry()[key]) return toast(`This app has no cloud function called ${fnName(key)}`);
+  fnBack = from ? [...fnBack, from] : [];
+  selFn = key; fnRun = null; fnTouches = null; hideBoltTip(); // read again: the agent may have changed a function since
+  if (tab !== 'workflow') switchTab('workflow'); else renderWorkflow();
+  readFnRun(key);
+}
+function backFromFn() {
+  const back = fnBack.pop();
+  if (!back) { selFn = null; return renderWorkflow(); }
+  if (back.kind === 'fn') { selFn = back.key; fnRun = null; readFnRun(back.key); return renderWorkflow(); }
+  if (back.kind === 'map') { selFn = null; fnBack = []; dataSub = 'map'; return switchTab('data'); }
+  // back to the workflow card it was opened from, which keeps its own Back to the element in Design
+  selFn = null; fnBack = []; selEvent = back.ev; cardBack = back.cardBack;
+  renderWorkflow();
+}
+/** The function's last run on the backend Studio runs (`GET /executions`), in a line. Not its steps: the backend records a
+    function's run, not which of its nodes ran. */
+async function readFnRun(key) {
+  const name = fnName(key);
+  let words, cls = '';
+  try {
+    const r = await fetch(`/api/backend/executions?kind=function&name=${encodeURIComponent(name)}&limit=20`);
+    if (!r.ok) words = r.status === 503 ? 'No backend is bound, so there is no run to show.' : `The backend did not say its runs (${r.status}).`;
+    else {
+      const run = (await r.json()).find((x) => (x.workflowName || x.workflowId) === name);
+      if (!run) words = 'Not run on this backend yet.';
+      else {
+        const failed = run.status && !/^(success|completed|ok)$/i.test(run.status);
+        words = `● Last run ${new Date(run.startedAt).toLocaleString()} · ${failed ? (run.errorMessage ? `refused: ${run.errorMessage}` : run.status) : 'answered'}${run.durationMs != null ? ` · ${run.durationMs} ms` : ''}`;
+        cls = failed ? 'refused' : 'ran';
+      }
+    }
+  } catch (e) { words = `The backend did not answer: ${e.message}`; }
+  if (selFn !== key) return;
+  fnRun = { words, cls };
+  const el = $('steps').querySelector('.fnfacts .run'); if (el) { el.textContent = words; el.className = `run ${cls}`; }
+}
+function fnCard(n, fconns, fById, col, loose) {
+  const p = n.parameters || {};
+  const say = (...kids) => h('span', {}, ...kids);
+  const lines = [];
+  let cls = 'step', title = n.label || typeName(n.type), sub = n.label ? typeName(n.type) : '', kind = KIND_COLOUR.code;
+  const from = (c) => { const s = fById[c.fromId]; return `${s?.label || typeName(s?.type ?? '?')} · ${fnPortLabel(s, 'output', c.fromProperty)}`; };
+  if (n.type === REQUEST) {
+    cls += ' fnstart'; title = 'When this function is called'; sub = n.label || ''; kind = FLOW.then;
+    const asks = requestAsks(n);
+    lines.push(say(asks.length ? 'It is sent: ' : 'It is sent nothing', ...asks.map((a) => h('code', { title: `${a.type}${a.required ? ', must be sent' : ', may be left out'}` }, `${a.name}${a.required ? '' : '?'}`))));
+    lines.push(say(p.allowNoAuth ? 'Anyone can call it, signed in or not' : 'Only someone signed in can call it'));
+  } else if (n.type === RESPONSE) {
+    const w = responseWords(n, fconns);
+    cls += w.refusal ? ' fnrefuse' : ' fnanswer'; title = w.refusal ? 'Refuse' : 'Return'; sub = n.label || ''; kind = w.refusal ? FLOW.no : FLOW.yes;
+    if (w.refusal) lines.push(say(w.message ? h('code', {}, w.message) : w.message === null ? 'with a message the function makes' : 'with no message'));
+    else lines.push(say(w.sends.length ? 'It answers with ' : 'It answers with nothing more', ...w.sends.map((s) => h('code', {}, s))));
+  } else if (n.type === 'Component Inputs' || n.type === 'Component Outputs') {
+    const start = n.type === 'Component Inputs';
+    cls += start ? ' fnstart' : ' fnanswer'; title = start ? 'What it is given' : 'What it hands back'; kind = start ? FLOW.then : FLOW.yes;
+    lines.push(say(...(n.ports || []).map((x) => h('code', {}, x.name))));
+  } else if (helperKey(n.type)) {
+    const hk = helperKey(n.type); kind = KIND_COLOUR.bolt; title = n.label || fnName(hk).replace(/^shared\//, ''); sub = n.label ? `uses ${fnName(hk).replace(/^shared\//, '')}` : 'a part on the backend';
+    lines.push(h('button', { class: 'quiet tiny fnopen', title: `Open ${fnName(hk)}'s own steps`, onclick: (e) => { e.stopPropagation(); openFunction(hk, { kind: 'fn', key: selFn }); } }, 'Open its steps ↗'));
+  } else {
+    if (/^(DbCollection2|DbModel2|NewDbModelProperties|SetDbModelProperties|DeleteDbModelProperties)$/.test(n.type)) kind = KIND_COLOUR.db;
+    if (p.collectionName) lines.push(say('Data type: ', h('code', {}, p.collectionName)));
+    if (typeof p.functionScript === 'string') { const first = p.functionScript.split('\n').map((l) => l.trim()).find((l) => l && !/^(\/\/|\/\*|\*)/.test(l)) ?? ''; lines.push(say(`A script of ${p.functionScript.split('\n').length} lines: `, h('code', {}, first.slice(0, 90)))); }
+    for (const [k, v] of Object.entries(p)) if (!['functionScript', 'collectionName', 'x', 'y'].includes(k) && !/^runOnChange/.test(k) && (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') && lines.length < 4) lines.push(say(`${fnPortLabel(n, 'input', k)}: `, h('code', {}, String(v).slice(0, 60))));
+  }
+  const wired = fconns.filter((c) => c.toId === n.id && fById[c.fromId] && n.type !== REQUEST);
+  for (const c of wired.slice(0, 4)) lines.push(say(`${fnPortLabel(n, 'input', c.toProperty)} ← `, h('code', {}, from(c))));
+  if (wired.length > 4) lines.push(h('span', { style: 'color:var(--dim)' }, `+ ${wired.length - 4} more wired in`));
+  if (loose) { cls += ' fnloose'; lines.push(say('No wire reaches it or leaves it')); }
+  return h('div', { class: cls, 'data-id': n.id, 'data-type': n.type, style: `--kind:${kind}` }, h('div', { class: 'num' }, String(col + 1)), h('h3', {}, title, sub ? h('span', {}, sub) : null), h('div', { class: 'acts' }), h('div', { class: 'lines' }, ...lines));
+}
+function renderFunction() {
+  const main = $('steps'); main.innerHTML = '';
+  $('workflow').classList.toggle('card', fnBack.length > 0);
+  const key = selFn, comp = store.readComponent(key).files;
+  const fnodes = comp.nodes.nodes, fconns = comp.connections.connections, fById = Object.fromEntries(fnodes.map((n) => [n.id, n]));
+  const L = functionLayout(fnodes, fconns, (c) => fnSignal(fById[c.fromId], fById[c.toId], c));
+  const endpoint = fnodes.some((n) => n.type === REQUEST);
+  if (!fnTouches) loadFnTouches();
+  const touched = touchesWords(fnTouches?.byKey?.get(key));
+  const back = fnBack.at(-1);
+  const wf = h('div', { class: 'wf fnview', 'data-fn': key });
+  wf.append(h('div', { class: 'cardnav' }, back ? h('button', { class: 'quiet back', title: 'Back to where you opened it (Esc)', onclick: backFromFn }, '← ', back.kind === 'fn' ? fnName(back.key) : back.title) : null,
+    h('button', { class: 'quiet tiny', title: 'Every workflow on this page, listed', onclick: () => { selFn = null; fnBack = []; cardBack = null; renderWorkflow(); } }, 'All workflows on this page')));
+  wf.append(h('div', { class: 'event-card' }, h('div', { class: 'named' }, h('h2', {}, fnName(key)), h('small', {}, endpoint ? 'A cloud function: it runs on the backend, never on the device' : 'A part cloud functions place: it runs on the backend, inside each one')),
+    h('div', { style: 'margin-left:auto;display:flex;gap:6px;align-items:center' }, h('div', { class: 'zoom' }, h('button', { title: 'Smaller', onclick: () => zoomFlow(-0.1) }, '−'), h('span', { class: 'zoomval' }), h('button', { title: 'Bigger', onclick: () => zoomFlow(0.1) }, '+'), h('button', { title: 'Fit the whole function in view', onclick: () => { flowZoom = null; fitFlow(); } }, 'Fit')))));
+  wf.append(h('div', { class: 'fnfacts' },
+    h('div', { class: 'touches' }, fnTouches?.pending ? 'Reading what it reads and writes…' : touched.length ? ['It ', ...touched.map((t) => h('span', { class: 'touch' }, t))] : fnTouches?.words ?? 'It reads and writes no data type itself.'),
+    h('div', { class: `run ${fnRun?.cls ?? ''}` }, fnRun?.words ?? 'Reading its last run…'),
+    h('div', { style: 'color:var(--dim)' }, 'Read only: Studio does not change a function’s steps yet. Ask the agent to change them.')));
+  flowWires = []; drawnForks.clear();
+  const flow = h('div', { class: 'flow fnflow' });
+  flow.append(document.createElementNS(SVG_NS, 'svg')); flow.firstChild.setAttribute('class', 'wires');
+  const cols = h('div', { class: 'fncols' });
+  L.columns.forEach((col, i) => cols.append(h('div', { class: 'fncol' }, ...col.map((id) => fnCard(fById[id], fconns, fById, i, L.loose.includes(id))))));
+  flow.append(cols);
+  const cardOf = (id) => cols.querySelector(`.step[data-id="${CSS.escape(id)}"]`);
+  for (const w of L.wires) { const a = cardOf(w.from), b = cardOf(w.to); if (a && b) flowWires.push({ from: a, port: 'out', to: b, kind: w.kind, dashed: false, edge: null }); }
+  wf.append(h('div', { class: 'flowarea' }, flow));
+  wf.append(h('div', { class: 'flowlegend' }, ...[['then', 'a signal: the next step runs'], ['value', 'a value handed on'], ['fail', 'when it fails'], ['yes', 'an answer'], ['no', 'a refusal']].map(([k, w]) => h('span', {}, h('i', { style: `border-color:${FLOW[k]}` }), w))));
+  main.append(wf);
+  flowRO?.disconnect();
+  flowRO = new ResizeObserver(() => fitFlow());
+  for (const el of [main, flow, ...flow.querySelectorAll('.step')]) flowRO.observe(el);
+  fitFlow();
+}
+window.__ob.openFunction = openFunction;
+// the map's "Open its steps" (Data → Map, @nodegx/backend-map in Studio's frame): only from that frame, only a function
+addEventListener('message', (e) => {
+  if (e.data?.nodegx !== 'open-function' || e.source !== $('mapframe')?.contentWindow || typeof e.data.component !== 'string') return;
+  const key = e.data.component.replace(/^\/?#?/, '');
+  if (key.startsWith(CLOUD)) openFunction(key, { kind: 'map', title: 'the map' });
+});
 /**
  * The chain from a signal: follow the first wired target, then its Done, and so on; a Condition ends the chain with two of
  * its own, unless both sides go on into one step (R4, rejoin): then the chain carries on from that step, after the branch.
@@ -3734,7 +3902,7 @@ function triggerOf(node) {
 /* ---- STU-026: the wires. renderChain records each one (what it leaves, by which port, what it reaches, what it carries);
    they are drawn from where the nodes landed, again whenever a node changes size (settings opened, a field typed) ---- */
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const FLOW = { then: '#4da3ff', yes: '#45d08a', no: '#f97066', join: '#35c3e8', dead: '#4a4856', offer: '#4a4856' };
+const FLOW = { then: '#4da3ff', yes: '#45d08a', no: '#f97066', join: '#35c3e8', dead: '#4a4856', offer: '#4a4856', value: '#8fa3bf', fail: '#f97066' }; // value, fail: a cloud function's wires (BKO-004)
 const KIND_COLOUR = { nav: '#4da3ff', db: '#fdb022', state: '#f776c4', user: '#a3e635', code: '#7d8a98', bolt: '#fb923c', page: '#c084fc', branch: '#a78bfa' };
 let flowWires = [], flowRO = null;
 /** `edge`: the graph wire it draws ({ from: { node, port }, to: { node, port } }), where a step can go between the two. */
@@ -3745,6 +3913,8 @@ const offer = (src, to) => wire(src, to, src?.kind === 'dead' ? 'dead' : src && 
 const neverDone = (s) => !s.refresh && byId[s.id]?.type === 'RouterNavigate' && !byId[s.id].parameters?.target && !conns.some((c) => c.toId === s.id && c.toProperty === 'target');
 function renderWorkflow() {
   renderEvents();
+  if (selFn && !registry()[selFn]) { selFn = null; fnBack = []; }
+  if (selFn) return renderFunction();
   const main = $('steps'); main.innerHTML = '';
   if (!selEvent || !byId[selEvent.node]) cardBack = null;
   $('workflow').classList.toggle('card', !!cardBack);
@@ -4066,6 +4236,9 @@ function stepCard(s, n) {
   const openSettings = () => { settings.style.display = ''; card.classList.add('open'); openSteps.add(s.id); };
   // a Go to page with no page never arrives, and RouterNavigate says Done only on arriving: nothing after it runs
   if (node.type === 'RouterNavigate' && !params.target && !wiredIn.target) lines.unshift(h('span', { class: 'nopage', style: 'color:var(--warn);flex-basis:100%;display:flex;flex-wrap:wrap;gap:2px 8px;align-items:center' }, 'No page picked: it goes nowhere, and nothing after it runs.', h('button', { class: 'quiet tiny', style: 'white-space:nowrap', onclick: openSettings }, 'Pick a page…')));
+  // BKO-004: a step that runs a cloud function opens it, its own graph, and Back comes here
+  if (node.type === 'CloudFunction2' && params.function) lines.unshift(h('button', { class: 'quiet tiny fnopen', title: `Open ${params.function}'s steps: what it does on the backend`,
+    onclick: (e) => { e.stopPropagation(); openFunction(CLOUD + params.function, { kind: 'card', ev: selEvent, cardBack, title: cardName(selEvent) }); } }, `Runs on the backend: ${params.function} ↗`));
   const kind = ACTIONS.find(([t]) => t === node.type)?.[2];
   const card = h('div', { class: `step${isCond ? ' cond' : ''}${openSteps.has(s.id) ? ' open' : ''}${neverDone(s) ? ' dead' : ''}`, 'data-id': s.id, style: kind ? `--kind:${KIND_COLOUR[kind]}` : null },
     h('div', { class: 'num' }, isCond ? icon('branch') : n),
@@ -4191,7 +4364,7 @@ $('newevent').onclick = (e) => {
       const shown = sigs.filter((p) => !q2 || `${labelOf(id)} ${p.label}`.toLowerCase().includes(q2));
       if (!shown.length) continue;
       list.append(h('div', { class: 'h' }, labelOf(id)));
-      for (const p of shown) list.append(h('div', { class: 'item', onclick: () => { closeMenu(); draftEvents.push({ node: id, port: p.name }); selEvent = { node: id, port: p.name }; renderWorkflow(); } }, icon(glyphOf(node.type)), `When ${labelOf(id)}: ${p.label}`, h('small', {}, typeName(node.type))));
+      for (const p of shown) list.append(h('div', { class: 'item', onclick: () => { closeMenu(); draftEvents.push({ node: id, port: p.name }); selEvent = { node: id, port: p.name }; selFn = null; fnBack = []; renderWorkflow(); } }, icon(glyphOf(node.type)), `When ${labelOf(id)}: ${p.label}`, h('small', {}, typeName(node.type))));
     }
   };
   fill('');
