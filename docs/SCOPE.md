@@ -1628,6 +1628,25 @@ editor draws it. Whether Claude Desktop offers `message` (`ui/message`) is not m
 the file and the toast says to tell the agent. Filed on the way: NodeGX P128-S6-OPTSETFLAKE (`check:hosted`'s New option
 set, asked and not made in four runs of six, on both arms).
 
+## STU-085 — a cloud function's last run, lit on its nodes (NodeGX P127-BKO004-FNSTEPS, P128 Beta round, 2026-10-27)
+
+**Why.** Workflow → On the backend said a function's last run in a line (BKO-004) but lit none of its nodes, while a
+page workflow's *Show the last run* lights what ran. The backend was never the gap: a function run records one step
+per node that acts (a record, a role, a user, an answer, a log), by node id, and `GET /executions/<id>` serves them
+(NodeGX DEF-004; re-measured P127 s10).
+
+**Built.** `readFnRun` reads the newest run's record (`/api/backend/executions/<id>`, as `readAutoRun` reads a backend
+workflow's) and keeps its steps (`stepsOfRun`); `lightFnRun` gives each node the run acted in the page workflow's
+`.ran` (green, "ran") and the node it failed in `.refused` (red, "failed here"). The start card (*When this function
+is called*) is lit when the run exists, and refused when the run was turned away before any node acted
+("Unauthenticated requests not accepted"). A node that only works out a value (an Expression, a Script) records no
+step, so it stays unlit: DEF-004's stated line.
+
+**Graded.** `check:hosted` 29/29, two new lines inside the conversation's frame: a call not signed in lights the start
+refused and no node; a call by someone signed in (role `nobody`) lights exactly what the backend recorded, read
+beside it from `/executions/<id>`: `members` refused (*There is no role named "nobody"*), `fail_response` ran.
+The New option set check now records what the panel showed when it misses (NodeGX P128-S6-OPTSETFLAKE).
+
 ## Rulings open
 
 | id | question | from |

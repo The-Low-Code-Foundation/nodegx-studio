@@ -488,6 +488,9 @@
   .fnfacts { display: flex; flex-direction: column; gap: 4px; margin: -12px 0 20px; font-size: 13px; color: var(--sub); max-width: 980px; }
   .fnfacts .touch { display: inline-block; margin-right: 6px; padding: 1px 8px; border-radius: 10px; border: 1px solid rgba(253,176,34,.45); color: #fde68a; }
   .fnfacts .run.ran { color: var(--green); } .fnfacts .run.refused { color: var(--red); }
+  /* P127-BKO004-FNSTEPS: a function's last run on its nodes (.ran is the page workflow's look) */
+  .flow .step.refused { box-shadow: 0 0 0 1.5px var(--red), 0 0 26px rgba(249,112,102,.35); }
+  .flow .step.refused::after { content: 'failed here'; position: absolute; top: -9px; right: 12px; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 8px; background: var(--red); color: #2a0b0b; }
   /* P127 BKO-005: a backend trigger's switch and time, a backend workflow's last run lit on its steps */
   .trigswitch { margin-left: 8px; padding: 1px 9px; border-radius: 10px; font-size: 11px; border: 1px solid var(--line); background: transparent; color: var(--dim); cursor: pointer; }
   .trigswitch[aria-checked=true] { border-color: rgba(69,208,138,.6); color: var(--green); }
@@ -4036,11 +4039,12 @@ function backFromFn() {
   selFn = null; fnBack = []; selEvent = back.ev; cardBack = back.cardBack;
   renderWorkflow();
 }
-/** The function's last run on the backend Studio runs (`GET /executions`), in a line. Not its steps: the backend records a
-    function's run, not which of its nodes ran. */
+/** The function's last run on the backend Studio runs (`GET /executions`), in a line, and the nodes it ran
+    (`GET /executions/<id>`, as `readAutoRun` reads a workflow's): P127-BKO004-FNSTEPS. The backend records a step for
+    each node that acts (a record, a role, an answer, a log); a node that only works out a value leaves none. */
 async function readFnRun(key) {
   const name = fnName(key);
-  let words, cls = '';
+  let words, cls = '', steps = null;
   try {
     const r = await fetch(`/api/backend/executions?kind=function&name=${encodeURIComponent(name)}&limit=20`);
     if (!r.ok) words = r.status === 503 ? 'No backend is bound, so there is no run to show.' : `The backend did not say its runs (${r.status}).`;
@@ -4051,12 +4055,27 @@ async function readFnRun(key) {
         const failed = run.status && !/^(success|completed|ok)$/i.test(run.status);
         words = `● Last run ${new Date(run.startedAt).toLocaleString()} · ${failed ? (run.errorMessage ? `refused: ${run.errorMessage}` : run.status) : 'answered'}${run.durationMs != null ? ` · ${run.durationMs} ms` : ''}`;
         cls = failed ? 'refused' : 'ran';
+        try { steps = stepsOfRun(await api(`/executions/${encodeURIComponent(run.id)}`)); } catch { steps = new Map(); /* the line still says the run */ }
       }
     }
   } catch (e) { words = `The backend did not answer: ${e.message}`; }
   if (selFn !== key) return;
-  fnRun = { words, cls };
+  fnRun = { words, cls, steps };
   const el = $('steps').querySelector('.fnfacts .run'); if (el) { el.textContent = words; el.className = `run ${cls}`; }
+  lightFnRun();
+}
+/** FNSTEPS: each node the last run acted in wears `.ran`, the one it failed in `.refused`. The call itself starts at the
+    Request card: lit when the run exists, refused when the run failed before any node did (a caller turned away at
+    the door, "Unauthenticated requests not accepted"). */
+function lightFnRun() {
+  const steps = fnRun?.steps;
+  const cards = $('steps').querySelectorAll('.fnview[data-fn] .fnflow .step[data-id]');
+  const failedNode = steps && [...steps.values()].some((x) => x.status === 'error');
+  for (const c of cards) {
+    const s = steps?.get(c.dataset.id), door = !!steps && c.dataset.type === REQUEST;
+    c.classList.toggle('refused', s?.status === 'error' || (door && fnRun.cls === 'refused' && !failedNode));
+    c.classList.toggle('ran', (!!s && s.status !== 'error' && s.status !== 'skipped') || (door && !(fnRun.cls === 'refused' && !failedNode)));
+  }
 }
 function fnCard(n, fconns, fById, col, loose) {
   const p = n.parameters || {};
@@ -4127,6 +4146,7 @@ function renderFunction() {
   flowRO = new ResizeObserver(() => fitFlow());
   for (const el of [main, flow, ...flow.querySelectorAll('.step')]) flowRO.observe(el);
   fitFlow();
+  lightFnRun();
 }
 window.__ob.openFunction = openFunction;
 // STU-084: the wiring view's controls. Read only: nothing here writes the project

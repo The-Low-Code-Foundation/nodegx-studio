@@ -12,7 +12,7 @@
  *      (the way the app preview is drawn), so no frame origin is needed
  *   3. "See it on the map" opens the map on that type (`#t:<type>`), and the map's live feed answers
  *   4. (BKO-004) a cloud function the agent made opens on Workflow as its graph, says what it touches (asked across
- *      origins) and, once it has run on the backend, its last run
+ *      origins) and, once it has run on the backend, its last run, with the nodes that run acted in lit (FNSTEPS)
  *
  *   node editor/hosted-check.mjs            PASS n/n and exit 0, or the failing lines and exit 1
  *   node editor/hosted-check.mjs --shots    also writes ../docs/look/bko-002-*.png
@@ -27,6 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { browser } from './cdp.mjs';
 import { AGENT_FN, makeFunctionAsAgent } from './agentmade-check.mjs';
 import { cspFor, hostPage } from './hosted-host.mjs';
+import { REQUEST } from './fngraph.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const shots = process.argv.includes('--shots');
@@ -138,6 +139,24 @@ try {
     await click(`#fnlist .row[data-fn="${AGENT_FN}"]`);
     const again = await until(`(() => { const t = ${P}.querySelector('#steps .fnview .fnfacts .run')?.textContent || ''; return t.startsWith('●') ? t : false; })()`, 15000);
     ok(again, 'after one call on the backend, its last run is said: when, how it ended, how long', again || { status: called.status, body: calledText.slice(0, 200), run: await ev(`${P}.querySelector('#steps .fnview .fnfacts .run')?.textContent`) });
+    // P127-BKO004-FNSTEPS: the nodes a run acted in are lit, read from the backend's own record of it (`GET /executions/<id>`)
+    const cardsLit = `(() => { const v = ${P}.querySelector('#steps .fnview'); const c = [...(v?.querySelectorAll('.fnflow .step') ?? [])]; return c.some((x) => x.classList.contains('ran') || x.classList.contains('refused')) ? c.map((x) => ({ id: x.dataset.id, type: x.dataset.type, ran: x.classList.contains('ran'), refused: x.classList.contains('refused') })) : false; })()`;
+    const door = await until(cardsLit, 10000);
+    ok(door && door.every((c) => (c.type === REQUEST) === c.refused && !c.ran), 'a call turned away at the door (not signed in) lights the start refused, and no node as run', door);
+    // the same function called by someone signed in: its nodes act, and the backend records each by its id
+    const signup = await (await fetch(`${bound.endpoint}/users`, { method: 'POST', headers: { 'X-Parse-Application-Id': bound.appId, 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'fnsteps@example.com', email: 'fnsteps@example.com', password: 'a-long-test-password-1' }) })).json();
+    const signedIn = await fetch(`${bound.endpoint}/functions/${encodeURIComponent('List Role Members')}`, { method: 'POST', headers: { 'X-Parse-Application-Id': bound.appId, 'X-Parse-Session-Token': signup.sessionToken ?? '', 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'nobody', page: 0 }) });
+    const signedInText = await signedIn.text();
+    await click(`#fnlist .row[data-fn="__cloud__/List Role Members"]`); await wait(300);
+    await click(`#fnlist .row[data-fn="${AGENT_FN}"]`);
+    const runs = await (await fetch(`${studio}/api/backend/executions?kind=function&name=${encodeURIComponent('List Role Members')}&limit=20`)).json();
+    const record = runs[0] ? await (await fetch(`${studio}/api/backend/executions/${encodeURIComponent(runs[0].id)}`)).json() : null;
+    const want = new Map((record?.steps ?? []).map((s) => [s.nodeId, s.status]));
+    const lit = await until(`(() => { const l = ${cardsLit}; return l && l.some((c) => c.ran && c.type !== ${JSON.stringify(REQUEST)}) ? l : false; })()`, 10000);
+    const onGraph = (lit || []).filter((c) => c.type !== REQUEST);
+    const agrees = lit && want.size > 0 && onGraph.every((c) => (want.get(c.id) === 'error') === c.refused && (want.has(c.id) && want.get(c.id) !== 'error' && want.get(c.id) !== 'skipped') === c.ran)
+      && [...want.keys()].every((id) => onGraph.some((c) => c.id === id));
+    ok(agrees, 'called by someone signed in, the steps it ran are lit: each node the backend recorded wears "ran" ("refused" where it failed), and no other', { call: signedIn.status, said: signedInText.slice(0, 80), recorded: [...want], lit: lit && lit.filter((c) => c.ran || c.refused).map((c) => `${c.id}:${c.ran ? 'ran' : 'refused'}`) });
     await shot('bko-004-hosted-function-ran');
 
     // the map's "Open its steps" (published with @nodegx/backend-map 0.1.3): its frame posts the function, Studio opens
@@ -194,7 +213,9 @@ try {
   const setAsked = await answer('Priorities');
   const setKey = 'components/Option sets/Priorities/';
   const setMade = await until(`!!${P}.querySelector('#optmain .bar button')`, 8000) && onDisk(setKey + 'nodes.json')?.nodes?.some((n) => n.type === 'Static Data');
-  ok(setAsked && setMade, 'New option set: Studio asks the name in its own field, and the set is a component on disk', { asked: setAsked, made: !!setMade });
+  // P128-S6-OPTSETFLAKE: what the panel showed at that step, read beside the ok (the field still up? the toast? the set in the registry?)
+  const optSeen = setMade ? undefined : await ev(`(() => ({ fieldUp: !!${P}.querySelector('.ask [data-input=askname]'), field: ${P}.querySelector('.ask [data-input=askname]')?.value ?? null, toast: ${P}.querySelector('.toast, #toast')?.textContent ?? null, list: ${P}.getElementById('optsets')?.innerText ?? null, main: ${P}.getElementById('optmain')?.innerText?.slice(0, 120) ?? null }))()`);
+  ok(setAsked && setMade, 'New option set: Studio asks the name in its own field, and the set is a component on disk', { asked: setAsked, made: !!setMade, seen: optSeen, registry: Object.keys(onDisk('components/_registry.json')?.components ?? {}).filter((k) => k.startsWith('Option sets/')) });
   if (setMade) {
     await ev(`[...${P}.querySelectorAll('#optmain .bar button')].find((x) => x.textContent.includes('New attribute')).click()`);
     const attrAsked = await answer('rank'); await wait(700);
