@@ -18,7 +18,7 @@
  *   node editor/hosted-check.mjs --shots    also writes ../docs/look/bko-002-*.png
  */
 import { spawn } from 'node:child_process';
-import { cpSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
@@ -119,7 +119,7 @@ try {
   };
   const ready = await until(`(${P}?.title || '').startsWith('ready')`, 90000);
   ok(ready, 'the panel, drawn from another origin than Studio\'s, comes up', await ev(`${P}?.title`));
-  const shot = async (name) => { if (shots) { await wait(600); await b.screenshot(name.startsWith('bko-004') ? join(here, '..', '..', 'OpenNoodl', 'dev-docs', 'tasks', 'phase-127-the-backend-in-the-open', 'look', `${name}.png`) : join(here, '..', 'docs', 'look', `bko-002-${name}.png`)); } };
+  const shot = async (name) => { if (shots) { await wait(600); await b.screenshot(name.startsWith('bko-00') ? join(here, '..', '..', 'OpenNoodl', 'dev-docs', 'tasks', 'phase-127-the-backend-in-the-open', 'look', `${name}.png`) : join(here, '..', 'docs', 'look', `bko-002-${name}.png`)); } };
 
   console.log('check: BKO-002 Privacy in the conversation');
   await click('[data-tab=data]'); await wait(400);
@@ -187,6 +187,30 @@ try {
     await click('#steps .fnview .cardnav .back');
     ok(await until(`!${P}.getElementById('data').hidden && ${P}.querySelector('[data-sub=map][aria-selected=true]') && !${P}.getElementById('data-map').hidden`, 8000), 'Back goes to the map');
   }
+
+  // BKO-005: a backend's trigger and workflow, drawn and switched off inside the conversation. Made on the backend and
+  // kept in nodegx.automations.json as BKO-001 keeps them (the kit's published MCP server predates it; the agent's own
+  // path is automations-drive.mjs's)
+  console.log('check: BKO-005 triggers and workflows in the conversation');
+  const admin = (method, path, body) => fetch(bound.endpoint + path, { method, headers: { 'X-Parse-Application-Id': bound.appId, 'X-Parse-Master-Key': adminToken, 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) }).then((r) => r.json());
+  const wfDef = { id: 'nightly', name: 'Nightly tidy', entry: 'pause', steps: [{ id: 'pause', kind: 'wait', params: { duration: 5, unit: 'milliseconds' }, next: ['tidy'] }, { id: 'tidy', kind: 'call-function', ref: 'tidyUp' }] };
+  const trigDef = { id: 'nightly-at-2', type: 'schedule', name: 'Every night', enabled: true, target: { kind: 'workflow', name: 'nightly' }, schedule: { cron: '0 2 * * *', missedFirePolicy: 'skip' } };
+  await admin('POST', '/admin/workflow-defs', wfDef);
+  await admin('POST', '/admin/triggers', trigDef);
+  writeFileSync(join(project, 'nodegx.automations.json'), JSON.stringify({ version: 1, workflows: [{ ...wfDef, concurrency: 1 }], triggers: [trigDef] }, null, 2) + '\n');
+  await click('[data-tab=workflow]');
+  const listedRow = await until(`(() => { const r = ${P}.querySelector('#autolist .row[data-trigger="nightly-at-2"]'); return r && /^Every day at 02:00/.test(r.innerText.trim()) ? r.innerText.replace(/\\s+/g, ' ').trim() : false; })()`, 15000);
+  ok(listedRow, 'inside the conversation, the trigger is listed in the backend\'s words for its cron, asked across origins', listedRow || await ev(`${P}.getElementById('autolist')?.innerText`));
+  await click('#autolist .row[data-workflow="nightly"]');
+  const drawn = await until(`(() => { const v = ${P}.querySelector('#steps .autoview[data-workflow="nightly"]'); if (!v || /Reading its last run/.test(v.innerText)) return false;
+    return { cols: [...v.querySelectorAll('.fncol')].map((c) => [...c.querySelectorAll('.step')].map((s) => s.dataset.id)), wires: v.querySelectorAll('svg.wires path[data-kind]').length, facts: v.querySelector('.fnfacts').innerText }; })()`, 15000);
+  ok(drawn && JSON.stringify(drawn.cols) === '[["pause"],["tidy"]]' && drawn.wires === 1 && /Started by Every day at 02:00/.test(drawn.facts) && /Not run on this backend yet/.test(drawn.facts), 'its workflow draws as two steps, wired, started by the trigger, not run yet', drawn);
+  await shot('bko-005-hosted-workflow');
+  await click('#autolist .row[data-trigger="nightly-at-2"] .trigswitch');
+  const off = await until(`${P}.querySelector('#autolist .row[data-trigger="nightly-at-2"] .trigswitch')?.getAttribute('aria-checked') === 'false'`, 10000);
+  const fileSays = JSON.parse(readFileSync(join(project, 'nodegx.automations.json'), 'utf8')).triggers[0].enabled;
+  const backendSays = (await admin('GET', '/admin/triggers/nightly-at-2')).trigger?.enabled;
+  ok(off && fileSays === false && backendSays === false, 'switched off inside the conversation: the project\'s file and the backend both say off', { off, fileSays, backendSays });
 } catch (e) {
   ok(false, 'the gate ran to the end', e.message);
 } finally {

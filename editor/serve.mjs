@@ -36,6 +36,10 @@
  *   GET  /api/images       STU-051: every image file in the project folder, `[path]`, for the image popover
  *   POST /api/asset?name=x the request's bytes as an image under `assets/` (the NodeGX editor's projectAssets.ts:
  *                          made unique before the extension, `logo-1.png`), answering `{ path }`
+ *   POST /api/automations/trigger  P127 BKO-005: { id, enabled?, time?: { hour, minute }, client } one trigger turned on or
+ *                          off, or a daily schedule moved, on the backend and in `nodegx.automations.json` together
+ *                          (BKO-001's rule: the backend first, then the file; the backend put back if the file fails).
+ *                          Answers `{ file, text, backend }`: the file's new text and what the backend stored
  *
  * STU-004: a project bound to a local backend (`lib/backend.mjs`) has it started when this server starts — or adopted
  * when the NodeGX editor or Claude Code already runs it — and stopped when this server stops (SIGTERM / SIGINT; the
@@ -45,7 +49,7 @@
  * The page holds the project in memory in the kit's own store (`V2ProjectStore` over `memoryFiles`), makes every edit
  * through it, and sends the files it changed here. This file knows nothing about nodes.
  */
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, watch, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, watch, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -56,6 +60,7 @@ import * as agent from '../lib/agent.mjs';
 import { createRequire } from 'node:module';
 import { TYPES, phrasesFor } from './phrases.mjs';
 import { CLOUD, scriptTableNames } from './fngraph.mjs';
+import { AUTOMATIONS_FILE, atTime, readAutomations } from './automations.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const flag = (name) => {
@@ -294,6 +299,47 @@ async function adminOf(which) {
   const token = await backends.adminTokenOf(state.id);
   if (!token) throw new Error(`The ${what} has no admin credential on this computer.`);
   return lives.admin({ endpoint: state.endpoint, token, appId: binding.appId ?? binding.instanceId });
+}
+/**
+ * P127 BKO-005: one trigger turned on or off, or its daily time moved, the way BKO-001 writes one: the backend first
+ * (it checks the change and answers with what it stored), then the project's file, the entry patched by id and nothing
+ * else in it touched. If the file cannot be written the backend is put back: both, or neither. The project's file is
+ * the truth (R1), so a trigger the file lacks is refused; a backend that is not running here is refused too, so the
+ * two never part.
+ */
+async function setTrigger({ id, enabled, time }) {
+  const rel = AUTOMATIONS_FILE, file = join(projectDir, rel);
+  const before = diskText(rel);
+  const autos = readAutomations(before);
+  if (autos.error) throw new Error(autos.error);
+  const at = autos.triggers.findIndex((t) => t.id === id);
+  if (at < 0) throw new Error(`The project's ${rel} has no trigger "${id}". Ask the agent to keep it in the project first.`);
+  const entry = autos.triggers[at];
+  let cron;
+  if (time) {
+    if (entry.type !== 'schedule' || !entry.schedule?.cron) throw new Error(`"${id}" is not a schedule, so it has no time to move.`);
+    cron = atTime(entry.schedule.cron, time.hour, time.minute);
+  } else if (typeof enabled !== 'boolean') throw new Error('Say what to change: enabled (on or off) or time.');
+  const be = await adminOf('development').catch((e) => { throw new Error(`${e.message} The trigger is changed on the backend and in the project together, so start the backend first.`); });
+  const path = `/admin/triggers/${encodeURIComponent(id)}`;
+  const was = (await be.get(path)).trigger;
+  const stored = cron
+    ? (await be.put(path, { ...was, schedule: { ...was.schedule, cron } })).trigger
+    : (await be.post(`${path}/enabled`, { enabled })).trigger;
+  const json = JSON.parse(before);
+  json.triggers[at] = cron ? { ...json.triggers[at], schedule: { ...json.triggers[at].schedule, cron: stored.schedule.cron } } : { ...json.triggers[at], enabled: stored.enabled };
+  const text = JSON.stringify(json, null, 2) + (before.endsWith('\n') ? '\n' : '');
+  try {
+    known.set(rel, text); // before the write, so the watcher's echo of it matches
+    writeFileSync(`${file}.studio-tmp`, text);
+    renameSync(`${file}.studio-tmp`, file);
+  } catch (e) {
+    known.set(rel, before);
+    let undone = true;
+    try { if (cron) await be.put(path, was); else await be.post(`${path}/enabled`, { enabled: was.enabled }); } catch { undone = false; }
+    throw new Error(`The backend took the change but ${rel} could not be written (${e.message}), ${undone ? 'so the backend was put back as it was. Nothing changed.' : 'and putting the backend back failed too: the backend now has a change the project does not.'}`);
+  }
+  return { file: rel, text, backend: stored };
 }
 /** STU-061: the field kinds, from vendor/ or bundled once from the checkout NODEGX_REPO names. */
 let fieldsFile = kit.fields;
@@ -544,6 +590,16 @@ const server = http.createServer(async (req, res) => {
           return made;
         });
         return json(200, up);
+      } catch (err) {
+        return json(409, { error: err.message });
+      }
+    }
+    if (url.pathname === '/api/automations/trigger' && req.method === 'POST') {
+      const { id, enabled, time, client } = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      try {
+        const done = await setTrigger({ id, enabled, time });
+        tell({ changed: { [done.file]: done.text }, removed: [] }, client); // another Studio window on the project
+        return json(200, done);
       } catch (err) {
         return json(409, { error: err.message });
       }

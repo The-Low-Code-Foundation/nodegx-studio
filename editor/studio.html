@@ -488,13 +488,23 @@
   .fnfacts { display: flex; flex-direction: column; gap: 4px; margin: -12px 0 20px; font-size: 13px; color: var(--sub); max-width: 980px; }
   .fnfacts .touch { display: inline-block; margin-right: 6px; padding: 1px 8px; border-radius: 10px; border: 1px solid rgba(253,176,34,.45); color: #fde68a; }
   .fnfacts .run.ran { color: var(--green); } .fnfacts .run.refused { color: var(--red); }
+  /* P127 BKO-005: a backend trigger's switch and time, a backend workflow's last run lit on its steps */
+  .trigswitch { margin-left: 8px; padding: 1px 9px; border-radius: 10px; font-size: 11px; border: 1px solid var(--line); background: transparent; color: var(--dim); cursor: pointer; }
+  .trigswitch[aria-checked=true] { border-color: rgba(69,208,138,.6); color: var(--green); }
+  .trigline { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .trigtime { font: inherit; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--ink); }
+  .fnflow .step.trigoff { opacity: .55; border-style: dashed; }
+  .fnflow .step.litok { border-color: rgba(69,208,138,.8); }
+  .fnflow .step.litfail { border-color: var(--red); box-shadow: 0 0 0 1px rgba(249,112,102,.35), 0 0 26px rgba(249,112,102,.35); }
+  .fnflow .step.litnot { opacity: .5; }
+  .fnflow .step .lit { font-weight: 600; } .fnflow .step.litok .lit { color: var(--green); } .fnflow .step.litfail .lit { color: var(--red); }
   .wf .fnopen, .wf button.fnopen { color: var(--blue); }
   .zoom { display: flex; align-items: center; gap: 4px; color: var(--dim); font-size: 12px; }
   .zoom button { padding: 3px 9px; border-radius: 14px; }
   .zoom span { min-width: 38px; text-align: center; }
   .wf .hint { color: var(--dim); }
   .wf button { background: #232129; border-color: var(--edge); color: var(--sub); }
-  .wf button:hover { border-color: #4a4856; color: var(--fg); }
+  .wf button:hover { background: #2b2933; border-color: #4a4856; color: var(--fg); } /* P127-BKO005-QUIETHOVER: a quiet button took the light theme's hover background under the canvas's light text */
   .wf button.primary { background: #1d4ed8; border-color: #2563eb; color: #fff; }
   .wf button.danger { color: var(--red); }
   .wf input, .wf select, .wf textarea { background: #1c1b22; color: var(--fg); border-color: #3a3946; }
@@ -789,6 +799,7 @@
         <h3 class="sec"><span id="wfcount">Workflows on this page</span> <button class="tiny primary" id="newevent"><svg class="i"><use href="#i-plus"/></svg>New</button></h3>
         <div class="events list" id="events"></div>
         <h3 class="sec" id="fnsec">On the backend</h3>
+        <div class="events list" id="autolist"></div>
         <div class="events list" id="fnlist"></div>
       </aside>
       <div id="steps"><div class="empty">Pick a workflow on the left.</div></div>
@@ -884,6 +895,7 @@ import { fieldReaders, typeReaders, renameField, renameType, appFields } from '.
 import { LANES, buildTimeline, lastRunOf, msText, shotAt, stepValues } from './timeline.mjs';
 import { runOver, lastActivity, watchSignals, runtimeTimers, runTimers } from './runwatch.mjs';
 import { CLOUD, REQUEST, RESPONSE, functionList, functionLayout, helperKey, requestAsks, responseWords, touchesWords } from './fngraph.mjs';
+import { AUTOMATIONS_FILE, agrees, hhmm, readAutomations, runLine, scheduleTime, stepsOfRun, targetOf, triggerHead, workflowLayout } from './automations.mjs';
 
 const $ = (id) => document.getElementById(id);
 const h = (tag, attrs = {}, ...kids) => {
@@ -931,6 +943,7 @@ function showBackend() {
   window.__ob.backend = b;
 }
 function takeBackend(next) {
+  autoBe = null; // BKO-005: what the backend runs is asked again
   const was = backendState.phase;
   backendState = next;
   showBackend();
@@ -1822,7 +1835,8 @@ window.addEventListener('keydown', (e) => {
   const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
   if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !inField) { e.preventDefault(); undo(); return; }
   if (e.key === 'Escape' && tab === 'workflow' && selFn && fnBack.length && !inField && !document.querySelector('.menu')) { backFromFn(); return; }
-  if (e.key === 'Escape' && tab === 'workflow' && !selFn && cardBack && !inField && !document.querySelector('.menu')) { backFromCard(); return; }
+  if (e.key === 'Escape' && tab === 'workflow' && !selFn && selAuto?.from && !inField && !document.querySelector('.menu')) { backFromAuto(); return; }
+  if (e.key === 'Escape' && tab === 'workflow' && !selFn && !selAuto && cardBack && !inField && !document.querySelector('.menu')) { backFromCard(); return; }
   // Esc with nothing selected, inside a copy on its page: up one level, the copy selected (as the NodeGX editor's breadcrumb)
   if (e.key === 'Escape' && !inField && host && !sel && !pending && !document.querySelector('.menu') && tab === 'design') { editUp(); return; }
   if (e.key === 'Escape') { closeMenu(); if (!inField) { pending = null; overlay.classList.remove('adding'); for (const b of $('palette').querySelectorAll('button')) b.setAttribute('aria-pressed', 'false'); select(null); } }
@@ -3683,6 +3697,7 @@ $('wfsearch').oninput = (e) => { wfFilter.q = e.target.value.trim(); renderEvent
 $('wfeffect').onchange = (e) => { wfFilter.effect = e.target.value; renderEvents(); };
 $('wftrigger').onchange = (e) => { wfFilter.trigger = e.target.value; renderEvents(); };
 function renderEvents() {
+  renderAutoList();
   renderFnList();
   const box = $('events'); box.innerHTML = '';
   const all = workflowIndex();
@@ -3698,7 +3713,7 @@ function renderEvents() {
   for (const c of shown) { if (!byElement.has(c.ev.node)) byElement.set(c.ev.node, []); byElement.get(c.ev.node).push(c); }
   for (const id of [...byElement.keys()].sort((a, b) => (order.get(a) ?? Infinity) - (order.get(b) ?? Infinity))) {
     box.append(h('div', { class: 'evhead', 'data-node': id }, icon(glyphOf(byId[id].type)), labelOf(id)));
-    for (const { ev } of byElement.get(id)) box.append(h('div', { class: 'row', 'data-node': ev.node, 'data-port': ev.port, 'aria-selected': !selFn && selEvent && selEvent.node === ev.node && selEvent.port === ev.port, onclick: () => { selEvent = ev; selFn = null; fnBack = []; renderWorkflow(); } },
+    for (const { ev } of byElement.get(id)) box.append(h('div', { class: 'row', 'data-node': ev.node, 'data-port': ev.port, 'aria-selected': !selFn && !selAuto && selEvent && selEvent.node === ev.node && selEvent.port === ev.port, onclick: () => { selEvent = ev; selFn = null; selAuto = null; fnBack = []; renderWorkflow(); } },
       h('span', {}, cardName(ev)), h('small', {}, `When ${portLabel(byId[ev.node], 'output', ev.port)} · ${eventSteps(ev)} step(s)`)));
   }
 }
@@ -3740,7 +3755,7 @@ function renderFnList() {
 function openFunction(key, from = null) {
   if (!registry()[key]) return toast(`This app has no cloud function called ${fnName(key)}`);
   fnBack = from ? [...fnBack, from] : [];
-  selFn = key; fnRun = null; fnTouches = null; hideBoltTip(); // read again: the agent may have changed a function since
+  selFn = key; selAuto = null; fnRun = null; fnTouches = null; hideBoltTip(); // read again: the agent may have changed a function since
   if (tab !== 'workflow') switchTab('workflow'); else renderWorkflow();
   readFnRun(key);
 }
@@ -3749,6 +3764,8 @@ function backFromFn() {
   if (!back) { selFn = null; return renderWorkflow(); }
   if (back.kind === 'fn') { selFn = back.key; fnRun = null; readFnRun(back.key); return renderWorkflow(); }
   if (back.kind === 'map') { selFn = null; fnBack = []; dataSub = 'map'; return switchTab('data'); }
+  // BKO-005: back to the trigger or the backend workflow whose step opened it
+  if (back.kind === 'auto') { selFn = null; fnBack = []; selAuto = back.auto; if (selAuto.kind === 'workflow') readAutoRun(selAuto.id); return renderWorkflow(); }
   // back to the workflow card it was opened from, which keeps its own Back to the element in Design
   selFn = null; fnBack = []; selEvent = back.ev; cardBack = back.cardBack;
   renderWorkflow();
@@ -3852,6 +3869,176 @@ addEventListener('message', (e) => {
   const key = e.data.component.replace(/^\/?#?/, '');
   if (key.startsWith(CLOUD)) openFunction(key, { kind: 'map', title: 'the map' });
 });
+/* ---- P127 BKO-005: the backend's triggers and workflows, drawn. Read from the project's nodegx.automations.json (the
+   truth, BKO-001), with what the backend Studio runs says beside each: a schedule in its words, whether its copy agrees,
+   the last run. A trigger is the head of a flow into what it starts; a workflow is its steps left to right (./automations.mjs),
+   its error routes red, a function step opening the function (BKO-004), the last run lit. Two changes a person makes here:
+   a trigger on or off, a daily schedule's time; each goes to the backend and the file together (serve.mjs setTrigger).
+   `selAuto`: { kind: 'trigger' | 'workflow', id, from } — `from`, the trigger a workflow was opened from, for Back ---- */
+let selAuto = null, autoBe = null, autoText, autoRun = null;
+const autos = () => readAutomations(files.read(AUTOMATIONS_FILE));
+const autoEntry = (a) => (a.kind === 'trigger' ? autos().triggers : autos().workflows).find((x) => x.id === a.id);
+const beNow = () => (autoBe && !autoBe.pending ? autoBe : null);
+const noBackend = (e) => /not bound|503/.test(e.message);
+function loadAutoBackend() {
+  if (autoBe?.pending) return;
+  autoBe = { pending: true };
+  Promise.all([api('/admin/triggers'), api('/admin/workflow-defs'), api('/admin/workflow-step-kinds').catch(() => ({ kinds: [] }))])
+    .then(([t, w, k]) => { autoBe = { triggers: new Map((t.triggers ?? []).map((x) => [x.id, x])), workflows: new Map((w.workflows ?? w.definitions ?? []).map((x) => [x.id, x])), kinds: new Map((k.kinds ?? []).map((x) => [x.kind, x])) }; })
+    .catch((e) => { autoBe = { triggers: new Map(), workflows: new Map(), kinds: new Map(), words: noBackend(e) ? 'No backend is bound, so what a backend runs now is not shown: these are the project’s.' : `The backend did not say its triggers and workflows: ${e.message}` }; })
+    .finally(() => { if (tab === 'workflow') renderWorkflow(); });
+}
+const switchOf = (t) => h('button', { class: 'trigswitch', role: 'switch', 'aria-checked': t.enabled !== false, title: t.enabled !== false ? 'On: turn it off, on the backend and in the project' : 'Off: turn it on, on the backend and in the project', onclick: (e) => { e.stopPropagation(); changeTrigger(t.id, { enabled: t.enabled === false }); } }, t.enabled !== false ? 'On' : 'Off');
+const startsWords = (t) => { const g = targetOf(t); return `${g.kind === 'workflow' ? 'the workflow' : 'the function'} ${g.kind === 'workflow' ? autos().workflows.find((w) => w.id === g.name)?.name || g.name : g.name}`; };
+function renderAutoList() {
+  const box = $('autolist'); box.innerHTML = '';
+  const text = files.read(AUTOMATIONS_FILE);
+  if (text !== autoText) { autoText = text; autoBe = null; } // the agent (or git) changed them: ask the backend again
+  if (!autoBe) loadAutoBackend();
+  const a = autos(), be = beNow(), q = wfFilter.q.toLowerCase();
+  if (a.error) return box.append(h('div', { class: 'hint' }, a.error));
+  for (const t of a.triggers) {
+    const head = triggerHead(t, be?.triggers.get(t.id)?.scheduleWords);
+    if (q && !`${head} ${targetOf(t).name}`.toLowerCase().includes(q)) continue;
+    const same = !be || be.words || agrees('trigger', t, be.triggers.get(t.id));
+    box.append(h('div', { class: 'row trig', 'data-trigger': t.id, 'aria-selected': selAuto?.kind === 'trigger' && selAuto.id === t.id, onclick: () => openAuto({ kind: 'trigger', id: t.id }) },
+      h('span', {}, icon('bolt'), ' ', head, switchOf(t)), h('small', {}, `Starts ${startsWords(t)}${same ? '' : ' · the backend’s copy differs'}`)));
+  }
+  for (const w of a.workflows) {
+    if (q && !`${w.name ?? ''} ${w.id}`.toLowerCase().includes(q)) continue;
+    const same = !be || be.words || agrees('workflow', w, be.workflows.get(w.id));
+    box.append(h('div', { class: 'row', 'data-workflow': w.id, 'aria-selected': selAuto?.kind === 'workflow' && selAuto.id === w.id, onclick: () => openAuto({ kind: 'workflow', id: w.id }) },
+      h('span', {}, w.name || w.id), h('small', {}, `A workflow on the backend · ${(w.steps ?? []).length} step${(w.steps ?? []).length === 1 ? '' : 's'}${same ? '' : ' · the backend’s copy differs'}`)));
+  }
+  // the file is the truth: what only the backend has is said, not drawn
+  const only = be && !be.words ? [...be.triggers.keys()].filter((id) => !a.triggers.some((t) => t.id === id)).length + [...be.workflows.keys()].filter((id) => !a.workflows.some((w) => w.id === id)).length : 0;
+  if (only) box.append(h('div', { class: 'hint' }, `${only} more on the backend only, not in the project’s files: ask the agent to keep ${only === 1 ? 'it' : 'them'} in the project.`));
+}
+function openAuto(target, from = null) {
+  if (!autoEntry(target)) return toast(`The project has no ${target.kind} called ${target.id}`);
+  selAuto = { kind: target.kind, id: target.id, from }; selFn = null; fnBack = []; autoRun = null; hideBoltTip();
+  if (tab !== 'workflow') switchTab('workflow'); else renderWorkflow();
+  if (target.kind === 'workflow') readAutoRun(target.id);
+}
+const backFromAuto = () => { selAuto = selAuto?.from ? { kind: 'trigger', id: selAuto.from, from: null } : null; autoRun = null; renderWorkflow(); };
+async function changeTrigger(id, change) {
+  const r = await fetch('/api/automations/trigger', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, ...change, client: windowId }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) return toast(j.error ?? `Nothing was changed (${r.status})`);
+  files.write(j.file, j.text); persisted[j.file] = j.text; autoText = j.text; autoBe = null;
+  toast(change.time ? `It runs at ${hhmm(change.time)} now, on the backend and in the project` : `Turned ${change.enabled ? 'on' : 'off'}, on the backend and in the project`);
+  renderWorkflow();
+}
+/** The workflow's newest run (the backend's `lastRuns`), with its steps (`/executions/:id`). */
+async function readAutoRun(id) {
+  let run = null, words = null;
+  try {
+    const last = (await api('/admin/workflow-defs')).lastRuns?.[id];
+    if (last) run = await api(`/executions/${encodeURIComponent(last.id)}`);
+  } catch (e) { words = noBackend(e) ? 'No backend is bound, so there is no run to show.' : `The backend did not say its runs: ${e.message}`; }
+  if (selAuto?.kind !== 'workflow' || selAuto.id !== id) return;
+  autoRun = { run, words };
+  renderWorkflow();
+}
+function autoNav() {
+  const from = selAuto.from && autos().triggers.find((t) => t.id === selAuto.from);
+  return h('div', { class: 'cardnav' }, from ? h('button', { class: 'quiet back', title: 'Back to the trigger that starts it (Esc)', onclick: backFromAuto }, '← ', triggerHead(from, beNow()?.triggers.get(from.id)?.scheduleWords)) : null,
+    h('button', { class: 'quiet tiny', title: 'Every workflow on this page, listed', onclick: () => { selAuto = null; renderWorkflow(); } }, 'All workflows on this page'));
+}
+const agreeWords = (kind, entry) => {
+  const be = beNow();
+  if (!be) return 'Asking the backend what it runs…';
+  if (be.words) return be.words;
+  const theirs = (kind === 'trigger' ? be.triggers : be.workflows).get(entry.id);
+  if (!theirs) return 'Not on the backend yet: a backend started from the project takes it.';
+  return agrees(kind, entry, theirs) ? 'The backend runs the same as the project says.' : 'The backend’s copy differs from the project’s. Ask the agent to bring them together: get_project_info names the difference.';
+};
+/** The flow area for cards in columns, wired: the function view's layout and look (BKO-004). */
+function autoFlow(wf, columns, wires) {
+  flowWires = []; drawnForks.clear();
+  const flow = h('div', { class: 'flow fnflow' });
+  flow.append(document.createElementNS(SVG_NS, 'svg')); flow.firstChild.setAttribute('class', 'wires');
+  const cols = h('div', { class: 'fncols' });
+  for (const col of columns) cols.append(h('div', { class: 'fncol' }, ...col));
+  flow.append(cols);
+  const cardOf = (id) => cols.querySelector(`.step[data-id="${CSS.escape(id)}"]`);
+  for (const w of wires) { const a = cardOf(w.from), b = cardOf(w.to); if (a && b) flowWires.push({ from: a, port: 'out', to: b, kind: w.kind, dashed: false, edge: null, ran: w.ran }); }
+  wf.append(h('div', { class: 'flowarea' }, flow));
+  const main = $('steps');
+  main.append(wf);
+  flowRO?.disconnect();
+  flowRO = new ResizeObserver(() => fitFlow());
+  for (const el of [main, flow, ...flow.querySelectorAll('.step')]) flowRO.observe(el);
+  fitFlow();
+}
+function renderTrigger(t) {
+  const be = beNow(), view = be?.triggers.get(t.id), head = triggerHead(t, view?.scheduleWords), g = targetOf(t), on = t.enabled !== false;
+  const wf = h('div', { class: 'wf fnview autoview', 'data-trigger': t.id });
+  wf.append(autoNav());
+  wf.append(h('div', { class: 'event-card' }, h('div', { class: 'ic' }, icon('bolt')), h('div', { class: 'named' }, h('h2', {}, head), h('small', {}, `A trigger on the backend: it starts ${startsWords(t)} there, never on the device`))));
+  const tm = t.type === 'schedule' ? scheduleTime(t.schedule?.cron) : null;
+  const timeIn = tm ? h('input', { type: 'time', class: 'trigtime', value: hhmm(tm), 'aria-label': 'The time it runs' }) : null;
+  const st = view?.status;
+  wf.append(h('div', { class: 'fnfacts' },
+    h('div', { class: 'trigline' }, switchOf(t), on ? ' On: it starts what it runs when it fires.' : ' Off: it starts nothing until it is turned on.'),
+    t.type === 'schedule' ? (tm ? h('div', { class: 'trigline' }, 'Runs at ', timeIn, ' ', h('button', { class: 'quiet tiny trigmove', onclick: () => { const [hh, mm] = (timeIn.value || '').split(':').map(Number); if (Number.isInteger(hh) && Number.isInteger(mm) && (hh !== tm.hour || mm !== tm.minute)) changeTrigger(t.id, { time: { hour: hh, minute: mm } }); } }, 'Move it'), h('span', { style: 'color:var(--dim)' }, ' (the days stay as they are)'))
+      : h('div', {}, 'It runs more than once a day (', h('code', {}, t.schedule?.cron ?? ''), '): ask the agent to change when.')) : null,
+    h('div', { class: 'agree' }, agreeWords('trigger', t)),
+    st ? h('div', { class: 'run' }, `${st.lastFiredAt ? `Last fired ${new Date(st.lastFiredAt).toLocaleString()}` : 'Not fired yet'}${on && st.nextFireAt ? ` · next ${new Date(st.nextFireAt).toLocaleString()}` : ''}${st.fireCount ? ` · ${st.fireCount} time${st.fireCount === 1 ? '' : 's'} in all` : ''}`) : null));
+  const headCard = h('div', { class: `step fnstart${on ? '' : ' trigoff'}`, 'data-id': 'trigger', style: `--kind:${FLOW.then}` }, h('div', { class: 'num' }, '1'), h('h3', {}, head, h('span', {}, on ? 'what starts it' : 'off')),
+    h('div', { class: 'acts' }), h('div', { class: 'lines' }, ...(t.type === 'db-change' ? [h('span', {}, 'Data type: ', h('code', {}, t.dbChange?.collection ?? '?'))] : t.type === 'schedule' ? [h('span', {}, 'Cron: ', h('code', {}, t.schedule?.cron ?? '?'))] : [h('span', {}, 'Signed with ', h('code', {}, t.webhook?.scheme ?? 'hmac-sha256'))])));
+  const there = g.kind === 'function' ? !!registry()[g.key] : !!autos().workflows.find((w) => w.id === g.name);
+  const open = there ? h('button', { class: 'quiet tiny fnopen', onclick: (e) => { e.stopPropagation(); if (g.kind === 'function') openFunction(g.key, { kind: 'auto', auto: { ...selAuto }, title: head }); else openAuto({ kind: 'workflow', id: g.name }, t.id); } }, g.kind === 'function' ? 'Open its steps ↗' : 'Open the workflow ↗') : h('span', { style: 'color:var(--red)' }, `The project has no ${g.kind} called ${g.name}`);
+  const targetCard = h('div', { class: 'step', 'data-id': 'target', 'data-target': g.key, style: `--kind:${KIND_COLOUR.bolt}` }, h('div', { class: 'num' }, '2'), h('h3', {}, g.kind === 'workflow' ? autos().workflows.find((w) => w.id === g.name)?.name || g.name : g.name, h('span', {}, g.kind === 'workflow' ? 'a workflow' : 'a cloud function')),
+    h('div', { class: 'acts' }), h('div', { class: 'lines' }, open));
+  autoFlow(wf, [[headCard], [targetCard]], [{ from: 'trigger', to: 'target', kind: on ? 'then' : 'dead' }]);
+}
+function autoStepCard(step, n, lit, wfLabel) {
+  const spec = beNow()?.kinds.get(step.kind), runsFn = !!step.ref && (spec?.invokesFunction ?? /^(call-function|for-each)$/.test(step.kind));
+  const title = step.name || (runsFn ? `Run ${step.ref}` : spec?.displayName || step.kind), sub = step.name ? spec?.displayName ?? step.kind : '';
+  const lines = [];
+  if (runsFn) lines.push(h('span', {}, 'Runs the cloud function ', h('code', {}, step.ref), ' ', registry()[CLOUD + step.ref] ? h('button', { class: 'quiet tiny fnopen', title: `Open ${step.ref}'s own steps`, onclick: (e) => { e.stopPropagation(); openFunction(CLOUD + step.ref, { kind: 'auto', auto: { ...selAuto }, title: wfLabel }); } }, 'Open its steps ↗') : h('span', { style: 'color:var(--red)' }, '(not in the project)')));
+  else if (spec?.summary) lines.push(h('span', { style: 'color:var(--sub)' }, spec.summary));
+  for (const [k, v] of Object.entries(step.params ?? {})) if (lines.length < 4 && (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')) lines.push(h('span', {}, `${k}: `, h('code', {}, String(v).slice(0, 60))));
+  let cls = 'step';
+  if (lit) {
+    const s = lit.get(step.id);
+    if (!s) { cls += ' litnot'; lines.push(h('span', { class: 'lit' }, 'Not reached in the last run')); }
+    else if (s.status === 'error') { cls += ' litfail'; lines.push(h('span', { class: 'lit' }, `✗ Failed here${s.error ? `: ${s.error}` : ''}${s.durationMs != null ? ` · ${s.durationMs} ms` : ''}`)); }
+    else if (s.status === 'skipped') { cls += ' litnot'; lines.push(h('span', { class: 'lit' }, 'Skipped in the last run')); }
+    else { cls += ' litok'; lines.push(h('span', { class: 'lit' }, `✓ Ran${s.durationMs != null ? ` in ${s.durationMs} ms` : ''}`)); }
+  }
+  return h('div', { class: cls, 'data-id': step.id, 'data-kind': step.kind, style: `--kind:${runsFn ? KIND_COLOUR.bolt : step.kind === 'branch' || step.kind === 'switch' ? KIND_COLOUR.branch : KIND_COLOUR.code}` },
+    h('div', { class: 'num' }, String(n)), h('h3', {}, title, sub ? h('span', {}, sub) : null), h('div', { class: 'acts' }), h('div', { class: 'lines' }, ...lines));
+}
+function renderAutoWorkflow(w) {
+  const L = workflowLayout(w), byStep = Object.fromEntries((w.steps ?? []).map((s) => [s.id, s]));
+  const lit = autoRun?.run ? stepsOfRun(autoRun.run) : null, label = w.name || w.id;
+  const wf = h('div', { class: 'wf fnview autoview', 'data-workflow': w.id });
+  wf.append(autoNav());
+  wf.append(h('div', { class: 'event-card' }, h('div', { class: 'named' }, h('h2', {}, label), h('small', {}, 'A workflow on the backend: its steps run there, left to right, never on the device')),
+    h('div', { style: 'margin-left:auto;display:flex;gap:6px;align-items:center' }, h('div', { class: 'zoom' }, h('button', { title: 'Smaller', onclick: () => zoomFlow(-0.1) }, '−'), h('span', { class: 'zoomval' }), h('button', { title: 'Bigger', onclick: () => zoomFlow(0.1) }, '+'), h('button', { title: 'Fit the whole workflow in view', onclick: () => { flowZoom = null; fitFlow(); } }, 'Fit')))));
+  const starts = autos().triggers.filter((t) => targetOf(t).kind === 'workflow' && targetOf(t).name === w.id);
+  const nameOf = (id) => byStep[id]?.name || (byStep[id]?.ref ? `Run ${byStep[id].ref}` : id);
+  const failedRun = autoRun?.run && autoRun.run.status !== 'success' && autoRun.run.status !== 'running';
+  wf.append(h('div', { class: 'fnfacts' },
+    h('div', {}, starts.length ? ['Started by ', ...starts.map((t) => h('button', { class: 'quiet tiny startedby', 'data-trigger': t.id, onclick: () => openAuto({ kind: 'trigger', id: t.id }) }, triggerHead(t, beNow()?.triggers.get(t.id)?.scheduleWords)))] : 'No trigger starts it: the agent (or another workflow) runs it.'),
+    h('div', { class: 'agree' }, agreeWords('workflow', w)),
+    h('div', { class: `run ${autoRun?.run ? (failedRun ? 'refused' : 'ran') : ''}` }, autoRun ? autoRun.words ?? runLine(autoRun.run, nameOf) : 'Reading its last run…'),
+    L.dangling.length ? h('div', { style: 'color:var(--red)' }, `It names ${L.dangling.length === 1 ? 'a step' : 'steps'} it does not have: ${[...new Set(L.dangling.map((d) => d.to))].join(', ')}`) : null));
+  let n = 0;
+  const columns = L.columns.map((col) => col.map((id) => autoStepCard(byStep[id], ++n, lit, label)));
+  const ran = (id) => lit?.has(id) && lit.get(id).status !== 'skipped';
+  autoFlow(wf, columns, L.wires.map((x) => ({ ...x, kind: x.kind === 'fail' ? 'fail' : 'then', ran: lit ? ran(x.from) && ran(x.to) : undefined })));
+  wf.querySelector('.flowarea').after(h('div', { class: 'flowlegend' }, ...[['then', 'the next step'], ['fail', 'when a step fails']].map(([k, t]) => h('span', {}, h('i', { style: `border-color:${FLOW[k]}` }), t))));
+}
+function renderAuto() {
+  const entry = autoEntry(selAuto);
+  $('steps').innerHTML = '';
+  $('workflow').classList.toggle('card', !!selAuto.from);
+  if (selAuto.kind === 'trigger') renderTrigger(entry); else renderAutoWorkflow(entry);
+}
+window.__ob.openAuto = openAuto;
 /**
  * The chain from a signal: follow the first wired target, then its Done, and so on; a Condition ends the chain with two of
  * its own, unless both sides go on into one step (R4, rejoin): then the chain carries on from that step, after the branch.
@@ -3915,6 +4102,8 @@ function renderWorkflow() {
   renderEvents();
   if (selFn && !registry()[selFn]) { selFn = null; fnBack = []; }
   if (selFn) return renderFunction();
+  if (selAuto && !autoEntry(selAuto)) selAuto = null;
+  if (selAuto) return renderAuto();
   const main = $('steps'); main.innerHTML = '';
   if (!selEvent || !byId[selEvent.node]) cardBack = null;
   $('workflow').classList.toggle('card', !!cardBack);
@@ -4007,6 +4196,7 @@ function applyRun() {
 }
 /** Did the last run cross this drawn wire? Null when no run is shown. */
 function wireRan(w) {
+  if (w.ran !== undefined) return w.ran; // BKO-005: a backend workflow's wires, lit from its last run
   const run = showRun ? runLit?.run : null; if (!run) return null;
   const id = (el) => (el.classList.contains('evnode') ? selEvent?.node : el.dataset.join ?? el.dataset.id);
   const a = id(w.from), b = id(w.to);
