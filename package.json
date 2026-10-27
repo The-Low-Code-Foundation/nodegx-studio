@@ -51,6 +51,15 @@
     "appId": "io.nodegx.studio",
     "productName": "NodeGX Studio",
     "copyright": "GPL-3.0-only. The Low-Code Foundation and NodeGX contributors.",
+    "artifactName": "NodeGX-Studio-${os}-${arch}.${ext}",
+    "protocols": [
+      {
+        "name": "NodeGX Studio",
+        "schemes": [
+          "nodegx-studio"
+        ]
+      }
+    ],
     "directories": {
       "output": "dist"
     },

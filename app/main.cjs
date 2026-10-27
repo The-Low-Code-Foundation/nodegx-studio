@@ -24,10 +24,27 @@ const path = require('node:path');
 
 if (process.env.NODEGX_STUDIO_USER_DATA) app.setPath('userData', path.resolve(process.env.NODEGX_STUDIO_USER_DATA));
 
+// P125-CCN006-NOSCHEME: a link hands the app a folder, nodegx-studio://open?dir=<folder>. NodeGX's browser window of
+// Studio sends one when its agent has gone and no server is left to launch anything. macOS delivers it as `open-url`
+// (before `ready` when the link is what starts the app); Windows and Linux put it on the command line, of this launch
+// or of the second one. Only an absolute path is taken: a link names a folder, never a place relative to anywhere.
+const SCHEME = 'nodegx-studio';
+const isLink = (a) => typeof a === 'string' && a.toLowerCase().startsWith(`${SCHEME}:`);
+function linkDir(arg) {
+  if (!isLink(arg)) return null;
+  try {
+    const url = new URL(arg);
+    const dir = url.hostname === 'open' ? url.searchParams.get('dir') : null;
+    return dir && path.isAbsolute(dir) ? path.resolve(dir) : null;
+  } catch {
+    return null;
+  }
+}
+
 const args = process.argv.slice(app.isPackaged ? 1 : 2).filter((a) => a !== '.');
 const smoke = args.includes('--smoke');
 const hidden = smoke || args.includes('--hidden');
-const projectArg = args.find((a) => !a.startsWith('--'));
+let projectArg = args.map(linkDir).find(Boolean) ?? args.find((a) => !a.startsWith('--') && !isLink(a));
 const serveJs = path.join(__dirname, '..', 'editor', 'serve.mjs');
 const actionsUrl = require('node:url').pathToFileURL(path.join(__dirname, 'actions.mjs')).href;
 const publishUrl = require('node:url').pathToFileURL(path.join(__dirname, '..', 'lib', 'publish.mjs')).href;
@@ -41,14 +58,35 @@ const testPicks = process.env.NODEGX_STUDIO_TEST_PICKS ? JSON.parse(process.env.
 // tab, and quits. The gates run --hidden, each apart, unless one asks for the lock to test it.
 if ((!hidden || process.env.NODEGX_STUDIO_SINGLE_INSTANCE) && !app.requestSingleInstanceLock()) app.exit(0);
 app.on('second-instance', (_event, argv) => {
-  if (win && !hidden) {
-    if (win.isMinimized()) win.restore();
-    win.show();
-    win.focus();
-  }
+  toFront();
+  const link = argv.slice(1).find(isLink);
+  if (link) return fromLink(linkDir(link));
   const dir = actions && argv.slice(1).find((a) => !a.startsWith('--') && actions.isProject(a));
   if (dir) open(path.resolve(dir));
 });
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  if (!actions) return void (projectArg = linkDir(url) ?? projectArg); // the link started the app: the start opens it
+  toFront();
+  fromLink(linkDir(url));
+});
+// The installers declare the scheme (package.json build.protocols); this makes the app the one that answers it. A run
+// from the repo (npm start, the gates) registers nothing: it would take the scheme from an installed Studio.
+if (app.isPackaged && !hidden) app.setAsDefaultProtocolClient(SCHEME);
+
+function toFront() {
+  if (!win || hidden) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+/** A folder from a link, to a running app: the folder in a tab, or why not. */
+function fromLink(dir) {
+  if (!actions) return;
+  if (dir && actions.isProject(dir)) return open(dir);
+  const detail = dir ? `${dir} has no nodegx.project.json.` : 'The link names no folder.';
+  dialog.showMessageBox({ type: 'warning', message: 'That folder is not a NodeGX project', detail });
+}
 
 const TAB_H = 38; // the strip's height (tabs.html)
 let win = null;

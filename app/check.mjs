@@ -243,6 +243,15 @@ try {
     const second = await new Promise((r) => { const p = spawn(electron, [...appArgs, todos, '--hidden'], { env: env2, stdio: 'ignore' }); const t = setTimeout(() => (p.kill(), r('still running')), 30000); p.on('exit', (code) => (clearTimeout(t), r(code))); });
     const handed = await strip.until(`document.querySelectorAll('.tab').length === 2 && !document.querySelector('.tab.busy') && ${named}`, 60000);
     ok(second === 0 && handed === '["Imported","My todos*"]', 'a second launch on My todos hands it to this Studio, which opens it in a tab, and the second launch quits', { second, handed });
+    // P125-CCN006-NOSCHEME: a nodegx-studio:// link, as NodeGX's browser window of Studio sends it once its agent has
+    // gone (companion.ts: encodeURIComponent). Windows and Linux hand it to a second launch's command line; macOS's
+    // open-url needs the packaged app (the session's drive, not this gate).
+    await strip.evaluate(`[...document.querySelectorAll('.tab')].find((t) => t.textContent.includes('My todos')).querySelector('button').click()`);
+    await strip.until(`document.querySelectorAll('.tab').length === 1`, 10000);
+    const link = `nodegx-studio://open?dir=${encodeURIComponent(todos)}`;
+    const third = await new Promise((r) => { const p = spawn(electron, [...appArgs, link, '--hidden'], { env: env2, stdio: 'ignore' }); const t = setTimeout(() => (p.kill(), r('still running')), 30000); p.on('exit', (code) => (clearTimeout(t), r(code))); });
+    const linked = await strip.until(`document.querySelectorAll('.tab').length === 2 && !document.querySelector('.tab.busy') && ${named}`, 60000);
+    ok(third === 0 && linked === '["Imported","My todos*"]', 'a nodegx-studio://open?dir= link to My todos opens it in a tab of this Studio, and the launch that carried it quits', { third, linked });
     await strip.close();
     await stop();
   }
@@ -273,6 +282,12 @@ try {
     let out = '';
     const code = await new Promise((r) => { const p = spawn(electron, [...appArgs, '--smoke'], { env }); p.stdout.on('data', (d) => (out += d)); p.on('exit', r); });
     ok(code === 0 && /smoke: ready welcome · 2 recent/.test(out), 'npm run smoke with no project draws the welcome screen and exits 0', { code, out: out.trim().split('\n')[0] });
+    // P125-CCN006-NOSCHEME: a link that starts the app (Windows, Linux) opens its folder; one naming a relative folder opens nothing
+    const smokeOn = (arg) => new Promise((r) => { let o = ''; const p = spawn(electron, [...appArgs, arg, '--smoke'], { env }); p.stdout.on('data', (d) => (o += d)); p.on('exit', (c) => r({ code: c, out: o.trim().split('\n').find((l) => l.startsWith('smoke:')) })); });
+    const cold = await smokeOn(`nodegx-studio://open?dir=${encodeURIComponent(todos)}`);
+    ok(cold.code === 0 && /^smoke: ready My todos /.test(cold.out || ''), 'a nodegx-studio:// link that starts the app opens its folder', cold);
+    const relative = await smokeOn('nodegx-studio://open?dir=My%20todos');
+    ok(relative.code === 0 && /^smoke: ready welcome /.test(relative.out || ''), 'a link naming a relative folder opens nothing: the welcome screen', relative);
   }
 } catch (err) {
   ok(false, 'the gate ran to the end', err.stack?.split('\n').slice(0, 3).join(' | '));
