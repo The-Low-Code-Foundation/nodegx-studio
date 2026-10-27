@@ -81,9 +81,13 @@ cpSync(join(studioRoot, 'app', 'icon.png'), join(stage, 'icon.png'));
 if (!existsSync(join(stage, server))) throw new Error(`mcpb: ${server} is missing after npm ci`);
 bundleNode();
 
+// P128-S3-NAMEMISMATCH: the server answers `initialize` with this name too. A Claude Desktop report says an
+// extension's tools reach the chat only when the manifest's `name` and the server's `serverInfo.name` match.
+const extensionName = 'nodegx';
+
 const manifest = {
   manifest_version: '0.3',
-  name: 'nodegx',
+  name: extensionName,
   display_name: 'NodeGX',
   version: mcpVersion,
   description: 'Build an app with Claude and watch it come together in NodeGX Studio, right in the conversation. Stop Claude any time, change something yourself, and it carries on from your change.',
@@ -100,6 +104,7 @@ const manifest = {
       command: 'node',
       args: [`\${__dirname}/${server}`, '--allow-writes'],
       env: {
+        NODEGX_SERVER_NAME: extensionName,
         NODEGX_STUDIO: '${__dirname}/studio',
         NODEGX_NODE: '${__dirname}/node/bin/node',
         NODEGX_DEPLOY_CLI: '${__dirname}/studio/node_modules/@nodegx/preview/dist/nodegx-deploy.cjs'
