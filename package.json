@@ -1,10 +1,31 @@
 {
-  "name": "nodegx-studio",
+  "name": "@nodegx/studio",
   "version": "0.1.0",
-  "private": true,
   "description": "A Design / Workflow / Data editor for NodeGX apps, on your own machine. Imports apps built on the Bubble™ platform.",
   "license": "GPL-3.0-only",
   "main": "app/main.cjs",
+  "bin": {
+    "nodegx-studio": "bin/nodegx-studio.mjs"
+  },
+  "files": [
+    "bin/",
+    "editor/",
+    "lib/",
+    "import/*.mjs",
+    "vendor/",
+    "LICENSE",
+    "README.md",
+    "!**/*check.mjs",
+    "!**/.DS_Store"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/The-Low-Code-Foundation/nodegx-studio.git"
+  },
+  "homepage": "https://nodegx.io",
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=22"
   },

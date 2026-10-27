@@ -1729,6 +1729,34 @@ passed through the content-authoring skill's offline checks with no flag (`writt
 rollercoaster's counts only). A manifest with the new sheet passes `mcpb validate` (2.1.2). **No `.mcpb` was built**:
 the next `npm run mcpb` carries it.
 
+## `@nodegx/studio` on npm, ready and not published (NodeGX CCN-006 AC7, P128-S3-NOSTUDIOFORTHEEDITOR's npm half; Beta round, 2026-10-27)
+
+**What the package is.** What `open_studio` starts, measured in NodeGX `packages/noodl-mcp/src/studio/studioProcess.ts`:
+`<NODEGX_NODE or the server's own node> editor/serve.mjs <project> --port 0`, cwd the Studio folder, the port read off
+the `nodegx-studio: http://127.0.0.1:<port>/` line; `findStudio` takes `NODEGX_STUDIO`, the sibling checkout, the
+desktop app's `Contents/Resources/app`, then `require.resolve('@nodegx/studio/package.json')`, and wants
+`editor/serve.mjs` under it. So the package carries what the `.mcpb` stages (`editor/`, `lib/`, `import/*.mjs`,
+`vendor/`, minus every `*check.mjs`), the `LICENSE` and the README, and depends on the pinned `@nodegx/mcp`,
+`@nodegx/preview` and `@nodegx/backend-map`. Not the Electron app (`app/`, the DMG); npm adds `app/main.cjs` because it
+is `main`, which Electron needs.
+
+**Built.** `package.json`: `name` `@nodegx/studio`, no `private`, `files`, `bin` `nodegx-studio` (`bin/nodegx-studio.mjs`:
+`npx @nodegx/studio [folder] [--port n] [--no-open]` starts `editor/serve.mjs` on the folder, refuses a folder with no
+`nodegx.project.json`, opens the browser at the ready line, passes Ctrl+C on), `repository`, `homepage`,
+`publishConfig.access public`; the licence stays `GPL-3.0-only`. electron-builder reads `productName`, `appId` and its own
+`build.files`, so the desktop app is unchanged. Found on the way and fixed (it blocked the AC): installed as a
+dependency, npm puts `@nodegx/preview` and `@nodegx/mcp` beside Studio, and `lib/nodegx.mjs` looked only inside it
+(*"serve: no the deploy runtime at …/@nodegx/studio/node_modules/@nodegx/preview/…"*, exit before listening); it now
+looks where Node looks (NodeGX P128-BETA-STUDIOHOISTED).
+
+**Graded outside the checkout.** `npm pack`, then `npm install <tgz>` into an empty folder (35 packages), then
+`node_modules/.bin/nodegx-studio <a copy of todo-list> --no-open`: `/`, `/app`, `/api/canon`, `/api/project`,
+`/preview.js`, `/panel` and `/runtime/noodl.deploy.js` answer 200; headless Chrome on `/` reaches *"ready todo-copy
+pages=2 visual=13"*, `/app` draws the todo app's Sign in; `POST /api/backend-provision` starts a backend (`running`);
+SIGTERM to the bin stops Studio and that backend. `grep -rl '/Users/'`: 0 files in the tarball and in the installed
+package (1 in the whole install: a third-party README's example path, `readdirp`). Not published: the publish line is
+Richard's.
+
 ## Rulings open
 
 | id | question | from |

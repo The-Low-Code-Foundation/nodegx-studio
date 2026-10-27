@@ -33,6 +33,15 @@ With no folder named, Studio opens on its welcome screen: reopen the last projec
 NodeGX's templates (a copy in a new folder you name), or import an app. A project is any folder holding `nodegx.project.json` — a NodeGX template, a project made in the NodeGX editor, or
 one the importer wrote.
 
+### From npm
+
+```bash
+npx @nodegx/studio /path/to/project   # Studio on a NodeGX project folder, in your browser
+```
+
+The package is the editor `open_studio` starts in your AI coder (NodeGX's `@nodegx/mcp` finds it installed beside it);
+the desktop app is a separate download. Node 22 or later.
+
 ## Import an app
 
 The importer brings across an app built on the Bubble™ platform.
