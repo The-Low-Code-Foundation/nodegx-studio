@@ -101,7 +101,11 @@ Waiting on Richard (ask in plain words):
   Not built; proposed: serve.mjs (local) launches the app with the project folder, a `nodegx-studio://` scheme for
   links from elsewhere, the hold passes to the desktop window. His answer to "what if the app already shows another
   project" was STU-009 (tabs): the project opens in a new tab. Who builds the bridge half (STU-070 is the other
-  session's) is still his to say.
+  session's) is still his to say. **The scheme is built** (NodeGX's Beta sweep s18, 75c8d63, P125-CCN006-NOSCHEME):
+  `nodegx-studio://open?dir=<folder>` opens the folder, cold or in the running app's tab; `check:app` 57/57. The same
+  commit adds the package workflow's draft release on a `v*` tag (P125-CCN006-NODOWNLOAD): a tag now needs the five
+  Apple secrets, or the macOS leg refuses. 🔴 Unset `ELECTRON_RUN_AS_NODE` before `open`-ing the packaged app from a
+  VS Code shell, or it starts as plain Node and quits.
 - Unchanged from s13: how the one-run Record feels on his app; his second sitting on data; his real app export
   (STU-044's 22 missing operators, STU-053's unread keys, STU-024's 16 split elements; also whether his reusables'
   states behave per copy). Filed and open in NodeGX's ledger: P123-STU032-TEXTFLASH, P123-STU031-COPYBOX,
