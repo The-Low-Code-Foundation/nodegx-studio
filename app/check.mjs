@@ -104,6 +104,9 @@ try {
     ok(t === 'ready welcome · 0 recent · 5 templates', 'the window shows the welcome screen, nothing recent, five templates', t);
     ok((await b.evaluate(`[...document.querySelectorAll('.tpl:not(:disabled)')].map((x) => x.dataset.slug).join()`)) === 'todo-list,planning,rocket-school,pixel-dungeon,story-engine', 'the five templates are the shelf\'s, each clickable');
     ok(await b.evaluate(`!document.querySelector('#reopen') && /appear here/.test(document.querySelector('#recent').textContent)`), 'no Reopen on a first run, and the empty list says what will appear');
+    // CPY-002: one line on what Studio is for, from NodeGX's canon ("When it's finished")
+    const forLine = await b.evaluate(`document.getElementById('forline')?.textContent ?? null`);
+    ok(forLine === 'Change a heading, a font, a button colour or a translation yourself. It works without the AI.' && readFileSync(kit.canon, 'utf8').includes(forLine), 'the welcome says what Studio is for, in the canon\'s words', forLine);
     await shot(b, 'welcome-first-run');
 
     console.log('2. a project from a template');
@@ -186,6 +189,15 @@ try {
     const styleYes = await yes(); await wait(700);
     ok(styleYes && !styleNamed('Outline'), 'Delete style: asked in Studio\'s card, and gone', { asked: styleYes });
     await b.evaluate(`document.querySelector('[data-tab=data]').click()`); await wait(300);
+
+    // P128 S5 (STU-083): Help in the desktop app, from the rail: the canon as the app carries it (vendor/docs/CANON.md)
+    console.log('2d. Help, the canon drawn in the desktop app (STU-083)');
+    const heads = [...readFileSync(kit.canon, 'utf8').matchAll(/^## (.+)$/gm)].map((m) => m[1].trim()).filter((x) => !['For the agent (the rules, not copy)', 'Waits on'].includes(x));
+    await b.evaluate(`document.getElementById('helpbtn').click()`);
+    const help = await b.until(`(() => { const p = document.getElementById('helppanel'); return p && !p.hidden && p.querySelector('section[data-heading]') ? { heads: [...p.querySelectorAll('section[data-heading] > h2')].map((x) => x.textContent), links: [...p.querySelectorAll('.downloads button')].map((x) => x.dataset.url) } : false; })()`, 10000);
+    ok(help && JSON.stringify(help.heads) === JSON.stringify(heads) && JSON.stringify(help.links) === JSON.stringify(['https://nodegx.io/start', 'https://nodegx.io/start#download', 'https://nodegx.io/your-own-editor']), 'Help opens in the desktop app: the canon\'s headings, and its three links as buttons', help);
+    await shot(b, 'stu-083-help');
+    await b.evaluate(`document.querySelector('#helppanel [data-act=close]').click()`);
 
     await stop();
     ok(serversOf().length === 0, 'stopping the app stops its editor server', serversOf());

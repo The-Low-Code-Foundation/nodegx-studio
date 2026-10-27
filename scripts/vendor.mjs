@@ -8,6 +8,8 @@
  * What it holds (lib/nodegx.mjs reads it):
  *   templates/<dir>/      the five shelf templates the welcome screen offers (app/actions.mjs TEMPLATES), from git
  *   phrasebook/rows.js    scripts/bubble-phrasebook/rows.js, from git
+ *   docs/CANON.md         the canon, from git: the page Studio's Help draws (P128 S5, STU-083), so Studio ships the
+ *                         words it quotes
  *   look.js, specs.js     @nodegx/canvas-look and @nodegx/node-spec's browser entry as ES modules, as the Orbit
  *                         prototype's build.sh bundles them
  *   fields.js             the backend manager's words for a field (nodegx-backend admin/app/fieldKinds.ts: Text, Number,
@@ -76,7 +78,7 @@ mkdirSync(out, { recursive: true });
 process.on('exit', (code) => code && rmSync(out, { recursive: true, force: true }));
 
 // from git, at the commit: a peer's uncommitted template edit is not taken
-const fromGit = [...TEMPLATES.map((t) => `templates/${t.dir}`), 'scripts/bubble-phrasebook/rows.js'];
+const fromGit = [...TEMPLATES.map((t) => `templates/${t.dir}`), 'scripts/bubble-phrasebook/rows.js', 'docs/CANON.md'];
 execFileSync('tar', ['-x', '-C', out], { input: execFileSync('git', ['-C', repo, 'archive', commit, '--', ...fromGit], { maxBuffer: 1 << 30 }) });
 mkdirSync(join(out, 'phrasebook'), { recursive: true });
 renameSync(join(out, 'scripts/bubble-phrasebook/rows.js'), join(out, 'phrasebook/rows.js'));

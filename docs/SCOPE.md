@@ -1647,6 +1647,42 @@ refused and no node; a call by someone signed in (role `nobody`) lights exactly 
 beside it from `/executions/<id>`: `members` refused (*There is no role named "nobody"*), `fail_response` ran.
 The New option set check now records what the panel showed when it misses (NodeGX P128-S6-OPTSETFLAKE).
 
+## STU-083 — Help, the canon drawn in Studio; CPY-002, Studio's own words (NodeGX P128 S5, Beta round, 2026-10-27)
+
+**Why.** Richard (2026-10-27, the audit's §10.2): *"a sort of 'help' tab where you can download the full NodeGX Studio
+electron app, the NodeGX Editor electron app, or even get a guide on how to talk to Claude about building your own
+editor … a sort of canon lore page of the NodeGX universe"*. And CPY-002: Studio had no words for what it is for.
+
+**Built.**
+- **Help** draws NodeGX's `docs/CANON.md`, the page every NodeGX surface quotes. `npm run vendor` now copies it from
+  git at the vendored commit (`vendor/docs/CANON.md`; vendor/ rebuilt from the 0.2.8 release worktree, every other hash
+  unchanged); `serve.mjs` serves it at `GET /api/canon` (`kit.canon`: the checkout's own under `NODEGX_REPO`). Reached
+  from a `?` in the rail above Undo, a **Help** item at the top of the header's "⋯" when it shows, and a `?` in the
+  hosted strip. Over the tab like the wiring, read only, Esc closes. It draws every section but the note above the
+  first (for the canon's keepers) and two written for the agent and for us, not the person: *For the agent (the rules,
+  not copy)* and *Waits on* (`HELP_LEFT_OUT`). *Get the tools* gets a button for each link the canon names
+  (nodegx.io/start, nodegx.io/start#download, nodegx.io/your-own-editor), through the host's `ui/open-link` in a
+  conversation.
+- **CPY-002.** The welcome screen: *"Change a heading, a font, a button colour or a translation yourself. It works
+  without the AI."* The hosted strip's line while the agent works now ends *"… HOLD stops it. Change a heading, a font,
+  a button colour or a translation yourself."* Both from the canon's *When it's finished*, under a `<!-- canon: What
+  NodeGX is for -->` marker: NodeGX `node scripts/canon-check.mjs app/welcome.html editor/hosted/hosted.js
+  editor/studio.html` passes (24 quotes), and fails on a copy of hosted.js with "colour" made "color".
+- **Option sets, empty:** *"No option sets yet. Make one for each fixed list your app picks from, like its languages or a
+  visit's statuses."*, and the page beside it the same in its own sentence.
+
+**Graded.** `check:editor` 217/217 (4 new: the rail's ? opens Help with the canon's headings in its order, read from
+`kit.canon`; the three links as buttons to the canon's addresses; the person's words and not the keepers' note; Esc
+closes), `check:hosted` 32/32 (3 new: the strip's ? opens Help in the frame; a button asks the host to open its link;
+the strip's line ends on the canon's sentence), `check:app` 66/66 (2 new: the welcome's line; **2d** Help opens in the
+desktop app, Electron, with the headings and the three links). Pictures: [look/stu-083-help.png](look/stu-083-help.png),
+[look/stu-083-help-tools.png](look/stu-083-help-tools.png).
+
+**Open.** Wording is Richard's (CPY-002's AC is "Read by Richard"): which canon sentence the welcome and the strip
+carry, the option-set empty state, and whether Help should leave out *Waits on*. NodeGX P128-S6-OPTSETFLAKE was
+the gate reading the disk before Studio's save landed (the set, its toast and its page were all there); the gate now
+waits for the file.
+
 ## Rulings open
 
 | id | question | from |

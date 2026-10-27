@@ -31,6 +31,7 @@
  *   POST /api/live-promote      { allowDestructive } Deploy to live; refused with the plan when it would lose something
  *   POST /api/live-copy         { from: 'development' | 'live', types: [], dryRun } rows from one to the other
  *   GET  /fields.js        STU-061: the backend manager's field kinds (vendor/fields.js, or bundled from NODEGX_REPO)
+ *   GET  /api/canon        P128 S5 (STU-083): NodeGX's `docs/CANON.md` as vendored (or the checkout's), which Help draws
  *   GET  /api/agent        STU-005: Claude Code and this folder (`lib/agent.mjs` stateOf): `{ state, serverName, command, … }`
  *   POST /api/agent-connect     "Connect Claude Code": the NodeGX editor's writer of `.mcp.json`, `CLAUDE.md`, `AGENTS.md`
  *   GET  /api/images       STU-051: every image file in the project folder, `[path]`, for the image popover
@@ -454,6 +455,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/') return send(200, readFileSync(join(here, 'studio.html')), types['.html']);
     if (url.pathname === '/panel') return send(200, panelHtml(`http://127.0.0.1:${server.address().port}`), types['.html']);
     if (url.pathname === '/api/vocabulary') return send(200, readFileSync(join(here, 'vocabulary.json')), types['.json']);
+    if (url.pathname === '/api/canon') return existsSync(kit.canon) ? send(200, readFileSync(kit.canon), 'text/markdown; charset=utf-8') : json(404, { error: 'This Studio carries no canon (vendor/docs/CANON.md)' });
     if (url.pathname === '/api/ask' && req.method === 'POST') {
       const { component, node, label, type, text } = JSON.parse((await readBody(req)).toString('utf8') || '{}');
       if (typeof text !== 'string' || !text.trim()) return json(400, { error: 'A question has words' });

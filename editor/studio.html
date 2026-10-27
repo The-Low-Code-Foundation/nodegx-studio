@@ -730,6 +730,24 @@
   .partcard .ptype, #wiringpanel .ptype { color: var(--muted); font-size: 12px; margin-top: 2px; }
   .partcard p { margin: 10px 0 0; color: var(--ink-2); }
   .partcard .acts { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  /* P128 S5 (STU-083): Help, the canon drawn whole (NodeGX docs/CANON.md, vendored), over the tab like the wiring */
+  #helppanel { position: absolute; inset: 0; z-index: 46; background: var(--panel); display: flex; flex-direction: column; }
+  #helppanel[hidden] { display: none; }
+  #helppanel .hhead { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  #helppanel .hhead .grow { flex: 1; }
+  #helppanel .hbody { flex: 1; overflow: auto; padding: 20px 28px 40px; }
+  #helppanel .canon { max-width: 760px; margin: 0 auto; color: var(--ink-2); font-size: 14px; line-height: 1.6; }
+  #helppanel .canon h1 { font-size: 22px; color: var(--ink); margin: 0 0 14px; }
+  #helppanel .canon h2 { font-size: 16px; color: var(--ink); margin: 26px 0 8px; }
+  #helppanel .canon p { margin: 0 0 10px; }
+  #helppanel .canon ul { margin: 0 0 10px; padding-left: 20px; }
+  #helppanel .canon li { margin: 0 0 6px; }
+  #helppanel .canon table { border-collapse: collapse; margin: 6px 0 12px; font-size: 13px; }
+  #helppanel .canon th, #helppanel .canon td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+  #helppanel .canon th { background: var(--panel-2); color: var(--ink); }
+  #helppanel .downloads { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+  #helppanel .downloads button { font-weight: 600; }
+  #rail #helpbtn .q { font-size: 15px; font-weight: 700; line-height: 1; }
   #wiringpanel { position: absolute; inset: 0; z-index: 45; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; }
   #wiringpanel[hidden] { display: none; }
   #wiringpanel .whead { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
@@ -806,6 +824,7 @@
     <button role="tab" data-tab="data" title="Data"><svg class="i"><use href="#i-data"/></svg><span class="tip">Data</span></button>
     <button role="tab" data-tab="styles" title="Styles"><svg class="i"><use href="#i-styles"/></svg><span class="tip">Styles</span></button>
     <div class="grow"></div>
+    <button id="helpbtn" title="Help: what NodeGX is for, and where to get the tools" aria-haspopup="dialog"><span class="q">?</span><span class="tip">Help</span></button>
     <button id="undo" title="Undo (⌘Z)"><svg class="i"><use href="#i-undo"/></svg><span class="tip">Undo <kbd>⌘Z</kbd></span></button>
   </nav>
   <header>
@@ -822,7 +841,7 @@
     <button class="status backend" id="reportpill" hidden title="What the import converted, and what it could not">Import report</button>
     <button class="primary" id="publishbtn" hidden title="Publish the app as a site, written by NodeGX's own deploy">Publish</button>
     <button class="quiet more" id="morebtn" hidden title="More: what the header has no room for" aria-haspopup="true">⋯</button>
-    <div id="moremenu" hidden></div>
+    <div id="moremenu" hidden><button class="quiet" id="morehelp" title="What NodeGX is for, and where to get the tools">Help</button></div>
   </header>
 
   <main>
@@ -894,7 +913,7 @@
           <h3 class="sec">Option sets <button class="tiny primary" id="newoptset"><svg class="i"><use href="#i-plus"/></svg>New</button></h3>
           <div class="types list" id="optsets"></div>
         </aside>
-        <div id="optmain"><div class="empty">Pick an option set, or make one. An option set is a fixed list the app loads with the page.</div></div>
+        <div id="optmain"><div class="empty">Pick an option set, or make one. An option set is a fixed list your app picks from, like its languages or a visit's statuses. It loads with the page, with no request and no backend.</div></div>
       </div>
     </section>
 
@@ -907,6 +926,10 @@
       <aside class="right" id="styleprops"><div class="empty">The style's properties appear here.</div></aside>
     </section>
 
+    <section id="helppanel" role="dialog" aria-label="Help" hidden>
+      <div class="hhead"><b>Help</b><span class="grow"></span><button class="quiet" data-act="close" title="Close (Esc)">Close</button></div>
+      <div class="hbody"><div class="canon">Reading the page…</div></div>
+    </section>
     <section id="wiringpanel" role="dialog" aria-label="The wiring underneath" hidden>
       <div class="whead">
         <button class="quiet tiny" data-act="back" hidden title="Back (Esc)">←</button>
@@ -1915,6 +1938,8 @@ window.addEventListener('keydown', (e) => {
   const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
   // STU-084: the wiring underneath is read only and over Design: no key reaches the page under it (Delete, ⌘Z); Esc goes back, then closes
   if (wiringOpen()) { if (e.key === 'Escape' && !document.querySelector('.menu')) { e.preventDefault(); wiringBack(); } return; }
+  // STU-083: Help is words over the tab: no key reaches the page under it; Esc closes it
+  if (!$('helppanel').hidden) { if (e.key === 'Escape') { e.preventDefault(); closeHelp(); } return; }
   if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !inField) { e.preventDefault(); undo(); return; }
   if (e.key === 'Escape' && tab === 'workflow' && selFn && fnBack.length && !inField && !document.querySelector('.menu')) { backFromFn(); return; }
   if (e.key === 'Escape' && tab === 'workflow' && !selFn && selAuto?.from && !inField && !document.querySelector('.menu')) { backFromAuto(); return; }
@@ -3113,6 +3138,71 @@ async function openOutside(url) {
   try { if (window.__hostOpen) return await window.__hostOpen(url); } catch (e) { return toast(`${e.message}: ${url}`); }
   window.open(url, '_blank', 'noopener');
 }
+/**
+ * P128 S5 (STU-083, CPY-002): Help draws NodeGX's canon (`docs/CANON.md`, the one page every NodeGX surface quotes), served
+ * by serve.mjs from vendor/. Its own words, never a copy here: what the canon says is what Help says. Left out: the note
+ * above the first section (for the people who keep the canon), and the two sections written for the agent and for us,
+ * not for the person. "Get the tools" gets a button for each link it names, opening that link.
+ */
+const HELP_LEFT_OUT = ['For the agent (the rules, not copy)', 'Waits on'];
+let helpCanon = null;
+const mdInline = (t) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])
+  .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*(.+?)\*/g, '<i>$1</i>').replace(/`(.+?)`/g, '<code>$1</code>');
+/** The canon's Markdown as the few blocks it uses: paragraphs, lists, one table. */
+function mdBlocks(text) {
+  const out = [];
+  for (const block of text.split(/\n\s*\n/)) {
+    const lines = block.split('\n').filter((l) => l.trim());
+    if (!lines.length) continue;
+    if (lines[0].startsWith('|')) {
+      const rows = lines.filter((l) => !/^\|[\s|:-]+\|$/.test(l.trim())).map((l) => l.trim().replace(/^\||\|$/g, '').split('|').map((c) => mdInline(c.trim())));
+      out.push(`<table><tr>${rows[0].map((c) => `<th>${c}</th>`).join('')}</tr>${rows.slice(1).map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</table>`);
+    } else if (/^(- |\d+\. )/.test(lines[0])) {
+      const items = [];
+      for (const l of lines) if (/^(- |\d+\. )/.test(l)) items.push(l.replace(/^(- |\d+\. )/, '')); else items[items.length - 1] += ' ' + l.trim();
+      const tag = lines[0].startsWith('- ') ? 'ul' : 'ol';
+      out.push(`<${tag}>${items.map((i) => `<li>${mdInline(i)}</li>`).join('')}</${tag}>`);
+    } else out.push(`<p>${mdInline(lines.map((l) => l.trim()).join(' '))}</p>`);
+  }
+  return out.join('');
+}
+function drawHelp(text) {
+  const box = $('helppanel').querySelector('.canon');
+  const [head, ...sections] = text.split(/^## /m);
+  const title = (head.match(/^# (.+)$/m) || [])[1] || 'NodeGX';
+  let html = `<h1>${mdInline(title)}</h1>`;
+  for (const sec of sections) {
+    const nl = sec.indexOf('\n'), heading = sec.slice(0, nl).trim(), body = sec.slice(nl + 1).trim();
+    if (HELP_LEFT_OUT.includes(heading)) continue;
+    html += `<section data-heading="${heading.replace(/"/g, '&quot;')}"><h2>${mdInline(heading)}</h2>${mdBlocks(body)}</section>`;
+  }
+  box.innerHTML = html;
+  // the canon's own links, each a button: "**NodeGX Studio for your computer** (…): nodegx.io/start"
+  for (const sec of box.querySelectorAll('section[data-heading="Get the tools"]')) {
+    const bar = h('div', { class: 'downloads' });
+    for (const li of sec.querySelectorAll('li')) {
+      const url = (li.textContent.match(/(nodegx\.io\/\S*[^\s.,;)])\s*$/) || [])[1], label = li.querySelector('b')?.textContent;
+      if (url && label) bar.append(h('button', { class: 'primary', 'data-url': `https://${url}`, title: url, onclick: () => openOutside(`https://${url}`) }, `${label} ↗`));
+    }
+    sec.querySelector('h2').after(bar);
+  }
+}
+async function openHelp(heading = null) {
+  closeMenu(); $('moremenu').hidden = true;
+  $('helppanel').hidden = false;
+  if (!helpCanon) {
+    try { const r = await fetch('/api/canon'); if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `${r.status}`); helpCanon = await r.text(); drawHelp(helpCanon); }
+    catch (e) { $('helppanel').querySelector('.canon').textContent = `Help could not be read: ${e.message}. The same page is at nodegx.io.`; }
+  }
+  const at = heading && $('helppanel').querySelector(`section[data-heading="${CSS.escape(heading)}"]`);
+  if (at) at.scrollIntoView({ block: 'start' }); else $('helppanel').querySelector('.hbody').scrollTop = 0;
+  $('helppanel').querySelector('[data-act=close]').focus();
+}
+function closeHelp() { $('helppanel').hidden = true; }
+$('helpbtn').onclick = () => openHelp();
+$('morehelp').onclick = () => openHelp();
+$('helppanel').querySelector('[data-act=close]').onclick = closeHelp;
+window.__ob.openHelp = openHelp;
 /** "Ask the agent": the question goes into the project (`.nodegx-questions.json`, which the agent's what_changed_since
     reads), and, inside a conversation whose host takes a message from Studio, into the conversation as the person's. */
 async function askAgent(key, id) {
@@ -5765,10 +5855,10 @@ function writeOptionSet(set, { attributes, options }) {
 function renderOptionSets() {
   const box = $('optsets'); box.innerHTML = '';
   for (const k of optionSetKeys()) { const s = optionSet(k); box.append(h('div', { class: 'row', 'aria-selected': selSet === k, onclick: () => { selSet = k; renderData(); } }, icon('list'), s.name, h('span', { class: 't' }, `${s.options.length} option(s)`))); }
-  if (!box.children.length) box.append(h('div', { class: 'hint' }, 'No option sets yet.'));
+  if (!box.children.length) box.append(h('div', { class: 'hint' }, 'No option sets yet. Make one for each fixed list your app picks from, like its languages or a visit’s statuses.'));
   const main = $('optmain'); main.innerHTML = '';
   const set = selSet && optionSet(selSet);
-  if (!set) { main.append(h('div', { class: 'empty' }, 'Pick an option set, or make one. An option set is a fixed list (colours, countries, priorities) the app loads with the page: no request, no backend.')); return; }
+  if (!set) { main.append(h('div', { class: 'empty' }, 'Pick an option set, or make one. An option set is a fixed list your app picks from, like its languages or a visit’s statuses. It loads with the page, with no request and no backend.')); return; }
   main.append(h('h2', {}, set.name), h('div', { class: 'bar', style: 'margin-top:-6px' }, h('span', { class: 'note' }, `Read it anywhere as `, h('b', {}, `${set.name} · all options`), ` — the component `, h('code', {}, `/${set.key}`), `, one Static Data node, loaded with the page.`)));
   // attributes
   const card = h('div', { class: 'card' }, h('h4', {}, 'Attributes (fields that describe each option)'));

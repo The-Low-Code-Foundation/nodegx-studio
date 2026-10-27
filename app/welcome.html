@@ -41,6 +41,8 @@
   .brand h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -.01em; }
   .brand .ver { color: var(--muted); font-size: 12px; }
   .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 28px; }
+  /* CPY-002: what Studio is for, one line from NodeGX's canon (docs/CANON.md, "When it's finished") */
+  .forline { color: var(--ink-2); margin: -8px 0 20px; max-width: 46ch; font-size: 14px; }
 
   h2 { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 0 0 10px; }
   .path { font-family: var(--mono); font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
@@ -103,6 +105,9 @@
       <div class="logo" aria-hidden="true"><svg viewBox="0 0 1024 1024" aria-hidden="true"><defs><linearGradient id="wlw" x1="642" y1="287" x2="382" y2="737" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#4DA3FF"/><stop offset="1" stop-color="#1570EF"/></linearGradient><radialGradient id="wlg" cx="0.5" cy="0.42" r="0.75"><stop offset="0" stop-color="#182231"/><stop offset="1" stop-color="#0B0E12"/></radialGradient></defs><rect width="1024" height="1024" rx="229" fill="url(#wlg)"/><rect x="6" y="6" width="1012" height="1012" rx="223" fill="none" stroke="#232A33" stroke-width="12"/><path d="M642 287A150 150 0 1 0 512 512A150 150 0 1 1 382 737" fill="none" stroke="url(#wlw)" stroke-width="66" stroke-linecap="round"/><circle cx="642" cy="287" r="81" fill="#EEF2F6"/><circle cx="382" cy="737" r="81" fill="#4DA3FF"/></svg></div>
       <div><h1>NodeGX Studio</h1><div class="ver" id="ver"></div></div>
     </div>
+    <!-- canon: What NodeGX is for -->
+    <p class="forline" id="forline">Change a heading, a font, a button colour or a translation yourself. It works without the AI.</p>
+
     <div class="actions">
       <button id="open-folder"><svg class="i" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Open a project…</button>
       <button id="import"><svg class="i" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 19h16"/></svg>Import an app…</button>

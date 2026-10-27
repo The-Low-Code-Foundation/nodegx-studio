@@ -1379,6 +1379,23 @@ try {
     const qf = join(project, '.nodegx-questions.json'), qs = existsSync(qf) ? JSON.parse(readFileSync(qf, 'utf8')).questions : [];
     ok(qs.length === 1 && qs[0].component === 'Pages/Sign in' && qs[0].node === 'grWords' && qs[0].text.includes('Greeting (by language)'), "a part's row opens its card, and Ask the agent writes the question to .nodegx-questions.json", qs.map((q) => [q.component, q.node]));
   }
+  // P128 S5 (STU-083): Help draws NodeGX's canon from vendor/, its headings and its links as the canon has them
+  console.log('check: Help, the canon drawn in Studio (STU-083)');
+  {
+    const canonText = readFileSync(kit.canon, 'utf8');
+    const wantHeads = [...canonText.matchAll(/^## (.+)$/gm)].map((m) => m[1].trim()).filter((x) => !['For the agent (the rules, not copy)', 'Waits on'].includes(x));
+    const tools = canonText.split(/^## /m).find((x) => x.startsWith('Get the tools'));
+    const wantLinks = [...tools.matchAll(/^- \*\*(.+?)\*\*.*?(nodegx\.io\/\S+)$/gm)].map((m) => [`${m[1]} ↗`, `https://${m[2]}`]);
+    await b.clickSel('#helpbtn');
+    const help = await b.until(`(() => { const p = document.getElementById('helppanel'); if (p.hidden || !p.querySelector('section[data-heading]')) return false;
+      return { heads: [...p.querySelectorAll('section[data-heading] > h2')].map((x) => x.textContent), links: [...p.querySelectorAll('.downloads button')].map((x) => [x.textContent, x.dataset.url]), text: p.innerText }; })()`, 8000);
+    ok(help && JSON.stringify(help.heads) === JSON.stringify(wantHeads) && wantHeads.length >= 7, "the rail's ? opens Help, and it shows the canon's headings in the canon's order", { want: wantHeads, got: help?.heads });
+    ok(help && wantLinks.length === 3 && JSON.stringify(help.links) === JSON.stringify(wantLinks), "Get the tools has a button for each of the canon's three links, to the canon's address", { want: wantLinks, got: help?.links });
+    ok(help && help.text.includes('Change a heading, a font, a button colour or a translation yourself.') && !help.text.includes('Approved by Richard') && !help.text.includes('the rules, not copy'), "it reads the canon's words, without the note for its keepers or the agent's rules", help?.text?.slice(0, 120));
+    await shot('stu-083-help');
+    await b.key('Escape', 'Escape', 27); await wait(200);
+    ok(await b.evaluate(`document.getElementById('helppanel').hidden`), 'Esc closes Help');
+  }
   ok((await status()).startsWith('App on screen'), 'after every edit the app still validates and draws', await status());
   const problems = b.problems.filter((p) => !/Invalid connection|doesn't have a port|Failed to load resource|fonts\.g|^\[noodl\]/.test(p)); // `[noodl]` lines are the app's own runtime (a Navigate with no target yet), not the editor
   ok(problems.length === 0, 'no exceptions in the editor page', problems.slice(0, 3));

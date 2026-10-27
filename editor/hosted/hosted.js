@@ -110,6 +110,7 @@ strip.innerHTML = `
   <button id="dockbtn" title="Studio docked beside the conversation (picture-in-picture), where it stays while the chat scrolls" hidden>Dock</button>
   <button id="fullbtn" title="Studio over the whole conversation" ${hosted ? '' : 'hidden'}>Full screen</button>
   <button id="wakebtn" title="Studio is live in the newest answer; this brings it back to this one">Bring it back here</button>
+  <button id="striphelp" title="Help: what NodeGX is for, and where to get the tools" ${hosted ? '' : 'hidden'}>?</button>
   <button id="windowbtn" title="Studio in its own window: the desktop app if it is installed, otherwise your browser" ${hosted ? '' : 'hidden'}>Window ↗</button>
 `;
 document.documentElement.insertBefore(strip, document.body ?? null);
@@ -144,6 +145,14 @@ if (hosted) {
     return !r?.isError;
   };
 }
+/** CPY-002: the strip's line while the agent works, ending on what Studio is for, from NodeGX's canon (docs/CANON.md,
+    "When it's finished"); `node scripts/canon-check.mjs editor/hosted/hosted.js` in NodeGX fails if it drifts. */
+const STUDIO_FOR = (
+  // <!-- canon: What NodeGX is for -->
+  `Change a heading, a font, a button colour or a translation yourself.`
+
+);
+const watching = (host) => `in the conversation${host ? ` (${host})` : ''} — the agent writes, you watch; HOLD stops it. ${STUDIO_FOR}`;
 const say =(text, held = false, lifted = false) => {
   stateEl.textContent = text; stateEl.classList.toggle('held', held); stateEl.classList.toggle('lifted', lifted);
 };
@@ -244,7 +253,7 @@ function drawHold(h) {
     holdBtn.className = 'hold';
     // shown while it is news (a quarter of an hour), then the strip says what it always says
     if (h.lifted?.by === 'agent' && Date.now() - Date.parse(h.lifted.at) < 15 * 60_000) say(`The agent lifted your hold at ${new Date(h.lifted.at).toLocaleTimeString()}, because you asked${h.lifted.words ? `: “${h.lifted.words}”` : ''}`, false, true);
-    else say(hosted && app ? 'in the conversation — the agent writes, you watch; HOLD stops it' : stateEl.textContent);
+    else say(hosted && app ? watching() : stateEl.textContent);
   }
 }
 
@@ -280,6 +289,8 @@ $('dockbtn').addEventListener('click', async () => {
 // host; the browser otherwise. NodeGX's proxy answers `/__nodegx/open-app` by launching the app on the project's
 // folder ({ opened: false } when it is not installed). Studio serving the panel itself has no such path: a 404 here,
 // and the browser.
+// STU-083: Help, Studio's own page of the canon (studio.html's openHelp), from the strip as from the rail
+$('striphelp').addEventListener('click', () => window.__ob?.openHelp?.());
 $('windowbtn').addEventListener('click', async () => {
   if (!app) return;
   try {
@@ -417,7 +428,7 @@ if (hosted) {
       const modes = ctx.availableDisplayModes ?? [];
       if (modes.includes('pip')) $('dockbtn').hidden = false;
       strip.title = `Host: ${app.getHostVersion()?.name ?? ctx.userAgent ?? '?'} · display modes it offers: ${modes.join(', ') || 'not stated'} · now: ${ctx.displayMode ?? '?'}`;
-      say(`in the conversation (${ctx.hostInfo?.name ?? ctx.userAgent ?? 'host'}) — the agent writes, you watch; HOLD stops it`);
+      say(watching(ctx.hostInfo?.name ?? ctx.userAgent ?? 'host'));
       if (!quiet) readHold().then(drawHold);
     },
     (e) => { app = null; say(`not connected to the conversation (${e.message}); HOLD still works through the file`); readHold().then(drawHold); }

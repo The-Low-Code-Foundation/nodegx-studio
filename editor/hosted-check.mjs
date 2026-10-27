@@ -212,7 +212,10 @@ try {
   await click('#newoptset');
   const setAsked = await answer('Priorities');
   const setKey = 'components/Option sets/Priorities/';
-  const setMade = await until(`!!${P}.querySelector('#optmain .bar button')`, 8000) && onDisk(setKey + 'nodes.json')?.nodes?.some((n) => n.type === 'Static Data');
+  // P128-S6-OPTSETFLAKE: the set was made every time (the toast, the list, its page: read beside the ok below), and the
+  // gate read the disk before Studio's save had landed. The disk is waited for, as the page is
+  const onDiskSoon = async (test, ms = 8000) => { const t = Date.now(); let v = test(); while (!v && Date.now() - t < ms) { await wait(150); v = test(); } return v; };
+  const setMade = await until(`!!${P}.querySelector('#optmain .bar button')`, 8000) && await onDiskSoon(() => onDisk(setKey + 'nodes.json')?.nodes?.some((n) => n.type === 'Static Data'));
   // P128-S6-OPTSETFLAKE: what the panel showed at that step, read beside the ok (the field still up? the toast? the set in the registry?)
   const optSeen = setMade ? undefined : await ev(`(() => ({ fieldUp: !!${P}.querySelector('.ask [data-input=askname]'), field: ${P}.querySelector('.ask [data-input=askname]')?.value ?? null, toast: ${P}.querySelector('.toast, #toast')?.textContent ?? null, list: ${P}.getElementById('optsets')?.innerText ?? null, main: ${P}.getElementById('optmain')?.innerText?.slice(0, 120) ?? null }))()`);
   ok(setAsked && setMade, 'New option set: Studio asks the name in its own field, and the set is a component on disk', { asked: setAsked, made: !!setMade, seen: optSeen, registry: Object.keys(onDisk('components/_registry.json')?.components ?? {}).filter((k) => k.startsWith('Option sets/')) });
@@ -262,6 +265,22 @@ try {
   const said = await until(`(window.__messages || []).length ? window.__messages[0] : false`, 6000);
   const asked = onDisk('.nodegx-questions.json')?.questions ?? [];
   ok(said?.role === 'user' && said.content?.[0]?.text?.includes("a part Studio doesn't edit") && asked.some((q) => q.node === partId), 'Ask the agent says the question into the conversation as the person, and writes it into the project', { role: said?.role, text: said?.content?.[0]?.text?.slice(0, 90), asked: asked.length });
+
+  // P128 S5 (STU-083): Help inside the conversation, from the strip's ?: the canon's headings, and its links through the host
+  console.log('check: STU-083 Help inside the conversation');
+  const canonText = readFileSync(kit.canon, 'utf8');
+  const wantHeads = [...canonText.matchAll(/^## (.+)$/gm)].map((m) => m[1].trim()).filter((x) => !['For the agent (the rules, not copy)', 'Waits on'].includes(x));
+  await click('#striphelp');
+  const help = await until(`(() => { const p = ${P}.getElementById('helppanel'); if (!p || p.hidden || !p.querySelector('section[data-heading]')) return false;
+    return { heads: [...p.querySelectorAll('section[data-heading] > h2')].map((x) => x.textContent), links: [...p.querySelectorAll('.downloads button')].map((x) => x.dataset.url) }; })()`, 10000);
+  ok(help && JSON.stringify(help.heads) === JSON.stringify(wantHeads), "the strip's ? opens Help in the frame: the canon's headings, read across origins from Studio's vendored copy", { want: wantHeads, got: help?.heads });
+  await shot('stu-083-hosted-help');
+  if (help) {
+    await ev(`${P}.querySelector('#helppanel .downloads button[data-url="https://nodegx.io/start#download"]').click()`);
+    const asked = await until(`(window.__links || []).filter((u) => u === 'https://nodegx.io/start#download').length >= 2 ? true : false`, 6000);
+    ok(asked && help.links.includes('https://nodegx.io/your-own-editor') && help.links.includes('https://nodegx.io/start'), "Help's buttons are the canon's links, and one pressed in the frame asks the host to open it", help.links);
+  }
+  ok(/HOLD stops it\. Change a heading, a font, a button colour or a translation yourself\.$/.test(await ev(`${P}.getElementById('hoststate')?.textContent ?? ''`)), "the strip's line ends on what Studio is for, in the canon's words", await ev(`${P}.getElementById('hoststate')?.textContent ?? null`));
 } catch (e) {
   ok(false, 'the gate ran to the end', e.message);
 } finally {

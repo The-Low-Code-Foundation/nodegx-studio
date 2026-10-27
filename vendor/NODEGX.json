@@ -5,7 +5,7 @@
     "committed": "2026-10-27T16:34:21+01:00",
     "subject": "chore(release): npm 0.2.8 re-cut — DUPEROLE fixed before publish (Richard: \"Hold, re-cut with fix\"); the changelog names it and Beta sweep s19's shipped fixes"
   },
-  "built": "2026-10-27T16:52:16.904Z",
+  "built": "2026-10-27T21:03:13.301Z",
   "esbuild": "0.25.12",
   "npm": {
     "@nodegx/backend-map": "0.1.3",
@@ -16,6 +16,7 @@
   "files": {
     "agent.cjs": "5c246ab8a5d657a1f786702940eef0d790d4e696639b446b7d6dde557e78f68f",
     "backend.cjs": "c8d49228cbe827dc9e2d6693842ca12637ed6596827ae905fd4cf8346354faf9",
+    "docs/CANON.md": "b74e0a1d6494e3077073b70d01409ac366499c8abbf416a7c83cf5f0930bca25",
     "fields.js": "86e99b4cf706b4bb9cb5c54c9911762214ddca06a8871164ac956d1fdae3449e",
     "look.js": "0df321ba069438bdb215cc1276249dd997b221cd51940f80c830515c91a82c8c",
     "phrasebook/rows.js": "fef66fcff1b2c7e683f39672745c59004431a0c94405ebeb5496dd0d985de560",
