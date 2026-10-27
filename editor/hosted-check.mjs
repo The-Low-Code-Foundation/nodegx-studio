@@ -177,6 +177,55 @@ try {
   const fileSays = JSON.parse(readFileSync(join(project, 'nodegx.automations.json'), 'utf8')).triggers[0].enabled;
   const backendSays = (await admin('GET', '/admin/triggers/nightly-at-2')).trigger?.enabled;
   ok(off && fileSays === false && backendSays === false, 'switched off inside the conversation: the project\'s file and the backend both say off', { off, fileSays, backendSays });
+
+  // P125-MUDDY-NATIVEDIALOG: the host's frame has no allow-modals, so prompt() and confirm() answer nothing there. Studio
+  // asks a name in its own field and a yes in its own card: both driven here as a person would, typing and pressing
+  console.log('check: P125-MUDDY-NATIVEDIALOG Studio asks in its own controls inside the conversation');
+  const onDisk = (rel) => { try { return JSON.parse(readFileSync(join(project, rel), 'utf8')); } catch { return null; } };
+  const answer = async (name) => {
+    const asked = await until(`!!${P}.querySelector('.ask [data-input=askname]')`, 5000);
+    if (asked) await ev(`(() => { const i = ${P}.querySelector('.ask [data-input=askname]'); i.focus(); i.value = ${JSON.stringify(name)}; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+    return asked;
+  };
+  const yes = async () => { const asked = await until(`!!${P}.querySelector('.sure [data-act=yes]')`, 5000); if (asked) await ev(`${P}.querySelector('.sure [data-act=yes]').click()`); return asked; };
+  await click('[data-tab=data]'); await wait(300);
+  await click('[data-sub=options]'); await wait(300);
+  await click('#newoptset');
+  const setAsked = await answer('Priorities');
+  const setKey = 'components/Option sets/Priorities/';
+  const setMade = await until(`!!${P}.querySelector('#optmain .bar button')`, 8000) && onDisk(setKey + 'nodes.json')?.nodes?.some((n) => n.type === 'Static Data');
+  ok(setAsked && setMade, 'New option set: Studio asks the name in its own field, and the set is a component on disk', { asked: setAsked, made: !!setMade });
+  if (setMade) {
+    await ev(`[...${P}.querySelectorAll('#optmain .bar button')].find((x) => x.textContent.includes('New attribute')).click()`);
+    const attrAsked = await answer('rank'); await wait(700);
+    const attrs = onDisk(setKey + 'component.json')?.metadata?.optionSet?.attributes?.map((a) => a.name);
+    ok(attrAsked && attrs?.includes('rank'), 'New attribute: asked in the same field, written into the set', { asked: attrAsked, attrs });
+    await ev(`[...${P}.querySelectorAll('#optmain .bar button')].find((x) => x.textContent.includes('Delete option set')).click()`);
+    const delAsked = await yes(); await wait(700);
+    ok(delAsked && !onDisk(setKey + 'nodes.json') && !onDisk('components/_registry.json')?.components?.['Option sets/Priorities'], 'Delete option set: asked in Studio\'s card, and the set is gone', { asked: delAsked });
+  }
+  await click('[data-sub=types]'); await wait(300);
+  await click('#newtype');
+  const typeAsked = await answer('Note');
+  const typeMade = await until(`!!${P}.querySelector('#types .row[data-type="Note"]')`, 10000);
+  const declaredNote = () => onDisk('nodegx.project.json')?.metadata?.dbCollections?.some((c) => c.name === 'Note');
+  ok(typeAsked && typeMade && declaredNote(), 'New data type: asked in Studio\'s field, declared in the project', { asked: typeAsked, made: typeMade });
+  if (typeMade) {
+    await ev(`[...${P}.querySelectorAll('#datamain button')].find((x) => x.textContent.includes('Delete type')).click()`);
+    const delAsked = await yes();
+    const gone = await until(`!${P}.querySelector('#types .row[data-type="Note"]')`, 10000);
+    ok(delAsked && gone && !declaredNote(), 'Delete type: asked in Studio\'s card, and the type is gone from the project', { asked: delAsked, gone });
+  }
+
+  // STU-082: the frame has no allow-downloads, so Export's <a download> saved nothing and the toast said "exported".
+  // Inside a host Studio hands the file to the host (ui/download-file), and this host offers it
+  console.log('check: STU-082 Export inside the conversation');
+  await click('[data-sub=app]'); await wait(400);
+  await click('#apptypes .row[data-type=Task]');
+  await click('#appmain [data-act=export]'); await wait(300);
+  await ev(`[...${P}.querySelectorAll('.menu .item')].find((x) => x.textContent.startsWith('As CSV')).click()`);
+  const saved = await until(`(window.__downloads || []).length ? window.__downloads[0].contents[0].resource : false`, 8000);
+  ok(saved && /Task-development\.csv$/.test(saved.uri) && saved.mimeType === 'text/csv' && saved.text.includes('Water the plants'), 'Export → As CSV hands the file to the host to save: its name, its type and the row in it', saved && { uri: saved.uri, mimeType: saved.mimeType, text: saved.text.slice(0, 120) });
 } catch (e) {
   ok(false, 'the gate ran to the end', e.message);
 } finally {

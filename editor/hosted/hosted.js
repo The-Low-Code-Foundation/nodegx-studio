@@ -121,7 +121,15 @@ const holdBtn = $('holdbtn');
 const noteEl = $('holdnote');
 
 let app = null;
-const say = (text, held = false, lifted = false) => {
+// STU-082: the host's frame is sandboxed without allow-downloads, so an <a download> saves nothing in it (and Studio's
+// Export said "exported" all the same). A file Studio saves comes here instead: the host's own download
+// (ui/download-file) when it offers one, else a refusal in words the page shows. Unset outside a host.
+if (hosted) window.__hostSave = async ({ name, mimeType, text }) => {
+  if (!app?.getHostCapabilities()?.downloadFile) throw new Error('This conversation cannot save files. Open Studio with Window ↗ above, and export there');
+  const r = await app.downloadFile({ contents: [{ type: 'resource', resource: { uri: `file:///${encodeURIComponent(name)}`, mimeType, text } }] });
+  if (r?.isError) throw new Error('The file was not saved');
+};
+const say =(text, held = false, lifted = false) => {
   stateEl.textContent = text; stateEl.classList.toggle('held', held); stateEl.classList.toggle('lifted', lifted);
 };
 

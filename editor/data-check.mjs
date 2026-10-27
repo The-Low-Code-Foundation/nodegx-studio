@@ -167,7 +167,9 @@ try {
   const clickIn = (sel, text) => ev(`(() => { const el = [...document.querySelectorAll(${JSON.stringify(sel)})].find(e => e.textContent.trim().startsWith(${JSON.stringify(text)})); if (!el) return false; el.click(); return true; })()`);
   const until = (expr, ms = 8000) => b.until(expr, ms);
   const settle = async () => { await wait(500); };
-  await ev(`window.confirm = () => true; window.__prompts = []; window.prompt = () => window.__prompts.shift() ?? null`);
+  // P125-MUDDY-NATIVEDIALOG: Studio asks in its own field and card (no prompt()/confirm() to stub), answered as a person does
+  const answerName = async (name) => { if (!(await until(`!!document.querySelector('.ask [data-input=askname]')`, 4000))) throw new Error(`no name asked for ${name}`); await ev(`document.querySelector('.ask [data-input=askname]').focus()`); await b.type(name); await b.key('Enter', 'Enter', 13); };
+  const yes = async () => { if (!(await until(`!!document.querySelector('.sure [data-act=yes]')`, 6000))) throw new Error('Studio asked no yes'); await ev(`document.querySelector('.sure [data-act=yes]').click()`); };
   const shot = async (name) => { if (shots) { await wait(500); await b.screenshot(join(here, '..', 'docs', 'look', `stu-06${name}.png`)); } };
 
   console.log('check: STU-060 the map in Data');
@@ -176,7 +178,7 @@ try {
   ok((await ev(`[...document.querySelectorAll('#data .subtabs [data-sub]')].map(x => x.textContent).join()`)) === 'Data types,Privacy,App data,Option sets,Map', 'Data\'s sub-tabs: Data types, Privacy, App data, Option sets, Map');
 
   console.log('check: STU-061 a type and its fields, on the backend and in the project');
-  await ev(`window.__prompts.push('Note'); document.getElementById('newtype').click()`);
+  await ev(`document.getElementById('newtype').click()`); await answerName('Note');
   await until(`!!document.querySelector('#types .row[data-type="Note"]')`); await settle();
   ok((await dev.table('Note')) && declared('Note'), 'New type: a table on the development backend and a type in the project', { onBackend: !!(await dev.table('Note')), declared: declared('Note') });
   const addField = async (kind, name, extra = '') => {
@@ -212,10 +214,10 @@ try {
   await ev(`document.querySelector('#datamain tr[data-field=count] button[title="Change this field"]').click()`);
   await until(`!!document.querySelector('#drawer:not([hidden]) .kinds')`);
   await ev(`document.querySelector('#drawer .kinds [data-kind=number]').click()`); await wait(150);
-  await ev(`[...document.querySelectorAll('#drawer .dfoot button')].pop().click()`); await until(`document.getElementById('drawer').hidden`, 6000); await settle();
+  await ev(`[...document.querySelectorAll('#drawer .dfoot button')].pop().click()`); await yes(); await until(`document.getElementById('drawer').hidden`, 6000); await settle();
   note = await dev.table('Note');
   ok(note.columns.find((c) => c.name === 'count')?.type === 'Number' && (await dev.get('/classes/Note')).results[0].count === 7 && declared('Note').columns.find((c) => c.name === 'count')?.type === 'Number', 'a kind change converts the values, on the backend and in the project', { type: note.columns.find((c) => c.name === 'count')?.type, value: (await dev.get('/classes/Note')).results[0].count });
-  await ev(`document.querySelector('#datamain tr[data-field=count] button[title="Delete this field"]').click()`); await settle();
+  await ev(`document.querySelector('#datamain tr[data-field=count] button[title="Delete this field"]').click()`); await yes(); await settle();
   ok(!(await dev.table('Note')).columns.some((c) => c.name === 'count') && !declared('Note').columns.some((c) => c.name === 'count'), 'Delete field: the column goes from the backend and the project');
   await shot('1-types');
 
@@ -232,7 +234,7 @@ try {
   await until(`(document.querySelector('#appmain [data-pages]')?.textContent || '').includes('with nothing in title')`); await settle();
   ok((await ev(`document.querySelector('#appmain [data-pages]').textContent`)) === '1–2 of 2 with nothing in title', 'Show them in App data: only those two rows', await ev(`document.querySelector('#appmain [data-pages]').textContent`));
   await ev(`[...document.querySelectorAll('#appmain tr[data-row] td.pick input')].forEach(i => i.click())`); await settle();
-  await ev(`document.querySelector('#appmain [data-act=delete]').click()`);
+  await ev(`document.querySelector('#appmain [data-act=delete]').click()`); await yes();
   await until(`(document.querySelector('#appmain .empty')?.textContent || '') === 'Every row has a title now.'`);
   await ev(`document.querySelector('[data-sub=types]').click()`); await settle();
   await ev(`document.querySelector('#types .row[data-type=Note]').click()`); await settle();
@@ -305,7 +307,7 @@ try {
   await ev(`document.querySelector('#drawer [data-act=import-go]').click()`); await until(`document.getElementById('drawer').hidden`, 6000); await settle();
   ok((await dev.count('Note')) === 123, 'then imported', await dev.count('Note'));
   await ev(`[...document.querySelectorAll('#appmain tr[data-row] td.pick input')].slice(0, 3).forEach(i => i.click())`); await settle();
-  await ev(`document.querySelector('#appmain [data-act=delete]').click()`); await wait(1500);
+  await ev(`document.querySelector('#appmain [data-act=delete]').click()`); await yes(); await wait(1500);
   ok((await dev.count('Note')) === 120, 'three rows ticked and deleted together', await dev.count('Note'));
   await shot('3-appdata');
   ok(await until(`(document.querySelector('#appmain [data-card=imported]')?.textContent || '').includes('Task (3)')`), 'the importer\'s data files are offered in App data', await ev(`document.querySelector('#appmain [data-card=imported]')?.textContent`));
@@ -418,13 +420,13 @@ try {
   const login = await dev.anonymous('POST', '/login', { username: 'added@example.com', password: 'added-password-1' });
   ok((await dev.get('/admin/users')).total === 2 && login.status === 200, 'New person: an account whose password signs in (kept hashed by the backend)', { status: login.status, total: (await dev.get('/admin/users')).total });
   await ev(`[...document.querySelectorAll('#appmain tr[data-row]')].find(tr => tr.textContent.includes('added@example.com')).querySelector('td.pick input').click()`); await settle();
-  await ev(`document.querySelector('#appmain [data-act=delete]').click()`); await wait(1500);
+  await ev(`document.querySelector('#appmain [data-act=delete]').click()`); await yes(); await wait(1500);
   ok((await dev.get('/admin/users')).total === 1 && (await dev.anonymous('POST', '/login', { username: 'added@example.com', password: 'added-password-1' })).status >= 400, 'ticked and deleted: that person can no longer sign in, the one from the app stays');
   await shot('3-users');
 
   console.log('check: STU-065 development and live');
   await ev(`document.querySelector('[data-sub=types]').click()`); await settle();
-  await ev(`document.querySelector('#envbar [data-act=make-live]').click()`);
+  await ev(`document.querySelector('#envbar [data-act=make-live]').click()`); await yes();
   await until(`!!document.querySelector('#envbar [data-env=live]:not([disabled])')`, 60000); await settle();
   const live = adminOf('cloudservicesLive');
   const liveNote = await live.table('Note');
@@ -443,7 +445,7 @@ try {
   ok(planText.includes("Note's field due") && (await live.table('Note')).columns.some((c) => c.name === 'due' && c.type === 'Date'), 'Deploy to live says what it adds, and live has it after', planText.slice(0, 160));
   await ev(`document.querySelector('#drawer .dfoot .primary').click()`); await settle();
   // a dropped field is lost on live only after the yes
-  await ev(`document.querySelector('#datamain tr[data-field=pinned] button[title="Delete this field"]').click()`); await settle();
+  await ev(`document.querySelector('#datamain tr[data-field=pinned] button[title="Delete this field"]').click()`); await yes(); await settle();
   await ev(`document.querySelector('#envbar [data-act=deploy-live]').click()`);
   await until(`!!document.querySelector('#drawer [data-act=deploy-lose]')`, 10000);
   ok((await ev(`document.querySelector('#drawer .dbody').textContent`)).includes("Note's field pinned, in every row") && (await live.table('Note')).columns.some((c) => c.name === 'pinned'), 'a field development dropped is named as lost, and live still has it until the yes');

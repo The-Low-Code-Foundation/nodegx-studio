@@ -141,6 +141,52 @@ try {
     const rows = await backendRows(todos, 'Task');
     ok(after && rows.length === 1, 'New entry adds a row, and the backend holds it', { after, rows: rows.length });
     await shot(b, 'backend-row');
+
+    // P125-MUDDY-NATIVEDIALOG: Electron implements no prompt(), so New type / option set / attribute / style did
+    // nothing in the desktop app. Studio asks in its own field and card; each made here, then deleted, so the sections
+    // after this one find the copy as they did
+    console.log('2c. names and yeses asked in Studio\'s own controls (P125-MUDDY-NATIVEDIALOG)');
+    const answer = async (name) => {
+      const asked = await b.until(`!!document.querySelector('.ask [data-input=askname]')`, 5000);
+      if (asked) await b.evaluate(`(() => { const i = document.querySelector('.ask [data-input=askname]'); i.focus(); i.value = ${JSON.stringify(name)}; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+      return !!asked;
+    };
+    const yes = async () => { const asked = await b.until(`!!document.querySelector('.sure [data-act=yes]')`, 5000); if (asked) await b.evaluate(`document.querySelector('.sure [data-act=yes]').click()`); return !!asked; };
+    const pressText = (sel, text) => b.evaluate(`[...document.querySelectorAll(${JSON.stringify(sel)})].find((x) => x.textContent.includes(${JSON.stringify(text)})).click()`);
+    const declares = (name) => readJson(join(todos, 'nodegx.project.json')).metadata?.dbCollections?.some((c) => c.name === name);
+    const setDir = join(todos, 'components', 'Option sets', 'Priorities');
+    const styleNamed = (name) => (existsSync(join(todos, 'nodegx.styles.json')) ? readJson(join(todos, 'nodegx.styles.json')).variants || [] : []).some((v) => v.name === name);
+    await b.evaluate(`document.querySelector('[data-sub=types]').click()`); await wait(300);
+    await b.evaluate(`document.getElementById('newtype').click()`);
+    const typeAsked = await answer('Note');
+    ok(typeAsked && (await b.until(`!!document.querySelector('#types .row[data-type="Note"]')`, 10000)) && declares('Note'), 'New type in the desktop app: the name asked in Studio\'s field, the type declared', { asked: typeAsked });
+    await pressText('#datamain button', 'Delete type');
+    const typeYes = await yes();
+    ok(typeYes && (await b.until(`!document.querySelector('#types .row[data-type="Note"]')`, 10000)) && !declares('Note'), 'Delete type: asked in Studio\'s card, and gone', { asked: typeYes });
+    await b.evaluate(`document.querySelector('[data-sub=options]').click()`); await wait(300);
+    await b.evaluate(`document.getElementById('newoptset').click()`);
+    const setAsked = await answer('Priorities');
+    const setDrawn = await b.until(`!!document.querySelector('#optmain .bar button')`, 8000);
+    for (const t0 = Date.now(); Date.now() - t0 < 5000 && !existsSync(join(setDir, 'nodes.json')); await wait(150)); // the panel draws before the save lands
+    ok(setAsked && setDrawn && existsSync(join(setDir, 'nodes.json')), 'New option set: asked, and a component on disk', { asked: setAsked, drawn: !!setDrawn, onDisk: existsSync(join(setDir, 'nodes.json')) });
+    await pressText('#optmain .bar button', 'New attribute');
+    const attrAsked = await answer('rank'); await wait(700);
+    const attrs = existsSync(join(setDir, 'component.json')) ? readJson(join(setDir, 'component.json')).metadata?.optionSet?.attributes?.map((a) => a.name) : null;
+    ok(attrAsked && attrs?.includes('rank'), 'New attribute: asked, and written into the set', { asked: attrAsked, attrs });
+    await pressText('#optmain .bar button', 'Delete option set');
+    const setYes = await yes(); await wait(700);
+    ok(setYes && !existsSync(join(setDir, 'nodes.json')), 'Delete option set: asked in Studio\'s card, and gone from disk', { asked: setYes });
+    await b.evaluate(`document.querySelector('[data-tab=styles]').click()`); await wait(300);
+    await b.evaluate(`document.getElementById('newstyle').click()`);
+    await b.until(`!!document.querySelector('.menu .item')`, 5000);
+    await b.evaluate(`[...document.querySelectorAll('.menu .item')].find((x) => x.textContent.trim() === 'Button').click()`);
+    const styleAsked = await answer('Outline'); await wait(700);
+    ok(styleAsked && styleNamed('Outline'), 'New style (a Button\'s): asked, and written into nodegx.styles.json', { asked: styleAsked });
+    await pressText('#stylemain .bar button', 'Delete style');
+    const styleYes = await yes(); await wait(700);
+    ok(styleYes && !styleNamed('Outline'), 'Delete style: asked in Studio\'s card, and gone', { asked: styleYes });
+    await b.evaluate(`document.querySelector('[data-tab=data]').click()`); await wait(300);
+
     await stop();
     ok(serversOf().length === 0, 'stopping the app stops its editor server', serversOf());
     ok(!(await backendAnswers(todos)) && !existsSync(join(backendsDir, bound.instanceId, 'runtime.json')), 'and the backend it started, leaving no runtime record');

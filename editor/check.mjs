@@ -103,6 +103,8 @@ try {
   const shows = () => b.evaluate('__ob.shows || 0');
   const rebuilt = async (n0) => { await b.until(`(__ob.shows || 0) > ${n0} && document.getElementById("status").textContent.startsWith("App on screen")`, 30000); await wait(300); };
   const status = () => b.evaluate('document.getElementById("status").textContent');
+  /** P125-MUDDY-NATIVEDIALOG: Studio asks a name in its own field (no prompt() to stub): typed, then Enter, as a person does */
+  const answerName = async (name) => { if (!(await b.until(`!!document.querySelector('.ask [data-input=askname]')`, 4000))) throw new Error(`no name asked for ${name}`); await b.evaluate(`document.querySelector('.ask [data-input=askname]').focus()`); await b.type(name); await b.key('Enter', 'Enter', 13); };
   const clickText = async (sel, text) => { const at = await b.evaluate(`(() => { const el = [...document.querySelectorAll(${JSON.stringify(sel)})].find(e => e.textContent.trim().startsWith(${JSON.stringify(text)})); if (!el) return null; el.scrollIntoView({ block: 'nearest' }); const r = el.getBoundingClientRect(); return { x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2) }; })()`); if (!at) throw new Error(`no "${text}" in ${sel}`); await b.click(at.x, at.y); return at; };
   const menuItem = async (text) => { await b.until(`[...document.querySelectorAll('.menu .item')].some(e => e.textContent.includes(${JSON.stringify(text)}))`, 4000); await clickText('.menu .item', text); await wait(250); };
   const shot = async (name) => { if (shots) { await wait(400); await b.screenshot(join(here, '..', 'docs', 'look', `s2-${name}.png`)); } };
@@ -478,7 +480,7 @@ try {
   }
   console.log('check: Data');
   await b.clickSel('[data-tab=data]'); await wait(300);
-  await b.evaluate(`window.prompt = () => 'Note'`); await b.clickSel('#newtype'); await wait(800);
+  await b.clickSel('#newtype'); await answerName('Note'); await wait(800);
   ok(onDisk('nodegx.project.json').metadata.dbCollections.some((c) => c.name === 'Note'), 'a new data type is written into nodegx.project.json');
   await clickText('#datamain .bar button', 'New field'); await b.until(`!!document.querySelector('#drawer:not([hidden]) [data-input=name]')`, 4000);
   await b.evaluate(`(() => { const i = document.querySelector('#drawer [data-input=name]'); i.value = 'title'; i.dispatchEvent(new Event('input')); [...document.querySelectorAll('#drawer .dfoot button')].pop().click(); })()`); await wait(800);
@@ -493,10 +495,10 @@ try {
   await shot('data');
   {
     await b.clickSel('#data .subtabs button[data-sub=options]'); await wait(200);
-    await b.evaluate(`window.prompt = () => 'Priorities'`); const n0 = await shows(); await b.clickSel('#newoptset'); await rebuilt(n0);
+    const n0 = await shows(); await b.clickSel('#newoptset'); await answerName('Priorities'); await rebuilt(n0);
     const key = 'components/Option sets/Priorities/';
     ok(existsSync(join(project, key + 'nodes.json')) && onDisk('components/_registry.json').components['Option sets/Priorities']?.type === 'logic' && onDisk(key + 'nodes.json').nodes.some((n) => n.type === 'Static Data'), 'a new option set is a logic component on disk with a Static Data node, in the registry');
-    await b.evaluate(`window.prompt = () => 'rank'`); await clickText('#optmain .bar button', 'New attribute'); await wait(700);
+    await clickText('#optmain .bar button', 'New attribute'); await answerName('rank'); await wait(700);
     for (const name of ['High', 'Low']) { await b.evaluate(`(() => { const i = document.querySelector('#optmain input[placeholder^="New option"]'); i.focus(); i.value = ''; })()`); await b.type(name); await b.key('Enter', 'Enter', 13); await wait(700); }
     const data = onDisk(key + 'nodes.json').nodes.find((n) => n.type === 'Static Data');
     const json = JSON.parse(data.parameters.json);
@@ -511,8 +513,7 @@ try {
   {
     await select(signInBtn);
     const bgSign0 = await b.evaluate(`__ob.preview.frame.contentWindow.getComputedStyle(__ob.preview.elementsOf(${JSON.stringify(signInBtn)})[0]).backgroundColor`);
-    await b.evaluate(`window.prompt = () => 'Primary'`);
-    let n0 = await shows(); await clickText('#right button', 'Save as a style'); await rebuilt(n0);
+    let n0 = await shows(); await clickText('#right button', 'Save as a style'); await answerName('Primary'); await rebuilt(n0);
     const styles = onDisk('nodegx.styles.json');
     const v = styles.variants?.find((x) => x.name === 'Primary' && x.typename === 'net.noodl.controls.button');
     ok(v && v.parameters.backgroundColor === 'var(--primary)' && onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === signInBtn).variant === 'Primary', 'Save as a style writes a variant of the button type into nodegx.styles.json with the button\'s look, and the button wears it', { parameters: Object.keys(v?.parameters || {}).length });

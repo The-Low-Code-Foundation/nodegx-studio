@@ -710,6 +710,15 @@
   #clash { position: fixed; left: 50%; top: 56px; transform: translateX(-50%); z-index: 101; max-width: min(640px, 90vw); background: #fff7ed; border: 1px solid #fdba74; border-left: 4px solid #ea580c; border-radius: var(--r); padding: 10px 14px; box-shadow: var(--shadow); font-size: 12.5px; }
   #clash p { margin: 0 0 8px; }
   #clash div { display: flex; gap: 8px; justify-content: flex-end; }
+  /* P125-MUDDY-NATIVEDIALOG: Studio's own name field and yes card (askName, askSure), never prompt() or confirm() */
+  .menu.ask { min-width: 320px; padding: 10px 12px; }
+  .menu.ask label { display: block; font-size: 12.5px; color: var(--ink-2); margin-bottom: 6px; }
+  .menu.ask .acts, .sure .acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+  .surescrim { position: fixed; inset: 0; z-index: 102; background: rgba(20, 24, 31, .28); display: flex; align-items: flex-start; justify-content: center; padding: 96px 16px 0; }
+  .sure { background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r-lg); box-shadow: var(--shadow); padding: 14px 16px 12px; max-width: min(480px, 100%); font-size: 13px; }
+  .sure p { margin: 0; white-space: pre-line; line-height: 1.5; }
+  button.primary.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+  button.primary.danger:hover { background: #b91c1c; }
 </style>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -2438,7 +2447,7 @@ function renderBubblePanel(right, node) {
     const s = h('select', { onchange: (e) => { const v = mine.find((x) => x.name === e.target.value); edits(pageKey, [{ edit: 'set_variant', component: pageKey, id: node.id, variant: e.target.value || undefined }, ...Object.keys(v?.parameters || {}).filter((k) => params[k] !== undefined).map((k) => ({ edit: 'set_parameter', component: pageKey, id: node.id, name: k, value: undefined }))], { redraw: true }); toast(e.target.value ? `${labelOf(node.id)} now wears ${e.target.value}` : `${labelOf(node.id)} wears no style`); } }, h('option', { value: '' }, '(no style)'));
     for (const v of mine) s.append(h('option', { value: v.name, selected: node.variant === v.name }, v.name));
     add(section('Style', [h('div', { class: 'field' }, h('label', {}, 'Style'), s, overridden ? h('span', { class: 'badge', title: 'This element sets some of what its style sets' }, 'Overridden') : null),
-      h('div', { class: 'field' }, h('label', {}), h('div', { style: 'display:flex;gap:6px' }, h('button', { class: 'tiny', title: 'Save this element\'s properties as a style every element of this type can wear', onclick: () => saveAsStyle(node) }, icon('styles'), 'Save as a style'), node.variant ? h('button', { class: 'tiny', onclick: () => { tab = 'styles'; selStyle = { typename: node.type, name: node.variant }; switchTab('styles'); } }, 'Edit style') : null))]));
+      h('div', { class: 'field' }, h('label', {}), h('div', { style: 'display:flex;gap:6px' }, h('button', { class: 'tiny', title: 'Save this element\'s properties as a style every element of this type can wear', onclick: (e) => saveAsStyle(node, e) }, icon('styles'), 'Save as a style'), node.variant ? h('button', { class: 'tiny', onclick: () => { tab = 'styles'; selStyle = { typename: node.type, name: node.variant }; switchTab('styles'); } }, 'Edit style') : null))]));
   }
 
   // Text: the font, its weight and size, the alignment, bold / italic, the colour; the rest behind ⋯
@@ -2624,7 +2633,7 @@ function renderPropsInto(right) {
     const s = h('select', { onchange: (e) => { const v = mine.find((x) => x.name === e.target.value); edits(pageKey, [{ edit: 'set_variant', component: pageKey, id: sel, variant: e.target.value || undefined }, ...Object.keys(v?.parameters || {}).filter((k) => params[k] !== undefined).map((k) => ({ edit: 'set_parameter', component: pageKey, id: sel, name: k, value: undefined }))], { redraw: true }); toast(e.target.value ? `${labelOf(sel)} now wears ${e.target.value}` : `${labelOf(sel)} wears no style`); } }, h('option', { value: '' }, '(no style)'));
     for (const v of mine) s.append(h('option', { value: v.name, selected: node.variant === v.name }, v.name));
     det.append(h('div', { class: 'field' }, h('label', {}, 'Style'), s));
-    det.append(h('div', { class: 'field' }, h('label', {}), h('div', { style: 'display:flex;gap:6px' }, h('button', { class: 'tiny', title: 'Save this element\'s properties as a style every element of this type can wear', onclick: () => saveAsStyle(node) }, icon('styles'), 'Save as a style'), node.variant ? h('button', { class: 'tiny', onclick: () => { tab = 'styles'; selStyle = { typename: node.type, name: node.variant }; switchTab('styles'); } }, 'Edit style') : null)));
+    det.append(h('div', { class: 'field' }, h('label', {}), h('div', { style: 'display:flex;gap:6px' }, h('button', { class: 'tiny', title: 'Save this element\'s properties as a style every element of this type can wear', onclick: (e) => saveAsStyle(node, e) }, icon('styles'), 'Save as a style'), node.variant ? h('button', { class: 'tiny', onclick: () => { tab = 'styles'; selStyle = { typename: node.type, name: node.variant }; switchTab('styles'); } }, 'Edit style') : null)));
     wrap.append(det);
   }
   const wiredIn = Object.fromEntries(conns.filter((c) => c.toId === sel).map((c) => [c.toProperty, c]));
@@ -3055,6 +3064,46 @@ function popover(e, cls = '') {
 /** A menu closes on a click outside it; a listener left by a menu already gone does nothing (it used to close whatever opened after it). */
 function dismissOnOutside(menu) { setTimeout(() => document.addEventListener('mousedown', function outside(ev) { if (!menu.isConnected) return; if (!menu.contains(ev.target)) closeMenu(); else document.addEventListener('mousedown', outside, { once: true }); }, { once: true }), 0); }
 const closeMenu = (selector = '.menu') => { for (const m of document.querySelectorAll(selector)) m.remove(); };
+/** P125-MUDDY-NATIVEDIALOG: Studio asks in its own controls. Electron implements no prompt(), and a host that draws
+    Studio in a frame without allow-modals (Claude Desktop) answers prompt() and confirm() with nothing: a name asked
+    that way never came, and a delete never went ahead. A name is asked in a field under what was pressed (`at`, a click
+    or an element): Enter or Create gives it, trimmed; Esc, Cancel, a click outside or another menu opening give null. */
+function askName(at, question, { go = 'Create' } = {}) {
+  const r = (at?.currentTarget || at)?.getBoundingClientRect?.();
+  closeMenu();
+  const left = r ? Math.max(8, Math.min(r.left, innerWidth - 348)) : Math.max(8, (innerWidth - 340) / 2);
+  const top = r ? Math.max(8, Math.min(r.bottom + 4, innerHeight - 150)) : 120;
+  const menu = h('div', { class: 'menu ask', role: 'dialog', 'aria-label': question, style: `left:${left}px;top:${top}px` });
+  const input = h('input', { type: 'text', 'data-input': 'askname', 'aria-label': question });
+  return new Promise((done) => {
+    let open = true;
+    const finish = (v) => { if (!open) return; open = false; gone.disconnect(); menu.remove(); done(v); };
+    const gone = new MutationObserver(() => { if (!menu.isConnected) finish(null); });
+    const create = h('button', { class: 'primary', 'data-act': 'create', disabled: true, onclick: () => { const v = input.value.trim(); if (v) finish(v); } }, go);
+    input.oninput = () => { create.disabled = !input.value.trim(); };
+    input.onkeydown = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); create.click(); } else if (ev.key === 'Escape') { ev.preventDefault(); finish(null); } };
+    menu.append(h('label', {}, question), input, h('div', { class: 'acts' }, h('button', { class: 'quiet', 'data-act': 'cancel', onclick: () => finish(null) }, 'Cancel'), create));
+    document.body.append(menu); gone.observe(document.body, { childList: true });
+    dismissOnOutside(menu);
+    input.focus();
+  });
+}
+/** A yes asked in Studio's own card over the page (see askName): true only from its button. Esc, Cancel or a click
+    beside it is a no; a delete starts on Cancel, so Enter alone never deletes. */
+function askSure(message, { yes = 'Delete', danger = true } = {}) {
+  for (const s of document.querySelectorAll('.surescrim')) s.dispatchEvent(new Event('withdraw'));
+  return new Promise((done) => {
+    let open = true;
+    const finish = (v) => { if (!open) return; open = false; scrim.remove(); done(v); };
+    const no = h('button', { class: 'quiet', 'data-act': 'no', onclick: () => finish(false) }, 'Cancel');
+    const ok = h('button', { class: danger ? 'primary danger' : 'primary', 'data-act': 'yes', onclick: () => finish(true) }, yes);
+    const scrim = h('div', { class: 'surescrim', onwithdraw: () => finish(false), onmousedown: (ev) => { if (ev.target === scrim) finish(false); },
+      onkeydown: (ev) => { if (ev.key === 'Escape') { ev.preventDefault(); finish(false); } else if (ev.key === 'Tab') { ev.preventDefault(); (document.activeElement === no ? ok : no).focus(); } } },
+      h('div', { class: 'sure', role: 'alertdialog', 'aria-modal': 'true', 'aria-label': message }, h('p', {}, message), h('div', { class: 'acts' }, no, ok)));
+    document.body.append(scrim);
+    (danger ? no : ok).focus();
+  });
+}
 function resolveColor(v) {
   if (!v) return 'transparent';
   const m = String(v).match(/^var\((--[\w-]+)\)/);
@@ -4645,8 +4694,8 @@ const noValue = (field) => ({ [field]: { $exists: false } });
 async function emptyCount(type, field) { if (!backendUp()) return 0; try { return (await api(`/classes/${encodeURIComponent(type)}?count=1&limit=0&where=${encodeURIComponent(JSON.stringify(noValue(field)))}`)).count ?? 0; } catch { return 0; } }
 /** Runs a change on the development backend; a refusal is said, and the caller writes nothing to the project. */
 async function onBackend(what, fn) { try { await fn(); return true; } catch (e) { toast(`${what}: ${e.message}`); return false; } }
-$('newtype').onclick = async () => {
-  const name = (prompt('Name of the new data type (a collection), e.g. Task') || '').trim();
+$('newtype').onclick = async (e) => {
+  const name = (await askName(e, 'Name of the new data type (a collection), e.g. Task')) || '';
   if (!name) return;
   if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name)) return toast('A type’s name starts with a letter and has only letters, digits and _');
   if (typeNamesHere().includes(name)) return toast('That type exists');
@@ -4713,7 +4762,7 @@ function syncCards(main, t) {
   if (d.onlyBackend.length) card(`On the development database but not in the project: ${d.onlyBackend.map((c) => `${c.name} (${c.type})`).join(', ')}. Something other than Studio added them: Claude Code, the NodeGX editor, or the app’s import.`,
     h('button', { class: 'primary', onclick: () => { editProject((list) => { list.find((x) => x.name === t.name).columns.push(...d.onlyBackend.map(projectColumn)); }); renderData(); } }, 'Declare them in the project'));
   for (const r of d.retyped) card(`${r.name} is ${r.project.type}${r.project.targetClass ? ` → ${r.project.targetClass}` : ''} in the project and ${r.backend.type}${r.backend.targetClass ? ` → ${r.backend.targetClass}` : ''} on the development database.`,
-    h('button', { onclick: async () => { if (!confirm(`Change ${r.name} on the development database to ${r.project.type}? Values that don’t convert are lost.`)) return; await onBackend(`${r.name} was not changed`, () => schemaAct({ action: 'changeColumnType', table: t.name, column: r.name, type: r.project.type })); renderData(); } }, `Make the backend’s ${r.project.type}`),
+    h('button', { onclick: async () => { if (!(await askSure(`Change ${r.name} on the development database to ${r.project.type}? Values that don’t convert are lost.`, { yes: 'Change it' }))) return; await onBackend(`${r.name} was not changed`, () => schemaAct({ action: 'changeColumnType', table: t.name, column: r.name, type: r.project.type })); renderData(); } }, `Make the backend’s ${r.project.type}`),
     h('button', { onclick: () => { editProject((list) => { const cols = list.find((x) => x.name === t.name).columns; cols[cols.findIndex((x) => x.name === r.name)] = projectColumn(r.backend); }); renderData(); } }, `Make the project’s ${r.backend.type}`));
   // Required, which the backend's own diff never compares: made required on the backend only when no row is without a value
   const word = (on) => (on ? 'required' : 'optional');
@@ -4889,7 +4938,7 @@ async function saveField(t, col, d, records, why, picked = new Set()) {
       if (mine.length) await onBackend('Renamed, but its rules were not put back', () => schemaAct({ action: 'setChecks', table: t.name, checks: [...F.rulesWithout(checks, col.name), ...mine.map((r) => ({ ...r, field: name }))] }));
     }
     if (up && from.storage !== to.storage) {
-      if (!confirm(`Change ${name} from ${from.label} to ${to.label}? ${records ? `Its values in ${F.recordsWord(records)} are converted; ones that don’t convert are lost.` : ''}`)) return;
+      if (!(await askSure(`Change ${name} from ${from.label} to ${to.label}? ${records ? `Its values in ${F.recordsWord(records)} are converted; ones that don’t convert are lost.` : ''}`, { yes: 'Change it' }))) return;
       let r; if (!(await onBackend(`${name} was not changed`, async () => { r = await schemaAct({ action: 'changeColumnType', table: t.name, column: name, type: to.storage }); }))) return;
       if (r?.convertedValues) toast(`${r.convertedValues} value(s) converted to ${to.label}`);
     }
@@ -4918,7 +4967,7 @@ async function saveField(t, col, d, records, why, picked = new Set()) {
 async function deleteField(t, col) {
   const records = await rowCount(t.name);
   const sure = fieldReaders(allComponents(), t.name, col.name).filter((r) => r.sure);
-  if (!confirm(`Delete the field ${col.name} from ${t.name}?${t.onBackend && records ? ` On the development database, ${F.recordsWord(records)} lose their ${col.name}.` : ''}${sure.length ? ` ${sure.length} place${sure.length === 1 ? '' : 's'} in the app still name${sure.length === 1 ? 's' : ''} it (${sure.slice(0, 3).map((r) => r.label).join(', ')}${sure.length > 3 ? ', …' : ''}).` : ''}`)) return;
+  if (!(await askSure(`Delete the field ${col.name} from ${t.name}?${t.onBackend && records ? ` On the development database, ${F.recordsWord(records)} lose their ${col.name}.` : ''}${sure.length ? ` ${sure.length} place${sure.length === 1 ? '' : 's'} in the app still name${sure.length === 1 ? 's' : ''} it (${sure.slice(0, 3).map((r) => r.label).join(', ')}${sure.length > 3 ? ', …' : ''}).` : ''}`, { yes: 'Delete field' }))) return;
   if (backendUp() && t.onBackend && t.backendColumns.some((c) => c.name === col.name)) {
     const checks = liveTables.find((x) => x.name === t.name)?.checks;
     if (F.rulesOn(col.name, checks).length && !(await onBackend('Not deleted', () => schemaAct({ action: 'setChecks', table: t.name, checks: F.rulesWithout(checks, col.name) })))) return;
@@ -4929,7 +4978,7 @@ async function deleteField(t, col) {
 }
 async function deleteType(t) {
   const records = t.onBackend ? await rowCount(t.name) : 0;
-  if (!confirm(`Delete the type ${t.name}?${t.onBackend ? ` Its table on the development database goes, with ${F.recordsWord(records)}.` : ''}${t.usedByApp ? ' The app’s Record nodes that name it will find nothing.' : ''}`)) return;
+  if (!(await askSure(`Delete the type ${t.name}?${t.onBackend ? ` Its table on the development database goes, with ${F.recordsWord(records)}.` : ''}${t.usedByApp ? ' The app’s Record nodes that name it will find nothing.' : ''}`, { yes: 'Delete type' }))) return;
   if (backendUp() && t.onBackend && !(await onBackend('Not deleted', () => schemaAct({ action: 'deleteTable', table: t.name })))) return;
   if (t.declared) editProject((list) => { const at = list.findIndex((c) => c.name === t.name); if (at >= 0) list.splice(at, 1); });
   selType = null; renderData();
@@ -5220,7 +5269,7 @@ async function newPerson(own) {
   } }, 'Add')]);
 }
 async function deletePeople(ids) {
-  if (!confirm(`Delete ${ids.length} account(s) from the ${env} database? They are signed out everywhere and can no longer sign in.`)) return;
+  if (!(await askSure(`Delete ${ids.length} account(s) from the ${env} database? They are signed out everywhere and can no longer sign in.`))) return;
   let gone = 0;
   for (const id of ids) { try { await envApi(`/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE' }); gone++; app.picked.delete(id); } catch (e) { toast(e.message); break; } }
   toast(`${gone} account(s) deleted`); renderAppData();
@@ -5281,7 +5330,7 @@ async function newRow(t, cols) {
   } }, 'Create')]);
 }
 async function deleteRows(t, ids) {
-  if (!confirm(`Delete ${ids.length} row(s) of ${t.name} from the ${env} database?`)) return;
+  if (!(await askSure(`Delete ${ids.length} row(s) of ${t.name} from the ${env} database?`))) return;
   let gone = 0;
   for (const id of ids) { try { await envApi(`/classes/${encodeURIComponent(t.name)}/${id}`, { method: 'DELETE' }); gone++; app.picked.delete(id); } catch (e) { toast(e.message); break; } }
   toast(`${gone} row(s) deleted`); renderAppData();
@@ -5293,8 +5342,10 @@ function exportMenu(e, t) {
     closeMenu();
     try {
       const { content, count } = await envApi(`/admin/export/${encodeURIComponent(t.name)}?format=${format}`);
-      const a = h('a', { href: URL.createObjectURL(new Blob([content], { type: format === 'csv' ? 'text/csv' : 'application/json' })), download: `${t.name}-${env}.${format}` });
-      document.body.append(a); a.click(); a.remove();
+      const name = `${t.name}-${env}.${format}`, mimeType = format === 'csv' ? 'text/csv' : 'application/json';
+      // STU-082: inside a conversation the frame cannot download; the host saves it, or the toast says why not
+      if (window.__hostSave) await window.__hostSave({ name, mimeType, text: content });
+      else { const a = h('a', { href: URL.createObjectURL(new Blob([content], { type: mimeType })), download: name }); document.body.append(a); a.click(); a.remove(); }
       toast(`${count} row(s) of ${t.name} exported`);
     } catch (err) { toast(err.message); }
   };
@@ -5376,8 +5427,9 @@ function renderEnvBar() {
     h('button', { 'data-act': 'copy-rows', disabled: !liveUp(), onclick: copyDrawer }, 'Copy rows…'));
 }
 async function makeLive(e) {
-  if (!confirm('Make a live database for this app?\n\nIt is a second backend on this computer. Publish points the app at it, so what people do in the published app lands there, not in development. Development’s types and rules are copied into it now; its rows start empty (Copy rows… brings some across).')) return;
-  const b = e.currentTarget; b.disabled = true; b.textContent = 'Making the live database…';
+  const b = e.currentTarget; // read before the question: an event's currentTarget is null once its dispatch is over
+  if (!(await askSure('Make a live database for this app?\n\nIt is a second backend on this computer. Publish points the app at it, so what people do in the published app lands there, not in development. Development’s types and rules are copied into it now; its rows start empty (Copy rows… brings some across).', { yes: 'Make it', danger: false }))) return;
+  b.disabled = true; b.textContent = 'Making the live database…';
   const r = await fetch('/api/live-provision', { method: 'POST' }); const j = await r.json();
   if (!r.ok) { toast(j.error); b.disabled = false; b.textContent = 'Make a live database'; return; }
   takeLive(j); toast(`Live database ready at ${hostOf(j.endpoint)}${j.done?.length ? ` · ${j.done.length} change(s) deployed` : ''}`); renderData();
@@ -5427,10 +5479,10 @@ async function copyDrawer() {
 
 /* ---- option sets: a logic component with one Static Data node (JSON) and Component Outputs (Items, Count) ---- */
 const ATTR_TYPES = ['text', 'number', 'yes / no', 'date'];
-$('newoptset').onclick = () => {
-  const name = prompt('Name of the option set (e.g. Colours, Countries, Priorities)');
+$('newoptset').onclick = async (e) => {
+  const name = await askName(e, 'Name of the option set (e.g. Colours, Countries, Priorities)');
   if (!name) return;
-  const key = `Option sets/${name.trim()}`;
+  const key = `Option sets/${name}`;
   if (registry()[key]) return toast('That option set exists');
   createComponent(key, 'logic', [
     { id: 'data', type: 'Static Data', label: `${name} · the options`, x: 100, y: 100, parameters: { type: 'json', json: '[]' } },
@@ -5465,7 +5517,7 @@ function renderOptionSets() {
     h('td', {}, i === 0 ? h('span', {}, a.name, h('span', { class: 'note', style: 'margin-left:8px' }, 'built in')) : h('input', { type: 'text', value: a.name, onchange: (e) => { const old = a.name; a.name = slug(e.target.value); writeOptionSet(set, { attributes: attrs, options: set.options.map((o) => { const { [old]: v, ...rest } = o; return { ...rest, [a.name]: v }; }) }); } })),
     h('td', {}, h('select', { onchange: (e) => { a.type = e.target.value; writeOptionSet(set, { attributes: attrs }); } }, ...ATTR_TYPES.map((t) => h('option', { value: t, selected: a.type === t }, t)))),
     h('td', {}, i === 0 ? '' : h('button', { class: 'quiet tiny danger', onclick: () => { attrs.splice(i, 1); writeOptionSet(set, { attributes: attrs, options: set.options.map((o) => { const { [a.name]: _, ...rest } = o; return rest; }) }); } }, icon('x'))))));
-  card.append(at, h('div', { class: 'bar' }, h('button', { onclick: () => { const name = prompt('Attribute name'); if (!name) return; attrs.push({ name: slug(name), type: 'text' }); writeOptionSet(set, { attributes: attrs }); } }, icon('plus'), 'New attribute')));
+  card.append(at, h('div', { class: 'bar' }, h('button', { onclick: async (e) => { const name = await askName(e, 'Attribute name', { go: 'Add' }); if (!name) return; attrs.push({ name: slug(name), type: 'text' }); writeOptionSet(set, { attributes: attrs }); } }, icon('plus'), 'New attribute')));
   main.append(card);
   // options
   const oc = h('div', { class: 'card' }, h('h4', {}, 'Options'));
@@ -5476,7 +5528,7 @@ function renderOptionSets() {
   const addOpt = () => { if (!newRow.value.trim()) return; options.push({ [attrs[0].name]: newRow.value.trim() }); writeOptionSet(set, { options }); };
   oc.append(ot, h('div', { class: 'bar' }, newRow, h('button', { class: 'primary', onclick: addOpt }, icon('plus'), 'Create')));
   main.append(oc);
-  main.append(h('div', { class: 'bar' }, h('button', { class: 'quiet danger', onclick: () => { if (!confirm(`Delete the option set ${set.name}? Pages that read it keep a dangling instance.`)) return; snapshot(); store.deleteComponent(set.key); persist(); rebuild(); selSet = null; renderData(); } }, icon('trash'), 'Delete option set')));
+  main.append(h('div', { class: 'bar' }, h('button', { class: 'quiet danger', onclick: async () => { if (!(await askSure(`Delete the option set ${set.name}? Pages that read it keep a dangling instance.`))) return; snapshot(); store.deleteComponent(set.key); persist(); rebuild(); selSet = null; renderData(); } }, icon('trash'), 'Delete option set')));
 }
 
 /* ================= Styles: the project's variants in nodegx.styles.json, by element type (Bubble's styles, NodeGX's Looks) ================= */
@@ -5485,8 +5537,8 @@ const stylesFile = () => store.readStyles() || { version: 2 };
 const writeStyles = (s) => writeJsonFile('nodegx.styles.json', s);
 const variantsFor = (typename) => (stylesFile().variants || []).filter((v) => v.typename === typename);
 const NOT_STYLE = new Set(['text', 'label', 'placeholder', 'source', 'value', 'checked', 'items', 'sizeMode', 'width', 'height', 'marginTop', 'marginBottom', 'marginLeft', 'marginRight', 'position', 'flexDirection', 'alignX', 'alignY', 'urlPath', 'title']);
-function saveAsStyle(node) {
-  const name = prompt(`Name of the style for every ${typeName(node.type)} (e.g. Primary, Outline, Danger)`);
+async function saveAsStyle(node, at) {
+  const name = await askName(at, `Name of the style for every ${typeName(node.type)} (e.g. Primary, Outline, Danger)`, { go: 'Save' });
   if (!name) return;
   const s = stylesFile(); s.variants ??= [];
   if (s.variants.some((v) => v.typename === node.type && v.name === name)) return toast('A style of that name exists for this type');
@@ -5501,7 +5553,7 @@ $('newstyle').onclick = (e) => {
   closeMenu();
   const menu = popover(e);
   menu.append(h('div', { class: 'h' }, 'A style for which element?'));
-  for (const t of STYLE_TYPES.filter((t) => libIndex.has(t))) menu.append(h('div', { class: 'item', onclick: () => { closeMenu(); const name = prompt(`Name of the new ${typeName(t)} style`); if (!name) return; const s = stylesFile(); s.variants ??= []; if (s.variants.some((v) => v.typename === t && v.name === name)) return toast('That style exists'); s.variants.push({ name, typename: t, parameters: {}, stateParameters: {}, stateTransitions: {}, defaultStateTransitions: {} }); writeStyles(s); selStyle = { typename: t, name }; renderStyles(); } }, icon(glyphOf(t)), typeName(t)));
+  for (const t of STYLE_TYPES.filter((t) => libIndex.has(t))) menu.append(h('div', { class: 'item', onclick: async () => { const name = await askName($('newstyle'), `Name of the new ${typeName(t)} style`); if (!name) return; const s = stylesFile(); s.variants ??= []; if (s.variants.some((v) => v.typename === t && v.name === name)) return toast('That style exists'); s.variants.push({ name, typename: t, parameters: {}, stateParameters: {}, stateTransitions: {}, defaultStateTransitions: {} }); writeStyles(s); selStyle = { typename: t, name }; renderStyles(); } }, icon(glyphOf(t)), typeName(t)));
   document.body.append(menu); dismissOnOutside(menu);
 };
 function renderStyles() {
@@ -5531,7 +5583,7 @@ function renderStyles() {
   const card = h('div', { class: 'card' }, h('h4', {}, `Elements wearing it · ${wearers.length}`));
   if (!wearers.length) card.append(h('div', { class: 'note' }, 'None yet. Select an element in Design and pick this style at the top of its properties.'));
   for (const w of wearers.slice(0, 40)) card.append(h('div', { class: 'row', onclick: () => { if (registry()[w.key]?.type === 'page') { pageKey = w.key; readGraph(); } sel = w.id; switchTab('design'); rebuild(0); } }, icon(glyphOf(v.typename)), w.label, h('span', { class: 't' }, w.key)));
-  main.append(card, h('div', { class: 'bar' }, h('button', { class: 'quiet danger', onclick: () => { if (!confirm(`Delete the style ${v.name}? The ${wearers.length} element(s) wearing it fall back to their own properties.`)) return; const s = stylesFile(); s.variants = s.variants.filter((x) => x !== v); writeStyles(s); selStyle = null; renderStyles(); } }, icon('trash'), 'Delete style')));
+  main.append(card, h('div', { class: 'bar' }, h('button', { class: 'quiet danger', onclick: async () => { if (!(await askSure(`Delete the style ${v.name}? The ${wearers.length} element(s) wearing it fall back to their own properties.`))) return; const s = stylesFile(); s.variants = s.variants.filter((x) => !(x.typename === v.typename && x.name === v.name)); /* P128-S4-STYLEDELETE: the file is read afresh, so `x !== v` kept every style */ writeStyles(s); selStyle = null; renderStyles(); } }, icon('trash'), 'Delete style')));
   // the style's properties, edited with the same fields as an element's
   props.append(h('div', { class: 'head' }, h('input', { type: 'text', value: v.name, onchange: (e) => { const name = e.target.value.trim(); if (!name) return; const s = stylesFile(); const me = s.variants.find((x) => x.typename === v.typename && x.name === v.name); me.name = name; writeStyles(s); for (const w of wearers) edits(w.key, [{ edit: 'set_variant', component: w.key, id: w.id, variant: name }], { redraw: false }); selStyle.name = name; renderStyles(); } }), h('span'), h('div', { class: 'type' }, `a style of ${typeName(v.typename)}`)));
   const wrap = h('div', { class: 'props' });

@@ -1542,6 +1542,39 @@ Required either way).
 
 ---
 
+## STU-082 — Studio asks in its own controls, and the sandbox census (NodeGX P128 S4, 2026-10-27)
+
+**Why.** Richard's Muddy Paws run in Claude Desktop: *"When I click 'add' in option sets, I can't add, nothing
+happens."* Studio asked names with `prompt()` and yeses with `confirm()`. Electron implements no `prompt()`, and a
+host draws the panel in a frame with no `allow-modals`, where both answer nothing (NodeGX P125-MUDDY-NATIVEDIALOG).
+
+**Built (NodeGX Beta sweep s21, as P128 S4).** `askName(at, question)`: a field under what was pressed (Enter or
+Create gives the name, Esc, Cancel or a click outside gives none). `askSure(message, { yes, danger })`: a card over
+the page (Cancel focused on a delete, so Enter alone never deletes). All 5 `prompt()` and 9 `confirm()` are gone from
+`studio.html`, and the gates' `window.prompt`/`window.confirm` stubs are gone with them: `check:editor` and `check:data`
+type into the field and press the card. Found and fixed on the way: Delete style never deleted (NodeGX
+P128-S4-STYLEDELETE: the styles file is read afresh, so `x !== v` kept every style), and Make a live database read its
+click's `currentTarget` after the question, by then null.
+
+**The census.** Each of Studio's browser-gated actions, driven once with a real mouse click in the fake host's frame
+(`allow-scripts allow-same-origin allow-forms`) and, as the control, in Studio opened directly:
+
+| action | where | in the host's frame | opened directly | now |
+|---|---|---|---|---|
+| a name (`prompt()`) | New type, option set, attribute, style, Save as a style | nothing asked, nothing made | (Electron: not implemented) | Studio's field; `check:hosted`, `check:app` 2c |
+| a yes (`confirm()`) | 9 deletes and changes | refused | asked | Studio's card; same gates |
+| Export → As CSV / JSON (`<a download>` of a blob) | App data | **no download began, no file, and the toast said "1 row(s) of Task exported"** | downloaded (`Task-development.csv`) | inside a host the file goes to the host's `ui/download-file` (`window.__hostSave`, hosted.js); a host that does not offer it gets a sentence pointing at Window ↗; `check:hosted` |
+| Import… (a file input clicked inside the button's click) | App data | the chooser opened | the chooser opened | unchanged |
+| Upload an image… (the same mechanism) | an Image's source | not driven (todo-list has no Image) | — | unchanged; same mechanism as Import |
+| Copy (`navigator.clipboard`) | the agent panel | not driven (the panel was not on screen) | — | unchanged; it already says "Select it and copy" when refused. The fake host serves the panel from its own origin, so it cannot grade a cross-origin clipboard refusal anyway |
+| `window.open`, `alert()`, `target=_blank` | — | none in `studio.html` (hosted.js opens through the host's `ui/open-link`) | — | — |
+
+**Open.** Whether Claude Desktop offers `downloadFile` is not measured: the fake host offers it. Seen in the hosted
+arm and filed, not fixed: NodeGX P128-S4-HOSTEDPUSHSTATE (the app preview's router pushes a URL on Studio's origin
+inside the host's document and throws `SecurityError`).
+
+---
+
 ## Rulings open
 
 | id | question | from |
