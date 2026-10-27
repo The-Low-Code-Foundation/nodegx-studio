@@ -85,13 +85,40 @@ bundleNode();
 // extension's tools reach the chat only when the manifest's `name` and the server's `serverInfo.name` match.
 const extensionName = 'nodegx';
 
+/**
+ * The install sheet's words (NodeGX P128 S3b step 7): a person reads them before Claude Desktop installs anything. The
+ * canon's own sentences (NodeGX `docs/CANON.md`, "What NodeGX is for"), quoted word for word under their markers, so
+ * NodeGX's `node scripts/canon-check.mjs <this file>` fails when one drifts; then one line on what this file is,
+ * passed through the content-authoring checks. No version numbers and no package names: the sheet is for a person.
+ */
+const SHEET = [
+  // <!-- canon: What NodeGX is for -->
+  `Your AI coder can already build you a whole app. NodeGX is about what happens around that.`
+
+  ,
+  // <!-- canon: What NodeGX is for -->
+  `While it builds, you are not left out and you are not buried in questions. The AI makes the small decisions and
+  carries on. The decisions that are yours, it shows you: the part itself, in the chat, with its settings and an
+  Approve button. If you don't like where the build is going, you press Hold. The AI stops at its next change and asks
+  what you saw.`
+
+  ,
+  // <!-- canon: What NodeGX is for -->
+  `When it's finished, the app is yours in a way code from an agency never is. The project is a folder of files on your
+  computer. NodeGX Studio is installed beside it: an open-source editor for pages, elements, workflows and data. Change
+  a heading, a font, a button colour or a translation yourself. It works without the AI.`
+
+  ,
+  `This extension installs NodeGX and Studio together. There's nothing else to download.`
+].map((p) => p.replace(/\s*\n\s*/g, ' '));
+
 const manifest = {
   manifest_version: '0.3',
   name: extensionName,
   display_name: 'NodeGX',
   version: mcpVersion,
   description: 'Build an app with Claude and watch it come together in NodeGX Studio, right in the conversation. Stop Claude any time, change something yourself, and it carries on from your change.',
-  long_description: `NodeGX apps are plain files on your computer: pages, workflows, data and privacy rules you can open and change in NodeGX Studio, with or without Claude. This extension carries the NodeGX server (@nodegx/mcp ${mcpVersion}) and Studio's editor (nodegx-studio ${pkg.version}), so nothing else needs installing. Ask Claude to make you an app; Studio opens beside the conversation. Press Hold in Studio and Claude stops writing until you release it.`,
+  long_description: SHEET.join('\n\n'),
   author: { name: 'The Low-Code Foundation', url: 'https://nodegx.io' },
   homepage: 'https://nodegx.io',
   repository: { type: 'git', url: 'https://github.com/The-Low-Code-Foundation/nodegx-studio' },

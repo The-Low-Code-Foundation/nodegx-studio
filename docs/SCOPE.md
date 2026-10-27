@@ -1668,8 +1668,11 @@ editor … a sort of canon lore page of the NodeGX universe"*. And CPY-002: Stud
   a button colour or a translation yourself."* Both from the canon's *When it's finished*, under a `<!-- canon: What
   NodeGX is for -->` marker: NodeGX `node scripts/canon-check.mjs app/welcome.html editor/hosted/hosted.js
   editor/studio.html` passes (24 quotes), and fails on a copy of hosted.js with "colour" made "color".
-- **Option sets, empty:** *"No option sets yet. Make one for each fixed list your app picks from, like its languages or a
-  visit's statuses."*, and the page beside it the same in its own sentence.
+- **Option sets, empty:** *"This app has no option sets yet. An option set is a fixed list of choices. The languages
+  your app offers are one. The statuses a task can have are another."* (the page beside it opens *"Pick an option set,
+  or make one."*). Passed through the content-authoring skill's offline checks (`written closer contract opener
+  figures rollercoaster`): no flags but rollercoaster's reanalysis counts; two earlier drafts were flagged and rewritten
+  (a lead-in fragment, and *", like its languages or a visit's statuses"* hung after a finished sentence).
 
 **Graded.** `check:editor` 217/217 (4 new: the rail's ? opens Help with the canon's headings in its order, read from
 `kit.canon`; the three links as buttons to the canon's addresses; the person's words and not the keepers' note; Esc
@@ -1715,6 +1718,16 @@ Members*, kept on the backend and in `nodegx.automations.json`, is drawn on the 
 wired `fires → f:List Role Members` and `watches → t:Task`. The gate's `click` now finds and clicks in one step
 (NodeGX P128-BETA-HOSTEDCLICKRACE: a re-render between a wait and a separate click aborted the gate once in twelve
 runs). `check:data` 80/80, `check:automations` 31/31 + 29/29, `check:functions` 695/695 + 46/46.
+
+## The bundle's install sheet, from the canon (NodeGX P128 S3b step 7; Beta round, 2026-10-27)
+
+`scripts/mcpb.mjs`'s `long_description`, what Claude Desktop's install sheet shows, named `@nodegx/mcp 0.2.7` and
+`nodegx-studio 0.1.0`, jargon to a non-coder. It is now `SHEET`: three runs of the canon's *What NodeGX is for*, word
+for word under `<!-- canon: -->` markers (NodeGX `node scripts/canon-check.mjs scripts/mcpb.mjs` passes 3 quotes),
+then one line of ours, *"This extension installs NodeGX and Studio together. There's nothing else to download."*,
+passed through the content-authoring skill's offline checks with no flag (`written closer contract opener figures`;
+rollercoaster's counts only). A manifest with the new sheet passes `mcpb validate` (2.1.2). **No `.mcpb` was built**:
+the next `npm run mcpb` carries it.
 
 ## Rulings open
 

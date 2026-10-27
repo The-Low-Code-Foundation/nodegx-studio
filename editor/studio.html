@@ -914,7 +914,7 @@
           <h3 class="sec">Option sets <button class="tiny primary" id="newoptset"><svg class="i"><use href="#i-plus"/></svg>New</button></h3>
           <div class="types list" id="optsets"></div>
         </aside>
-        <div id="optmain"><div class="empty">Pick an option set, or make one. An option set is a fixed list your app picks from, like its languages or a visit's statuses. It loads with the page, with no request and no backend.</div></div>
+        <div id="optmain"><div class="empty">Pick an option set, or make one. An option set is a fixed list of choices. The languages your app offers are one. The statuses a task can have are another.</div></div>
       </div>
     </section>
 
@@ -5860,10 +5860,10 @@ function writeOptionSet(set, { attributes, options }) {
 function renderOptionSets() {
   const box = $('optsets'); box.innerHTML = '';
   for (const k of optionSetKeys()) { const s = optionSet(k); box.append(h('div', { class: 'row', 'aria-selected': selSet === k, onclick: () => { selSet = k; renderData(); } }, icon('list'), s.name, h('span', { class: 't' }, `${s.options.length} option(s)`))); }
-  if (!box.children.length) box.append(h('div', { class: 'hint' }, 'No option sets yet. Make one for each fixed list your app picks from, like its languages or a visit’s statuses.'));
+  if (!box.children.length) box.append(h('div', { class: 'hint' }, 'This app has no option sets yet. An option set is a fixed list of choices. The languages your app offers are one. The statuses a task can have are another.'));
   const main = $('optmain'); main.innerHTML = '';
   const set = selSet && optionSet(selSet);
-  if (!set) { main.append(h('div', { class: 'empty' }, 'Pick an option set, or make one. An option set is a fixed list your app picks from, like its languages or a visit’s statuses. It loads with the page, with no request and no backend.')); return; }
+  if (!set) { main.append(h('div', { class: 'empty' }, 'Pick an option set, or make one. An option set is a fixed list of choices. The languages your app offers are one. The statuses a task can have are another.')); return; }
   main.append(h('h2', {}, set.name), h('div', { class: 'bar', style: 'margin-top:-6px' }, h('span', { class: 'note' }, `Read it anywhere as `, h('b', {}, `${set.name} · all options`), ` — the component `, h('code', {}, `/${set.key}`), `, one Static Data node, loaded with the page.`)));
   // attributes
   const card = h('div', { class: 'card' }, h('h4', {}, 'Attributes (fields that describe each option)'));
