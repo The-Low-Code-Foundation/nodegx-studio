@@ -111,6 +111,7 @@ strip.innerHTML = `
   <button id="fullbtn" title="Studio over the whole conversation" ${hosted ? '' : 'hidden'}>Full screen</button>
   <button id="wakebtn" title="Studio is live in the newest answer; this brings it back to this one">Bring it back here</button>
   <button id="striphelp" title="Help: what NodeGX is for, and where to get the tools" ${hosted ? '' : 'hidden'}>?</button>
+  <button id="previewbtn" title="The app alone in your browser, full window: it changes as Studio and the agent change it" ${hosted ? '' : 'hidden'}>Preview ↗</button>
   <button id="windowbtn" title="Studio in its own window: the desktop app if it is installed, otherwise your browser" ${hosted ? '' : 'hidden'}>Window ↗</button>
 `;
 document.documentElement.insertBefore(strip, document.body ?? null);
@@ -289,6 +290,11 @@ $('dockbtn').addEventListener('click', async () => {
 // host; the browser otherwise. NodeGX's proxy answers `/__nodegx/open-app` by launching the app on the project's
 // folder ({ opened: false } when it is not installed). Studio serving the panel itself has no such path: a 404 here,
 // and the browser.
+// P128 S7 (STU-080): Preview, the app alone in a browser tab (serve.mjs /app), through the host: the frame opens no window.
+// Only looking, so the hold does not come into it
+$('previewbtn').addEventListener('click', async () => {
+  try { await app.openLink({ url: ORIGIN + '/app' }); } catch (e) { say(`could not open the preview: ${e.message}`); }
+});
 // STU-083: Help, Studio's own page of the canon (studio.html's openHelp), from the strip as from the rail
 $('striphelp').addEventListener('click', () => window.__ob?.openHelp?.());
 $('windowbtn').addEventListener('click', async () => {

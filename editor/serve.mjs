@@ -31,6 +31,7 @@
  *   POST /api/live-promote      { allowDestructive } Deploy to live; refused with the plan when it would lose something
  *   POST /api/live-copy         { from: 'development' | 'live', types: [], dryRun } rows from one to the other
  *   GET  /fields.js        STU-061: the backend manager's field kinds (vendor/fields.js, or bundled from NODEGX_REPO)
+ *   GET  /app              P128 S7 (STU-080): Preview, the app alone, full window, drawn again on each change to the project
  *   GET  /api/canon        P128 S5 (STU-083): NodeGX's `docs/CANON.md` as vendored (or the checkout's), which Help draws
  *   GET  /api/agent        STU-005: Claude Code and this folder (`lib/agent.mjs` stateOf): `{ state, serverName, command, … }`
  *   POST /api/agent-connect     "Connect Claude Code": the NodeGX editor's writer of `.mcp.json`, `CLAUDE.md`, `AGENTS.md`
@@ -443,6 +444,47 @@ const panelHtml = (origin) =>
     .replace(/(import\(|from\s+)(['"])\.?\/(?!\/)/g, `$1$2${origin}/`)
     .replace(/<script type="module">/, '<script type="module">\nawait window.__studioReady;\n');
 
+/** P128 S7 (STU-080): Preview, the app alone in a browser tab, full window, beside Studio. The same in-page preview Studio
+    draws in Design, mounted on the whole page; it follows the project folder (`/api/events`: a change Studio saves, the
+    agent writes or anyone else makes) and draws again, without a reload. It only looks: nothing here writes. */
+const APP_PAGE = `<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Preview — NodeGX Studio</title>
+<style>html, body { margin: 0; height: 100%; background: #fff; } #app { position: fixed; inset: 0; } #app > * { width: 100%; height: 100%; border: 0; }
+#said { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); font: 13px system-ui, sans-serif; color: #fff; background: #14181f; padding: 6px 12px; border-radius: 8px; opacity: 0; transition: opacity .3s; pointer-events: none; }
+#said.on { opacity: .92; }</style>
+<div id="app"></div><div id="said" role="status" aria-live="polite"></div>
+<script src="/preview.js"></script>
+<script type="module">
+const said = document.getElementById('said');
+const say = (t, ms = 2500) => { said.textContent = t; said.classList.add('on'); clearTimeout(say.t); if (ms) say.t = setTimeout(() => said.classList.remove('on'), ms); };
+const opened = await (await fetch('/api/project?look=1')).json();
+document.title = opened.name + ' — Preview';
+const files = { ...opened.files };
+const preview = await NodegxPreview.mountPreview(document.getElementById('app'), { runtimeBase: '/runtime/' });
+let draws = 0;
+const draw = async () => {
+  const r = await preview.update({ ...files });
+  draws++;
+  document.documentElement.dataset.draws = String(draws);
+  document.documentElement.dataset.status = r?.status ?? '';
+  if (r?.status !== 'ok') say('The app is not shown: ' + (r?.report?.diagnostics?.find((d) => d.severity === 'error')?.message || r?.message || r?.status), 0);
+  else if (draws > 1) say('Changed in the project: drawn again');
+};
+await draw();
+let soon = null;
+const events = new EventSource('/api/events?client=preview-' + Math.random().toString(36).slice(2));
+events.onmessage = (m) => {
+  let e; try { e = JSON.parse(m.data); } catch { return; }
+  if (!e.changed && !e.removed) return;
+  for (const [p, t] of Object.entries(e.changed || {})) files[p] = t;
+  for (const p of e.removed || []) delete files[p];
+  clearTimeout(soon); soon = setTimeout(draw, 250);
+};
+window.__preview = { get draws() { return draws; }, preview };
+</script>
+`;
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const send = (status, body, type) => {
@@ -453,6 +495,7 @@ const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'OPTIONS') { res.writeHead(204, CORS); return res.end(); }
     if (url.pathname === '/') return send(200, readFileSync(join(here, 'studio.html')), types['.html']);
+    if (url.pathname === '/app') return send(200, APP_PAGE, types['.html']);
     if (url.pathname === '/panel') return send(200, panelHtml(`http://127.0.0.1:${server.address().port}`), types['.html']);
     if (url.pathname === '/api/vocabulary') return send(200, readFileSync(join(here, 'vocabulary.json')), types['.json']);
     if (url.pathname === '/api/canon') return existsSync(kit.canon) ? send(200, readFileSync(kit.canon), 'text/markdown; charset=utf-8') : json(404, { error: 'This Studio carries no canon (vendor/docs/CANON.md)' });
@@ -505,8 +548,8 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === '/api/project' && req.method === 'GET') {
       const files = projectFiles(projectDir);
-      known.clear();
-      for (const [p, t] of Object.entries(files)) known.set(p, t);
+      // STU-080: the Preview page only looks; what Studio last read stays what Studio last read
+      if (!url.searchParams.has('look')) { known.clear(); for (const [p, t] of Object.entries(files)) known.set(p, t); }
       return json(200, { dir: projectDir, name: projectDir.split(sep).pop(), files, backend, live });
     }
     if (url.pathname === '/api/events') {

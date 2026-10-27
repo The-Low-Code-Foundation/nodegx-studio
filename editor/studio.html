@@ -839,6 +839,7 @@
     <button class="status backend" id="backendpill" title="The app's backend">…</button>
     <button class="status backend off" id="agentpill" title="Claude Code and this app">Claude Code</button>
     <button class="status backend" id="reportpill" hidden title="What the import converted, and what it could not">Import report</button>
+    <button class="quiet" id="apppreviewbtn" title="The app alone in your browser, full window: it changes as Studio and the agent change it">Preview ↗</button>
     <button class="primary" id="publishbtn" hidden title="Publish the app as a site, written by NodeGX's own deploy">Publish</button>
     <button class="quiet more" id="morebtn" hidden title="More: what the header has no room for" aria-haspopup="true">⋯</button>
     <div id="moremenu" hidden><button class="quiet" id="morehelp" title="What NodeGX is for, and where to get the tools">Help</button></div>
@@ -3200,6 +3201,10 @@ async function openHelp(heading = null) {
 }
 function closeHelp() { $('helppanel').hidden = true; }
 $('helpbtn').onclick = () => openHelp();
+// P128 S7 (STU-080): Preview ↗, the app alone in a browser tab (serve.mjs /app), drawn again on every change to the project.
+// In a conversation the strip carries it (hosted.js), beside Window ↗; the desktop app hands the link to the browser
+$('apppreviewbtn').hidden = !!window.__STUDIO_ORIGIN;
+$('apppreviewbtn').onclick = () => openOutside(`${location.origin}/app`);
 $('morehelp').onclick = () => openHelp();
 $('helppanel').querySelector('[data-act=close]').onclick = closeHelp;
 window.__ob.openHelp = openHelp;
@@ -6381,7 +6386,7 @@ function renderAll() {
  * least used first; the menu lists them in the header's order. The elements themselves move, so their handlers and
  * state go with them; each has a comment left where it stood, and every fit puts them all back before measuring.
  */
-const HEADER_FOLD = ['reportpill', 'agentpill', 'backendpill', 'recbtn', 'widthseg', 'previewmode-l', 'publishbtn']; // first to go first
+const HEADER_FOLD = ['apppreviewbtn', 'reportpill', 'agentpill', 'backendpill', 'recbtn', 'widthseg', 'previewmode-l', 'publishbtn']; // first to go first
 function setupHeaderFold() {
   const header = document.querySelector('header'), menu = $('moremenu'), more = $('morebtn');
   const slots = new Map(HEADER_FOLD.map((id) => { const c = document.createComment(id); $(id).after(c); return [id, c]; }));

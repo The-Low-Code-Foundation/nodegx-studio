@@ -24,7 +24,7 @@ import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { browser } from './cdp.mjs';
+import { attach, browser } from './cdp.mjs';
 import { AGENT_FN, makeFunctionAsAgent } from './agentmade-check.mjs';
 import { cspFor, hostPage } from './hosted-host.mjs';
 import { REQUEST } from './fngraph.mjs';
@@ -44,7 +44,7 @@ const project = join(tmp, 'todo-list');
 cpSync(join(kit.templates, 'todo-list'), project, { recursive: true });
 
 const children = [];
-let b, host;
+let b, host, tab;
 try {
   const port = await freePort();
   const server = spawn(process.execPath, [join(here, 'serve.mjs'), project, '--port', String(port)], { stdio: ['ignore', 'pipe', 'pipe'], env: process.env });
@@ -74,7 +74,8 @@ try {
   });
   await new Promise((r) => host.listen(hostPort, '127.0.0.1', r));
 
-  b = await browser({ port: await freePort(), width: 1400, height: 900 });
+  const chromePort = await freePort();
+  b = await browser({ port: chromePort, width: 1400, height: 900 });
   await b.goto(`http://127.0.0.1:${hostPort}/`);
   const P = `document.getElementById('app').contentDocument`;
   const ev = (expr) => b.evaluate(expr);
@@ -280,10 +281,38 @@ try {
     const asked = await until(`(window.__links || []).filter((u) => u === 'https://nodegx.io/start#download').length >= 2 ? true : false`, 6000);
     ok(asked && help.links.includes('https://nodegx.io/your-own-editor') && help.links.includes('https://nodegx.io/start'), "Help's buttons are the canon's links, and one pressed in the frame asks the host to open it", help.links);
   }
+  if (help) await click('#helppanel [data-act=close]');
   ok(/HOLD stops it\. Change a heading, a font, a button colour or a translation yourself\.$/.test(await ev(`${P}.getElementById('hoststate')?.textContent ?? ''`)), "the strip's line ends on what Studio is for, in the canon's words", await ev(`${P}.getElementById('hoststate')?.textContent ?? null`));
+
+  // P128 S7 (STU-080): Preview ↗ beside Window ↗. The host is asked to open Studio's /app; that page, opened in a tab of
+  // its own as the person's browser would, draws the app alone and follows a headline changed in Studio, without a reload
+  console.log('check: STU-080 Preview, the app alone in a tab');
+  await click('#previewbtn');
+  const appUrl = await until(`(window.__links || []).find((u) => u.endsWith('/app')) ?? false`, 6000);
+  ok(appUrl === studio + '/app', 'Preview ↗ in the strip asks the host to open Studio\'s /app', appUrl);
+  if (appUrl) {
+    const { targetId } = await b.send('Target.createTarget', { url: appUrl });
+    tab = await attach({ port: chromePort, match: (t) => t.id === targetId });
+    const T = `window.__preview?.preview?.frame?.contentDocument?.body?.innerText ?? ''`;
+    const first = await tab.until(`document.documentElement.dataset.status === 'ok' && (${T}).includes('Sign in') ? Number(document.documentElement.dataset.draws) : false`, 45000);
+    ok(first === 1, 'the /app tab draws the app alone, full window: the page a visitor lands on (Sign in)', first || await tab.evaluate(`({ status: document.documentElement.dataset.status, text: (${T}).slice(0, 120) })`));
+    await tab.evaluate(`window.__sameDocument = 'yes'`);
+    // the headline, changed in Studio inside the frame as a person changes it: clicked in the page, typed in its Text field
+    await click('[data-tab=design]'); await wait(800);
+    const titleId = await ev(`${P}.defaultView.__ob.store.readComponent('Pages/Sign in').files.nodes.nodes.find((n) => n.label === 'App name')?.id ?? null`);
+    const at = await ev(`(() => { const d = ${P}, w = d.defaultView; const el = w.__ob.preview.elementsOf(${JSON.stringify(titleId)})[0]; if (!el) return null; const r = el.getBoundingClientRect(), o = d.getElementById('overlay').getBoundingClientRect(), f = document.getElementById('app').getBoundingClientRect(); return { x: Math.round(f.left + o.left + r.left + r.width / 2), y: Math.round(f.top + o.top + r.top + r.height / 2) }; })()`);
+    if (at) await b.click(at.x, at.y);
+    const field = await until(`(() => { const f = [...${P}.querySelectorAll('#right .field')].find((x) => x.querySelector('label')?.textContent === 'Text'); const i = f?.querySelector('input,textarea'); if (!i) return false; i.focus(); i.select(); return true; })()`, 8000);
+    if (field) await b.type('Changed in Studio');
+    const onDiskTitle = await onDiskSoon(() => onDisk('components/Pages/Sign in/nodes.json')?.nodes?.find((n) => n.id === titleId)?.parameters?.text === 'Changed in Studio');
+    const followed = await tab.until(`(${T}).includes('Changed in Studio') ? { draws: Number(document.documentElement.dataset.draws), same: window.__sameDocument } : false`, 15000);
+    ok(field && onDiskTitle && followed && followed.draws > 1 && followed.same === 'yes', 'the headline changed in Studio in the conversation changes in the /app tab, drawn again in the same page, no reload', { at, field, onDisk: onDiskTitle, followed, seen: field ? undefined : await ev(`({ head: ${P}.querySelector('#right .head input')?.value ?? null, fields: [...${P}.querySelectorAll('#right .field label')].map((l) => l.textContent).slice(0, 8), side: ${P}.documentElement.dataset.side ?? null, page: ${P}.getElementById('pagepick')?.value, hit: (() => { const e = document.elementFromPoint(${at?.x ?? 0}, ${at?.y ?? 0}); return e ? e.tagName + '#' + e.id : null; })() })`) });
+    await shot('stu-080-preview');
+  }
 } catch (e) {
   ok(false, 'the gate ran to the end', e.message);
 } finally {
+  if (tab) await tab.close().catch(() => {});
   if (b) await b.close().catch(() => {});
   if (host) host.close();
   for (const c of children) c.kill('SIGTERM');

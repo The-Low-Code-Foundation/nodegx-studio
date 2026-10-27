@@ -199,6 +199,12 @@ try {
     await shot(b, 'stu-083-help');
     await b.evaluate(`document.querySelector('#helppanel [data-act=close]').click()`);
 
+    // P128 S7 (STU-080): the desktop app's header has Preview ↗ (it opens the browser, so the gate reads the button and
+    // the page it opens rather than pressing it: a press would put a real browser window on this machine)
+    const pv = await b.evaluate(`(() => { const x = document.getElementById('apppreviewbtn'); return x ? { shown: !x.hidden && getComputedStyle(x).display !== 'none', text: x.textContent, origin: location.origin } : null; })()`);
+    const appPage = pv ? await fetch(pv.origin + '/app').then(async (r) => ({ status: r.status, mounts: (await r.text()).includes('NodegxPreview.mountPreview') })).catch((e) => ({ error: e.message })) : null;
+    ok(pv?.shown && pv.text === 'Preview ↗' && appPage?.status === 200 && appPage.mounts, 'the desktop app\'s header has Preview ↗, and the page it opens (/app) answers with the app alone', { pv, appPage });
+
     await stop();
     ok(serversOf().length === 0, 'stopping the app stops its editor server', serversOf());
     ok(!(await backendAnswers(todos)) && !existsSync(join(backendsDir, bound.instanceId, 'runtime.json')), 'and the backend it started, leaving no runtime record');

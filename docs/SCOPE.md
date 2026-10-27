@@ -1683,6 +1683,28 @@ carry, the option-set empty state, and whether Help should leave out *Waits on*.
 the gate reading the disk before Studio's save landed (the set, its toast and its page were all there); the gate now
 waits for the file.
 
+## STU-080 — Preview: the app alone in a browser tab (NodeGX P128 S7, Beta round, 2026-10-27)
+
+**Why.** The audit's §4: Richard changes a headline in Studio inside Claude Desktop and wants to see the app itself,
+not Studio's canvas, change. The hold does not come into it: the person is only looking.
+
+**Built.** `serve.mjs` `GET /app`: one page that loads `/preview.js`, reads the project (`/api/project?look=1`, which
+leaves Studio's record of what it last read alone), mounts `NodegxPreview.mountPreview` on the whole window and, on each
+`/api/events` change (Studio's own saves reach it as another page's; the agent's and anyone's through the watcher),
+applies the change to its copy of the files and draws again, debounced 250 ms, without a reload. Nothing on it writes.
+**Preview ↗** beside Window ↗ in the hosted strip (the host's `ui/open-link` on `ORIGIN + '/app'`); the same button in
+Studio's header (`#apppreviewbtn`, first to fold into "⋯"; hidden in a conversation, where the strip has it), which
+the desktop app hands to the browser.
+
+**Graded.** `check:hosted` 35/35, 3 new: Preview ↗ in the strip asks the host to open `/app`; that URL opened in a
+second tab draws the app alone (Sign in, the page a visitor lands on); the headline ("App name") clicked in the page
+inside the conversation's frame and typed in its Text field reaches the page's nodes.json and the `/app` tab, drawn a second
+time in the same document (a marker set before the change is still there: no reload). `check:app` 67/67 (the desktop
+app's header has Preview ↗ and `/app` answers with the app alone; the gate does not press it, which would open a real
+browser). `check:editor` 217/217, `check:data` 80/80, `check:timeline` 53/53 on the same tree.
+
+**Open.** Claude Desktop itself (does it open `/app` in the person's browser through `ui/open-link`?) is Richard's run.
+
 ## Rulings open
 
 | id | question | from |
