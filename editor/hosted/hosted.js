@@ -129,6 +129,21 @@ if (hosted) window.__hostSave = async ({ name, mimeType, text }) => {
   const r = await app.downloadFile({ contents: [{ type: 'resource', resource: { uri: `file:///${encodeURIComponent(name)}`, mimeType, text } }] });
   if (r?.isError) throw new Error('The file was not saved');
 };
+// STU-084: from a part's card. A link out goes through the host (the frame opens no window); a question goes into the
+// conversation as the person's message when the host takes one (ui/message), and says false when it does not, so
+// Studio says where the question went instead.
+if (hosted) {
+  window.__hostOpen = async (url) => {
+    if (!app?.getHostCapabilities()?.openLinks) throw new Error('This conversation cannot open links. Open Studio with Window ↗ above');
+    const r = await app.openLink({ url });
+    if (r?.isError) throw new Error('The link was not opened');
+  };
+  window.__hostAsk = async (text) => {
+    if (!app?.getHostCapabilities()?.message) return false;
+    const r = await app.sendMessage({ role: 'user', content: [{ type: 'text', text }] });
+    return !r?.isError;
+  };
+}
 const say =(text, held = false, lifted = false) => {
   stateEl.textContent = text; stateEl.classList.toggle('held', held); stateEl.classList.toggle('lifted', lifted);
 };

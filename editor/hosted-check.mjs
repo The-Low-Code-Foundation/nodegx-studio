@@ -226,6 +226,21 @@ try {
   await ev(`[...${P}.querySelectorAll('.menu .item')].find((x) => x.textContent.startsWith('As CSV')).click()`);
   const saved = await until(`(window.__downloads || []).length ? window.__downloads[0].contents[0].resource : false`, 8000);
   ok(saved && /Task-development\.csv$/.test(saved.uri) && saved.mimeType === 'text/csv' && saved.text.includes('Water the plants'), 'Export → As CSV hands the file to the host to save: its name, its type and the row in it', saved && { uri: saved.uri, mimeType: saved.mimeType, text: saved.text.slice(0, 120) });
+
+  // STU-084: a part's card inside the conversation. The frame opens no window, so Get the editor goes to the host as a
+  // link (ui/open-link); Ask the agent goes into the conversation as the person's message (ui/message), and into the project
+  console.log('check: STU-084 a part Studio does not edit, inside the conversation');
+  await click('[data-tab=design]'); await wait(600);
+  await click('#logiclist .row[data-part]'); await wait(300);
+  const partId = await ev(`${P}.querySelector('.partcard')?.dataset.part ?? null`);
+  await click('.partcard [data-act=editor]');
+  const linked = await until(`(window.__links || []).find((u) => u.includes('nodegx.io/start#download')) ?? false`, 6000);
+  ok(partId && linked === 'https://nodegx.io/start#download', 'Get the editor, from a part\'s card in the frame, asks the host to open the download', { partId, linked });
+  await click('#logiclist .row[data-part]'); await wait(300);
+  await click('.partcard [data-act=ask]');
+  const said = await until(`(window.__messages || []).length ? window.__messages[0] : false`, 6000);
+  const asked = onDisk('.nodegx-questions.json')?.questions ?? [];
+  ok(said?.role === 'user' && said.content?.[0]?.text?.includes("a part Studio doesn't edit") && asked.some((q) => q.node === partId), 'Ask the agent says the question into the conversation as the person, and writes it into the project', { role: said?.role, text: said?.content?.[0]?.text?.slice(0, 90), asked: asked.length });
 } catch (e) {
   ok(false, 'the gate ran to the end', e.message);
 } finally {

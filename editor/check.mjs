@@ -13,7 +13,8 @@
  * Needs the deploy runtime, the in-page preview bundle and Orbit's look.js / specs.js (serve.mjs says which is missing).
  */
 import { spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -67,6 +68,30 @@ cpSync(join(kit.templates, 'todo-list'), project, { recursive: true });
     { id: 'ruleTop', type: 'Expression', label: 'Top right: marginTop when the screen is narrow', parameters: { expression: '((w < 100000)) ? 24 : 8', evaluateAtLoad: true }, metadata: { bubble: "Current Page Width's less_than 100000" }, x: 1000, y: 120 });
   nj.nodes.find((n) => n.id === 'siCreate').stateParameters = { hover: { backgroundColor: '#ff0000' } };
   cj.connections.push({ fromId: 'ruleScreen', fromProperty: 'width', toId: 'ruleTop', toProperty: 'w' }, { fromId: 'ruleTop', fromProperty: 'result', toId: 'siTop', toProperty: 'marginTop' });
+  writeFileSync(nf, JSON.stringify(nj, null, 2)); writeFileSync(cf, JSON.stringify(cj, null, 2));
+}
+{
+  // STU-084 (P125-MUDDY-DEADCHIP): Muddy Paws Shelter's shape, which Richard hit on 2026-10-27. A logic component
+  // (a Variable into a States node into its outputs, as the agent wrote /Components/Wording) placed on Sign in and feeding
+  // a Text of its own in Top right (the headline's case). Its text is a part Studio does not edit
+  const rel = 'Logic/Greeting', dir = join(project, 'components', rel), cid = '11111111-2222-5333-8444-666666666666';
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'component.json'), JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/component-v2.json', id: cid, name: 'Greeting', path: '/' + rel, type: 'logic', created: '2026-10-27T00:00:00.000Z' }, null, 2));
+  writeFileSync(join(dir, 'nodes.json'), JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/nodes-v2.json', componentId: cid, version: 1, nodes: [
+    { id: 'grLang', type: 'Variable2', label: 'Current language', parameters: { name: 'gateLanguage' }, x: 40, y: 40 },
+    { id: 'grStates', type: 'States', label: 'Words by language', parameters: { states: 'en,fr', values: 'words', 'type-words': 'string', 'value-en-words': 'Hello', 'value-fr-words': 'Bonjour', useTransitions: false }, x: 40, y: 160 },
+    { id: 'grOut', type: 'Component Outputs', label: 'Greeting out', ports: [{ name: 'words', plug: 'input', type: 'string' }], x: 40, y: 320 }] }, null, 2));
+  writeFileSync(join(dir, 'connections.json'), JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/connections-v2.json', componentId: cid, version: 1, connections: [
+    { fromId: 'grLang', fromProperty: 'value', toId: 'grStates', toProperty: 'currentState' },
+    { fromId: 'grStates', fromProperty: 'words', toId: 'grOut', toProperty: 'words' }] }, null, 2));
+  const regPath = join(project, 'components/_registry.json'), reg = JSON.parse(readFileSync(regPath, 'utf8'));
+  reg.components[rel] = { path: rel, type: 'logic', nodeCount: 3, connectionCount: 2, modified: '2026-10-27T00:00:00.000Z', created: '2026-10-27T00:00:00.000Z' };
+  writeFileSync(regPath, JSON.stringify(reg, null, 2));
+  const sdir = join(project, 'components/Pages/Sign in'), nf = join(sdir, 'nodes.json'), cf = join(sdir, 'connections.json');
+  const nj = JSON.parse(readFileSync(nf, 'utf8')), cj = JSON.parse(readFileSync(cf, 'utf8'));
+  nj.nodes.push({ id: 'grText', type: 'Text', label: 'Greeting', parent: 'siTop', parameters: {} }, { id: 'grWords', type: '/Logic/Greeting', label: 'Greeting (by language)', x: 1000, y: 300 });
+  nj.nodes.find((n) => n.id === 'siTop').children.push('grText');
+  cj.connections.push({ fromId: 'grWords', fromProperty: 'words', toId: 'grText', toProperty: 'text' });
   writeFileSync(nf, JSON.stringify(nj, null, 2)); writeFileSync(cf, JSON.stringify(cj, null, 2));
 }
 const children = [];
@@ -1296,6 +1321,63 @@ try {
     n0 = await shows();
     await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Pages/Sign in'; s.dispatchEvent(new Event('change')); })()`);
     await rebuilt(n0).catch(() => {}); await wait(600);
+  }
+  {
+    // STU-084 (P128 S6, P125-MUDDY-DEADCHIP): a part Studio does not edit has somewhere to be opened from, and the wiring
+    // underneath draws the page whole, read only. The truth is the files: Sign in's nodes on disk, and a hash of every file
+    console.log('check: the wiring underneath (STU-084)');
+    await b.clickSel('[data-tab=design]'); await wait(400);
+    if ((await page()) !== 'Pages/Sign in') { const n0 = await shows(); await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Pages/Sign in'; s.dispatchEvent(new Event('change')); })()`); await rebuilt(n0).catch(() => {}); await wait(500); }
+    const hashes = () => { const m = {}; (function walk(d, rel) { for (const e of readdirSync(d, { withFileTypes: true })) { if (e.name.startsWith('.')) continue; const p = join(d, e.name), r = rel ? `${rel}/${e.name}` : e.name; if (e.isDirectory()) walk(p, r); else m[r] = createHash('sha1').update(readFileSync(p)).digest('hex'); } })(project, ''); return m; };
+    const signNodes = onDisk(SIGN + 'nodes.json').nodes, signWires = onDisk(SIGN + 'connections.json').connections;
+    const logicRows = await b.evaluate(`JSON.stringify([...document.querySelectorAll('#logiclist .row')].map(r => r.dataset.part))`).then(JSON.parse);
+    // on disk: the User node the template has, the Screen Resolution and the placed Greeting the gate added; not the rule
+    // Expression (the Conditional tab's), the sign-in steps, or any element
+    ok(JSON.stringify(logicRows) === JSON.stringify(['siUser', 'ruleScreen', 'grWords']), '"Logic on this page" lists the parts Studio does not edit (a User node, a Screen Resolution, a placed logic component), not the rule it reads, the steps or the elements', logicRows);
+    await b.evaluate(`(() => { const i = document.getElementById('treesearch'); i.value = 'Greeting'; i.dispatchEvent(new Event('input')); })()`); await wait(300);
+    await b.clickSel('#tree .row'); await wait(400);
+    await b.evaluate(`(() => { const i = document.getElementById('treesearch'); i.value = ''; i.dispatchEvent(new Event('input')); })()`); await wait(300);
+    const chip = await b.evaluate(`(() => { const c = document.querySelector('#right .chip.part[data-part=grWords]'); return c ? { text: c.textContent, role: c.getAttribute('role') } : null; })()`);
+    ok(chip && chip.role === 'button' && chip.text.includes('Greeting (by language)'), 'P125-MUDDY-DEADCHIP: a text fed by a placed logic component is a chip that names it and can be pressed', chip);
+    await b.clickSel('#right .chip.part[data-part=grWords]'); await wait(300);
+    const card = await b.evaluate(`(() => { const c = document.querySelector('.partcard'); return c ? { part: c.dataset.part, text: c.innerText, acts: [...c.querySelectorAll('[data-act]')].map(a => a.textContent) } : null; })()`);
+    ok(card?.part === 'grWords' && card.text.includes('Logic/Greeting') && card.text.includes("Studio doesn't edit this. Look at the wiring underneath, or open it in the NodeGX editor.") && JSON.stringify(card.acts) === JSON.stringify(['Wiring', 'Get the editor', 'Ask the agent']), "the chip opens the part's card: what it is, that Studio doesn't edit it, Wiring, the editor, the agent", card);
+    await shot('wiring-card');
+    const before = hashes(), storeBefore = await b.evaluate(`JSON.stringify(__ob.store.readComponent('Pages/Sign in').files)`);
+    await b.clickSel('.partcard [data-act=wiring]'); await wait(700);
+    const view = await b.evaluate(`(() => { const p = document.getElementById('wiringpanel'); return { shown: !p.hidden, component: p.querySelector('.wplane').dataset.component, on: [...p.querySelectorAll('g.card.on')].map(g => g.dataset.id), cards: [...p.querySelectorAll('g.card')].map(g => g.dataset.id), wires: p.querySelectorAll('path.wire').length, side: p.querySelector('.wsel').innerText }; })()`);
+    const drawn = signNodes.filter((n) => n.type !== 'Comment').map((n) => n.id);
+    ok(view.shown && view.component === 'Pages/Sign in' && JSON.stringify(view.on) === '["grWords"]', 'Wiring opens the page with the part that feeds the value selected', { component: view.component, on: view.on });
+    ok(view.cards.length === drawn.length && drawn.every((id) => view.cards.includes(id)) && view.wires === signWires.length, 'the wiring draws every node and every wire of the page on disk', { cards: view.cards.length, nodes: drawn.length, wires: view.wires, onDisk: signWires.length });
+    await shot('wiring-page');
+    // read only: drag a card, drag the ground, Delete, Backspace, ⌘Z, the wheel; then nothing changed, on disk or in the store
+    const at = await b.rectOf('#wiringpanel g.card.on');
+    await b.drag(at, { x: at.x + 140, y: at.y + 70 });
+    const ground = await b.rectOf('#wiringpanel .wcanvas');
+    await b.drag({ x: ground.x - 300, y: ground.y + 250 }, { x: ground.x - 200, y: ground.y + 180 });
+    await b.key('Delete', 'Delete', 46); await b.key('Backspace', 'Backspace', 8);
+    await b.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'z', code: 'KeyZ', modifiers: 4, windowsVirtualKeyCode: 90 }); await b.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'z', code: 'KeyZ', modifiers: 4 });
+    await b.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: ground.x, y: ground.y, deltaX: 0, deltaY: 200 });
+    await wait(1200);
+    const after = hashes(), moved = Object.keys({ ...before, ...after }).filter((k) => before[k] !== after[k]);
+    ok(moved.length === 0 && (await b.evaluate(`JSON.stringify(__ob.store.readComponent('Pages/Sign in').files)`)) === storeBefore && !(await b.evaluate(`document.getElementById('wiringpanel').hidden`)), 'the wiring takes no edits: after a drag, Delete, Backspace, ⌘Z and the wheel, no file changed and the page is as it was', moved);
+    // into the placed component, and its States node
+    await b.evaluate(`document.querySelector('#wiringpanel g.card[data-id="grWords"]').dispatchEvent(new MouseEvent('click', { bubbles: true }))`); await wait(300);
+    await b.clickSel('#wiringpanel [data-act=into]'); await wait(600);
+    await b.evaluate(`document.querySelector('#wiringpanel g.card[data-id="grStates"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))`); await wait(300);
+    const inside = await b.evaluate(`(() => { const p = document.getElementById('wiringpanel'); return { component: p.querySelector('.wplane').dataset.component, crumbs: p.querySelector('.wcrumbs').innerText.replace(/\\s+/g, ' '), cards: [...p.querySelectorAll('g.card')].map(g => g.dataset.id), side: p.querySelector('.wsel').innerText }; })()`);
+    ok(inside.component === 'Logic/Greeting' && JSON.stringify(inside.cards.sort()) === JSON.stringify(['grLang', 'grOut', 'grStates']) && inside.side.startsWith('Words by language') && inside.side.includes('Studio does not edit this one'), "the placed component opens into its own wiring, and its States node is there to read", inside);
+    await shot('wiring-component');
+    await b.key('Escape', 'Escape', 27); await wait(300);
+    const back = await b.evaluate(`document.querySelector('#wiringpanel .wplane').dataset.component`);
+    await b.key('Escape', 'Escape', 27); await wait(300);
+    ok(back === 'Pages/Sign in' && (await b.evaluate(`document.getElementById('wiringpanel').hidden`)), 'Esc goes back to the page, then closes the wiring', back);
+    // the list's row opens the same card; Ask the agent writes the question where the agent's server reads it
+    await b.evaluate(`document.querySelector('#logiclist .row[data-part=grWords]').scrollIntoView()`);
+    await b.clickSel('#logiclist .row[data-part=grWords]'); await wait(300);
+    await b.clickSel('.partcard [data-act=ask]'); await wait(600);
+    const qf = join(project, '.nodegx-questions.json'), qs = existsSync(qf) ? JSON.parse(readFileSync(qf, 'utf8')).questions : [];
+    ok(qs.length === 1 && qs[0].component === 'Pages/Sign in' && qs[0].node === 'grWords' && qs[0].text.includes('Greeting (by language)'), "a part's row opens its card, and Ask the agent writes the question to .nodegx-questions.json", qs.map((q) => [q.component, q.node]));
   }
   ok((await status()).startsWith('App on screen'), 'after every edit the app still validates and draws', await status());
   const problems = b.problems.filter((p) => !/Invalid connection|doesn't have a port|Failed to load resource|fonts\.g|^\[noodl\]/.test(p)); // `[noodl]` lines are the app's own runtime (a Navigate with no target yet), not the editor

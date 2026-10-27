@@ -11,13 +11,14 @@ export const hostPage = `<!doctype html><meta charset="utf-8"><title>host</title
 const frame = document.getElementById('app');
 window.__links = [];
 window.__downloads = []; // STU-082: what Studio handed the host to save (ui/download-file)
+window.__messages = []; // STU-084: what Studio said into the conversation as the person (ui/message)
 window.addEventListener('message', (ev) => {
   const m = ev.data;
   if (!m || m.jsonrpc !== '2.0' || m.id === undefined || !m.method) return;
   const reply = (result) => frame.contentWindow.postMessage({ jsonrpc: '2.0', id: m.id, result }, '*');
-  if (m.method === 'ui/initialize') reply({ protocolVersion: m.params.protocolVersion, hostInfo: { name: 'gate-host', version: '0' }, hostCapabilities: { openLinks: {}, downloadFile: {} },
+  if (m.method === 'ui/initialize') reply({ protocolVersion: m.params.protocolVersion, hostInfo: { name: 'gate-host', version: '0' }, hostCapabilities: { openLinks: {}, downloadFile: {}, message: { text: {} } },
     hostContext: { displayMode: 'fullscreen', availableDisplayModes: ['inline', 'fullscreen'], platform: 'desktop', theme: 'dark', containerDimensions: { maxHeight: 900 } } });
-  else { if (m.method === 'ui/open-link') window.__links.push(m.params.url); if (m.method === 'ui/download-file') window.__downloads.push(m.params); reply({}); }
+  else { if (m.method === 'ui/open-link') window.__links.push(m.params.url); if (m.method === 'ui/download-file') window.__downloads.push(m.params); if (m.method === 'ui/message') window.__messages.push(m.params); reply({}); }
 });
 </script>`;
 

@@ -415,6 +415,9 @@ const mapWords = (words) =>
 // server listens on loopback only, so "any origin" is any page on this computer, which is what it was already.
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'content-type' };
 const HOLD_FILE = '.nodegx-hold.json';
+/** STU-084: "Ask the agent" on a part Studio does not edit. A dotfile, as the hold is (Studio's store and watcher skip
+    dotfiles), that the agent's server reads in what_changed_since; the last 50 questions are kept. */
+const QUESTIONS_FILE = '.nodegx-questions.json';
 let livePanel = { id: '', seq: -1 };
 /** The hold: a file in the project folder the MCP server reads before every write. A dotfile, so the page's store and the watcher never see it as a project file. */
 /** P125-PUPPY2: who lifted the last hold, and on which words (the agent's `release_hold` passes the person's message). Kept
@@ -450,6 +453,18 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'OPTIONS') { res.writeHead(204, CORS); return res.end(); }
     if (url.pathname === '/') return send(200, readFileSync(join(here, 'studio.html')), types['.html']);
     if (url.pathname === '/panel') return send(200, panelHtml(`http://127.0.0.1:${server.address().port}`), types['.html']);
+    if (url.pathname === '/api/vocabulary') return send(200, readFileSync(join(here, 'vocabulary.json')), types['.json']);
+    if (url.pathname === '/api/ask' && req.method === 'POST') {
+      const { component, node, label, type, text } = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      if (typeof text !== 'string' || !text.trim()) return json(400, { error: 'A question has words' });
+      const at = join(projectDir, QUESTIONS_FILE);
+      let file = { questions: [] };
+      try { file = JSON.parse(readFileSync(at, 'utf8')); if (!Array.isArray(file.questions)) file = { questions: [] }; } catch { /* none yet, or unreadable: started again */ }
+      const q = { id: `q-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, at: new Date().toISOString(), by: 'NodeGX Studio', component: String(component ?? ''), node: String(node ?? ''), label: String(label ?? '').slice(0, 200), type: String(type ?? '').slice(0, 200), text: text.slice(0, 1000) };
+      file.questions = [...file.questions, q].slice(-50);
+      writeFileSync(at, JSON.stringify(file, null, 2) + '\n');
+      return json(200, q);
+    }
     if (url.pathname === '/api/hold' && req.method === 'GET') return json(200, holdOf());
     if (url.pathname === '/api/hold' && req.method === 'POST') {
       const { held, note = '', by, words } = JSON.parse((await readBody(req)).toString('utf8') || '{}');

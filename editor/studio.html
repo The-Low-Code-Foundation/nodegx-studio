@@ -712,6 +712,44 @@
   #clash div { display: flex; gap: 8px; justify-content: flex-end; }
   /* P125-MUDDY-NATIVEDIALOG: Studio's own name field and yes card (askName, askSure), never prompt() or confirm() */
   .menu.ask { min-width: 320px; padding: 10px 12px; }
+  /* STU-084: a part Studio does not edit — its chip, its card, "Logic on this page", the wiring underneath */
+  .chip.part { cursor: pointer; border-style: dashed; }
+  .chip.part:hover, .chip.part:focus-visible { border-color: var(--accent); color: var(--accent-ink); }
+  .chip.part svg { width: 12px; height: 12px; }
+  #logiclist .row { display: flex; align-items: center; gap: 6px; padding: 4px 8px; cursor: pointer; border-radius: var(--r); }
+  #logiclist .row:hover, #logiclist .row:focus-visible { background: var(--panel-2); }
+  #logiclist .row svg { width: 14px; height: 14px; flex: none; color: var(--muted); }
+  #logiclist .row .t { margin-left: auto; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+  #logic-title button { margin-left: auto; }
+  .menu.partcard { min-width: 320px; max-width: 380px; padding: 12px 14px; }
+  .partcard .phead { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+  .partcard .phead svg { width: 16px; height: 16px; color: var(--muted); }
+  .partcard .ptype, #wiringpanel .ptype { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .partcard p { margin: 10px 0 0; color: var(--ink-2); }
+  .partcard .acts { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  #wiringpanel { position: absolute; inset: 0; z-index: 45; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; }
+  #wiringpanel[hidden] { display: none; }
+  #wiringpanel .whead { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  #wiringpanel .wcrumbs { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); margin-left: 6px; }
+  #wiringpanel .wcrumbs .sep { color: var(--muted); }
+  #wiringpanel .grow { flex: 1; }
+  #wiringpanel .wro { font-size: 11.5px; color: var(--muted); border: 1px solid var(--line-2); border-radius: 999px; padding: 1px 8px; }
+  #wiringpanel .zoom { display: inline-flex; align-items: center; gap: 2px; }
+  #wiringpanel .zoom button { padding: 2px 8px; }
+  #wiringpanel .wzoomval { min-width: 44px; text-align: center; font-size: 12px; color: var(--muted); }
+  #wiringpanel .wbody { flex: 1; display: flex; min-height: 0; }
+  #wiringpanel .wcanvas { flex: 1; position: relative; overflow: hidden; background: #141318; cursor: grab; touch-action: none; }
+  #wiringpanel .wcanvas:active { cursor: grabbing; }
+  #wiringpanel .wplane { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  #wiringpanel .wplane svg { display: block; }
+  #wiringpanel .winfo { width: 280px; flex: none; border-left: 1px solid var(--line); padding: 14px; overflow: auto; display: flex; flex-direction: column; gap: 16px; }
+  #wiringpanel .wsel h4 { margin: 0; font-size: 14px; }
+  #wiringpanel .wsel .wcount, #wiringpanel .wsel .wnote { font-size: 12px; color: var(--ink-2); margin-top: 6px; }
+  #wiringpanel .wsel button { margin-top: 10px; }
+  #wiringpanel .wabout { margin-top: auto; font-size: 12.5px; color: var(--ink-2); border-top: 1px solid var(--line); padding-top: 12px; }
+  #wiringpanel .wabout p { margin: 0 0 8px; }
+  #wiringpanel .wabout .wlead { color: var(--ink); font-weight: 500; }
+  @media (max-width: 760px) { #wiringpanel .winfo { display: none; } }
   .menu.ask label { display: block; font-size: 12.5px; color: var(--ink-2); margin-bottom: 6px; }
   .menu.ask .acts, .sure .acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
   .surescrim { position: fixed; inset: 0; z-index: 102; background: rgba(20, 24, 31, .28); display: flex; align-items: flex-start; justify-content: center; padding: 96px 16px 0; }
@@ -792,6 +830,8 @@
         <div class="pagedata list" id="pagedata"></div>
         <h3 class="sec" id="elements-title">Elements on this page</h3>
         <div class="tree list" id="tree"></div>
+        <h3 class="sec" id="logic-title"><span>Logic on this page</span> <button class="tiny quiet" id="wiringbtn" title="The page as it really is: every node and wire, read only">Wiring</button></h3>
+        <div class="list" id="logiclist"></div>
         <h3 class="sec">Visual elements</h3>
         <div class="palette" id="palette"></div>
         <h3 class="sec">Reusable components</h3>
@@ -864,6 +904,29 @@
       <aside class="right" id="styleprops"><div class="empty">The style's properties appear here.</div></aside>
     </section>
 
+    <section id="wiringpanel" role="dialog" aria-label="The wiring underneath" hidden>
+      <div class="whead">
+        <button class="quiet tiny" data-act="back" hidden title="Back (Esc)">←</button>
+        <b>The wiring underneath</b><span class="wcrumbs"></span>
+        <span class="grow"></span>
+        <span class="wro">Read only</span>
+        <div class="zoom"><button data-act="zout" title="Smaller">−</button><span class="wzoomval"></span><button data-act="zin" title="Bigger">+</button><button data-act="fit" title="The whole drawing in view">Fit</button></div>
+        <button class="quiet" data-act="close" title="Back to Design (Esc)">Close</button>
+      </div>
+      <div class="wbody">
+        <div class="wcanvas"><div class="wplane"></div></div>
+        <aside class="winfo">
+          <div class="wsel"></div>
+          <div class="wabout">
+            <p class="wlead">The page as it really is: every node and every wire, read only.</p>
+            <!-- canon: The wiring underneath -->
+            <p>If you want to change what you see there, download the NodeGX editor. It is the unrestricted version, and it has a learning curve: the lessons inside it take you through the canvas step by step.</p>
+
+            <button data-act="editor" title="nodegx.io/start#download">Get the NodeGX editor</button>
+          </div>
+        </aside>
+      </div>
+    </section>
     <section id="timeline" aria-label="Run timeline" tabindex="-1" hidden>
       <div class="tlhead" id="tlhead">
         <h4>Run timeline</h4><span class="note" id="tlnote"></span><span class="grow"></span>
@@ -905,6 +968,11 @@ import { LANES, buildTimeline, lastRunOf, msText, shotAt, stepValues } from './t
 import { runOver, lastActivity, watchSignals, runtimeTimers, runTimers } from './runwatch.mjs';
 import { CLOUD, REQUEST, RESPONSE, functionList, functionLayout, helperKey, requestAsks, responseWords, touchesWords } from './fngraph.mjs';
 import { AUTOMATIONS_FILE, agrees, hhmm, readAutomations, runLine, scheduleTime, stepsOfRun, targetOf, triggerHead, workflowLayout } from './automations.mjs';
+import { logicOnPage, placedComponent, studioEdits, wiringLayout, wiringSvg } from './wiring.mjs';
+import { look as canvasLook, nodeScheme, wireColors } from './look.js';
+// STU-084: what Studio draws and edits, as data (the element types, the action menu, the value sources), one file the
+// agent's server keeps a copy of
+const VOCAB = await fetch('./vocabulary.json').then((r) => r.json());
 
 const $ = (id) => document.getElementById(id);
 const h = (tag, attrs = {}, ...kids) => {
@@ -1474,7 +1542,7 @@ function readGraph() {
 const typeDef = (type) => libIndex.get(type);
 const typeName = (type) => typeDef(type)?.displayNodeName || typeDef(type)?.displayName || (type.startsWith('/') ? type.split('/').pop() : type);
 const labelOf = (id) => byId[id]?.label || typeName(byId[id]?.type ?? '?');
-const isVisualType = (type) => type.startsWith('/') ? componentDraws(type.slice(1)) : (typeDef(type)?.category === 'Visual' || ['Group', 'Text', 'Page', 'For Each', 'Component Children'].includes(type) || type.startsWith('net.noodl.controls.') || type.startsWith('net.noodl.visual.'));
+const isVisualType = (type) => type.startsWith('/') ? componentDraws(type.slice(1)) : (typeDef(type)?.category === VOCAB.elements.category || VOCAB.elements.types.includes(type) || VOCAB.elements.prefixes.some((p) => type.startsWith(p)));
 const holdsChildren = (type) => { const t = typeDef(type); return !!(t?.allowChildren || t?.allowChildrenWithCategory) || (type.startsWith('/') && isVisualType(type)); };
 // a node library port with no display name ("zIndex", "backdropBlur") is said in words, not as its raw name
 const PORT_WORDS = { zIndex: 'Layer (z-index)' };
@@ -1842,6 +1910,8 @@ overlay.addEventListener('mousedown', (e) => {
 window.addEventListener('mouseup', (e) => { if (gesture) endGesture(e); });
 window.addEventListener('keydown', (e) => {
   const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
+  // STU-084: the wiring underneath is read only and over Design: no key reaches the page under it (Delete, ⌘Z); Esc goes back, then closes
+  if (wiringOpen()) { if (e.key === 'Escape' && !document.querySelector('.menu')) { e.preventDefault(); wiringBack(); } return; }
   if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !inField) { e.preventDefault(); undo(); return; }
   if (e.key === 'Escape' && tab === 'workflow' && selFn && fnBack.length && !inField && !document.querySelector('.menu')) { backFromFn(); return; }
   if (e.key === 'Escape' && tab === 'workflow' && !selFn && selAuto?.from && !inField && !document.querySelector('.menu')) { backFromAuto(); return; }
@@ -2122,6 +2192,7 @@ function hostRows(tree, key, level, depth) {
   for (const t of tops) row(t, 0);
 }
 function renderTree() {
+  renderLogic();
   const tree = $('tree'); tree.innerHTML = '';
   const q = $('treesearch').value.trim().toLowerCase();
   if (!q) return host ? renderHostOutline(tree) : renderOutline(tree);
@@ -2987,7 +3058,153 @@ function sourceChip(fromId, port) {
   if (n.type.startsWith('/Option sets/')) return h('span', { class: 'chip opt' }, icon('list'), `${n.type.split('/').pop()} · ${portLabel(n, 'output', port)}`);
   if (isComposed(n)) return h('span', { class: 'chip expr' }, icon('fx'), composedPreview(n));
   if (isPageDataNode(n)) return h('span', { class: 'chip data' }, icon('db'), pageDataChip(fromId, port));
-  return h('span', { class: 'chip' }, `${labelOf(fromId)}'s ${portLabel(n, 'output', port)}`);
+  // an element's own output (a field's text): the chip selects the element
+  if (studioEditsHere(n)) return h('span', { class: 'chip', ...(isVisualType(n.type) ? { role: 'button', tabindex: 0, onclick: (e) => { e.stopPropagation(); select(fromId); } } : {}) }, `${labelOf(fromId)}'s ${portLabel(n, 'output', port)}`);
+  // STU-084 (P125-MUDDY-DEADCHIP): a part Studio does not edit. The chip names it and opens its card, never a dead end
+  return h('span', { class: 'chip part', role: 'button', tabindex: 0, 'data-part': fromId, title: `${labelOf(fromId)}: a part Studio does not edit. Click to see what it is`,
+    onclick: (e) => { e.stopPropagation(); partCard(e, fromId, port); }, onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); partCard(e, fromId, port); } } },
+  icon(placedComponent(n.type) ? 'component' : 'code'), `${labelOf(fromId)}'s ${portLabel(n, 'output', port)}`);
+}
+/* ---- STU-084 (P128 S6, P125-MUDDY-DEADCHIP): the wiring underneath. A part Studio does not edit (a States node, a
+   script, a logic component placed on the page) used to show its value as a chip that opened nothing, and appeared in no
+   list. Now the chip and "Logic on this page" open its card: what it is, that Studio doesn't edit it, the wiring
+   underneath (the page as it really is, every node and wire, read only, drawn in the NodeGX canvas's look by
+   ./wiring.mjs), the editor's download, and a question to the agent. Nothing here writes the project but the question,
+   which goes to its own dotfile ---- */
+// an Expression the Conditional tab reads as a rule (ruleChip) is Studio's whatever its metadata says: the importer's carry none
+const isRuleHere = (n, key) => n.type === 'Expression' && key === pageKey && conns.some((c) => c.fromId === n.id && c.fromProperty === 'result' && readRule(n.parameters?.expression, c.toProperty));
+const studioEditsHere = (n, key = pageKey) => studioEdits(VOCAB, n, { inComponent: key, isVisual: isVisualType }) || isRuleHere(n, key);
+const EDITOR_DOWNLOAD = 'https://nodegx.io/start#download';
+function renderLogic() {
+  const box = $('logiclist'); if (!box) return;
+  box.innerHTML = '';
+  const parts = logicOnPage(VOCAB, nodes, { inComponent: pageKey, isVisual: isVisualType }).filter((n) => !isRuleHere(n, pageKey));
+  $('logic-title').firstChild.textContent = parts.length ? `Logic on this page: ${parts.length}` : 'Logic on this page';
+  if (!parts.length) return box.append(h('div', { class: 'hint' }, 'Nothing here that Studio does not edit. The wiring shows every node all the same.'));
+  for (const n of parts) box.append(h('div', { class: 'row', 'data-part': n.id, tabindex: 0, title: 'What it is, and the wiring it sits in', onclick: (e) => partCard(e, n.id), onkeydown: (e) => { if (e.key === 'Enter') partCard(e, n.id); } },
+    icon(placedComponent(n.type) ? 'component' : 'code'), h('span', { style: 'overflow:hidden;text-overflow:ellipsis' }, labelOf(n.id)), h('span', { class: 't' }, partType(n))));
+}
+/** A part's kind in words: "component · Wording", "States". */
+const partType = (n) => (placedComponent(n.type) ? `component · ${placedComponent(n.type).split('/').pop()}` : typeName(n.type));
+/** The card a part's chip or its row opens. `port`: the output the chip showed. */
+function partCard(e, id, port) {
+  const n = byId[id]; if (!n) return;
+  closeMenu();
+  const r = (e.currentTarget || e.target)?.getBoundingClientRect?.();
+  const left = r ? Math.max(8, Math.min(r.left, innerWidth - 400)) : 120, top = r ? Math.max(8, Math.min(r.bottom + 6, innerHeight - 260)) : 120;
+  const comp = placedComponent(n.type);
+  const card = h('div', { class: 'menu partcard', role: 'dialog', 'aria-label': labelOf(id), 'data-part': id, style: `left:${left}px;top:${top}px` },
+    h('div', { class: 'phead' }, icon(comp ? 'component' : 'code'), h('b', {}, labelOf(id))),
+    h('div', { class: 'ptype' }, comp ? `A component placed on this page: ${comp}` : `A ${typeName(n.type)} node`, port ? ` · its ${portLabel(n, 'output', port)} is the value here` : ''),
+    h('p', {}, "Studio doesn't edit this. Look at the wiring underneath, or open it in the NodeGX editor."),
+    h('div', { class: 'acts' },
+      h('button', { class: 'primary', 'data-act': 'wiring', onclick: () => { closeMenu(); openWiring(pageKey, id); } }, 'Wiring'),
+      h('button', { 'data-act': 'editor', title: EDITOR_DOWNLOAD, onclick: () => { closeMenu(); openOutside(EDITOR_DOWNLOAD); } }, 'Get the editor'),
+      h('button', { class: 'quiet', 'data-act': 'ask', title: 'Ask your AI coder what it is and what it does', onclick: () => { closeMenu(); askAgent(pageKey, id); } }, 'Ask the agent')));
+  document.body.append(card); dismissOnOutside(card);
+  card.querySelector('[data-act=wiring]').focus();
+}
+/** A link out: through the conversation's host inside one (the frame cannot open a window), a new window otherwise
+    (the desktop app hands it to the browser). */
+async function openOutside(url) {
+  try { if (window.__hostOpen) return await window.__hostOpen(url); } catch (e) { return toast(`${e.message}: ${url}`); }
+  window.open(url, '_blank', 'noopener');
+}
+/** "Ask the agent": the question goes into the project (`.nodegx-questions.json`, which the agent's what_changed_since
+    reads), and, inside a conversation whose host takes a message from Studio, into the conversation as the person's. */
+async function askAgent(key, id) {
+  const n = byId[id] ?? store.readComponent(key).files.nodes.nodes.find((x) => x.id === id);
+  if (!n) return;
+  const label = n.label || typeName(n.type), page = key.replace(/^Pages\//, '');
+  const text = `In Studio, on ${page}, I'm looking at "${label}" (${placedComponent(n.type) ? `the component ${placedComponent(n.type)}` : `a ${n.type} node`}), a part Studio doesn't edit. What is it, what does it do here, and how would I change it?`;
+  let noted = false, said = false;
+  try { const r = await fetch('/api/ask', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: key, node: id, label, type: n.type, text }) }); noted = r.ok; } catch { /* said below */ }
+  try { said = !!(await window.__hostAsk?.(text)); } catch { said = false; }
+  toast(said ? 'Asked in the conversation' : noted ? `Asked: your agent reads it the next time it checks what you changed. Or tell it now: "I asked about ${label} in Studio"` : 'The question could not be written to the project');
+}
+
+/* the view: `wiring.stack` is where it was opened and every component opened from it, for Back; `sel` per level */
+let wiring = null;
+const wiringOpen = () => !!wiring && !$('wiringpanel').hidden;
+function openWiring(key, selId = null) {
+  wiring = { stack: [{ key, sel: selId }], zoom: null, pan: null };
+  $('wiringpanel').hidden = false;
+  renderWiring(true);
+}
+function closeWiring() { wiring = null; $('wiringpanel').hidden = true; $('wiringpanel').querySelector('.wplane').innerHTML = ''; }
+function wiringInto(comp) {
+  if (!registry()[comp]) return toast(`This app has no component called ${comp}`);
+  wiring.stack.push({ key: comp, sel: null }); wiring.zoom = null; wiring.pan = null;
+  renderWiring(true);
+}
+function wiringBack() { if (wiring.stack.length > 1) { wiring.stack.pop(); wiring.zoom = null; wiring.pan = null; renderWiring(true); } else closeWiring(); }
+const wiringCategory = (n) => {
+  if (placedComponent(n.type)) return 'component';
+  const c = typeDef(n.type)?.color;
+  if (['visual', 'data', 'logic', 'javascript', 'component'].includes(c)) return c;
+  return isVisualType(n.type) ? 'visual' : 'default';
+};
+function renderWiring(centre = false) {
+  const panel = $('wiringpanel'), level = wiring.stack.at(-1);
+  const f = store.readComponent(level.key).files;
+  const wnodes = f.nodes.nodes, wconns = f.connections.connections, wById = new Map(wnodes.map((n) => [n.id, n]));
+  const roots = f.nodes.visualRoots?.length ? f.nodes.visualRoots : wnodes.filter((n) => n.parent === undefined && (n.children || isVisualType(n.type))).map((n) => n.id);
+  const words = (n) => ({ title: n.label || typeName(n.type), sub: placedComponent(n.type) ? partType(n) : n.label ? typeName(n.type) : '' });
+  const L = wiringLayout({
+    nodes: wnodes, conns: wconns, roots, look: canvasLook, words,
+    isElement: (n) => isVisualType(n.type) || n.parent !== undefined || Array.isArray(n.children),
+    isSignal: (c) => fnSignal(wById.get(c.fromId), wById.get(c.toId), c),
+    portWords: (n, plug, port) => fnPortLabel(n, plug, port)
+  });
+  const plane = panel.querySelector('.wplane');
+  plane.innerHTML = wiringSvg(L, { look: canvasLook, scheme: (c) => nodeScheme(c), wireColor: (k) => wireColors(k), words, category: wiringCategory, byId: wById, selected: level.sel });
+  plane.dataset.component = level.key;
+  // where it is: the page, then each component opened from it
+  const crumbs = panel.querySelector('.wcrumbs'); crumbs.innerHTML = '';
+  wiring.stack.forEach((s, i) => {
+    if (i) crumbs.append(h('span', { class: 'sep' }, '›'));
+    crumbs.append(i === wiring.stack.length - 1 ? h('b', {}, s.key.split('/').pop()) : h('button', { class: 'quiet tiny', onclick: () => { wiring.stack.length = i + 1; wiring.zoom = null; wiring.pan = null; renderWiring(true); } }, s.key.split('/').pop()));
+  });
+  panel.querySelector('[data-act=back]').hidden = wiring.stack.length < 2;
+  panel.querySelector('.wlead').textContent = `${isPage(wiring.stack[0].key) && wiring.stack.length === 1 ? 'The page' : level.key.split('/').pop()} as it really is: every node and every wire, read only.`;
+  // the selected node, said beside the canvas
+  const info = panel.querySelector('.wsel'); info.innerHTML = '';
+  const sn = level.sel && wById.get(level.sel);
+  if (sn) {
+    const comp = placedComponent(sn.type);
+    const ins = wconns.filter((c) => c.toId === sn.id).length, outs = wconns.filter((c) => c.fromId === sn.id).length;
+    info.append(...[h('h4', {}, sn.label || typeName(sn.type)), h('div', { class: 'ptype' }, comp ? partType(sn) : typeName(sn.type)),
+      h('div', { class: 'wcount' }, `${ins} wire${ins === 1 ? '' : 's'} in · ${outs} out`),
+      !studioEditsHere(sn, level.key) ? h('div', { class: 'wnote' }, 'Studio does not edit this one.') : null,
+      comp && registry()[comp] ? h('button', { 'data-act': 'into', onclick: () => wiringInto(comp) }, `Open ${comp.split('/').pop()}'s wiring ↗`) : null].filter(Boolean));
+  } else info.append(h('div', { class: 'hint' }, 'Click a node to see what it is. A component placed here opens into its own wiring.'));
+  // clicks: select, and a placed component's card opens into it on a double click
+  for (const g of plane.querySelectorAll('g.card')) {
+    g.addEventListener('click', (e) => { e.stopPropagation(); if (wiring.moved) return; level.sel = g.dataset.id; renderWiring(); });
+    if (g.dataset.component) g.addEventListener('dblclick', (e) => { e.stopPropagation(); if (registry()[g.dataset.component]) wiringInto(g.dataset.component); });
+  }
+  const svg = plane.querySelector('svg');
+  const view = panel.querySelector('.wcanvas').getBoundingClientRect();
+  const W = Number(svg.getAttribute('width')), H = Number(svg.getAttribute('height'));
+  if (wiring.zoom === null) wiring.zoom = Math.min(1, Math.max(0.3, Math.min((view.width - 24) / W, (view.height - 24) / H)));
+  if (centre || !wiring.pan) {
+    const card = level.sel && L.cards.find((c) => c.id === level.sel);
+    // the selected node in the middle; otherwise the drawing's top left in view
+    wiring.pan = card ? { x: view.width / 2 - (card.x + 24 + card.w / 2) * wiring.zoom, y: view.height / 2 - (card.y + 24 + card.h / 2) * wiring.zoom } : { x: 12, y: 12 };
+  }
+  placeWiring();
+}
+function placeWiring() {
+  const panel = $('wiringpanel');
+  panel.querySelector('.wplane').style.transform = `translate(${wiring.pan.x}px, ${wiring.pan.y}px) scale(${wiring.zoom})`;
+  panel.querySelector('.wzoomval').textContent = `${Math.round(wiring.zoom * 100)}%`;
+}
+function zoomWiring(by, at) {
+  const r = $('wiringpanel').querySelector('.wcanvas').getBoundingClientRect();
+  const cx = at ? at.x - r.left : r.width / 2, cy = at ? at.y - r.top : r.height / 2;
+  const z = Math.min(2, Math.max(0.2, wiring.zoom * by));
+  wiring.pan = { x: cx - (cx - wiring.pan.x) * (z / wiring.zoom), y: cy - (cy - wiring.pan.y) * (z / wiring.zoom) };
+  wiring.zoom = z; placeWiring();
 }
 /** Every value a field can take from the page, grouped as Bubble's dropdown is. */
 function valueSources(forNode) {
@@ -3912,6 +4129,34 @@ function renderFunction() {
   fitFlow();
 }
 window.__ob.openFunction = openFunction;
+// STU-084: the wiring view's controls. Read only: nothing here writes the project
+{
+  const panel = $('wiringpanel'), canvas = panel.querySelector('.wcanvas');
+  $('wiringbtn').onclick = () => openWiring(pageKey, null);
+  panel.querySelector('[data-act=close]').onclick = closeWiring;
+  panel.querySelector('[data-act=back]').onclick = wiringBack;
+  panel.querySelector('[data-act=zin]').onclick = () => zoomWiring(1.2);
+  panel.querySelector('[data-act=zout]').onclick = () => zoomWiring(1 / 1.2);
+  panel.querySelector('[data-act=fit]').onclick = () => { wiring.zoom = null; wiring.pan = null; renderWiring(); };
+  panel.querySelector('[data-act=editor]').onclick = () => openOutside(EDITOR_DOWNLOAD);
+  // pan by dragging (a drag that starts on a card is not a click on it), zoom with ⌘/ctrl and the wheel or a pinch; the wheel alone pans
+  canvas.addEventListener('pointerdown', (e) => {
+    if (!wiring) return;
+    const start = { x: e.clientX, y: e.clientY, pan: { ...wiring.pan } };
+    wiring.moved = false;
+    const move = (ev) => { const dx = ev.clientX - start.x, dy = ev.clientY - start.y; if (Math.abs(dx) + Math.abs(dy) > 3) wiring.moved = true; if (wiring.moved) { wiring.pan = { x: start.pan.x + dx, y: start.pan.y + dy }; placeWiring(); } };
+    const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); setTimeout(() => { if (wiring) wiring.moved = false; }, 0); };
+    addEventListener('pointermove', move); addEventListener('pointerup', up);
+  });
+  canvas.addEventListener('wheel', (e) => {
+    if (!wiring) return;
+    e.preventDefault();
+    if (e.ctrlKey || e.metaKey) zoomWiring(Math.exp(-e.deltaY / 300), { x: e.clientX, y: e.clientY });
+    else { wiring.pan = { x: wiring.pan.x - e.deltaX, y: wiring.pan.y - e.deltaY }; placeWiring(); }
+  }, { passive: false });
+  canvas.addEventListener('click', () => { if (!wiring || wiring.moved) return; wiring.stack.at(-1).sel = null; renderWiring(); });
+}
+window.__ob.openWiring = openWiring;
 // the map's "Open its steps" (Data → Map, @nodegx/backend-map in Studio's frame): only from that frame, only a function
 addEventListener('message', (e) => {
   if (e.data?.nodegx !== 'open-function' || e.source !== $('mapframe')?.contentWindow || typeof e.data.component !== 'string') return;
@@ -4514,11 +4759,7 @@ function deleteStep(s) {
   edits(pageKey, [...doomed.map((id) => ({ edit: 'remove_node', component: pageKey, id })), ...heal]);
   toast(s.branches ? 'Deleted the branch and its chains' : `Deleted the ${stepTypeName(node.type)} step`);
 }
-const ACTIONS = [
-  ['RouterNavigate', 'Go to page', 'nav'], ['NewDbModelProperties', 'Create a new record', 'db'], ['SetDbModelProperties', 'Make changes to a record', 'db'], ['DeleteDbModelProperties', 'Delete a record', 'db'],
-  ['@refresh', 'Refresh page data', 'db'], ['Set Variable', 'Set a custom state or variable', 'state'], ['Condition', 'Branch (Yes / No)', 'branch'], ['net.noodl.user.LogIn', 'Log the user in', 'user'], ['net.noodl.user.LogOut', 'Log the user out', 'user'],
-  ['net.noodl.user.SignUp', 'Sign the user up', 'user'], ['Send Event', 'Send an event', 'bolt'], ['JavaScriptFunction', 'Run JavaScript', 'code'], ['Timer', 'Wait (timer)', 'bolt'], ['Navigate To Path', 'Go to a URL path', 'nav'], ['Show Popup', 'Show a popup', 'page']
-];
+const ACTIONS = VOCAB.steps.menu; // [type, the menu's words, glyph]: vocabulary.json
 /** A step's kind as the action menu says it ("Go to page", "Log the user in"); a variable's set, whose menu line covers
     two things, and anything not in the menu keep the node type's name. */
 const stepTypeName = (type) => (type === 'Set Variable' ? null : ACTIONS.find(([t]) => t === type)?.[1]) ?? typeName(type);

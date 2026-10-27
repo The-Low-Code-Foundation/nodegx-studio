@@ -1575,6 +1575,59 @@ inside the host's document and throws `SecurityError`).
 
 ---
 
+## STU-084 — the wiring underneath, and Studio's vocabulary (NodeGX P128 S6, 2026-10-27)
+
+**Why.** Richard's Muddy Paws run in Claude Desktop: the headline's Text read as a chip, "Wordings (option set by
+language)'s Home_headline", that opened nothing; the node behind it (a placed `/Components/Wording`, a `States` node
+inside) was listed nowhere, and he could not find it (*"I'm not finding it yet"*; NodeGX P125-MUDDY-DEADCHIP). The canon
+(NodeGX `docs/CANON.md`, "The wiring underneath"): Studio names a part it does not edit, and from there the person can
+look at the page as it really is, read only. Richard on it: *"hidden by default, but not invisible and inaccessible …
+a simple read only node canvas … not an obvious main feature."*
+
+**Built (NodeGX Beta sweep s22, as P128 S6).**
+- **`editor/vocabulary.json`**: what Studio draws and edits, as data (element types, the action menu, the value
+  sources it chips, an interface, an option set's insides, the sub-tabs). `studio.html` reads its element types and
+  its action menu from it; `serve.mjs` serves it at `/api/vocabulary`; it ships in the package. NodeGX's `@nodegx/mcp`
+  pins a copy (`src/studio/studioVocabulary.ts`, by its `scripts/pin-studio-vocabulary.mjs`) and its write note reads
+  from that; `tests/p128StudioVocabulary.test.ts` fails when the copy and this file differ.
+- **The chip.** A value fed by a part Studio does not edit is a chip that names the part and opens its card: its name
+  and kind, *"Studio doesn't edit this. Look at the wiring underneath, or open it in the NodeGX editor."*, **Wiring**,
+  **Get the editor** (nodegx.io/start#download), **Ask the agent**. A chip whose source Studio does edit (an element's
+  own output) selects that element instead.
+- **Logic on this page**, under the element tree: every node on the page Studio does not edit (not the elements, the
+  steps, the sources it chips, nor an Expression the Conditional tab reads as a rule), each row opening the same card,
+  and a quiet **Wiring** beside the heading.
+- **The wiring underneath** (`editor/wiring.mjs`, pure, beside `fngraph.mjs`): the page drawn whole in the NodeGX
+  canvas's look (`@nodegx/canvas-look`: the category schemes, the card metrics, the structure lane, the wire colours),
+  the visual tree down the lane, each child under its parent, the logic to its right a column per step away from the
+  tree, level with what it is wired to; a component with no tree laid out as a function is. The part the chip named is
+  selected and centred; a placed component opens into its own wiring (breadcrumbs, Esc back, Esc again closes).
+  Read only: drag pans, ⌘/ctrl and the wheel zoom, and while it is open no key reaches the page under it (Delete, ⌘Z).
+  The panel's notice quotes the canon (`<!-- canon: The wiring underneath -->`; NodeGX `scripts/canon-check.mjs
+  editor/studio.html` passes, and fails on a one-word drift).
+- **Ask the agent** writes the question into the project's `.nodegx-questions.json` (a dotfile, as the hold is), which
+  the agent's `what_changed_since` reports once; inside a host that takes a message (`ui/message`) it is also said into
+  the conversation as the person's. A link out goes through the host's `ui/open-link` inside one, `window.open`
+  outside (the census row above for `window.open` is no longer "none").
+
+**Graded.** `node editor/wiring-check.mjs`: every non-cloud component of NodeGX's templates (968 components, 12,965
+nodes, 26,207 wires) laid out with every node placed once and somewhere, no overlap, the tree in the lane, every wire
+on its ports' rows, and a Muddy-Paws-shaped fixture (6636/6636; a planted overlap, a wrong indent and an unanchored
+node at y = ∞ each go red; the last was a real bug, found by this check on 412 components). `check:editor` 213/213
+(9 new: the Muddy shape built into the todo copy, a Text fed by a placed `Logic/Greeting` with a `States` node inside;
+red at HEAD: the list empty and no chip), `check:hosted` 27/27 (the card in the host's frame: the editor's link reached
+the host as `ui/open-link`, the question as `ui/message`), `check:app` 64/64, `check:data` 80/80, `check:timeline`
+53/53, `check:functions` 695/695 + 46/46. On a copy of Richard's Muddy Paws Shelter: the headline's chip opens the card,
+Wiring shows Home with the Wording instance selected, Wording's wiring has the States node, and no project file
+changed. Pictures: [look/stu-084-card.png](look/stu-084-card.png), [look/stu-084-wiring-page.png](look/stu-084-wiring-page.png),
+[look/stu-084-wiring-component.png](look/stu-084-wiring-component.png).
+
+**Open.** The header chip on each card is drawn empty (`canvas-look` leaves the glyph to the painter). A wire from a
+logic node on the right into an element's input on the left loops out past the card's left edge, as the NodeGX
+editor draws it. Whether Claude Desktop offers `message` (`ui/message`) is not measured; without it the question is in
+the file and the toast says to tell the agent. Filed on the way: NodeGX P128-S6-OPTSETFLAKE (`check:hosted`'s New option
+set, asked and not made in four runs of six, on both arms).
+
 ## Rulings open
 
 | id | question | from |
