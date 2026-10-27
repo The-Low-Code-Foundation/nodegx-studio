@@ -1705,6 +1705,17 @@ browser). `check:editor` 217/217, `check:data` 80/80, `check:timeline` 53/53 on 
 
 **Open.** Claude Desktop itself (does it open `/app` in the person's browser through `ui/open-link`?) is Richard's run.
 
+## The map's triggers in the conversation: `@nodegx/backend-map` 0.1.4 (NodeGX P127 BKO-005, its map half; Beta round, 2026-10-27)
+
+Studio pins `@nodegx/backend-map` 0.1.4 (published by Richard; the registry's latest) and `vendor/NODEGX.json` moves
+with it (rebuilt from the 0.2.8 release worktree: only the pin and the build time change; `check:vendor` PASS). 0.1.4
+draws a backend's triggers on the map, each wired to the functions it runs and the table whose change starts it.
+`check:hosted` 36/36, one new line: inside the conversation, a row-change trigger on Task that runs *List Role
+Members*, kept on the backend and in `nodegx.automations.json`, is drawn on the map (`g:task-added`, on the backend),
+wired `fires → f:List Role Members` and `watches → t:Task`. The gate's `click` now finds and clicks in one step
+(NodeGX P128-BETA-HOSTEDCLICKRACE: a re-render between a wait and a separate click aborted the gate once in twelve
+runs). `check:data` 80/80, `check:automations` 31/31 + 29/29, `check:functions` 695/695 + 46/46.
+
 ## Rulings open
 
 | id | question | from |

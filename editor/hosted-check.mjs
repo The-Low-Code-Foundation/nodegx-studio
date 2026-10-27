@@ -81,9 +81,10 @@ try {
   const ev = (expr) => b.evaluate(expr);
   const until = (expr, ms = 8000) => b.until(expr, ms);
   /** Click the first element `sel` matches in the panel, once there is one; throws naming it when there never is. */
+  // found and clicked in one evaluate: a panel that re-renders between a wait and a separate click left the second
+  // query null and aborted the gate (P128-BETA-HOSTEDCLICKRACE)
   const click = async (sel, ms = 15000) => {
-    if (!(await until(`!!${P}.querySelector(${JSON.stringify(sel)})`, ms))) throw new Error(`nothing to click: ${sel}`);
-    await ev(`${P}.querySelector(${JSON.stringify(sel)}).click()`);
+    if (!(await until(`(() => { const el = ${P}?.querySelector(${JSON.stringify(sel)}); if (!el) return false; el.click(); return true; })()`, ms))) throw new Error(`nothing to click: ${sel}`);
   };
   const ready = await until(`(${P}?.title || '').startsWith('ready')`, 90000);
   ok(ready, 'the panel, drawn from another origin than Studio\'s, comes up', await ev(`${P}?.title`));
@@ -197,6 +198,24 @@ try {
   const fileSays = JSON.parse(readFileSync(join(project, 'nodegx.automations.json'), 'utf8')).triggers[0].enabled;
   const backendSays = (await admin('GET', '/admin/triggers/nightly-at-2')).trigger?.enabled;
   ok(off && fileSays === false && backendSays === false, 'switched off inside the conversation: the project\'s file and the backend both say off', { off, fileSays, backendSays });
+
+  // P127 BKO-005, the map's half (@nodegx/backend-map 0.1.4): a trigger is drawn on the map inside the conversation,
+  // wired to the function it runs and the table whose change starts it. Kept in the file and on the backend, as above
+  if (agentMade) {
+    console.log('check: BKO-005 the map draws triggers inside the conversation');
+    const mapTrig = { id: 'task-added', type: 'db-change', name: 'When a task is added', enabled: true, target: { kind: 'function', name: 'List Role Members' }, dbChange: { collection: 'Task', actions: ['create'] } };
+    const madeTrig = await admin('POST', '/admin/triggers', mapTrig);
+    const autoFile = JSON.parse(readFileSync(join(project, 'nodegx.automations.json'), 'utf8'));
+    writeFileSync(join(project, 'nodegx.automations.json'), JSON.stringify({ ...autoFile, triggers: [...autoFile.triggers, mapTrig] }, null, 2) + '\n');
+    await click('[data-tab=data]'); await wait(300);
+    await click('[data-sub=map]'); await wait(300);
+    await ev(`${P}.getElementById('mapframe').src = '/backend-map/'`); // a fresh map, as reopening it gives: it reads the backend once a minute
+    const MF = `${P}.getElementById('mapframe')`;
+    const onMap = await until(`(() => { const m = ${MF}?.contentWindow?.__map; const n = m?.byId?.['g:task-added']; if (!n) return false;
+      return { title: n.title, kind: n.kind, notOnBackend: n.trigger.notOnBackend, edges: (m.edges || []).filter((e) => e.from === 'g:task-added').map((e) => e.kind + '>' + e.to) }; })()`, 25000);
+    ok(onMap && onMap.kind === 'trigger' && !onMap.notOnBackend && onMap.edges.includes('fires>f:List Role Members') && onMap.edges.includes('watches>t:Task'), 'inside the conversation the map draws the trigger, wired to the function it runs and the table that starts it', onMap || { made: madeTrig, ids: await ev(`Object.keys(${MF}?.contentWindow?.__map?.byId ?? {}).slice(0, 20)`) });
+    await shot('bko-005-hosted-map-trigger');
+  }
 
   // P125-MUDDY-NATIVEDIALOG: the host's frame has no allow-modals, so prompt() and confirm() answer nothing there. Studio
   // asks a name in its own field and a yes in its own card: both driven here as a person would, typing and pressing
