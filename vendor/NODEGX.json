@@ -1,25 +1,25 @@
 {
   "nodegx": {
     "repository": "https://github.com/The-Low-Code-Foundation/NodeGX",
-    "commit": "2cac89c058e442b563b3ec2a6a7cbafc25c3a11b",
-    "committed": "2026-10-23T23:48:05+02:00",
-    "subject": "docs(p26): npm 0.2.6 packed and smoked, waiting on Richard's publish — the tarballs, their shasums and the commands"
+    "commit": "2fde69490b6933f99866cd29f474f13d72f27aff",
+    "committed": "2026-10-27T10:06:29+01:00",
+    "subject": "fix(p127 bko-006): what two stranger briefs met — an agent's tables kept in the project, triggers that name what is served and say why they fail, a creator-only table that lists before its first row, exports without password hashes"
   },
-  "built": "2026-10-24T07:41:41.238Z",
+  "built": "2026-10-27T09:07:00.128Z",
   "esbuild": "0.25.12",
   "npm": {
-    "@nodegx/backend-map": "0.1.2",
-    "@nodegx/mcp": "0.2.6",
-    "@nodegx/preview": "0.2.5"
+    "@nodegx/backend-map": "0.1.3",
+    "@nodegx/mcp": "0.2.7",
+    "@nodegx/preview": "0.2.7"
   },
-  "sources": 232,
+  "sources": 233,
   "files": {
     "agent.cjs": "b1a8b9b7a19f19e0204d394f03a87f645f3fd1dc346c93f83924d9398677b048",
-    "backend.cjs": "2bc94caf7409ed12b04f253ab267a9a1d0614667bded5cf9603496be367ed24e",
+    "backend.cjs": "c8d49228cbe827dc9e2d6693842ca12637ed6596827ae905fd4cf8346354faf9",
     "fields.js": "86e99b4cf706b4bb9cb5c54c9911762214ddca06a8871164ac956d1fdae3449e",
     "look.js": "0df321ba069438bdb215cc1276249dd997b221cd51940f80c830515c91a82c8c",
     "phrasebook/rows.js": "fef66fcff1b2c7e683f39672745c59004431a0c94405ebeb5496dd0d985de560",
-    "specs.js": "5d28f3118dd3b869f8e629d85cce69c94e13a5b98158bdb6b577de5227ed6d59",
+    "specs.js": "e52d062eca67fdfd8655f2b7fa33dd5a58d9faacfc455dd277b7a6829b799f0e",
     "templates/pixel-game/components/_registry.json": "de0875f75e5144a3fa7cccdcadb87c1d12be6b9e589286f3b0d60f3ec18a0139",
     "templates/pixel-game/components/App/component.json": "1ab96cc8ac12d8062f53d076a44238fa973ffc8243d992122a5df42586897e1b",
     "templates/pixel-game/components/App/connections.json": "47156262e6d81366820a393631f0ca9ed15b8c7f113dd4494b8d991b000155ec",

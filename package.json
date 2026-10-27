@@ -38,9 +38,9 @@
     "dist:signed": "electron-builder --publish never"
   },
   "dependencies": {
-    "@nodegx/backend-map": "0.1.2",
-    "@nodegx/mcp": "0.2.6",
-    "@nodegx/preview": "0.2.5"
+    "@nodegx/backend-map": "0.1.3",
+    "@nodegx/mcp": "0.2.7",
+    "@nodegx/preview": "0.2.7"
   },
   "devDependencies": {
     "electron": "43.2.0",

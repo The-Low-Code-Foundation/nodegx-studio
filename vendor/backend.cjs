@@ -2509,10 +2509,14 @@ var WHEN_TARGET_GOES_BY_BACKEND = Object.freeze({
 // packages/nodegx-backend/src/security/model.ts
 var CLP_OPS = ["find", "get", "create", "update", "delete"];
 var RULE_ATOMS = /* @__PURE__ */ new Set(["public", "authenticated", "nobody"]);
+var CREATOR_ATOM = "creator";
 function isPathRule(atom) {
   return !!atom && typeof atom === "object" && !Array.isArray(atom) && "path" in atom;
 }
 function validateRuleAtom(atom, paths) {
+  if (atom === CREATOR_ATOM) {
+    return paths ? null : '"creator" is allowed only on find, get, update and delete of a collection (a row being created has nobody who made it yet)';
+  }
   if (isPathRule(atom)) {
     if (!paths) return "a path rule is allowed only on find, get, update and delete of a collection";
     const keys = Object.keys(atom);
@@ -2528,7 +2532,7 @@ function validateRuleAtom(atom, paths) {
   if (atom.startsWith("role:")) {
     return atom.length > "role:".length ? null : "role: rule is missing the role name";
   }
-  return `unknown rule value "${atom}" (expected public | authenticated | nobody | role:<name>)`;
+  return `unknown rule value "${atom}" (expected public | authenticated | nobody | creator | role:<name>)`;
 }
 function validateFunctionRateLimit(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {

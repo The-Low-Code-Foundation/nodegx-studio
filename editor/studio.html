@@ -5067,7 +5067,7 @@ async function renderPrivacy() {
   renderRoles(main, map);
 }
 function renderRoles(main, map) {
-  main.append(h('div', { class: 'card' }, h('h4', {}, 'Groups'), map.roles.length ? h('ul', { class: 'reach' }, ...map.roles.map((r) => h('li', {}, h('b', {}, r.name), `: ${r.members} ${r.members === 1 ? 'person' : 'people'}`))) : h('div', { class: 'note' }, 'No groups yet. A group (a role) is a set of people a rule can name: “staff”, “admins”.'),
+  main.append(h('div', { class: 'card' }, h('h4', {}, 'Groups'), map.roles.length ? h('ul', { class: 'reach' }, ...map.roles.map((r) => h('li', {}, h('b', {}, r.name), `: ${r.members} ${r.members === 1 ? 'person' : 'people'}`))) : h('div', { class: 'note' }, 'No groups yet. A group (a role) is a set of people a rule can name, like “admins” or “members”.'),
     h('div', { class: 'note' }, `${map.people} ${map.people === 1 ? 'person has' : 'people have'} an account on this database.`)));
 }
 
