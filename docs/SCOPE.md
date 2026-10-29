@@ -1757,6 +1757,72 @@ SIGTERM to the bin stops Studio and that backend. `grep -rl '/Users/'`: 0 files 
 package (1 in the whole install: a third-party README's example path, `readdirp`). Not published: the publish line is
 Richard's.
 
+## STU-090 — Swapshop: a whole app built in Studio, and what it changed (Richard's ask, 2026-10-29)
+
+**Why.** Richard: *"There are several parts I'm not happy about, especially the workflow explorer and database map …
+we've made it too much like the database map, with the black background and dark mode. It doesn't fit with the rest
+of the editor which is light mode by default. Also adding and editing nodes is a pain … you expect to click on it and
+config comes up but you have to click on the cog."* And: build a full-stack app end to end with every option Studio
+has (a Bubble clone with Noodl's power), and improve what needs it, without asking.
+
+**The build.** *Swapshop*, a community marketplace, from nothing, through Studio's own UI driven over CDP (scratchpad,
+not committed): a blank app; data types Listing (title, description, price, photo, sold, category, seller → User) and
+Offer (listing → Listing, buyer → User, amount); the option set Category; a backend started from App data; Listing's
+read rule opened in Privacy; a page data list "Listings for sale"; a repeating group of it drawing two seeded rows; a
+button whose click creates a Listing, branches, and goes to a page.
+
+**Built.**
+- *The workflow, light.* The canvas and its cards take Studio's own tokens (`--bg` dotted, white cards, the accent
+  ring); `FLOW` and `KIND_COLOUR` are the light palette; no glow filter; the dark `.wf` button and input overrides are
+  gone, so its controls are Studio's. The backend workflows and a cloud function's graph (same canvas) follow.
+- *A step is set up by clicking it.* No cog and no settings inside the card: a click on a step (or on what starts the
+  workflow) marks it and opens `#wfinspect`, a panel on the right like Design's: the step's own name, what the action
+  does in one sentence, a branch's condition, then its fields. A record step leads with **Data type** and then
+  "Fields of Listing"; a Choice field is a dropdown of its choices; developer settings (Source Object Id, Upsert On,
+  Router, run-on-change) fold under *More options*. *Add an action after this one* / *Put an action after this one*
+  at its foot. A step just added is picked, so it is set up at once. Esc or a click on the canvas closes it; opening it
+  never shrinks the flow (the fit is measured as if it were shut; the canvas scrolls under it).
+- *The action menu by section,* Bubble's order (Navigation, Data, Account, Element and state, Popups, Logic, Events
+  and backend, Custom code), each action with what it does. **Bug fixed:** vocabulary.json's three display-name rows
+  (Send an event, Go to a URL path, Show a popup) never matched a node type and were missing from Actions; their
+  `aliases` are applied now. Nine more actions Studio's own (Run a cloud function, Open an external website, Close the
+  popup, Change the current user, Email a sign-in link, Ask for a file, Upload a file, Call an API, Write to the log);
+  vocabulary.json is untouched (NodeGX pins it). Every other node folds under "for developers", deprecated twins out.
+- *Starting a workflow.* The New menu shows the usual events in Bubble's words ("When Button is clicked", "When Home is
+  loaded"), the other 48 behind one line; the event card says the same. Design → Interaction has the buttons (*When it
+  is clicked*, *Another event…*) where it said "Add one in Workflow".
+- *Data → Map is the data model first.* Every type a card of its fields, each Link a purple wire to the type it points
+  at (dashed: many), User (the backend's accounts) and the option sets beside them, who may read each type from
+  nodegx.security.json; a card opens its type. *Who can reach what* is the backend map, one click away (its dark look
+  is the package's: see Open).
+- *A blank app* first on the welcome screen (`lib/blank.mjs`, the skeleton NodeGX's `create_project` writes;
+  `app/blank-check.mjs` 9/9).
+- *A repeating group* in the palette: it asks which page data list, makes `Rows/<Type> row` (Component Inputs named
+  after the fields, a Text for each of the first three) and a For Each drawing it with the list wired in. Swapshop's two
+  listings drew as two rows on the first try.
+- *Data fixes.* A Link can point at **User** (it was refused: "There is no collection called _User"). A Choice field
+  can take its choices from an option set. **Bug fixed:** once a backend ran, its empty `checks` list hid the Choice the
+  project declares, and the field read as Text everywhere. A new field's drawer no longer opens on "The field needs a
+  name.".
+- *A new type's first list.* The page data panel says why a query was refused (401/403: "nobody may read them yet")
+  with *Who can read Listing…* straight to Privacy; the first backend Studio starts for an app keeps its rules in
+  `nodegx.security.json` at once, so Privacy can change them without the extra step.
+- *Small ones.* A new Button is its own size, blue, rounded (it was a black bar the width of its parent). The backend
+  pill opens App data when there is no backend. **Bug fixed:** `header .status` beat `button[hidden]`, so every hidden
+  status pill showed ("Import report" on an app never imported); `check:app` read the attribute and passed — it now
+  reads what is drawn.
+
+**Graded.** `check:editor` **219/219** (the cog and inline-settings rows now drive the panel; new: a click opens the panel with fields and no step has a cog, Esc closes it, the New menu says "When Sign-in card is clicked"), `check:data` 80/80, `check:timeline` 53/53, `check:hosted` 36/36 (it picks *Who can reach what* before reading the frame), `app/blank-check.mjs` 9/9 (new, in `npm run check`). `check:app` **36/40**: the four Publish rows of P123-STU008-APPCHECKPUBLISH, reopened (STU-090 does not touch Publish; load 16–20; not re-measured at the base commit). Its "no Import report" row now reads what is drawn and passes.
+
+**Open.**
+- *The backend map's own look is dark* (`@nodegx/backend-map`, NodeGX P124: `server.mjs` sends `look.colors.dark`, the
+  canvas draws `#232129` cards and white text). A light theme is that package's change and a release; Studio frames it.
+- An option set and a Choice field are still two things: the choices are copied, not linked.
+- A provisioned backend did not carry the project's Choice rule (its `checks` came back empty): it does not enforce it.
+- The repeating group's row is plain text (no picture, no click-to-open-its-listing yet), and its For Each's panel says
+  nothing of the list it shows.
+- The header is crowded at 1440 px ("App on sc…", "Preview ↗" wraps).
+
 ## Rulings open
 
 | id | question | from |

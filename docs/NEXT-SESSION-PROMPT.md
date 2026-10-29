@@ -81,7 +81,21 @@ agent's when the watcher saw it change in the same batch as its `component.json`
 changed …"*, and so does the "redrawn" toast. `check:editor` **203/203** (3 new), `check:data` 80/80, `check:timeline`
 53/53, `check:app` 54/54 on that tree. Pushed with s22–s24 (Richard: "Push yes please").
 
+**s25 (2026-10-29), STU-090 — Richard: the workflow and the map did not fit the light editor, a step needed a cog to
+set it up; "build a full stack app end to end … don't ask my permission".** Built Swapshop (a marketplace) through
+Studio's UI and changed what it hit (SCOPE STU-090 has the list): the workflow canvas light; a click on a step opens its
+settings in `#wfinspect` on the right (no cog); the action menu by section with what each does (and the three aliased
+actions that were missing); usual events in Bubble's words; Interaction's *When it is clicked*; Data → Map opens on the
+data model (cards, Link wires, User, option sets), *Who can reach what* is the backend map; a Blank app on the welcome
+screen; a Repeating group in the palette; Link → User; Choice from an option set; a refused list points at Privacy.
+Five bugs filed and fixed in NodeGX's ledger (P123-STU-ACTIONALIASES, -CHOICELOST, -USERLINK, -NEWTYPECLOSED,
+-HIDDENPILL). Committed, **not pushed** (ask first). Waiting on Richard: how the light workflow, the step panel and the
+data model feel on his own app; whether the backend map itself should go light (that is `@nodegx/backend-map`, NodeGX
+P124's package, and a release).
+
 Next buildable, in order:
+0a. STU-090's open list (SCOPE): the repeating group's row (a picture, a click that opens its record), the For Each's
+   panel saying which list it shows, an option set linked to a Choice rather than copied, the crowded header.
 0. STU-009 on Windows / Linux in the package workflow (only macOS was run). STU-026: nothing left that was asked.
 1. When NodeGX publishes a release with BACKENDPUBLIC: bump the pins, `npm run vendor`, every gate. Check npm first
    (`npm view @nodegx/preview versions`).

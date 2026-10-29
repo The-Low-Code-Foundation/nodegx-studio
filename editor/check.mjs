@@ -308,10 +308,13 @@ try {
   await b.evaluate(`${evRow(signInBtn)}.click()`); await wait(300);
   const steps = await b.evaluate('[...document.querySelectorAll("#steps .step h3")].map(r => r.firstChild.textContent)');
   ok(steps.length >= 1 && steps[0] === 'Log the user in', 'the Sign in click\'s first step is the Log In action, headed as the action menu says it ("Log the user in")', steps);
-  await b.clickSel('#steps .step .acts button'); await wait(200);
-  const fields = await b.evaluate(`[...document.querySelectorAll('#steps .step .settings')].filter(p => p.style.display !== 'none').flatMap(p => [...p.querySelectorAll('.field label')].map(l => l.textContent))`);
-  ok(fields.length > 0, 'a step opens its settings as fields', fields.slice(0, 6));
-  await b.clickSel('#steps .step .acts button'); await wait(100);
+  // Richard, 2026-10-29: a click on the step sets it up, in the panel on the right (no cog); Esc closes it
+  await b.clickSel('#steps .flow .step h3'); await wait(250);
+  const fields = await b.evaluate(`document.getElementById('wfinspect').hidden ? [] : [...document.querySelectorAll('#wfinspect .field label')].map(l => l.textContent)`);
+  const picked = await b.evaluate(`!!document.querySelector('#steps .flow .step.picked') && document.getElementById('workflow').classList.contains('inspecting') && !document.querySelector('#steps .step .settings, #steps .step .acts button[title=Settings]')`);
+  ok(fields.length > 0 && picked, 'a click on a step opens its settings as fields in the panel on the right; the step is marked, and no step has a cog or settings of its own', fields.slice(0, 6));
+  await b.key('Escape', 'Escape', 27); await wait(150);
+  ok(await b.evaluate(`document.getElementById('wfinspect').hidden && !document.querySelector('#steps .flow .step.picked')`), 'Esc closes the step\'s panel');
   {
     // a new workflow on the card's click, with a branch: Yes gets "Set state", No gets "Go to page", the condition is composed
     // (a click, not Did Mount: the app opening must not run it — STU-013-NAVLOOP below)
@@ -319,7 +322,7 @@ try {
     await b.type('Sign-in card click'); await wait(200);
     const first = await b.evaluate(`document.querySelector('.menu .item')?.textContent`);
     await b.clickSel('.menu .item'); await wait(300);
-    const evPort = (first.match(/: (.+?)[A-Z][a-z]+ *$/) || [])[1];
+    ok(/^When Sign-in card is clicked/.test(first || ''), 'the new workflow menu says the event as Bubble does: "When Sign-in card is clicked"', first);
     const cardHead = async () => JSON.parse(await b.evaluate(`JSON.stringify({ name: document.querySelector('#steps .event-card h2')?.textContent, trigger: document.querySelector('#steps .event-card small')?.textContent, row: document.querySelector('#events .row[aria-selected=true] span')?.textContent })`));
     const draft = await cardHead();
     ok(draft.name === 'No steps yet' && /^When Sign-in card: /.test(draft.trigger), 'STU-023: a new workflow with no steps and no name says so; the event is the line under it', draft);
@@ -392,7 +395,7 @@ try {
     await rebuilt(n1); await wait(500);
     const branchTrace = async () => JSON.parse(await b.evaluate(`JSON.stringify(__ob.preview.frame.contentWindow.Noodl.Navigation._noodlRuntime.context.getTraceEvents(0).filter(e => e.toNode === ${JSON.stringify(cond.id)} || e.fromNode === ${JSON.stringify(cond.id)}).map(e => e.fromPort + ' > ' + e.toPort))`));
     const atOpen = await branchTrace();
-    ok(first.includes('Click') && atOpen.includes('result > condition') && !atOpen.some((t) => /^on(true|false) > /.test(t)), 'in the app, the branch\'s value arrives as it opens and neither Yes nor No runs: nothing clicked the card', { event: first, atOpen });
+    ok(/click/i.test(first) && atOpen.includes('result > condition') && !atOpen.some((t) => /^on(true|false) > /.test(t)), 'in the app, the branch\'s value arrives as it opens and neither Yes nor No runs: nothing clicked the card', { event: first, atOpen });
     await b.evaluate(`__ob.preview.elementsOf(${JSON.stringify(card)})[0].click()`); await wait(500);
     const clicked = await branchTrace();
     ok(clicked.includes('onClick > eval') && clicked.includes('onfalse > navigate') && !clicked.includes('ontrue > do'), 'a click on the card in the app runs the branch: 1 > 2 is false, so No\'s Go to page runs', clicked);
@@ -491,9 +494,9 @@ try {
     const afterUndo = await b.evaluate(`document.getElementById('toast').textContent`);
     ok(afterUndo === 'Undone', 'after Undo the toast says Undone, not what was undone ("Deleted the branch…")', afterUndo);
     await shot('workflow-rejoin');
-    // the step's "Pick a page…" opens its settings; a page picked there takes the line away, and Undo brings it back
+    // the step's "Pick a page…" opens its settings in the panel; a page picked there takes the line away, and Undo brings it back
     await clickText('#steps .branch.no .step .nopage button', 'Pick a page…'); await wait(200);
-    const picked = await b.evaluate(`(() => { const f = [...document.querySelectorAll('#steps .branch.no .step .settings .field')].find(f => /^target/i.test(f.querySelector('label')?.textContent || '')); const s = f?.querySelector('select'); const o = s && [...s.options].find(o => o.value); if (!o) return null; s.value = o.value; s.dispatchEvent(new Event('change')); return o.value; })()`);
+    const picked = await b.evaluate(`(() => { const f = [...document.querySelectorAll('#wfinspect .field')].find(f => /^(target|page)$/i.test(f.querySelector('label')?.textContent || '')); const s = f?.querySelector('select'); const o = s && [...s.options].find(o => o.value); if (!o) return null; s.value = o.value; s.dispatchEvent(new Event('change')); return o.value; })()`);
     let target;
     for (const t0 = Date.now(); Date.now() - t0 < 5000 && !target; await wait(150)) target = onSign().nodes.find((n) => n.id === noNav.id)?.parameters?.target;
     await wait(300);
@@ -1043,7 +1046,7 @@ try {
     await b.clickSel('[data-tab=workflow]'); await wait(300);
     await b.clickSel('#newevent'); await wait(250);
     await b.type('Panel click'); await wait(200);
-    await menuItem('When Panel: Click');
+    await menuItem('When Panel is clicked');
     await clickText('#steps .addrow button', 'Add an action'); await wait(250);
     await b.type('custom state'); await wait(200); await menuItem('Set a custom state');
     await menuItem("Probe text's mood");
@@ -1053,9 +1056,9 @@ try {
       setCo = pn.find((n) => n.type === 'net.noodl.SetComponentObjectProperties' && pc.some((w) => w.fromId === 'ppRoot' && w.toId === n.id && w.toProperty === 'store'));
     }
     ok(setCo?.parameters?.properties === 'mood', 'Set a custom state in a reusable is a Set Component Object Properties step for mood, run by store from the Panel\'s click', { type: setCo?.type, parameters: setCo?.parameters });
-    const stepFields = await b.evaluate(`[...document.querySelectorAll('#steps .step .settings')].filter(p => p.style.display !== 'none').flatMap(p => [...p.querySelectorAll('.field label')].map(l => l.textContent))`);
+    const stepFields = await b.evaluate(`[...document.querySelectorAll('#wfinspect .field label')].map(l => l.textContent)`); // a step just added is set up at once, in the panel
     n0 = await shows();
-    await b.evaluate(`(() => { const f = [...document.querySelectorAll('#steps .step .settings .field')].find(f => f.querySelector('label').textContent === 'mood'); const i = f.querySelector('input'); i.value = 'clicked'; i.dispatchEvent(new Event('input')); })()`);
+    await b.evaluate(`(() => { const f = [...document.querySelectorAll('#wfinspect .field')].find(f => f.querySelector('label').textContent === 'mood'); const i = f.querySelector('input'); i.value = 'clicked'; i.dispatchEvent(new Event('input')); })()`);
     let setTo;
     for (const t0 = Date.now(); Date.now() - t0 < 5000 && setTo !== 'clicked'; await wait(150)) setTo = onDisk(PANEL + 'nodes.json').nodes.find((n) => n.id === setCo?.id)?.parameters?.['prop-mood'];
     ok(stepFields.includes('mood') && setTo === 'clicked', 'its settings name the state (mood), and the value typed there is the step\'s prop-mood', { stepFields, setTo });

@@ -120,6 +120,8 @@ try {
 
   console.log('check: the map');
   await click('[data-sub=map]'); await wait(400);
+  // Map opens on the data model (Richard, 2026-10-29); the backend map is its "Who can reach what"
+  await ev(`${P}.querySelectorAll('#mapbar .seg button')[1]?.click()`); await wait(400);
   const F = `${P}.getElementById('mapframe')`;
   const opened = await until(`(() => { const d = ${F}?.contentDocument; const l = d?.getElementById('backendLine')?.textContent || ''; return d?.getElementById('map') && l && !/^Opening the backend/.test(l) ? l : false; })()`, 20000);
   ok(opened, 'the map draws inside the conversation', opened || await ev(`${F}?.contentDocument?.body?.innerText?.slice(0, 200) ?? null`));

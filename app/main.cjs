@@ -376,7 +376,7 @@ function handlers() {
     asking(async (tab, slug) => {
       const t = actions.templates().find((x) => x.slug === slug);
       if (!t) return { error: `There is no template called ${slug}.` };
-      const dest = await chooseDestination(`New project from ${t.title}`, t.title, 'Create');
+      const dest = await chooseDestination(slug === 'blank' ? 'New blank app' : `New project from ${t.title}`, slug === 'blank' ? 'My app' : t.title, 'Create');
       if (!dest) return { cancelled: true };
       busy(`Copying ${t.title}…`, tab);
       const { dir } = await actions.createFromTemplate(slug, dest);

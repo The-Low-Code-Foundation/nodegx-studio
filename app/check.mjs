@@ -102,7 +102,7 @@ try {
     const b = await start([todos]);
     const t = await welcomeTitle(b);
     ok(t === 'ready welcome · 0 recent · 5 templates', 'the window shows the welcome screen, nothing recent, five templates', t);
-    ok((await b.evaluate(`[...document.querySelectorAll('.tpl:not(:disabled)')].map((x) => x.dataset.slug).join()`)) === 'todo-list,planning,rocket-school,pixel-dungeon,story-engine', 'the five templates are the shelf\'s, each clickable');
+    ok((await b.evaluate(`[...document.querySelectorAll('.tpl:not(:disabled)')].map((x) => x.dataset.slug).join()`)) === 'blank,todo-list,planning,rocket-school,pixel-dungeon,story-engine', 'Blank app first, then the five templates of the shelf, each clickable');
     ok(await b.evaluate(`!document.querySelector('#reopen') && /appear here/.test(document.querySelector('#recent').textContent)`), 'no Reopen on a first run, and the empty list says what will appear');
     // CPY-002: one line on what Studio is for, from NodeGX's canon ("When it's finished")
     const forLine = await b.evaluate(`document.getElementById('forline')?.textContent ?? null`);
@@ -221,7 +221,7 @@ try {
     await b.clickSel('#reopen');
     ok(/^ready My todos /.test(await editorReady(b)), 'Reopen opens it in the editor');
     ok((await backendUp(b))?.phase === 'running', 'its backend is started again');
-    ok(await b.evaluate(`document.querySelector('#reportpill').hidden && !document.querySelector('#reportpanel')`), 'a project with no import report shows no report and no button for one');
+    ok(await b.evaluate(`document.querySelector('#reportpill').hidden && getComputedStyle(document.querySelector('#reportpill')).display === 'none' && !document.querySelector('#reportpanel')`), 'a project with no import report shows no report and no button for one');
     const note = await openRows(b, 'Task');
     ok(note === '1–1 of 1' && (await backendRows(todos, 'Task')).length === 1, 'the row added before the quit is there', note);
 

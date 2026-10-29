@@ -8,6 +8,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, 
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { attachNewBackend, needsBackend } from '../lib/backend.mjs';
+import { writeBlank } from '../lib/blank.mjs';
 import { kit, studioRoot } from '../lib/nodegx.mjs';
 
 export const isProject = (dir) => !!dir && existsSync(join(dir, 'nodegx.project.json'));
@@ -32,7 +33,10 @@ const templateDir = (t) => join(kit.templates, t.dir);
 
 /** The list the welcome screen draws; a template whose folder is missing is listed as unavailable.
     Whether it needs a backend is NodeGX's rule read off the folder (a security policy, or a cloud function). */
-export const templates = () => TEMPLATES.map((t) => ({ ...t, needsBackend: needsBackend(templateDir(t)), available: isProject(templateDir(t)) }));
+export const templates = () => [BLANK, ...TEMPLATES.map((t) => ({ ...t, needsBackend: needsBackend(templateDir(t)), available: isProject(templateDir(t)) }))];
+/** Where a Bubble user starts: one empty page (lib/blank.mjs, the skeleton NodeGX's create_project writes). Studio's own, first
+    on the welcome screen; not a shelf template, so not in TEMPLATES (which `npm run vendor` copies). */
+export const BLANK = { slug: 'blank', category: 'blank', title: 'Blank app', summary: 'One empty page, nothing else. Add pages, elements, data and workflows yourself: a backend starts the first time you make a data type.', needsBackend: false, available: true };
 
 /**
  * The editor writes these into a project it opens, with paths of the machine that opened it; the shelf refuses a
@@ -65,6 +69,12 @@ function nameAfterFolder(dir) {
  * Resolves with the project folder and what happened to the backend.
  */
 export async function createFromTemplate(slug, dest) {
+  if (slug === BLANK.slug) {
+    dest = resolve(dest);
+    claimEmptyFolder(dest);
+    writeBlank(dest, basename(dest));
+    return { dir: dest, backend: { status: 'none' } };
+  }
   const t = TEMPLATES.find((x) => x.slug === slug);
   if (!t) throw new Error(`There is no template called ${slug}.`);
   if (!isProject(templateDir(t))) throw new Error(`The ${t.title} template is not in ${kit.templates}.`);

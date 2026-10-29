@@ -118,8 +118,8 @@
   </section>
 
   <section aria-labelledby="tpl-head">
-    <h2 id="tpl-head">Start from a template</h2>
-    <p class="intro">A copy of a whole NodeGX app, yours to change. It goes in a new folder you name.</p>
+    <h2 id="tpl-head">Start something new</h2>
+    <p class="intro">A blank app, or a copy of a whole NodeGX app, yours to change. It goes in a new folder you name.</p>
     <div class="templates" id="templates"></div>
   </section>
 
@@ -151,7 +151,7 @@ const el = (tag, props = {}, ...children) => {
   for (const c of children) if (c != null) n.append(c);
   return n;
 };
-const CATEGORY = { 'data-app': 'Data app', game: 'Game', starter: 'Starter', site: 'Site', dashboard: 'Dashboard', form: 'Form', integration: 'Integration' };
+const CATEGORY = { blank: 'Start here', 'data-app': 'Data app', game: 'Game', starter: 'Starter', site: 'Site', dashboard: 'Dashboard', form: 'Form', integration: 'Integration' };
 let data = null;
 let busy = false;
 
@@ -268,6 +268,6 @@ for (const kind of ['file', 'folder']) $(`#import-${kind}`).onclick = () => { gu
   if (data.error) return status(data.error, 'error');
   render();
   (document.querySelector('#reopen') || document.querySelector('.tpl:not(:disabled)'))?.focus();
-  document.title = `ready welcome · ${data.recent.length} recent · ${data.templates.filter((t) => t.available).length} templates`;
+  document.title = `ready welcome · ${data.recent.length} recent · ${data.templates.filter((t) => t.available && t.slug !== 'blank').length} templates`;
 })();
 </script>

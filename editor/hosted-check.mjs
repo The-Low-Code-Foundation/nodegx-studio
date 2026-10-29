@@ -104,6 +104,8 @@ try {
 
   console.log('check: BKO-002 the map in the conversation');
   await click('[data-sub=map]'); await wait(400);
+  // Map opens on the data model (Richard, 2026-10-29); the backend map is its "Who can reach what"
+  await ev(`${P}.querySelectorAll('#mapbar .seg button')[1]?.click()`); await wait(400);
   const F = `${P}.getElementById('mapframe')`;
   const shown = await ev(`(() => { const f = ${F}; return !!f && getComputedStyle(f).display !== 'none' && !${P}.querySelector('#data-map .hostedmap:not([hidden])'); })()`);
   ok(shown, 'Map shows the map\'s frame, not the "Open the map" card');

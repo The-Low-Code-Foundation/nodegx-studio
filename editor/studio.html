@@ -91,6 +91,7 @@
   header .toggle input:checked + i::after { left: 16px; }
   header .spacer { flex: 1; }
   header .status { color: var(--muted); font-size: 12px; max-width: 360px; min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+  header .status[hidden] { display: none; } /* the rule above beat button[hidden]: a project with no import report showed "Import report" all the same */
   header .status::before { content: ''; width: 7px; height: 7px; border-radius: 4px; background: var(--ok); flex: none; }
   header .status.busy::before { background: var(--warn); }
   header .status.bad { color: var(--danger); }
@@ -275,6 +276,7 @@
   .when .chip { max-width: 150px; } .rulecode { font-family: var(--mono); font-size: 12px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .field.otherwise label, .field.inherited label { color: var(--muted); } .rulenote { padding: 2px 0 6px; } .rulenote.bad { color: #b42318; } .ruleacts { padding: 4px 0 2px; }
   .chip.rulechip { cursor: pointer; }
+  .startwf { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0 10px; }
   .ptabs .count { margin-left: 5px; background: var(--accent-soft); color: var(--accent-ink); border-radius: 8px; padding: 0 6px; font-size: 11px; }
   .sec2 summary { justify-content: flex-start; gap: 6px; }
   .sec2 summary .acts { margin-left: auto; display: flex; gap: 4px; }
@@ -414,7 +416,19 @@
   .bolttip b { font-weight: 600; margin-right: 6px; }
   .bolttip .tiplane { padding-left: 10px; }
   #workflow.card { grid-template-columns: 1fr; max-width: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; }
-  #workflow.card > aside { display: none; }
+  #workflow.card > aside:not(.right) { display: none; }
+  #workflow.inspecting { grid-template-columns: 280px 1fr 360px; }
+  #workflow.card.inspecting { grid-template-columns: 1fr 360px; }
+  #wfinspect[hidden] { display: none; }
+  #wfinspect .head .type { display: flex; align-items: center; gap: 6px; }
+  #wfinspect .what { margin: 0; padding: 10px 12px; color: var(--ink-2); font-size: 12.5px; line-height: 1.5; border-bottom: 1px solid var(--line); background: var(--panel-2); }
+  #wfinspect .stepkind { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; color: #fff; flex: none; }
+  #wfinspect .stepkind svg.i { width: 12px; height: 12px; }
+  #wfinspect .warn { color: var(--warn); font-size: 12px; padding: 8px 0 2px; }
+  #wfinspect .cond-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); padding: 8px 0; }
+  #wfinspect details.more > summary { padding: 9px 0; font-weight: 600; cursor: pointer; color: var(--muted); font-size: 12px; }
+  #wfinspect .after { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0; }
+  #wfinspect .sechead { padding: 12px 0 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
   .chip.opt { background: #fefce8; color: #854d0e; border-color: #fde68a; }
   .chip button { border: 0; background: transparent; padding: 0; color: inherit; opacity: .6; }
   .chip button:hover { opacity: 1; background: transparent; }
@@ -466,11 +480,12 @@
   .events .evhead { display: flex; align-items: center; gap: 6px; padding: 10px 8px 2px; font-size: 11px; font-weight: 600; color: var(--muted); border-top: 1px solid var(--line); margin-top: 4px; }
   .events .evhead:first-child { border-top: 0; margin-top: 0; }
   .events .row[aria-selected=true] small { color: var(--accent-ink); opacity: .75; }
-  /* STU-026: a workflow drawn as NodeGX draws, in the backend map's look: steps as nodes left to right on a dark canvas,
-     wires (svg.wires, drawn from where the nodes landed) coloured by what they carry */
-  #steps { overflow: auto; padding: 0; background: #141318; background-image: radial-gradient(rgba(255,255,255,.07) 1px, transparent 1px); background-size: 22px 22px; color-scheme: dark; }
-  #steps > .empty { color: #7d8a98; padding: 24px 28px; }
-  .wf { --fg: #fff; --sub: #c4cedb; --dim: #7d8a98; --edge: #33323d; --card: rgba(35,33,41,.94); --blue: #4da3ff; --green: #45d08a; --red: #f97066; --amber: #fdb022; --pink: #f776c4; --purple: #a78bfa; --cyan: #35c3e8; --ghost: #4a4856;
+  /* STU-026: a workflow drawn as NodeGX draws: steps as nodes left to right, wires (svg.wires, drawn from where the nodes
+     landed) coloured by what they carry. On Studio's own light canvas (it was the backend map's dark one until Richard,
+     2026-10-29: "it doesn't fit with the rest of the editor which is light mode by default") */
+  #steps { overflow: auto; padding: 0; background: var(--bg); background-image: radial-gradient(rgba(23,27,34,.13) 1px, transparent 1px); background-size: 22px 22px; }
+  #steps > .empty { color: var(--muted); padding: 24px 28px; }
+  .wf { --fg: var(--ink); --sub: var(--ink-2); --dim: var(--muted); --edge: var(--line-2); --card: var(--panel); --blue: #1f5eff; --green: #16a34a; --red: #dc2626; --amber: #d97706; --pink: #db2777; --purple: #7c3aed; --cyan: #0891b2; --ghost: #c3c8d1;
     position: relative; min-height: 100%; padding: 18px 28px 64px; color: var(--sub); }
   .flowarea { position: relative; }
   .flow { position: absolute; left: 0; top: 0; width: max-content; transform-origin: 0 0; }
@@ -480,25 +495,25 @@
   .fncols { display: flex; align-items: flex-start; gap: 72px; padding: 4px 0; }
   .fncol { display: flex; flex-direction: column; gap: 22px; }
   .fnflow .step { cursor: default; width: 240px; }
-  .fnflow .step.fnstart { border-color: var(--blue); box-shadow: 0 0 0 1px rgba(77,163,255,.25), 0 0 26px rgba(77,163,255,.35); }
-  .fnflow .step.fnanswer { border-color: rgba(69,208,138,.7); }
-  .fnflow .step.fnrefuse { border-color: rgba(249,112,102,.7); }
+  .fnflow .step.fnstart { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(31,94,255,.12), var(--cardshadow); }
+  .fnflow .step.fnanswer { border-color: rgba(22,163,74,.6); }
+  .fnflow .step.fnrefuse { border-color: rgba(220,38,38,.6); }
   .fnflow .step.fnloose { border-style: dashed; }
   .fnflow .step .lines code { white-space: pre-wrap; word-break: break-word; }
   .fnfacts { display: flex; flex-direction: column; gap: 4px; margin: -12px 0 20px; font-size: 13px; color: var(--sub); max-width: 980px; }
-  .fnfacts .touch { display: inline-block; margin-right: 6px; padding: 1px 8px; border-radius: 10px; border: 1px solid rgba(253,176,34,.45); color: #fde68a; }
+  .fnfacts .touch { display: inline-block; margin-right: 6px; padding: 1px 8px; border-radius: 10px; border: 1px solid #fcd34d; background: #fffbeb; color: #92400e; }
   .fnfacts .run.ran { color: var(--green); } .fnfacts .run.refused { color: var(--red); }
   /* P127-BKO004-FNSTEPS: a function's last run on its nodes (.ran is the page workflow's look) */
-  .flow .step.refused { box-shadow: 0 0 0 1.5px var(--red), 0 0 26px rgba(249,112,102,.35); }
-  .flow .step.refused::after { content: 'failed here'; position: absolute; top: -9px; right: 12px; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 8px; background: var(--red); color: #2a0b0b; }
+  .flow .step.refused { box-shadow: 0 0 0 1.5px var(--red), 0 0 0 5px rgba(220,38,38,.12); }
+  .flow .step.refused::after { content: 'failed here'; position: absolute; top: -9px; right: 12px; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 8px; background: var(--red); color: #fff; }
   /* P127 BKO-005: a backend trigger's switch and time, a backend workflow's last run lit on its steps */
   .trigswitch { margin-left: 8px; padding: 1px 9px; border-radius: 10px; font-size: 11px; border: 1px solid var(--line); background: transparent; color: var(--dim); cursor: pointer; }
-  .trigswitch[aria-checked=true] { border-color: rgba(69,208,138,.6); color: var(--green); }
+  .trigswitch[aria-checked=true] { border-color: rgba(22,163,74,.5); background: #f0fdf4; color: var(--green); }
   .trigline { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
   .trigtime { font: inherit; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--ink); }
   .fnflow .step.trigoff { opacity: .55; border-style: dashed; }
-  .fnflow .step.litok { border-color: rgba(69,208,138,.8); }
-  .fnflow .step.litfail { border-color: var(--red); box-shadow: 0 0 0 1px rgba(249,112,102,.35), 0 0 26px rgba(249,112,102,.35); }
+  .fnflow .step.litok { border-color: rgba(22,163,74,.7); }
+  .fnflow .step.litfail { border-color: var(--red); box-shadow: 0 0 0 4px rgba(220,38,38,.12); }
   .fnflow .step.litnot { opacity: .5; }
   .fnflow .step .lit { font-weight: 600; } .fnflow .step.litok .lit { color: var(--green); } .fnflow .step.litfail .lit { color: var(--red); }
   .wf .fnopen, .wf button.fnopen { color: var(--blue); }
@@ -506,77 +521,76 @@
   .zoom button { padding: 3px 9px; border-radius: 14px; }
   .zoom span { min-width: 38px; text-align: center; }
   .wf .hint { color: var(--dim); }
-  .wf button { background: #232129; border-color: var(--edge); color: var(--sub); }
-  .wf button:hover { background: #2b2933; border-color: #4a4856; color: var(--fg); } /* P127-BKO005-QUIETHOVER: a quiet button took the light theme's hover background under the canvas's light text */
-  .wf button.primary { background: #1d4ed8; border-color: #2563eb; color: #fff; }
   .wf button.danger { color: var(--red); }
-  .wf input, .wf select, .wf textarea { background: #1c1b22; color: var(--fg); border-color: #3a3946; }
   .cardnav { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
   .cardnav .back { font-weight: 500; }
-  .event-card { display: flex; align-items: center; gap: 12px; margin: 0 0 22px; max-width: 980px; color: var(--fg); }
+  .event-card { display: flex; align-items: center; gap: 12px; margin: 0 0 22px; max-width: 980px; color: var(--fg); flex-wrap: wrap; }
+  .event-card .named { min-width: 260px; }
   .event-card .ic { display: none; }
   .event-card h2 { margin: 0; font-size: 18px; font-weight: 600; cursor: text; color: var(--fg); }
   .event-card .named { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
-  .event-card input.cardname { font: inherit; font-size: 18px; font-weight: 600; width: 100%; padding: 2px 6px; margin: -3px 0 -3px -7px; border: 1px solid var(--blue); border-radius: var(--r); background: #1c1b22; color: var(--fg); }
+  .event-card input.cardname { font: inherit; font-size: 18px; font-weight: 600; width: 100%; padding: 2px 6px; margin: -3px 0 -3px -7px; border: 1px solid var(--blue); border-radius: var(--r); background: var(--panel); color: var(--fg); }
   .event-card small { color: var(--dim); display: block; font-size: 13px; }
   .event-card button { border-radius: 18px; padding: 5px 14px; }
   .chain { display: flex; flex-direction: row; align-items: center; gap: 0; }
   .chain > .link { flex: none; width: 56px; height: 2px; }
-  .evnode, .step { flex: none; position: relative; background: var(--card); border: 1.5px solid var(--edge); border-radius: 12px; color: var(--fg); box-shadow: 0 10px 34px rgba(0,0,0,.45); }
-  .evnode { width: 210px; padding: 12px 14px; border-color: var(--blue); box-shadow: 0 0 0 1px rgba(77,163,255,.25), 0 0 26px rgba(77,163,255,.35); align-self: center; }
+  .wf { --cardshadow: 0 1px 2px rgba(17,24,39,.06), 0 6px 18px rgba(17,24,39,.07); }
+  .evnode, .step { flex: none; position: relative; background: var(--card); border: 1.5px solid var(--edge); border-radius: 12px; color: var(--fg); box-shadow: var(--cardshadow); }
+  .evnode { width: 210px; padding: 12px 14px; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(31,94,255,.12), var(--cardshadow); align-self: center; cursor: pointer; }
   .evnode b { display: flex; align-items: center; gap: 6px; font-size: 14px; } .evnode b svg.i { color: var(--blue); width: 15px; height: 15px; }
   .evnode small { display: block; color: var(--sub); margin-top: 3px; }
   .step { width: 250px; padding: 12px 12px 12px 12px; display: grid; grid-template-columns: auto 1fr auto; gap: 6px 8px; align-items: center; }
   .step::before { content: ''; position: absolute; left: -1.5px; right: -1.5px; top: -1.5px; height: 4px; border-radius: 12px 12px 0 0; background: var(--kind, var(--blue)); }
-  .step.open { width: 330px; }
-  .step:hover { border-color: #4a4856; }
-  .step .num { min-width: 26px; height: 22px; padding: 0 6px; border-radius: 6px; background: rgba(255,255,255,.08); color: var(--sub); display: grid; place-items: center; font-weight: 600; font-size: 11px; }
-  .step.cond { border-color: var(--purple); box-shadow: 0 0 22px rgba(167,139,250,.28); --kind: var(--purple); }
+  .step:hover { border-color: var(--accent-line); }
+  /* a step is configured where Design configures an element: click it, and its settings are the panel on the right */
+  .flow .step.picked, .evnode.picked { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), var(--cardshadow); }
+  .step .num { min-width: 26px; height: 22px; padding: 0 6px; border-radius: 6px; background: var(--panel-2); color: var(--sub); display: grid; place-items: center; font-weight: 600; font-size: 11px; }
+  .step.cond { border-color: rgba(124,58,237,.55); --kind: var(--purple); }
   .step.cond .num { color: var(--purple); }
-  .step.joined { border-color: var(--cyan); box-shadow: 0 0 22px rgba(53,195,232,.3); }
-  .step.dead { border-color: rgba(253,176,34,.7); }
+  .step.joined { border-color: rgba(8,145,178,.6); }
+  .step.dead { border-color: rgba(217,119,6,.65); }
   .step h3 { margin: 0; font-size: 14px; font-weight: 600; display: flex; gap: 8px; align-items: baseline; min-width: 0; flex-wrap: wrap; }
   .step h3 span { color: var(--dim); font-weight: 400; font-size: 12px; }
   .step .lines { grid-column: 1 / -1; color: var(--sub); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
-  .step .lines code { background: rgba(255,255,255,.07); color: var(--fg); padding: 0 5px; border-radius: 4px; }
-  .step .acts { display: flex; gap: 4px; }
+  .step .lines code { background: var(--panel-2); color: var(--fg); padding: 0 5px; border-radius: 4px; }
+  .step .acts { display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+  .step:hover .acts, .step.picked .acts, .step .acts:focus-within { opacity: 1; }
   .step .acts button { background: transparent; border-color: transparent; }
   .step .settings { grid-column: 1 / -1; border-top: 1px solid var(--edge); margin-top: 4px; padding-top: 4px; }
   .step .settings .field label { color: var(--sub); }
   .branches { display: flex; flex-direction: column; gap: 34px; align-items: flex-start; }
   .branch { display: flex; flex-direction: row; align-items: center; gap: 0; }
-  .branch h4 { margin: 0 14px 0 0; flex: none; font-size: 11px; font-weight: 600; letter-spacing: .03em; padding: 4px 9px; border-radius: 10px; background: #141318; border: 1px solid currentColor; display: flex; align-items: center; gap: 6px; }
+  .branch h4 { margin: 0 14px 0 0; flex: none; font-size: 11px; font-weight: 600; letter-spacing: .03em; padding: 4px 9px; border-radius: 10px; background: var(--panel); border: 1px solid currentColor; display: flex; align-items: center; gap: 6px; }
   .branch.yes h4 { color: var(--green); } .branch.no h4 { color: var(--red); }
-  .wf .addrow { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1.5px dashed var(--ghost); border-radius: 12px; }
+  .wf .addrow { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1.5px dashed var(--ghost); border-radius: 12px; background: rgba(255,255,255,.55); }
   .chain > .hint { flex: none; max-width: 230px; margin-left: 18px; }
   .wf .addrow button { white-space: nowrap; justify-content: flex-start; }
-  .joinnote { flex: none; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: .03em; color: var(--cyan); padding: 4px 10px; border-radius: 10px; border: 1px solid rgba(53,195,232,.5); background: #141318; box-shadow: 0 0 14px rgba(53,195,232,.25); }
+  .joinnote { flex: none; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: .03em; color: var(--cyan); padding: 4px 10px; border-radius: 10px; border: 1px solid rgba(8,145,178,.45); background: var(--panel); }
   .joinnote svg.i { width: 13px; height: 13px; }
   .lanes { display: flex; flex-direction: column; gap: 22px; }
   .lane { border: 1px dashed var(--ghost); border-radius: 14px; padding: 10px 14px 14px; }
   .lane h4 { margin: 0 0 10px; font-size: 11px; font-weight: 600; color: var(--dim); }
   .lanesnote { margin: 0 0 14px; }
   .lanes.fork { flex: none; gap: 18px; }
-  .flow .step { cursor: grab; } .flow .step h3, .flow .step .num { user-select: none; }
-  .flow .step.dragging { cursor: grabbing; z-index: 5; box-shadow: 0 18px 44px rgba(0,0,0,.6); }
+  .flow .step { cursor: pointer; } .flow .step h3, .flow .step .num { user-select: none; }
+  .flow .step.dragging { cursor: grabbing; z-index: 5; box-shadow: 0 18px 44px rgba(17,24,39,.22); }
   .lanesrow { display: flex; align-items: center; gap: 56px; }
   .cond-line { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--sub); }
-  .wf .chip.expr { background: rgba(167,139,250,.14); border-color: rgba(167,139,250,.45); color: #ddd6fe; }
-  .flowlegend { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-top: 40px; padding-top: 12px; border-top: 1px solid var(--edge); max-width: 980px; font-size: 12px; color: var(--sub); }
+    .flowlegend { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-top: 40px; padding-top: 12px; border-top: 1px solid var(--edge); max-width: 980px; font-size: 12px; color: var(--sub); }
   .flowlegend i { display: inline-block; width: 24px; height: 0; border-top: 2.5px solid; vertical-align: middle; margin-right: 7px; }
   /* the last run, lit up: what it crossed glows with a white pulse running along it; what it did not run is faded */
-  .wf button.showrun[aria-pressed=true] { background: rgba(69,208,138,.14); border-color: var(--green); color: var(--green); }
+  .wf button.showrun[aria-pressed=true] { background: #f0fdf4; border-color: var(--green); color: var(--green); }
   .flowlegend .lastrun { margin-left: auto; color: var(--dim); }
   .flowlegend .lastrun.ran { color: var(--green); }
   .flow.showrun .step:not(.ran), .flow.showrun .evnode:not(.ran), .flow.showrun .joinnote:not(.ran) { opacity: .45; }
-  .flow .step.ran, .flow .evnode.ran { box-shadow: 0 0 0 1.5px var(--green), 0 0 26px rgba(69,208,138,.35); }
-  .flow .step.ran::after, .flow .evnode.ran::after { content: 'ran'; position: absolute; top: -9px; right: 12px; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 8px; background: var(--green); color: #0b2a19; }
+  .flow .step.ran, .flow .evnode.ran { box-shadow: 0 0 0 1.5px var(--green), 0 0 0 5px rgba(22,163,74,.14); }
+  .flow .step.ran::after, .flow .evnode.ran::after { content: 'ran'; position: absolute; top: -9px; right: 12px; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 8px; background: var(--green); color: #fff; }
   .flow svg.wires path.pulse { animation: flowpulse .9s linear infinite; }
   @keyframes flowpulse { to { stroke-dashoffset: -18; } }
   @media (prefers-reduced-motion: reduce) { .flow svg.wires path.pulse { animation: none; } }
   /* a "+" on a wire puts a step between the two it joins */
   .flow .wireplus { position: absolute; left: 0; top: 0; z-index: 2; pointer-events: none; }
-  .wf .flow .wireplus button { position: absolute; pointer-events: auto; width: 20px; height: 20px; padding: 0; margin: -10px 0 0 -10px; border-radius: 50%; display: grid; place-items: center; background: #1c1b22; border: 1.5px solid #6b6878; color: var(--sub); opacity: .85; }
+  .wf .flow .wireplus button { position: absolute; pointer-events: auto; width: 20px; height: 20px; padding: 0; margin: -10px 0 0 -10px; border-radius: 50%; display: grid; place-items: center; background: var(--panel); border: 1.5px solid var(--line-2); color: var(--sub); opacity: .9; }
   .wf .flow .wireplus button:hover { opacity: 1; border-color: var(--blue); color: var(--fg); transform: scale(1.15); }
   .wf .flow .wireplus button svg.i { width: 11px; height: 11px; }
 
@@ -591,6 +605,19 @@
   .menu .item:hover svg.i, .menu .item[aria-selected=true] svg.i { color: var(--accent-ink); }
   .menu .item small { color: var(--muted); margin-left: auto; font-size: 11px; white-space: nowrap; }
   .menu .item:hover small { color: var(--accent-ink); opacity: .7; }
+  /* the action menu: by section, each action with what it does (Bubble's "Click here to add an action…") */
+  .menu.actions { width: 410px; max-width: 92vw; }
+  .menu.actions .item { align-items: flex-start; padding: 7px 8px; }
+  .menu.actions .item .ic { flex: none; width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; margin-top: 1px; }
+  .menu.actions .item .ic svg.i, .menu.actions .item:hover .ic svg.i { color: #fff; width: 13px; height: 13px; }
+  .menu.actions .item .words { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-weight: 500; }
+  .menu.actions .item small { margin-left: 0; white-space: normal; color: var(--muted); font-weight: 400; font-size: 11.5px; line-height: 1.35; }
+  .menu.actions .item.dev .words { font-weight: 400; }
+  .menu.actions .item.dev { align-items: center; padding: 4px 8px; }
+  .menu.actions .item.dev .ic { width: 20px; height: 20px; opacity: .7; }
+  .menu.events .h.more { cursor: pointer; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 10px; text-transform: none; letter-spacing: 0; font-size: 12px; }
+  .menu.actions .h.more { cursor: pointer; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 10px; text-transform: none; letter-spacing: 0; font-size: 12px; }
+  .menu.actions .h.more:hover { color: var(--accent-ink); }
   .composer { width: 560px; max-width: 92vw; padding: 0; }
   .composer .bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
   .composer .bar strong { font-weight: 600; }
@@ -625,9 +652,39 @@
   /* ---- Data ---- */
   #data { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   /* STU-060: the backend map (@nodegx/backend-map, served by serve.mjs at /backend-map/) is Data's Map */
-  #data-map { min-height: 0; height: 100%; }
-  #data-map[hidden] { display: none; }
-  #mapframe { width: 100%; height: 100%; border: 0; display: block; }
+  #data-map { min-height: 0; height: 100%; display: flex; flex-direction: column; }
+  #data-map[hidden], #datamodel[hidden], #mapframe[hidden] { display: none; }
+  #mapframe { width: 100%; flex: 1; min-height: 0; border: 0; display: block; }
+  .mapbar { display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .mapbar .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: var(--r); overflow: hidden; flex: none; }
+  .mapbar .seg button { border: 0; border-radius: 0; margin: 0; padding: 4px 12px; color: var(--muted); }
+  .mapbar .seg button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+  .mapbar .hint { padding: 0; flex: 1; min-width: 0; }
+  /* the data model: a type a card of its fields; a Link a purple wire to the type it points at (dashed: many) */
+  #datamodel { flex: 1; min-height: 0; overflow: auto; background: var(--bg); background-image: radial-gradient(rgba(23,27,34,.13) 1px, transparent 1px); background-size: 22px 22px; }
+  .dm { position: relative; padding: 28px 32px 56px; min-height: 100%; box-sizing: border-box; }
+  .dm svg.links { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; z-index: 0; } /* behind the cards: a wire crossing a card never hides its fields */
+  .dm .grid { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(auto-fill, 250px); gap: 40px 84px; align-items: start; }
+  .dm .tcard { background: var(--panel); border: 1.5px solid var(--line-2); border-radius: 12px; box-shadow: 0 1px 2px rgba(17,24,39,.06), 0 6px 18px rgba(17,24,39,.07); cursor: pointer; overflow: hidden; position: relative; z-index: 1; }
+  .dm .tcard:hover { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft), 0 6px 18px rgba(17,24,39,.07); }
+  .dm .tcard header { display: flex; align-items: baseline; gap: 8px; padding: 9px 12px 8px; border-bottom: 1px solid var(--line); box-shadow: inset 0 4px 0 var(--c); padding-top: 12px; }
+  .dm .tcard header b { font-weight: 600; font-size: 14px; color: var(--ink); }
+  .dm .tcard header .t { margin-left: auto; color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .dm .tcard .who { display: flex; align-items: center; gap: 6px; padding: 5px 12px; font-size: 11.5px; color: var(--ink-2); background: var(--panel-2); border-bottom: 1px solid var(--line); }
+  .dm .tcard .who svg.i { width: 12px; height: 12px; color: var(--muted); flex: none; }
+  .dm .frow { display: grid; grid-template-columns: 20px 1fr auto; gap: 6px; align-items: center; padding: 5px 12px; font-size: 12.5px; color: var(--ink); }
+  .dm .frow + .frow { border-top: 1px solid var(--panel-2); }
+  .dm .frow .g { color: var(--accent); font-weight: 600; text-align: center; font-size: 12px; }
+  .dm .frow .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dm .frow .k { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .dm .frow.link .g, .dm .frow.link .k { color: #7c3aed; }
+  .dm .frow.dangling .k { color: var(--warn); }
+  .dm .none, .dm .builtin { padding: 6px 12px 9px; color: var(--muted); font-size: 11px; }
+  .dm .builtin { border-top: 1px solid var(--line); background: var(--panel-2); }
+  .dm .opts { display: flex; flex-wrap: wrap; gap: 4px; padding: 9px 12px 11px; }
+  .dm .grid > h4 { grid-column: 1 / -1; margin: 8px 0 -24px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .dmempty { max-width: 460px; margin: 60px auto; text-align: center; color: var(--ink-2); }
+  .dmempty b { font-size: 16px; color: var(--ink); } .dmempty p { line-height: 1.5; }
   /* STU-065: development or live, beside the sub-tabs */
   .subtabs .grow { flex: 1; }
   .subtabs .env { display: flex; align-items: center; gap: 8px; padding-bottom: 6px; }
@@ -786,6 +843,7 @@
   <symbol id="i-data" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></symbol>
   <symbol id="i-styles" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.7-.7 1.7-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.7 1.7-1.7H16c3.3 0 6-2.7 6-6 0-4.7-4.5-8.4-10-8.4z"/></symbol>
   <symbol id="i-map" viewBox="0 0 24 24"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7 6h10M6 8l5 8M18 8l-5 8"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
   <symbol id="i-group" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></symbol>
   <symbol id="i-text" viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></symbol>
@@ -875,6 +933,7 @@
         <div class="events list" id="fnlist"></div>
       </aside>
       <div id="steps"><div class="empty">Pick a workflow on the left.</div></div>
+      <aside class="right" id="wfinspect" aria-label="The step's settings" hidden></aside>
     </section>
 
     <section class="tab" id="data" hidden>
@@ -908,7 +967,7 @@
         </aside>
         <div id="appmain"><div class="empty">Pick a data type.</div></div>
       </div>
-      <div id="data-map" hidden><iframe id="mapframe" title="The backend map: who can reach which rows"></iframe></div>
+      <div id="data-map" hidden><div class="mapbar" id="mapbar"></div><div id="datamodel"></div><iframe id="mapframe" title="The backend map: who can reach which rows" hidden></iframe></div>
       <div class="split" id="data-options" hidden>
         <aside>
           <h3 class="sec">Option sets <button class="tiny primary" id="newoptset"><svg class="i"><use href="#i-plus"/></svg>New</button></h3>
@@ -1944,6 +2003,7 @@ window.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !inField) { e.preventDefault(); undo(); return; }
   if (e.key === 'Escape' && tab === 'workflow' && selFn && fnBack.length && !inField && !document.querySelector('.menu')) { backFromFn(); return; }
   if (e.key === 'Escape' && tab === 'workflow' && !selFn && selAuto?.from && !inField && !document.querySelector('.menu')) { backFromAuto(); return; }
+  if (e.key === 'Escape' && tab === 'workflow' && !selFn && !selAuto && selStep && !inField && !document.querySelector('.menu')) { pickStep(null); return; }
   if (e.key === 'Escape' && tab === 'workflow' && !selFn && !selAuto && cardBack && !inField && !document.querySelector('.menu')) { backFromCard(); return; }
   // Esc with nothing selected, inside a copy on its page: up one level, the copy selected (as the NodeGX editor's breadcrumb)
   if (e.key === 'Escape' && !inField && host && !sel && !pending && !document.querySelector('.menu') && tab === 'design') { editUp(); return; }
@@ -2064,7 +2124,7 @@ const defaultSizeMode = (type) => (type === 'Group' || type === 'Page' ? 'explic
 const PALETTE = [
   ['Group', 'group', { sizeMode: 'contentHeight', width: { value: 100, unit: '%' }, flexDirection: 'column', paddingTop: { value: 12, unit: 'px' }, paddingBottom: { value: 12, unit: 'px' }, paddingLeft: { value: 12, unit: 'px' }, paddingRight: { value: 12, unit: 'px' } }],
   ['Text', 'text', { text: 'New text', sizeMode: 'contentHeight', width: { value: 100, unit: '%' } }],
-  ['net.noodl.controls.button', 'button', { label: 'Button', sizeMode: 'contentHeight' }],
+  ['net.noodl.controls.button', 'button', { label: 'Button', sizeMode: 'contentSize', backgroundColor: '#2563eb', color: '#ffffff', borderRadius: { value: 8, unit: 'px' }, paddingTop: { value: 10, unit: 'px' }, paddingBottom: { value: 10, unit: 'px' }, paddingLeft: { value: 18, unit: 'px' }, paddingRight: { value: 18, unit: 'px' } }],
   ['net.noodl.controls.textinput', 'input', { placeholder: 'Type here', sizeMode: 'contentHeight', width: { value: 100, unit: '%' } }],
   ['Image', 'image', { sizeMode: 'explicit', width: { value: 200, unit: 'px' }, height: { value: 120, unit: 'px' } }],
   ['net.noodl.controls.checkbox', 'check', { sizeMode: 'contentHeight' }],
@@ -2079,6 +2139,7 @@ function renderPalette() {
     if (lib && !libIndex.has(type)) continue;
     pal.append(h('button', { 'aria-pressed': pending?.type === type, onclick: (e) => armPending({ type, params }, e.currentTarget) }, icon(glyph), typeName(type)));
   }
+  if (!lib || libIndex.has('For Each')) pal.append(h('button', { 'aria-pressed': pending?.type === REPEAT, title: 'A list of rows, one per item of a page data list (Bubble’s Repeating group)', onclick: (e) => armPending({ type: REPEAT, params: {} }, e.currentTarget) }, icon('repeat'), 'Repeating group'));
   const comps = $('components'); comps.innerHTML = '';
   for (const k of reusableKeys()) {
     if (k === pageKey) continue;
@@ -2091,7 +2152,51 @@ function armPending(p, btn) {
   if ($('previewmode').checked) { $('previewmode').checked = false; overlay.classList.remove('preview'); }
   for (const b of document.querySelectorAll('.palette button')) b.setAttribute('aria-pressed', b === btn);
   overlay.classList.add('adding');
-  toast(`Click in the page where the ${typeName(p.type)} goes (Esc to cancel)`);
+  toast(`Click in the page where the ${p.type === REPEAT ? 'repeating group' : typeName(p.type)} goes (Esc to cancel)`);
+}
+/* ---- Bubble's Repeating group: a list drawn one row per item. Placing one asks which page data list it shows, then makes a
+   reusable row (Rows/<Type> row: Component Inputs named after the type's fields, a Text for each of the first few, wired
+   from them) and a For Each on the page drawing it, the list's `items` wired in. A For Each fills a row's inputs from the
+   item's fields by name, so the row shows its record. Click a row to open the row, and change it as any reusable ---- */
+const REPEAT = '@repeat';
+function placeRepeat(parent) {
+  const lists = pageItems.filter((it) => it.collection && !it.first);
+  const at = { clientX: Math.round(innerWidth / 2 - 180), clientY: 140 };
+  closeMenu();
+  const menu = popover(at, 'newitem');
+  menu.append(h('div', { class: 'h' }, 'A repeating group shows…'));
+  for (const it of lists) menu.append(h('div', { class: 'item', onclick: () => { closeMenu(); makeRepeat(parent, it, it.collection); } }, icon('db'), it.name, h('small', {}, sentence(it))));
+  if (!lists.length) menu.append(h('div', { class: 'note' }, 'This page has no list of data yet. Make one in Page data → New (“every Listing”, say), then place the repeating group. Or make its row now, from a type, and wire the list in later.'));
+  for (const t of allTypes().filter((x) => !x.name.startsWith('_'))) menu.append(h('div', { class: 'item', onclick: () => { closeMenu(); makeRepeat(parent, null, t.name); } }, icon('repeat'), `Rows of ${t.name}`, h('small', {}, 'no list wired yet')));
+  document.body.append(menu); dismissOnOutside(menu);
+}
+function makeRepeat(parent, it, type) {
+  const t = allTypes().find((x) => x.name === type);
+  const fields = ((t?.columns.length ? t.columns : t?.backendColumns) || []).filter((c) => !['objectId', 'createdAt', 'updatedAt', 'ACL'].includes(c.name));
+  const portOf = (c) => (c.type === 'Number' ? 'number' : c.type === 'Boolean' ? 'boolean' : 'string');
+  const shown = fields.filter((c) => ['String', 'Number', 'Date'].includes(c.type)).slice(0, 3);
+  let key = `Rows/${type} row`;
+  for (let i = 2; registry()[key]; i++) key = `Rows/${type} row ${i}`;
+  const compId = uuid(), at = new Date().toISOString(), S = 'https://opennoodl.dev/schemas';
+  const px = (v) => ({ value: v, unit: 'px' });
+  const nodes = [
+    { id: 'rowIn', type: 'Component Inputs', label: `One ${type}`, ports: [{ name: 'id', plug: 'output', type: 'string' }, ...fields.map((c) => ({ name: c.name, plug: 'output', type: portOf(c) }))], x: 420, y: 80 },
+    { id: 'rowBox', type: 'Group', label: `${type} row`, parameters: { flexDirection: 'column', sizeMode: 'contentHeight', width: { value: 100, unit: '%' }, rowGap: px(4), paddingTop: px(12), paddingBottom: px(12), paddingLeft: px(14), paddingRight: px(14), borderBottomStyle: 'solid', borderBottomWidth: px(1), borderBottomColor: '#e3e6eb' }, children: shown.map((c) => `rowText-${c.name}`) },
+    ...shown.map((c, i) => ({ id: `rowText-${c.name}`, type: 'Text', label: c.name, parent: 'rowBox', parameters: { text: '', sizeMode: 'contentHeight', width: { value: 100, unit: '%' }, ...(i === 0 ? { fontSize: px(15), fontWeight: 600 } : { fontSize: px(13), color: '#717886' }) } }))
+  ];
+  const wires = shown.map((c) => ({ fromId: 'rowIn', fromProperty: c.name, toId: `rowText-${c.name}`, toProperty: 'text' }));
+  snapshot();
+  try {
+    store.writeComponent(key, {
+      component: { $schema: `${S}/component-v2.json`, id: compId, name: key.split('/').pop(), path: '/' + key, type: 'visual', created: at, modified: at, modifiedBy: 'nodegx-studio', description: `One row of a repeating group of ${type}: a For Each fills its inputs from each ${type}'s fields.` },
+      nodes: { $schema: `${S}/nodes-v2.json`, componentId: compId, version: 1, nodes, visualRoots: ['rowBox'] },
+      connections: { $schema: `${S}/connections-v2.json`, componentId: compId, version: 1, connections: wires }
+    }, { expectNew: true });
+  } catch (err) { undoStack.pop(); toast(err.message); throw err; }
+  const [id] = edits(pageKey, [{ edit: 'add_node', component: pageKey, type: 'For Each', parent, label: `Repeating group of ${type}`, parameters: { template: '/' + key, templateType: 'explicit' } }]);
+  if (it) edits(pageKey, [{ edit: 'connect', component: pageKey, from: { node: it.id, port: 'items' }, to: { node: id, port: 'items' } }]);
+  sel = id; readGraph(); renderAll(); rebuild();
+  toast(it ? `A repeating group of ${type}: one row per item of ${it.name}. Its row is ${key.split('/').pop()}; open it to change what a row shows.` : `A repeating group of ${type}, its row ${key.split('/').pop()}. Wire a list into its items: ⚡ on Items.`);
 }
 function placePending(hit) {
   const p = pending; pending = null; overlay.classList.remove('adding');
@@ -2099,6 +2204,7 @@ function placePending(hit) {
   let parent = hit?.id ?? pageRootId();
   while (parent && !holdsChildren(byId[parent].type)) parent = byId[parent].parent;
   if (!parent) return toast('Nowhere to put it on this page');
+  if (p.type === REPEAT) return placeRepeat(parent);
   const [id] = edits(pageKey, [{ edit: 'add_node', component: pageKey, type: p.type, parent, parameters: p.params, label: undefined }]);
   sel = id; renderTree(); renderProps();
   toast(`Added a ${typeName(p.type)} to ${labelOf(parent)}`);
@@ -2453,7 +2559,15 @@ function renderBubblePanel(right, node) {
     const mine = events().filter((ev) => ev.node === node.id);
     add(section('Workflows', [
       ...mine.map((ev) => h('div', { class: 'row wf', onclick: () => openCard(ev) }, icon('workflow'), cardName(ev), h('span', { class: 't' }, `When ${portLabel(byId[ev.node], 'output', ev.port)} · ${eventSteps(ev)} steps`))),
-      h('div', { class: 'hint' }, mine.length ? 'Open one to change its steps.' : 'No workflow starts at this element. Add one in Workflow.')]));
+      h('div', { class: 'hint' }, mine.length ? 'Open one to change its steps.' : 'No workflow starts at this element yet.'),
+      // Bubble's "Start/Edit workflow": the element's usual events, each one a click away from its workflow
+      (() => {
+        const sigs = portsOf(node, 'output').filter((p) => p.signal && !mine.some((ev) => ev.port === p.name));
+        const usual = sigs.filter((p) => isCommonEvent(node, p));
+        if (!sigs.length) return null;
+        return h('div', { class: 'startwf' }, ...usual.map((p, i) => h('button', { class: i || mine.length ? '' : 'primary', onclick: () => startWorkflow(node.id, p.name) }, icon('plus'), `When it ${eventPhrase(node, p.name)}`)),
+          sigs.length > usual.length ? h('button', { class: 'quiet', onclick: (e) => { closeMenu(); const menu = popover(e); menu.append(h('div', { class: 'h' }, `Start a workflow when ${labelOf(node.id)}…`)); for (const p of sigs) menu.append(h('div', { class: 'item', onclick: () => startWorkflow(node.id, p.name) }, icon('bolt'), eventPhrase(node, p.name), h('small', {}, p.label))); document.body.append(menu); dismissOnOutside(menu); } }, usual.length ? 'Another event…' : 'Start a workflow…') : null);
+      })()]));
     add(section('Visibility', [has('visible') ? plain('visible') : null, has('mounted') ? plain('mounted') : null]));
     add(section('Options', [...['enabled', 'keepsFocus', 'repeatWhileSaving'].filter(has).map(plain), ...ports.filter((p) => p.name.startsWith('runOnChange-')).map((p) => (claimed.add(p.name), fieldFor(node, { ...p, displayName: `A change to ${(CONFIGURE_AS[p.name.slice('runOnChange-'.length)] || P[p.name.slice('runOnChange-'.length)]?.displayName || p.displayName).toLowerCase()} runs what it feeds` }, params[p.name], wiredIn[p.name])))]));
     const more = new Map();
@@ -3483,6 +3597,13 @@ function pageDataChip(fromId, port) {
 /** What the app's frame wrote down (./probe.js): its requests and its moves between pages. */
 const frameWindow = () => { try { return preview.frame?.contentWindow ?? null; } catch { return null; } };
 const frameLog = () => { try { return frameWindow()?.__studioLog || []; } catch { return []; } };
+/** A query the backend refused for want of a rule says why, and where the rule is set: a type made in Studio starts closed
+    (nobody may read its rows), so a Bubble user's first list is empty until they say who may. */
+function refusedHint(it, run) {
+  if (!run || run.running || !(run.status === 401 || run.status === 403) || !it?.collection) return [];
+  return [h('div', { class: 'hint warn', style: 'padding:6px 0 2px' }, `The backend let this page read no ${it.collection} rows: nobody may read them yet. A new data type starts closed; say who may read it.`),
+    h('button', { class: 'tiny', onclick: () => { selPriv = it.collection; dataSub = 'privacy'; switchTab('data'); } }, icon('lock'), `Who can read ${it.collection}…`)];
+}
 function runText(run) {
   if (!run) return 'has not run in this preview';
   if (run.running) return 'running…';
@@ -3601,7 +3722,7 @@ setInterval(() => {
   probeSeen = seen; probeFrame = preview.frame;
   renderPageData();
   const run = $('itemrun'); const it = selItem && itemById(selItem);
-  if (run && it) run.textContent = runText(lastRun(it, log));
+  if (run && it) { const r = lastRun(it, log); run.textContent = runText(r); $('itemrunfix')?.replaceChildren(...refusedHint(it, r)); }
 }, 500);
 
 /** The item in the right panel: what it asks, who reads it, what it did in the app. */
@@ -3678,7 +3799,7 @@ function renderItem(right) {
   wrap.append(rd);
   // what it did in the app on screen
   const ran = h('details', { class: 'group', open: true }, h('summary', {}, 'In the app'));
-  ran.append(h('div', { class: 'field' }, h('label', {}, 'Last run'), h('div', { id: 'itemrun' }, runText(lastRun(it, frameLog())))));
+  ran.append(h('div', { class: 'field' }, h('label', {}, 'Last run'), h('div', { id: 'itemrun' }, runText(lastRun(it, frameLog())))), h('div', { id: 'itemrunfix' }, ...refusedHint(it, lastRun(it, frameLog()))));
   wrap.append(ran);
   right.append(wrap);
 }
@@ -3848,7 +3969,6 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
 /* ================= Workflow: events and their steps, read from the wires; a Condition splits the chain ================= */
 let selEvent = null; // { node, port }
 const draftEvents = [];
-const openSteps = new Set();
 const isHelperNode = (n) => n.metadata?.customState || isComposed(n) || n.type.startsWith('/Option sets/') || isPageDataNode(n);
 function events() {
   const list = [];
@@ -3908,7 +4028,7 @@ function stepWords(s, short = false) {
   }
   const more = !short && s.siblings.length ? ` (+${s.siblings.length} more)` : '';
   if (node.label) return node.label + more;
-  const words = ACTIONS.find(([t]) => t === node.type)?.[1];
+  const words = actionRow(node.type)?.[1];
   if (node.type === 'RouterNavigate' && p.target) return `Go to ${String(p.target).split('/').pop()}${more}`;
   if (node.type === 'Set Variable' && p.name) return `Set ${p.name}${more}`;
   if (words && p.collectionName) return `${words} (${p.collectionName})${more}`;
@@ -4498,8 +4618,8 @@ function triggerOf(node) {
 /* ---- STU-026: the wires. renderChain records each one (what it leaves, by which port, what it reaches, what it carries);
    they are drawn from where the nodes landed, again whenever a node changes size (settings opened, a field typed) ---- */
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const FLOW = { then: '#4da3ff', yes: '#45d08a', no: '#f97066', join: '#35c3e8', dead: '#4a4856', offer: '#4a4856', value: '#8fa3bf', fail: '#f97066' }; // value, fail: a cloud function's wires (BKO-004)
-const KIND_COLOUR = { nav: '#4da3ff', db: '#fdb022', state: '#f776c4', user: '#a3e635', code: '#7d8a98', bolt: '#fb923c', page: '#c084fc', branch: '#a78bfa' };
+const FLOW = { then: '#1f5eff', yes: '#16a34a', no: '#dc2626', join: '#0891b2', dead: '#b8bec9', offer: '#b8bec9', value: '#94a3b8', fail: '#dc2626' }; // value, fail: a cloud function's wires (BKO-004)
+const KIND_COLOUR = { nav: '#1f5eff', db: '#d97706', state: '#db2777', user: '#65a30d', code: '#64748b', bolt: '#ea580c', page: '#9333ea', branch: '#7c3aed' };
 let flowWires = [], flowRO = null;
 /** `edge`: the graph wire it draws ({ from: { node, port }, to: { node, port } }), where a step can go between the two. */
 const wire = (src, to, kind = src?.kind, dashed = false, edge = null) => { if (src) flowWires.push({ from: src.el, port: src.port, to, kind, dashed, edge }); };
@@ -4507,11 +4627,16 @@ const wire = (src, to, kind = src?.kind, dashed = false, edge = null) => { if (s
 const offer = (src, to) => wire(src, to, src?.kind === 'dead' ? 'dead' : src && src.port !== 'out' ? src.kind : 'offer', true);
 /** A Go to page with no page never says Done (RouterNavigate settles only on arriving): what follows it never runs. */
 const neverDone = (s) => !s.refresh && byId[s.id]?.type === 'RouterNavigate' && !byId[s.id].parameters?.target && !conns.some((c) => c.toId === s.id && c.toProperty === 'target');
+let shownEv = null;
 function renderWorkflow() {
   renderEvents();
   if (selFn && !registry()[selFn]) { selFn = null; fnBack = []; }
-  if (selFn) return renderFunction();
   if (selAuto && !autoEntry(selAuto)) selAuto = null;
+  // another workflow (or none) shown: its own steps, none of them picked yet
+  const evKey = selFn || selAuto || !selEvent ? null : `${selEvent.node}.${selEvent.port}`;
+  if (evKey !== shownEv) { shownEv = evKey; selStep = null; }
+  renderStepPanel();
+  if (selFn) return renderFunction();
   if (selAuto) return renderAuto();
   const main = $('steps'); main.innerHTML = '';
   if (!selEvent || !byId[selEvent.node]) cardBack = null;
@@ -4523,12 +4648,19 @@ function renderWorkflow() {
     h('button', { class: 'quiet tiny', title: 'Every workflow on this page, listed', onclick: () => { cardBack = null; renderWorkflow(); } }, 'All workflows on this page')));
   wf.append(h('div', { class: 'event-card' }, h('div', { class: 'ic' }, icon('bolt')), h('div', { class: 'named' }, cardTitle(ev), h('small', {}, `${eventTitle(ev)} · ${typeName(byId[ev.node].type)}`)),
     h('div', { style: 'margin-left:auto;display:flex;gap:6px;align-items:center' }, h('button', { class: 'quiet tiny showrun', 'aria-pressed': showRun, title: runPin ? 'This is the run you opened from the timeline; hide it, and Show the last run lights the latest one again' : 'Light up what this workflow did the last time it ran in the app: the wires it crossed and the steps it ran', onclick: () => toggleLastRun() }, showRun ? (runPin ? 'Hide this run' : 'Hide the last run') : 'Show the last run'), reachOf(ev).some((x) => x.metadata?.flowAt) ? h('button', { class: 'quiet tiny tidy', title: 'Put every step you moved back where the workflow lays it out', onclick: () => tidyFlow(ev) }, 'Tidy up') : null, h('div', { class: 'zoom' }, h('button', { title: 'Smaller', onclick: () => zoomFlow(-0.1) }, '−'), h('span', { class: 'zoomval' }), h('button', { title: 'Bigger', onclick: () => zoomFlow(0.1) }, '+'), h('button', { title: 'Fit the whole workflow in view', onclick: () => { flowZoom = null; fitFlow(); } }, 'Fit')), isRenaming(ev) ? null : h('button', { class: 'quiet tiny rename', title: 'Name this workflow yourself; an empty name gives it back to its steps', onclick: () => { renaming = `${ev.node}.${ev.port}`; renderWorkflow(); } }, 'Rename'), eventSteps(ev) ? null : h('button', { class: 'quiet', onclick: () => { const i = draftEvents.findIndex((d) => d.node === ev.node && d.port === ev.port); if (i >= 0) draftEvents.splice(i, 1); selEvent = null; renderWorkflow(); } }, 'Discard'))));
-  flowWires = []; drawnForks.clear();
+  flowWires = []; drawnForks.clear(); drawnSteps.clear();
   const flow = h('div', { class: 'flow' });
   flow.addEventListener('pointerdown', (e) => dragStep(e, flow));
   flow.addEventListener('click', (e) => { if (performance.now() - dragEnded < 250) { e.stopPropagation(); e.preventDefault(); } }, true);
+  // a click on a step (not on its buttons, fields or chips) sets it up in the panel on the right; on the canvas, closes it
+  flow.addEventListener('click', (e) => {
+    if (e.target.closest('button, input, select, textarea, a, .chip, .addrow, .wireplus')) return;
+    const card = e.target.closest('.step[data-id], .evnode');
+    pickStep(card ? (card.classList.contains('evnode') ? 'event' : card.dataset.id) : null);
+  });
+  main.onclick = (e) => { if (selStep && (e.target === main || e.target === wf || e.target.classList?.contains('flowarea') || e.target.classList?.contains('flowlegend'))) pickStep(null); };
   flow.append(document.createElementNS(SVG_NS, 'svg')); flow.firstChild.setAttribute('class', 'wires');
-  const evnode = h('div', { class: 'evnode' }, h('b', {}, icon('bolt'), `When ${portLabel(byId[ev.node], 'output', ev.port)}`), h('small', {}, `${labelOf(ev.node)} (${typeName(byId[ev.node].type)})`));
+  const evnode = h('div', { class: `evnode${selStep === 'event' ? ' picked' : ''}`, title: 'What starts this workflow' }, h('b', {}, icon('bolt'), `When ${labelOf(ev.node)} ${eventPhrase(byId[ev.node], ev.port)}`), h('small', {}, `${typeName(byId[ev.node].type)} · ${portLabel(byId[ev.node], 'output', ev.port)}`));
   const start = { el: evnode, port: 'out', kind: 'then' };
   const lanes = lanesOf(ev);
   if (!lanes) renderChain(flow, chain(ev.node, ev.port), { node: ev.node, port: ev.port }, 1, '', null, start, evnode);
@@ -4547,6 +4679,7 @@ function renderWorkflow() {
   if (showRun) runLit = readLastRun(ev);
   applyRun();
   fitFlow();
+  renderStepPanel();
 }
 /* ---- STU-026: the last run, lit up. Read off the runtime's trace (armed when the app opens, nothing to press first), with
    the timeline's own reading of runs (./timeline.mjs runsOf): this card's latest run, every other card on the component
@@ -4629,7 +4762,10 @@ function fitFlow() {
     if (mw > flow.offsetWidth) flow.style.minWidth = `${Math.ceil(mw)}px`;
     if (mh > flow.offsetHeight) flow.style.minHeight = `${Math.ceil(mh)}px`;
   }
-  const w = flow.offsetWidth, ht = flow.offsetHeight, room = $('steps').clientWidth - 56;
+  // fitted as if the step's panel were shut: opening it to set a step up must not shrink every step out of reading; the
+  // canvas scrolls under it instead
+  const panel = $('wfinspect'), room = $('steps').clientWidth + (panel && !panel.hidden ? panel.offsetWidth : 0) - 56;
+  const w = flow.offsetWidth, ht = flow.offsetHeight;
   flowZ = flowZoom ?? Math.max(0.55, Math.min(1, room / Math.max(1, w)));
   flow.style.transform = flowZ === 1 ? '' : `scale(${flowZ})`;
   Object.assign(flow.parentElement.style, { width: `${Math.ceil(w * flowZ)}px`, height: `${Math.ceil(ht * flowZ)}px` });
@@ -4698,11 +4834,11 @@ function drawWires() {
     const x2 = b.left, y2 = b.top + b.height / 2, dx = Math.max(40, (x2 - x1) / 2);
     const colour = FLOW[w.kind] ?? FLOW.then, faint = w.dashed || w.kind === 'dead' || w.kind === 'offer';
     const ran = wireRan(w), d = `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
-    add('path', { d, fill: 'none', stroke: colour, 'stroke-width': faint ? 2 : ran ? 3.5 : 2.5, ...(faint ? { 'stroke-dasharray': '6 6' } : { filter: 'url(#flowglow)' }),
+    add('path', { d, fill: 'none', stroke: colour, 'stroke-width': faint ? 2 : ran ? 3.5 : 2.5, ...(faint ? { 'stroke-dasharray': '6 6' } : {}),
       ...(ran === false ? { opacity: 0.3 } : {}), ...(ran ? { 'data-ran': '1' } : {}),
       'data-kind': w.kind, 'data-from': w.from.dataset.id ?? w.from.className.split(' ')[0], 'data-to': w.to.dataset.id ?? w.to.className.split(' ')[0] });
-    add('circle', { cx: x1, cy: y1, r: 5, fill: colour, stroke: '#141318', 'stroke-width': 2, ...(ran === false ? { opacity: 0.3 } : {}) });
-    if (!faint) add('circle', { cx: x2, cy: y2, r: 5, fill: colour, stroke: '#141318', 'stroke-width': 2, ...(ran === false ? { opacity: 0.3 } : {}) });
+    add('circle', { cx: x1, cy: y1, r: 5, fill: colour, stroke: '#eef0f3', 'stroke-width': 2, ...(ran === false ? { opacity: 0.3 } : {}) });
+    if (!faint) add('circle', { cx: x2, cy: y2, r: 5, fill: colour, stroke: '#eef0f3', 'stroke-width': 2, ...(ran === false ? { opacity: 0.3 } : {}) });
     if (ran) pulses.push(d);
     // the curve's middle (t = ½), where a "+" puts a step between the two it joins
     if (w.edge && w.kind !== 'dead') {
@@ -4809,56 +4945,150 @@ function chainEnd(steps, from) {
 }
 function stepCard(s, n) {
   const node = byId[s.id];
+  drawnSteps.set(s.id, s);
   if (s.refresh) {
     const it = itemById(s.id);
-    return h('div', { class: 'step', 'data-id': s.id, style: `--kind:${KIND_COLOUR.db}` }, h('div', { class: 'num' }, n),
+    return h('div', { class: `step${selStep === s.id ? ' picked' : ''}`, 'data-id': s.id, style: `--kind:${KIND_COLOUR.db}` }, h('div', { class: 'num' }, n),
       h('h3', {}, 'Refresh page data', h('span', {}, it?.name ?? labelOf(s.id))),
       h('div', { class: 'acts' }, h('button', { class: 'quiet tiny danger', title: 'Stop refreshing it here (the page data stays)', onclick: () => deleteStep(s) }, icon('trash'))),
       h('div', { class: 'lines' }, h('span', {}, it ? sentence(it) : ''), h('span', { style: 'color:var(--muted)' }, 'What it asks is edited in Design → Page data.')));
   }
   const params = node.parameters || {};
-  const ins = portsOf(node, 'input');
   const isCond = node.type === 'Condition';
-  const lines = [];
-  for (const [k, v] of Object.entries(params)) {
-    if (['x', 'y'].includes(k) || typeof v === 'object' || (isCond && k === 'condition')) continue;
-    const p = ins.find((p) => p.name === k);
-    if (p?.signal) continue;
-    lines.push(h('span', {}, `${p?.label || k}: `, h('code', {}, String(v).slice(0, 80))));
-  }
-  for (const c of conns.filter((c) => c.toId === s.id && !isSignalPort(node, 'input', c.toProperty) && !(isCond && c.toProperty === 'condition'))) lines.push(h('span', { style: 'display:inline-flex;gap:4px;align-items:center' }, `${portLabel(node, 'input', c.toProperty)} = `, sourceChip(c.fromId, c.fromProperty)));
-  const settings = h('div', { class: 'props settings', style: `display:${openSteps.has(s.id) ? '' : 'none'}` });
   const wiredIn = Object.fromEntries(conns.filter((c) => c.toId === s.id).map((c) => [c.toProperty, c]));
-  const ports = editablePorts(node, { wireOnly: true }).filter((p) => !['x', 'y'].includes(p.name) && !(isCond && p.name === 'condition'));
-  if (!ports.length) settings.append(h('div', { class: 'hint' }, 'This action has no settings to type; its inputs come from values.'));
-  for (const p of ports) settings.append(fieldFor(node, p, params[p.name], wiredIn[p.name]));
-  const openSettings = () => { settings.style.display = ''; card.classList.add('open'); openSteps.add(s.id); };
+  const lines = stepLines(node);
   // a Go to page with no page never arrives, and RouterNavigate says Done only on arriving: nothing after it runs
-  if (node.type === 'RouterNavigate' && !params.target && !wiredIn.target) lines.unshift(h('span', { class: 'nopage', style: 'color:var(--warn);flex-basis:100%;display:flex;flex-wrap:wrap;gap:2px 8px;align-items:center' }, 'No page picked: it goes nowhere, and nothing after it runs.', h('button', { class: 'quiet tiny', style: 'white-space:nowrap', onclick: openSettings }, 'Pick a page…')));
+  if (node.type === 'RouterNavigate' && !params.target && !wiredIn.target) lines.unshift(h('span', { class: 'nopage', style: 'color:var(--warn);flex-basis:100%;display:flex;flex-wrap:wrap;gap:2px 8px;align-items:center' }, 'No page picked: it goes nowhere, and nothing after it runs.', h('button', { class: 'quiet tiny', style: 'white-space:nowrap', onclick: () => pickStep(s.id) }, 'Pick a page…')));
   // BKO-004: a step that runs a cloud function opens it, its own graph, and Back comes here
-  if (node.type === 'CloudFunction2' && params.function) lines.unshift(h('button', { class: 'quiet tiny fnopen', title: `Open ${params.function}'s steps: what it does on the backend`,
-    onclick: (e) => { e.stopPropagation(); openFunction(CLOUD + params.function, { kind: 'card', ev: selEvent, cardBack, title: cardName(selEvent) }); } }, `Runs on the backend: ${params.function} ↗`));
-  const kind = ACTIONS.find(([t]) => t === node.type)?.[2];
-  const card = h('div', { class: `step${isCond ? ' cond' : ''}${openSteps.has(s.id) ? ' open' : ''}${neverDone(s) ? ' dead' : ''}`, 'data-id': s.id, style: kind ? `--kind:${KIND_COLOUR[kind]}` : null },
+  if (node.type === 'CloudFunction2' && params.function) lines.unshift(fnOpener(params.function));
+  const kind = actionKind(node.type);
+  const card = h('div', { class: `step${isCond ? ' cond' : ''}${selStep === s.id ? ' picked' : ''}${neverDone(s) ? ' dead' : ''}`, 'data-id': s.id, title: 'Click to set it up', style: kind ? `--kind:${KIND_COLOUR[kind]}` : null },
     h('div', { class: 'num' }, isCond ? icon('branch') : n),
     h('h3', {}, isCond ? 'Branch' : stepTypeName(node.type), h('span', { title: isCond ? 'If the condition holds, Yes runs; otherwise No' : null }, isCond ? (node.label || 'if the condition holds, Yes; otherwise No') : node.label || '')),
-    h('div', { class: 'acts' },
-      ports.length ? h('button', { class: 'quiet tiny', title: 'Settings', onclick: () => { const open = settings.style.display === 'none'; settings.style.display = open ? '' : 'none'; card.classList.toggle('open', open); open ? openSteps.add(s.id) : openSteps.delete(s.id); } }, icon('settings')) : null,
-      h('button', { class: 'quiet tiny danger', title: isCond ? 'Delete the branch and both chains' : 'Delete step', onclick: () => deleteStep(s) }, icon('trash'))));
-  if (isCond) {
-    const cw = wiredIn.condition; const src = cw && byId[cw.fromId];
-    const pCond = { name: 'condition', displayName: 'Condition' };
-    const fixed = !src && typeof params.condition === 'boolean';
-    const line = h('div', { class: 'cond-line' }, fixed ? 'Always ' : 'If ');
-    if (src && isComposed(src)) line.append(h('span', { class: 'chip expr', style: 'cursor:pointer', onclick: (e) => openComposer(e, node, pCond, src) }, icon('fx'), composedPreview(src)), h('button', { class: 'quiet tiny', onclick: (e) => openComposer(e, node, pCond, src) }, 'Edit'));
-    else if (src) line.append(sourceChip(cw.fromId, cw.fromProperty), h('button', { class: 'quiet tiny', onclick: () => edits(pageKey, [{ edit: 'disconnect', component: pageKey, from: { node: cw.fromId, port: cw.fromProperty }, to: { node: node.id, port: 'condition' } }]) }, icon('x')));
-    // a condition saved as a fixed Yes or No (the todo app's "Put the old error away" is a constant false, read for its value): said, not offered as empty
-    else if (fixed) line.append(h('span', { class: 'chip' }, params.condition ? 'Yes' : 'No'), h('span', { style: 'color:var(--muted)' }, `a fixed value: only ${params.condition ? 'Yes' : 'No'} runs`), h('button', { class: 'quiet tiny', onclick: (e) => sourceMenu(e, node, pCond) }, 'Use a value instead…'));
-    else line.append(h('button', { class: 'primary tiny', onclick: (e) => sourceMenu(e, node, pCond) }, icon('bolt'), 'Set the condition…'), h('span', { style: 'color:var(--muted)' }, '(a Yes / No value, or an expression)'));
-    card.append(line);
-  } else card.append(h('div', { class: 'lines' }, ...(lines.length ? lines : [h('span', { style: 'color:var(--muted)' }, 'No settings yet')]), s.siblings.length ? h('span', { style: 'color:var(--muted)' }, `+ ${s.siblings.length} more wired from the same signal`) : null));
-  card.append(settings);
+    h('div', { class: 'acts' }, h('button', { class: 'quiet tiny danger', title: isCond ? 'Delete the branch and both chains' : 'Delete step', onclick: () => deleteStep(s) }, icon('trash'))));
+  if (isCond) card.append(condLine(node, wiredIn.condition));
+  else card.append(h('div', { class: 'lines' }, ...(lines.length ? lines : [h('span', { style: 'color:var(--muted)' }, 'Not set up yet: click to set it up')]), s.siblings.length ? h('span', { style: 'color:var(--muted)' }, `+ ${s.siblings.length} more wired from the same signal`) : null));
   return card;
+}
+const fnOpener = (fn) => h('button', { class: 'quiet tiny fnopen', title: `Open ${fn}'s steps: what it does on the backend`,
+  onclick: (e) => { e.stopPropagation(); openFunction(CLOUD + fn, { kind: 'card', ev: selEvent, cardBack, title: cardName(selEvent) }); } }, `Runs on the backend: ${fn} ↗`);
+/** What a step is set to, one short line each, on its card: its settings and the values wired into it. */
+function stepLines(node) {
+  const params = node.parameters || {}, ins = portsOf(node, 'input'), isCond = node.type === 'Condition', lines = [];
+  for (const [k, v] of Object.entries(params)) {
+    if (['x', 'y'].includes(k) || typeof v === 'object' || (isCond && k === 'condition') || k.startsWith('runOnChange-')) continue;
+    const p = ins.find((p) => p.name === k);
+    if (p?.signal) continue;
+    lines.push(h('span', {}, `${STEP_WORDS[k] || p?.label || k}: `, h('code', {}, String(v).slice(0, 80))));
+  }
+  for (const c of conns.filter((c) => c.toId === node.id && !isSignalPort(node, 'input', c.toProperty) && !(isCond && c.toProperty === 'condition'))) lines.push(h('span', { style: 'display:inline-flex;gap:4px;align-items:center' }, `${STEP_WORDS[c.toProperty] || portLabel(node, 'input', c.toProperty)} = `, sourceChip(c.fromId, c.fromProperty)));
+  return lines;
+}
+/** A branch's condition, as a sentence with its value or expression; on the card and in the step's panel. */
+function condLine(node, cw) {
+  const params = node.parameters || {};
+  const src = cw && byId[cw.fromId];
+  const pCond = { name: 'condition', displayName: 'Condition' };
+  const fixed = !src && typeof params.condition === 'boolean';
+  const line = h('div', { class: 'cond-line' }, fixed ? 'Always ' : 'If ');
+  if (src && isComposed(src)) line.append(h('span', { class: 'chip expr', style: 'cursor:pointer', onclick: (e) => openComposer(e, node, pCond, src) }, icon('fx'), composedPreview(src)), h('button', { class: 'quiet tiny', onclick: (e) => openComposer(e, node, pCond, src) }, 'Edit'));
+  else if (src) line.append(sourceChip(cw.fromId, cw.fromProperty), h('button', { class: 'quiet tiny', onclick: () => edits(pageKey, [{ edit: 'disconnect', component: pageKey, from: { node: cw.fromId, port: cw.fromProperty }, to: { node: node.id, port: 'condition' } }]) }, icon('x')));
+  // a condition saved as a fixed Yes or No (the todo app's "Put the old error away" is a constant false, read for its value): said, not offered as empty
+  else if (fixed) line.append(h('span', { class: 'chip' }, params.condition ? 'Yes' : 'No'), h('span', { style: 'color:var(--muted)' }, `a fixed value: only ${params.condition ? 'Yes' : 'No'} runs`), h('button', { class: 'quiet tiny', onclick: (e) => sourceMenu(e, node, pCond) }, 'Use a value instead…'));
+  else line.append(h('button', { class: 'primary tiny', onclick: (e) => sourceMenu(e, node, pCond) }, icon('bolt'), 'Set the condition…'), h('span', { style: 'color:var(--muted)' }, '(a Yes / No value, or an expression)'));
+  return line;
+}
+
+/* ---- a step is set up in the panel on the right, as Design sets up an element: click the step (Richard, 2026-10-29:
+   "you expect to click on it and config comes up but you have to click on the cog"). A step just added is picked, so its
+   settings are open at once. What starts the workflow is picked the same way. Esc, or a click on the empty canvas, closes it ---- */
+let selStep = null; // a step's node id, or 'event'
+const drawnSteps = new Map(); // id → the chain's step (its wires in and out), filled as the cards are drawn
+/** Settings a person rarely needs, folded under "More options": they are for developers, or for an import's leftovers. */
+const ADVANCED_PORTS = new Set(['sourceObjectId', 'upsertOn', 'storageInsertIndex', 'runOnChange', 'router']);
+const STEP_WORDS = { collectionName: 'Data type', target: 'Page', objectId: 'Which record' };
+function pickStep(id) {
+  selStep = id;
+  for (const el of $('steps').querySelectorAll('.flow .step[data-id], .flow .evnode')) el.classList.toggle('picked', el.classList.contains('evnode') ? id === 'event' : el.dataset.id === id);
+  renderStepPanel();
+}
+function renderStepPanel() {
+  const panel = $('wfinspect'); if (!panel) return;
+  if (selStep && selStep !== 'event' && !byId[selStep]) selStep = null;
+  const on = tab === 'workflow' && !selFn && !selAuto && !!selEvent && !!byId[selEvent.node] && !!selStep;
+  $('workflow').classList.toggle('inspecting', on);
+  panel.hidden = !on;
+  // a redraw keeps the focus on the same control, as Design's panel does
+  const a = document.activeElement, focusAt = on && a && panel.contains(a) && a.matches('input,select,textarea') ? [...panel.querySelectorAll('input,select,textarea')].indexOf(a) : -1;
+  panel.innerHTML = '';
+  if (!on) return;
+  if (selStep === 'event') eventPanel(panel); else stepPanel(panel, byId[selStep]);
+  if (focusAt >= 0) panel.querySelectorAll('input,select,textarea')[focusAt]?.focus();
+}
+function eventPanel(panel) {
+  const ev = selEvent, node = byId[ev.node], n = eventSteps(ev);
+  panel.append(h('div', { class: 'head' }, h('b', {}, cardName(ev)), h('button', { class: 'quiet', title: 'Close (Esc)', onclick: () => pickStep(null) }, icon('x')),
+    h('div', { class: 'type' }, h('span', { class: 'stepkind', style: `background:${FLOW.then}` }, icon('bolt')), 'What starts this workflow')));
+  panel.append(h('p', { class: 'what' }, `It runs when ${labelOf(ev.node)} (${typeName(node.type)}) ${eventPhrase(node, ev.port)}. ${n ? `Then its ${n} step${n === 1 ? '' : 's'} run, left to right.` : 'It has no steps yet.'}`));
+  const wrap = h('div', { class: 'props' });
+  wrap.append(h('div', { class: 'after' },
+    h('button', { onclick: () => { cardBack = null; switchTab('design'); if (byId[ev.node]) { select(ev.node); elOf(ev.node)?.scrollIntoView({ block: 'nearest' }); } } }, icon(glyphOf(node.type)), `Show ${labelOf(ev.node)} in Design`),
+    h('button', { onclick: () => { renaming = `${ev.node}.${ev.port}`; renderWorkflow(); } }, 'Rename the workflow'),
+    eventSteps(ev) ? null : h('button', { class: 'primary', onclick: (e) => addActionMenu(e, { node: ev.node, port: ev.port }) }, icon('plus'), 'Add the first action')));
+  panel.append(wrap);
+}
+function stepPanel(panel, node) {
+  const s = drawnSteps.get(node.id), params = node.parameters || {}, isCond = node.type === 'Condition';
+  const card = $('steps').querySelector(`.flow .step[data-id="${CSS.escape(node.id)}"]`);
+  const num = card?.querySelector('.num')?.textContent || '';
+  const kind = actionKind(node.type);
+  if (s?.refresh) {
+    const it = itemById(node.id);
+    panel.append(h('div', { class: 'head' }, h('b', {}, 'Refresh page data'), h('button', { class: 'quiet danger', title: 'Stop refreshing it here (the page data stays)', onclick: () => deleteStep(s) }, icon('trash'))),
+      h('p', { class: 'what' }, `Asks the backend again for ${it?.name ?? labelOf(node.id)}${it ? ` (${sentence(it)})` : ''}, so every element reading it updates. What it asks is edited in Design → Page data.`));
+    return;
+  }
+  panel.append(h('div', { class: 'head' },
+    h('input', { type: 'text', value: node.label || '', placeholder: isCond ? 'Name this branch' : `Name this step (${stepTypeName(node.type)})`, title: 'A name for this step, shown on its card', onchange: (e) => edits(pageKey, [{ edit: 'rename', component: pageKey, id: node.id, label: e.target.value }], { rebuildApp: false, redraw: true }) }),
+    s ? h('button', { class: 'quiet danger', title: isCond ? 'Delete the branch and both chains' : 'Delete this step', onclick: () => deleteStep(s) }, icon('trash')) : h('span'),
+    h('div', { class: 'type' }, h('span', { class: 'stepkind', style: `background:${KIND_COLOUR[kind] || KIND_COLOUR.code}` }, icon(isCond ? 'branch' : kind || 'code')), `${num && !isCond ? `Step ${num} · ` : ''}${isCond ? 'Branch (Yes / No)' : stepTypeName(node.type)}`)));
+  const what = actionInfo(node.type)?.what;
+  if (what) panel.append(h('p', { class: 'what' }, what));
+  const wrap = h('div', { class: 'props' });
+  const wiredIn = Object.fromEntries(conns.filter((c) => c.toId === node.id).map((c) => [c.toProperty, c]));
+  if (isCond) wrap.append(h('div', { class: 'sechead' }, 'Only when'), condLine(node, wiredIn.condition), h('div', { class: 'hint', style: 'padding:0 0 8px' }, 'Yes runs when this holds; No runs when it does not. Add their steps on the canvas.'));
+  if (node.type === 'RouterNavigate' && !params.target && !wiredIn.target) wrap.append(h('div', { class: 'warn' }, 'No page picked yet: it goes nowhere, and nothing after it runs.'));
+  if (node.type === 'CloudFunction2' && params.function) wrap.append(h('div', { class: 'after' }, fnOpener(params.function)));
+  const ports = editablePorts(node, { wireOnly: true }).filter((p) => !['x', 'y'].includes(p.name) && !(isCond && p.name === 'condition'));
+  const field = (p) => {
+    // "run on change": a step runs when its chain reaches it; a change to the value it reads running it too is for developers
+    const words = STEP_WORDS[p.name] || (p.name.startsWith('runOnChange-') ? `A change to ${portLabel(node, 'input', p.name.slice(12)).toLowerCase()} runs it too` : null);
+    const choice = choicesFor(node, p.name);
+    if (choice && !wiredIn[p.name]) p = { ...p, type: { name: 'enum', enums: choice } };
+    return fieldFor(node, words ? { ...p, displayName: words } : p, params[p.name], wiredIn[p.name]);
+  };
+  const advanced = ports.filter((p) => ADVANCED_PORTS.has(p.name) || p.name.startsWith('runOnChange-') || /advanced|experimental/i.test(p.group || ''));
+  const isRecord = ports.some((p) => p.name === 'collectionName');
+  const record = isRecord ? ports.filter((p) => p.name.startsWith('prop-') && !advanced.includes(p)) : [];
+  const main = ports.filter((p) => !advanced.includes(p) && !record.includes(p)).sort((a, b) => (b.name === 'collectionName') - (a.name === 'collectionName'));
+  for (const p of main) wrap.append(field(p));
+  if (record.length) { wrap.append(h('div', { class: 'sechead' }, `Fields of ${params.collectionName || 'the record'}`)); for (const p of record) wrap.append(field(p)); }
+  else if (isRecord && !params.collectionName) wrap.append(h('div', { class: 'hint', style: 'padding:6px 0' }, 'Pick its data type, and its fields appear here.'));
+  if (!ports.length && !isCond) wrap.append(h('div', { class: 'hint', style: 'padding:10px 0' }, 'This action has no settings to type; its inputs come from values.'));
+  if (advanced.length) { const more = h('details', { class: 'more' }, h('summary', {}, `More options (${advanced.length})`)); for (const p of advanced) more.append(field(p)); wrap.append(more); }
+  // what comes next: a step after this one, on its Done (a branch's sides are added on the canvas)
+  const done = !isCond && doneOf(node);
+  if (done && s && !s.refresh) {
+    const next = conns.find((c) => c.fromId === node.id && c.fromProperty === done && byId[c.toId] && isSignalPort(byId[c.toId], 'input', c.toProperty));
+    wrap.append(h('div', { class: 'after' }, h('button', { onclick: (e) => addActionMenu(e, next ? { node: node.id, port: done, before: { node: next.toId, port: next.toProperty } } : { node: node.id, port: done }) }, icon('plus'), next ? 'Put an action after this one' : 'Add an action after this one')));
+  }
+  panel.append(wrap);
+}
+/** A record step's field that is a Choice on its data type: its choices, for a dropdown instead of a text box. */
+function choicesFor(node, port) {
+  if (!port.startsWith('prop-') || !node.parameters?.collectionName) return null;
+  const rule = collections().find((c) => c.name === node.parameters.collectionName)?.checks?.find((r) => r.field === port.slice(5) && Array.isArray(r.oneOf));
+  return rule ? rule.oneOf.map((v) => ({ value: v, label: String(v) })) : null;
 }
 function deleteStep(s) {
   const node = byId[s.id];
@@ -4874,27 +5104,94 @@ function deleteStep(s) {
   edits(pageKey, [...doomed.map((id) => ({ edit: 'remove_node', component: pageKey, id })), ...heal]);
   toast(s.branches ? 'Deleted the branch and its chains' : `Deleted the ${stepTypeName(node.type)} step`);
 }
-const ACTIONS = VOCAB.steps.menu; // [type, the menu's words, glyph]: vocabulary.json
+// [type, the menu's words, glyph]: vocabulary.json, its three display names turned into the node types they place (`aliases`):
+// "Send an event", "Go to a URL path" and "Show a popup" were missing from the menu until they were
+const ACTIONS = VOCAB.steps.menu.map(([t, w, g]) => [VOCAB.steps.aliases?.[t] ?? t, w, g]);
+/** More of what a Bubble workflow does, after the vocabulary's own menu: [node type, the menu's words, glyph]. Studio's own
+    rows (vocabulary.json is pinned by @nodegx/mcp, and these change nothing it reads). */
+const MORE_ACTIONS = [
+  ['CloudFunction2', 'Run a cloud function', 'bolt'],
+  ['net.noodl.externallink', 'Open an external website', 'nav'],
+  ['NavigationClosePopup', 'Close the popup', 'page'],
+  ['net.noodl.user.SetUserProperties', 'Change the current user', 'user'],
+  ['net.noodl.user.RequestMagicLink', 'Email a sign-in link', 'user'],
+  ['Open File Picker', 'Ask for a file', 'db'],
+  ['Upload File', 'Upload a file', 'db'],
+  ['net.noodl.HTTP', 'Call an API (HTTP request)', 'code'],
+  ['net.noodl.Log', 'Write to the log', 'code']
+];
+const MENU_ACTIONS = [...ACTIONS, ...MORE_ACTIONS.filter(([t]) => !ACTIONS.some(([a]) => a === t))];
+/** The menu's sections, by glyph, in Bubble's order; and what each action does, said once in the menu and in the step's panel. */
+const ACTION_GROUPS = [['nav', 'Navigation'], ['db', 'Data'], ['user', 'Account'], ['state', 'Element and state'], ['page', 'Popups'], ['branch', 'Logic'], ['bolt', 'Events and backend'], ['code', 'Custom code']];
+const ACTION_INFO = {
+  RouterNavigate: 'Opens another page of the app. The steps after it run once the page is open.',
+  PageStackNavigateToPath: 'Opens a path inside the app, such as /listing/42.',
+  'net.noodl.externallink': 'Opens a web address outside the app, in this tab or a new one.',
+  NewDbModelProperties: 'Adds a row to one of your data types, with the field values you give it.',
+  SetDbModelProperties: 'Changes fields on a row that already exists.',
+  DeleteDbModelProperties: 'Deletes a row from the backend, for good.',
+  '@refresh': 'Asks the backend again for a page data item, so every element reading it updates.',
+  'Set Variable': 'Keeps a value in a custom state or a page variable, for elements to read.',
+  Condition: 'Splits the workflow in two: the Yes steps run when its condition holds, the No steps when it does not.',
+  'net.noodl.user.LogIn': 'Signs a person in with their email (or username) and password.',
+  'net.noodl.user.LogOut': 'Signs the current person out.',
+  'net.noodl.user.SignUp': 'Makes a new account and signs the person in with it.',
+  'net.noodl.user.SetUserProperties': 'Changes fields on the signed-in person’s own account.',
+  'net.noodl.user.RequestMagicLink': 'Emails a link that signs the person in without a password.',
+  'Event Sender': 'Sends an event by name; every Receive Event listening for that name runs.',
+  JavaScriptFunction: 'Runs a few lines of JavaScript you write.',
+  Timer: 'Waits the number of milliseconds you give it, then goes on.',
+  NavigationShowPopup: 'Shows a component as a popup over the page.',
+  NavigationClosePopup: 'Closes the popup this workflow runs in.',
+  CloudFunction2: 'Runs one of the app’s cloud functions on the backend, out of reach of the device, and waits for its answer.',
+  'Open File Picker': 'Asks the person to choose a file from their device.',
+  'Upload File': 'Uploads a file to the backend and gives its address, for a Picture or file field.',
+  'net.noodl.HTTP': 'Calls another service’s API over HTTP and reads its answer.',
+  'net.noodl.Log': 'Writes a line to the browser’s console, for finding out what happened.'
+};
+const actionRow = (type) => MENU_ACTIONS.find(([t]) => t === type);
+/** A node as a toast names it: an element by its name, a step by its own name or the menu's words for what it does. */
+const nodeNoun = (id) => { const n = byId[id]; return !n ? id : n.label || (isVisualType(n.type) ? labelOf(id) : `the ${stepTypeName(n.type) || typeName(n.type)} step`); };
+/** What starts a workflow, as Bubble says it: "Button is clicked", "Home is loaded". */
+const EVENT_WORDS = { Click: 'is clicked', 'Did Mount': 'appears', 'Will Unmount': 'goes away', Changed: 'changes', 'Value Changed': 'changes', 'Text Changed': 'changes', 'Hover Start': 'is hovered', 'Hover End': 'is no longer hovered', Focused: 'gets the focus', Blurred: 'loses the focus', 'Focus Lost': 'loses the focus', 'Pointer Down': 'is pressed', 'Pointer Up': 'is released', 'On Enter': 'gets Enter', Enter: 'gets Enter', Submit: 'is submitted', Checked: 'is checked', Unchecked: 'is unchecked' };
+function eventPhrase(node, port) {
+  const label = portLabel(node, 'output', port);
+  if (node.type === 'Page' && label === 'Did Mount') return 'is loaded';
+  return EVENT_WORDS[label] || `says ${label}`;
+}
+const actionKind = (type) => actionRow(type)?.[2];
+const actionInfo = (type) => (ACTION_INFO[type] ? { what: ACTION_INFO[type] } : null);
 /** A step's kind as the action menu says it ("Go to page", "Log the user in"); a variable's set, whose menu line covers
     two things, and anything not in the menu keep the node type's name. */
-const stepTypeName = (type) => (type === 'Set Variable' ? null : ACTIONS.find(([t]) => t === type)?.[1]) ?? typeName(type);
+const stepTypeName = (type) => (type === 'Set Variable' ? null : actionRow(type)?.[1]) ?? typeName(type);
+/** "Click here to add an action…": the actions by section, each with what it does; every other node a developer might want
+    under one folded section at the end (its deprecated twins left out), opened by a search or a click. */
+let menuShowsAll = false;
 function addActionMenu(e, from) {
   closeMenu();
-  const menu = popover(e);
+  const menu = popover(e, 'actions');
   const search = h('input', { type: 'text', placeholder: 'Search actions…', oninput: () => fill(search.value) });
   const list = h('div');
+  const pick = (type) => { closeMenu(); if (type === '@refresh') return refreshMenu(e, from); if (type === 'Set Variable' && statesOf().length) return setStateMenu(e, from); addAction(type, from); };
   const fill = (q) => {
     list.innerHTML = '';
-    const q2 = q.toLowerCase();
-    const named = ACTIONS.filter(([t]) => t === '@refresh' || libIndex.has(t) || hasSpec(t));
-    // a query is page data, made in Design: a workflow refreshes one, it never writes its own (STU-012)
-    const rest = (lib?.nodetypes || []).filter((t) => t.category !== 'Visual' && t.name !== 'DbCollection2' && !ACTIONS.some(([a]) => a === t.name)).map((t) => [t.name, t.displayNodeName || t.name, 'code']);
-    for (const [title, all] of [['Actions', named], ['Every other node', rest]]) {
-      const shown = all.filter(([type, label]) => (!q2 || label.toLowerCase().includes(q2) || type.toLowerCase().includes(q2)) && (type === '@refresh' || triggerOf({ type, parameters: {} })));
+    const q2 = q.trim().toLowerCase();
+    const hit = (type, label, what = '') => !q2 || label.toLowerCase().includes(q2) || type.toLowerCase().includes(q2) || what.toLowerCase().includes(q2);
+    const named = MENU_ACTIONS.filter(([t]) => (t === '@refresh' || libIndex.has(t) || hasSpec(t)) && (t === '@refresh' || triggerOf({ type: t, parameters: {} })));
+    let any = false;
+    for (const [glyph, title] of ACTION_GROUPS) {
+      const shown = named.filter(([t, label, g]) => g === glyph && hit(t, label, ACTION_INFO[t]));
       if (!shown.length) continue;
+      any = true;
       list.append(h('div', { class: 'h' }, title));
-      for (const [type, label, ic] of shown) list.append(h('div', { class: 'item', onclick: () => { closeMenu(); if (type === '@refresh') return refreshMenu(e, from); if (type === 'Set Variable' && statesOf().length) return setStateMenu(e, from); addAction(type, from); } }, icon(ic), label, h('small', {}, type === '@refresh' ? 'runs a page data item again now' : typeName(type))));
+      for (const [type, label, ic] of shown) list.append(h('div', { class: 'item', title: ACTION_INFO[type] || '', onclick: () => pick(type) }, h('span', { class: 'ic', style: `background:${KIND_COLOUR[ic]}` }, icon(ic)), h('span', { class: 'words' }, label, ACTION_INFO[type] ? h('small', {}, ACTION_INFO[type]) : null)));
     }
+    // a query is page data, made in Design: a workflow refreshes one, it never writes its own (STU-012)
+    const rest = (lib?.nodetypes || []).filter((t) => t.category !== 'Visual' && !t.deprecated && t.name !== 'DbCollection2' && !MENU_ACTIONS.some(([a]) => a === t.name) && triggerOf({ type: t.name, parameters: {} }) && hit(t.name, t.displayNodeName || t.name));
+    if (!rest.length) { if (!any) list.append(h('div', { class: 'hint' }, `No action matches “${q}”.`)); return; }
+    const open = menuShowsAll || !!q2;
+    list.append(h('div', { class: 'h more', role: 'button', 'aria-expanded': open, onclick: () => { menuShowsAll = !menuShowsAll; fill(search.value); } }, `${open ? '▾' : '▸'} Every other node, for developers (${rest.length})`));
+    if (open) for (const t of rest.sort((a, b) => (a.displayNodeName || a.name).localeCompare(b.displayNodeName || b.name))) list.append(h('div', { class: 'item dev', onclick: () => pick(t.name) }, h('span', { class: 'ic', style: `background:${KIND_COLOUR.code}` }, icon('code')), h('span', { class: 'words' }, t.displayNodeName || t.name, h('small', {}, t.category || ''))));
   };
   fill('');
   menu.append(h('div', { class: 'search' }, icon('search'), search), list); document.body.append(menu); search.focus();
@@ -4941,26 +5238,42 @@ function addAction(type, from, params = {}, label) {
   }
   edits(pageKey, wire);
   if (!events().some((ev) => ev.node === selEvent.node && ev.port === selEvent.port)) draftEvents.length = 0;
-  if (type !== 'Condition') openSteps.add(id);
+  selStep = id; // set it up at once: its settings open on the right
   renderWorkflow();
-  toast(type === 'Condition' ? 'Added a branch: set its condition, then add actions under Yes and No' : `Added ${label || typeName(type)} ${from.before && !from.also ? `between ${labelOf(from.node)} and ${labelOf(from.before.node)}` : `after ${labelOf(from.node)}`}`);
+  toast(type === 'Condition' ? 'Added a branch: set its condition, then add actions under Yes and No' : `Added ${label || stepTypeName(type)} ${from.before && !from.also ? `between ${nodeNoun(from.node)} and ${nodeNoun(from.before.node)}` : `after ${nodeNoun(from.node)}`}`);
 }
+/** Starts a workflow at an element's event (a draft until its first step), and shows it. */
+function startWorkflow(id, port) {
+  closeMenu();
+  if (!events().some((ev) => ev.node === id && ev.port === port) && !draftEvents.some((d) => d.node === id && d.port === port)) draftEvents.push({ node: id, port });
+  selEvent = { node: id, port }; selFn = null; selAuto = null; fnBack = [];
+  if (tab !== 'workflow') { cardBack = { node: id, page: pageKey }; switchTab('workflow'); } else renderWorkflow();
+  pickStep('event');
+}
+/** The events a person starts a workflow with, first: Bubble's "An element is clicked", "Page is loaded", "An input's value is changed". */
+const COMMON_EVENTS = new Set(['Click', 'Changed', 'Value Changed', 'Text Changed', 'On Enter', 'Enter', 'Submit', 'Checked', 'Unchecked']);
+const isCommonEvent = (node, p) => COMMON_EVENTS.has(p.label) || (node.type === 'Page' && p.label === 'Did Mount');
+let eventsShowAll = false;
 $('newevent').onclick = (e) => {
   closeMenu();
-  const menu = popover(e);
+  const menu = popover(e, 'events');
   const search = h('input', { type: 'text', placeholder: 'Search elements and events…', oninput: () => fill(search.value) });
   const list = h('div');
   const fill = (q) => {
     list.innerHTML = '';
-    const q2 = q.toLowerCase();
+    const q2 = q.trim().toLowerCase();
+    let hidden = 0;
     for (const id of visualIds) {
       const node = byId[id];
       const sigs = portsOf(node, 'output').filter((p) => p.signal);
-      const shown = sigs.filter((p) => !q2 || `${labelOf(id)} ${p.label}`.toLowerCase().includes(q2));
+      const shown = sigs.filter((p) => (!q2 ? eventsShowAll || isCommonEvent(node, p) : `${labelOf(id)} ${p.label} ${eventPhrase(node, p.name)}`.toLowerCase().includes(q2)));
+      hidden += sigs.length - shown.length;
       if (!shown.length) continue;
       list.append(h('div', { class: 'h' }, labelOf(id)));
-      for (const p of shown) list.append(h('div', { class: 'item', onclick: () => { closeMenu(); draftEvents.push({ node: id, port: p.name }); selEvent = { node: id, port: p.name }; selFn = null; fnBack = []; renderWorkflow(); } }, icon(glyphOf(node.type)), `When ${labelOf(id)}: ${p.label}`, h('small', {}, typeName(node.type))));
+      for (const p of shown) list.append(h('div', { class: 'item', onclick: () => startWorkflow(id, p.name) }, icon(glyphOf(node.type)), `When ${labelOf(id)} ${eventPhrase(node, p.name)}`, h('small', {}, typeName(node.type))));
     }
+    if (!list.children.length) list.append(h('div', { class: 'hint' }, q2 ? `Nothing on this page matches “${q}”.` : 'Nothing on this page can be clicked or changed yet: add a button or an input in Design, or show every event.'));
+    if (!q2 && (hidden || eventsShowAll)) list.append(h('div', { class: 'h more', role: 'button', onclick: () => { eventsShowAll = !eventsShowAll; fill(''); } }, eventsShowAll ? '▾ Only the usual events' : `▸ Every event (${hidden} more: hovers, focus, drag and drop…)`));
   };
   fill('');
   menu.append(h('div', { class: 'search' }, icon('search'), search), list);
@@ -5024,7 +5337,8 @@ function allTypes() {
     t.file = fromFile.some((f) => f.name === t.name); // backend/schema.json: shown, not edited here
     if (t.file) t.declared = false;
     const live = liveTables.find((x) => x.name === t.name);
-    t.checks = live?.checks || declared.find((c) => c.name === t.name)?.checks?.map((rule) => ({ rule, declared: true })) || [];
+    // an empty list from the backend (a type made there before its choices were) does not hide the choices the project declares
+    t.checks = (live?.checks?.length ? live.checks : null) || declared.find((c) => c.name === t.name)?.checks?.map((rule) => ({ rule, declared: true })) || [];
     t.indexes = live?.indexes || [];
     t.backendColumns = live?.columns || [];
     t.drift = t.declared && t.onBackend ? driftOf(t.columns, t.backendColumns) : null;
@@ -5050,14 +5364,15 @@ const noValue = (field) => ({ [field]: { $exists: false } });
 async function emptyCount(type, field) { if (!backendUp()) return 0; try { return (await api(`/classes/${encodeURIComponent(type)}?count=1&limit=0&where=${encodeURIComponent(JSON.stringify(noValue(field)))}`)).count ?? 0; } catch { return 0; } }
 /** Runs a change on the development backend; a refusal is said, and the caller writes nothing to the project. */
 async function onBackend(what, fn) { try { await fn(); return true; } catch (e) { toast(`${what}: ${e.message}`); return false; } }
-$('newtype').onclick = async (e) => {
-  const name = (await askName(e, 'Name of the new data type (a collection), e.g. Task')) || '';
+$('newtype').onclick = (e) => newType(e);
+async function newType(e) {
+  const name = (await askName(e, 'Name of the new data type, e.g. Listing')) || '';
   if (!name) return;
   if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name)) return toast('A type’s name starts with a letter and has only letters, digits and _');
   if (typeNamesHere().includes(name)) return toast('That type exists');
   if (backendUp() && !(await onBackend(`${name} was not made`, () => schemaAct({ action: 'createTable', table: name, columns: [] })))) return;
   declare(name); selType = name; renderData();
-};
+}
 function renderTypeMain(t) {
   const main = $('datamain'); main.innerHTML = '';
   if (!t) { main.append(h('div', { class: 'empty' }, 'Pick a data type, or make one. A type is a table of rows on the app’s backend: Task, Customer, Order.')); return; }
@@ -5216,8 +5531,10 @@ async function fieldDrawer(t, col) {
   const body = h('div', { style: 'display:grid;gap:12px' });
   const input = (label, key, attrs = {}) => h('label', { class: 'f' }, label, h('input', { type: 'text', value: d[key], ...attrs, oninput: (e) => { d[key] = e.target.value; check(); } }));
   const check = () => {
-    why.textContent = F.draftProblem(d, { taken: t.columns.map((c) => c.name).filter((n) => n !== col?.name), collections: typeNamesHere(), records: col ? 0 : records }) || (col && d.required && !col.required && empty ? `${F.recordsWord(empty)} ${empty === 1 ? 'has' : 'have'} no ${col.name} yet.` : '');
+    why.textContent = F.draftProblem(d, { taken: t.columns.map((c) => c.name).filter((n) => n !== col?.name), collections: [...typeNamesHere(), '_User'], records: col ? 0 : records }) || (col && d.required && !col.required && empty ? `${F.recordsWord(empty)} ${empty === 1 ? 'has' : 'have'} no ${col.name} yet.` : '');
     save.disabled = !!why.textContent;
+    // a new field not named yet: Add field waits, and the drawer does not open on an error the person has not made
+    if (!col && !String(d.name || '').trim()) why.textContent = '';
   };
   const showEmpty = () => { closeDrawer(); env = 'development'; dataSub = 'app'; Object.assign(app, { type: t.name, skip: 0, q: '', order: '-createdAt', picked: new Set(), missing: col.name }); renderData(); };
   const draw = () => {
@@ -5225,8 +5542,14 @@ async function fieldDrawer(t, col) {
     // a stored field keeps the kinds its values can become; a Link's target is not changed here
     const kinds = h('div', { class: 'kinds' }, ...F.KINDS.map((k) => h('button', { 'aria-pressed': d.kind === k.id, 'data-kind': k.id, disabled: col && (k.id === 'link' || k.id === 'links' || oldKind.id === 'link' || oldKind.id === 'links') && k.id !== oldKind.id, onclick: () => { d.kind = k.id; draw(); } }, h('b', {}, `${k.icon}  ${k.label}`), h('small', {}, k.line))));
     body.append(h('label', { class: 'f' }, 'Kind', kinds), input('Name', 'name', { placeholder: 'e.g. dueDate', 'data-input': 'name' }));
-    if (d.kind === 'link' || d.kind === 'links') body.append(h('label', { class: 'f' }, d.kind === 'link' ? 'Points at one row of' : 'Points at rows of', h('select', { disabled: !!col, onchange: (e) => { d.target = e.target.value; check(); } }, h('option', { value: '' }, 'Choose a type…'), ...typeNamesHere().map((n) => h('option', { value: n, selected: d.target === n }, n)))));
-    if (d.kind === 'choice') body.append(h('label', { class: 'f' }, 'The choices, one per line', h('textarea', { rows: 4, 'data-input': 'values', oninput: (e) => { d.values = e.target.value.split('\n').map((s) => s.trim()).filter(Boolean); check(); } }, d.values.join('\n'))));
+    if (d.kind === 'link' || d.kind === 'links') body.append(h('label', { class: 'f' }, d.kind === 'link' ? 'Points at one row of' : 'Points at rows of', h('select', { disabled: !!col, onchange: (e) => { d.target = e.target.value; check(); } }, h('option', { value: '' }, 'Choose a type…'), h('option', { value: '_User', selected: d.target === '_User' }, 'User (people who sign in)'), ...typeNamesHere().filter((n) => n !== '_User').map((n) => h('option', { value: n, selected: d.target === n }, n)))));
+    if (d.kind === 'choice') {
+      const box = h('textarea', { rows: 4, 'data-input': 'values', oninput: (e) => { d.values = e.target.value.split('\n').map((s) => s.trim()).filter(Boolean); check(); } }, d.values.join('\n'));
+      // an option set made in Data → Option sets is the list a Bubble user reaches for: its options become the choices
+      const sets = optionSetKeys().map(optionSet).filter((x) => x?.options.length);
+      if (sets.length) body.append(h('label', { class: 'f' }, 'Take the choices from an option set', h('select', { onchange: (e) => { const set = sets.find((x) => x.key === e.target.value); if (!set) return; d.values = set.options.map((o) => String(o.display ?? o.value ?? '')).filter(Boolean); box.value = d.values.join('\n'); check(); } }, h('option', { value: '' }, 'None: type them below'), ...sets.map((x) => h('option', { value: x.key }, `${x.name} (${x.options.length} options)`)))));
+      body.append(h('label', { class: 'f' }, 'The choices, one per line', box));
+    }
     if (d.kind === 'text') body.append(input('At most this many characters (optional)', 'maxLength'), h('label', { class: 'f' }, 'Must look like', h('select', { onchange: (e) => { d.looksLike = e.target.value; check(); } }, ...[['', 'anything'], ['email', 'an email address'], ['url', 'a web address']].map(([v, w]) => h('option', { value: v, selected: d.looksLike === v }, w)))));
     if (d.kind === 'number') body.append(input('Smallest (optional)', 'min'), input('Largest (optional)', 'max'), h('label', { class: 'c' }, h('input', { type: 'checkbox', checked: d.whole, onchange: (e) => { d.whole = e.target.checked; check(); } }), 'Whole numbers only'));
     if (!col) {
@@ -5273,7 +5596,7 @@ function renameForLive(pj, step) { if (pj.metadata.cloudservicesLive) (pj.metada
 async function saveField(t, col, d, records, why, picked = new Set()) {
   const name = d.name.trim();
   const live = liveTables.find((x) => x.name === t.name);
-  const checks = live?.checks || t.checks;
+  const checks = live?.checks?.length ? live.checks : t.checks;
   const rules = F.toRules(d);
   const up = backendUp() && t.onBackend;
   if (!col) {
@@ -5405,12 +5728,96 @@ async function renameTypeNow(t, name, picked) {
 
 /* ---- STU-060: the backend map is Data's Map; a type opens it on its table (#t:<type>) ---- */
 let mapFocus = null;
+/* ---- Data → Map. First the data model, on Studio's light canvas: every data type a card of its fields, each Link drawn to
+   the type it points at, the people who sign in (the backend's own accounts) and the option sets beside them; a card opens
+   its type. Then "Who can reach what": the backend map (@nodegx/backend-map), measured by running the app as each person.
+   (Richard, 2026-10-29: the map did not fit the light editor, and a Bubble user's Map is their data, drawn.) ---- */
+let mapView = 'model';
 function renderMap() {
+  const bar = $('mapbar'); bar.innerHTML = '';
+  bar.append(h('div', { class: 'seg' }, ...[['model', 'Data model'], ['reach', 'Who can reach what']].map(([k, w]) => h('button', { 'aria-pressed': mapView === k, onclick: () => { mapView = k; renderMap(); } }, w))),
+    h('span', { class: 'hint' }, mapView === 'model' ? 'Your data types, their fields, and what points at what. Click a card to change it.' : 'Which rows each person can reach, measured by running the app’s functions as them. Drag to move, scroll to zoom.'),
+    mapView === 'model' ? h('button', { class: 'tiny primary', onclick: (e) => newType(e) }, icon('plus'), 'New data type') : null);
+  $('datamodel').hidden = mapView !== 'model'; $('mapframe').hidden = mapView !== 'reach';
+  if (mapView === 'model') return renderDataModel($('datamodel'));
   const f = $('mapframe');
   const want = `/backend-map/${mapFocus ? `?at=${encodeURIComponent(mapFocus)}#t:${encodeURIComponent(mapFocus)}` : ''}`;
   if (f.getAttribute('src') !== want) f.src = want;
 }
-function openOnMap(type) { mapFocus = type; dataSub = 'map'; renderData(); }
+function openOnMap(type) { mapFocus = type; mapView = 'reach'; dataSub = 'map'; renderData(); }
+const USER_TYPE = '_User';
+/** Who may read a type's rows, in the backend map's words, from the rules kept in the app's folder; '' when there are none. */
+let mapWords = null;
+function readWords(name) {
+  if (!mapWords) { import('/backend-map/words.js').then((W) => { mapWords = W; if (dataSub === 'map' && mapView === 'model') renderDataModel($('datamodel')); }).catch(() => { mapWords = false; }); return ''; }
+  try { const config = JSON.parse(files.read('nodegx.security.json') || 'null'); return config ? mapWords.ruleWords(mapWords.readRule(mapWords.tableRule(config, name).permissions)) : ''; } catch { return ''; }
+}
+function renderDataModel(box) {
+  box.innerHTML = '';
+  const types = allTypes().filter((t) => !t.name.startsWith('_'));
+  const userCols = (liveTables.find((x) => x.name === USER_TYPE)?.columns || []).filter((c) => !['username', 'email', 'password', 'emailVerified', 'authData', 'objectId', 'createdAt', 'updatedAt', 'ACL'].includes(c.name));
+  const sets = optionSetKeys().map(optionSet).filter(Boolean);
+  if (!types.length && !sets.length) {
+    box.append(h('div', { class: 'dm' }, h('div', { class: 'dmempty' }, h('b', {}, 'No data types yet'), h('p', {}, 'A data type is a table of rows on the app’s backend: a Listing, an Order, a Message. Make one, give it fields, and it is drawn here with what it points at.'), h('button', { class: 'primary', onclick: (e) => newType(e) }, icon('plus'), 'New data type'))));
+    return;
+  }
+  const dm = h('div', { class: 'dm' }), grid = h('div', { class: 'grid' }), svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', 'links');
+  const cards = new Map(), links = [];
+  const fieldRow = (owner, c, checks) => {
+    const k = F.kindOf(c, checks), target = c.targetClass;
+    const choice = k.id === 'choice' && F.rulesOn(c.name, checks).find((r) => r.oneOf)?.oneOf;
+    const row = h('div', { class: `frow${target ? ' link' : ''}`, title: k.line || '' }, h('span', { class: 'g' }, k.icon), h('span', { class: 'n' }, c.name),
+      h('span', { class: 'k' }, target ? `${k.id === 'links' ? 'many ' : ''}${target === USER_TYPE ? 'User' : target}` : choice ? `one of ${choice.length}` : k.label));
+    if (target) links.push({ from: row, to: target, many: k.id === 'links' });
+    return row;
+  };
+  const card = (key, colour, title, sub, rows, onclick, foot) => {
+    const el = h('div', { class: 'tcard', style: `--c:${colour}`, 'data-type': key, onclick }, h('header', {}, h('b', {}, title), h('span', { class: 't' }, sub)), ...rows, foot);
+    cards.set(key, el); return el;
+  };
+  // the people who sign in: the backend's accounts, a type of their own that any Link can point at
+  grid.append(card(USER_TYPE, '#16a34a', 'User', 'people who sign in', [
+    ...[['Aa', 'email'], ['Aa', 'username']].map(([g, n]) => h('div', { class: 'frow' }, h('span', { class: 'g' }, g), h('span', { class: 'n' }, n), h('span', { class: 'k' }, 'built in'))),
+    ...userCols.map((c) => fieldRow(USER_TYPE, c, []))], () => { dataSub = 'app'; renderData(); }, h('div', { class: 'builtin' }, 'Their passwords are kept by the backend, never as a field.')));
+  for (const t of types) {
+    const cols = (t.columns.length ? t.columns : t.backendColumns).filter((c) => !['objectId', 'createdAt', 'updatedAt', 'ACL'].includes(c.name));
+    const who = readWords(t.name);
+    grid.append(card(t.name, '#1f5eff', t.name, t.declared ? `${cols.length} field${cols.length === 1 ? '' : 's'}` : t.onBackend ? 'on the backend' : 'used by the app', [
+      who ? h('div', { class: 'who', title: 'Who can read its rows: Data → Privacy' }, icon('lock'), who) : null,
+      ...(cols.length ? cols.map((c) => fieldRow(t.name, c, t.checks)) : [h('div', { class: 'none' }, 'No fields yet: click to add some.')])].filter(Boolean),
+      () => { selType = t.name; dataSub = 'types'; renderData(); }, h('div', { class: 'builtin' }, 'Built in: its id, when it was made and last changed.')));
+  }
+  if (sets.length) {
+    grid.append(h('h4', {}, 'Option sets'));
+    for (const s of sets) grid.append(card(s.key, '#d97706', s.name, `${s.options.length} option${s.options.length === 1 ? '' : 's'}`,
+      [h('div', { class: 'opts' }, ...s.options.slice(0, 8).map((o) => h('span', { class: 'chip opt' }, String(o.display ?? o.value ?? ''))), s.options.length > 8 ? h('span', { class: 'k' }, `+${s.options.length - 8}`) : null)],
+      () => { selSet = s.key; dataSub = 'options'; renderData(); }));
+  }
+  dm.append(svg, grid); box.append(dm);
+  const draw = () => {
+    if (!svg.isConnected) return;
+    const D = dm.getBoundingClientRect();
+    svg.setAttribute('width', dm.scrollWidth); svg.setAttribute('height', dm.scrollHeight); svg.innerHTML = '';
+    const add = (tag, attrs) => { const e = document.createElementNS(SVG_NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); svg.append(e); };
+    for (const l of links) {
+      const to = cards.get(l.to); if (!to) { l.from.classList.add('dangling'); l.from.title = `It points at ${l.to}, which is not a data type of this app`; continue; }
+      const a = l.from.getBoundingClientRect(), b = to.querySelector('header').getBoundingClientRect();
+      const right = b.left + b.width / 2 >= a.left + a.width / 2;
+      const x1 = (right ? a.right : a.left) - D.left, y1 = a.top + a.height / 2 - D.top;
+      const self = to.contains(l.from);
+      const x2 = (self ? b.right : right ? b.left : b.right) - D.left, y2 = b.top + b.height / 2 - D.top;
+      const bend = self ? 46 : Math.max(36, Math.abs(x2 - x1) / 2);
+      const d = self ? `M${x1},${y1} C${x1 + bend},${y1} ${x2 + bend},${y2} ${x2},${y2}` : `M${x1},${y1} C${x1 + (right ? bend : -bend)},${y1} ${x2 - (right ? bend : -bend)},${y2} ${x2},${y2}`;
+      add('path', { d, fill: 'none', stroke: '#7c3aed', 'stroke-width': 2, ...(l.many ? { 'stroke-dasharray': '7 4' } : {}), opacity: 0.75 });
+      add('circle', { cx: x1, cy: y1, r: 3.5, fill: '#7c3aed' });
+      add('circle', { cx: x2, cy: y2, r: 4.5, fill: '#fff', stroke: '#7c3aed', 'stroke-width': 2 });
+    }
+  };
+  requestAnimationFrame(draw);
+  dataModelRO?.disconnect(); dataModelRO = new ResizeObserver(() => requestAnimationFrame(draw)); dataModelRO.observe(dm);
+}
+let dataModelRO = null;
 
 /* ---- STU-064: Privacy — each type's rule in the map's words (/backend-map/words.js), changed through the map, which writes the backend and nodegx.security.json together ---- */
 let selPriv = null;
@@ -5639,6 +6046,9 @@ function renderStartBackend(main) {
     const r = await fetch('/api/backend-provision', { method: 'POST' }); const j = await r.json();
     if (!r.ok) { toast(j.error); start.disabled = false; start.textContent = 'Start a backend for this app'; return; }
     takeBackend(j); for (const w of j.warnings || []) toast(w);
+    // a new app's rules are kept in its folder from the start, so Privacy can change them at once (it refuses while they
+    // live only on the backend: a change would last until the backend restarts)
+    if (!files.read('nodegx.security.json')) setTimeout(async () => { try { const { config } = await api('/admin/permissions'); if (config && !files.read('nodegx.security.json')) writeJsonFile('nodegx.security.json', config); } catch { /* Privacy offers it */ } }, 800);
   } }, 'Start a backend for this app');
   main.append(h('div', { class: 'card' }, h('p', {}, 'This app is bound to no backend, so it has nowhere to keep rows. Studio can start one on this computer — the same kind the NodeGX editor and Claude Code start — and bind the app to it.'), start));
 }
@@ -6436,7 +6846,7 @@ if (first.status === 'ok') {
 renderAll();
 // from here on, a file changed outside Studio is taken in and drawn (STU-002)
 new EventSource(`/api/events?client=${windowId}`).onmessage = (e) => { const m = JSON.parse(e.data); if (m.backend || m.live) { if (m.backend) takeBackend(m.backend); if (m.live) takeLive(m.live); } else takeOutside(m); };
-$('backendpill').onclick = () => switchTab('data');
+$('backendpill').onclick = () => { if (!backendUp() && backendState.phase !== 'remote') dataSub = 'app'; switchTab('data'); }; // no backend yet: App data, where one is started
 showBackend();
 $('agentpill').onclick = openAgent;
 window.__ob.openAgent = openAgent;
