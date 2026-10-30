@@ -1,7 +1,10 @@
 /**
  * The welcome screen's Blank app (lib/blank.mjs through app/actions.mjs createFromTemplate('blank')): a project that opens,
  * named after its folder, its Router listing the one Home page, every length written as the format's unit object (a "48px"
- * string is dropped by the runtime, and Studio says so over the page); a folder that holds files is refused.
+ * string is dropped by the runtime, and Studio says so over the page); a folder that holds files is refused. Then, as
+ * Swapshop was built (STU-090): a type with a Choice declared, a backend started for the app (lib/backend.mjs
+ * provisionFor, under a backends folder of the check's own), and the backend refuses a value the Choice does not list
+ * (P123-STU-CHOICELOST: it took any).
  *
  *   node app/blank-check.mjs
  */
@@ -15,6 +18,8 @@ const ok = (cond, what, detail) => { if (cond) { pass++; console.log(`  ok  ${wh
 const json = (p) => JSON.parse(readFileSync(p, 'utf8'));
 
 const root = mkdtempSync(join(tmpdir(), 'nodegx-studio-blank-'));
+process.env.NODEGX_BACKENDS_DIR = join(root, 'backends'); // nothing is written to ~/.noodl
+let backend = null, started = null;
 try {
   const list = templates();
   ok(list[0]?.slug === 'blank' && list[0].available && !list[0].needsBackend, 'Blank app is first on the welcome screen, available, and needs no backend', list[0]);
@@ -41,7 +46,27 @@ try {
   let refused = null;
   try { await createFromTemplate('blank', full); } catch (e) { refused = e.message; }
   ok(/already holds 1 item/.test(refused || '') && !existsSync(join(full, 'nodegx.project.json')), 'a folder that holds files is refused, and nothing is written into it', refused);
+
+  // a type with a Choice, declared as Studio's field drawer writes it, then Data's Start a backend
+  const file = join(dir, 'nodegx.project.json');
+  const declared = json(file);
+  const choices = ['Furniture', 'Books', 'Clothes', 'Electronics'];
+  declared.metadata = { ...declared.metadata, dbCollections: [{ name: 'Listing', columns: [{ name: 'title', type: 'String' }, { name: 'category', type: 'String' }], checks: [{ field: 'category', oneOf: choices }] }] };
+  writeFileSync(file, JSON.stringify(declared, null, 2));
+  backend = await import('../lib/backend.mjs');
+  started = await backend.provisionFor(dir);
+  const token = await backend.adminTokenOf(started.id);
+  const call = async (method, path, body) => {
+    const r = await fetch(started.endpoint.replace(/\/$/, '') + path, { method, headers: { Authorization: `Bearer ${token}`, 'X-Parse-Master-Key': token, 'content-type': 'application/json' }, body: body && JSON.stringify(body) });
+    return { status: r.status, json: await r.json().catch(() => null) };
+  };
+  const table = (await call('GET', '/admin/schema')).json?.tables?.find((t) => t.name === 'Listing');
+  ok(table?.checks?.some((c) => c.rule?.field === 'category' && c.rule.oneOf?.join() === choices.join()) && !started.warnings.length, 'Start a backend: the table carries the Choice the project declares', { checks: table?.checks, warnings: started.warnings });
+  const bad = await call('POST', '/classes/Listing', { title: 'A car', category: 'Cars' });
+  const good = await call('POST', '/classes/Listing', { title: 'A chair', category: 'Furniture' });
+  ok(bad.status === 400 && bad.json?.reason === 'check-failed' && good.status === 201, 'and the backend refuses a value the Choice does not list, and takes one it does', { bad, good: good.status });
 } finally {
+  if (started) await backend.stop(started.id).catch(() => {});
   rmSync(root, { recursive: true, force: true });
 }
 console.log(`\n${fail ? 'FAIL' : 'PASS'} ${pass}/${pass + fail}`);

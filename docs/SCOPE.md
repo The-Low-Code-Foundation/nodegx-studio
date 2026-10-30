@@ -1818,7 +1818,9 @@ button whose click creates a Listing, branches, and goes to a page.
 - *The backend map's own look is dark* (`@nodegx/backend-map`, NodeGX P124: `server.mjs` sends `look.colors.dark`, the
   canvas draws `#232129` cards and white text). A light theme is that package's change and a release; Studio frames it.
 - An option set and a Choice field are still two things: the choices are copied, not linked.
-- A provisioned backend did not carry the project's Choice rule (its `checks` came back empty): it does not enforce it.
+- ~~A provisioned backend did not carry the project's Choice rule~~ **Fixed (s26, P123-STU-CHOICENOTENFORCED):** `provisionFor`
+  sets each declared type's rules on its table after provisioning; `app/blank-check.mjs` 11/11 (a "Cars" listing is refused).
+  NodeGX's own `provision_backend` still seeds columns only (read): its fix is NodeGX's, and a release.
 - The repeating group's row is plain text (no picture, no click-to-open-its-listing yet), and its For Each's panel says
   nothing of the list it shows.
 - The header is crowded at 1440 px ("App on sc…", "Preview ↗" wraps).
