@@ -760,8 +760,10 @@
   tr:last-child td { border-bottom: 0; }
   th { background: var(--panel-2); font-weight: 600; font-size: 12px; color: var(--ink-2); }
   td input, td select { padding: 3px 6px; }
-  td.cell { cursor: text; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  td.cell:hover { background: var(--panel-2); }
+  td.cell { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #appmain tr[data-row] { cursor: pointer; }
+  #appmain tr[data-row]:hover td, #appmain tr[data-row][aria-selected=true] td { background: var(--panel-2); }
+  #appmain .zone { margin-top: 8px; }
   .bar { display: flex; gap: 8px; align-items: center; margin: 14px 0 8px; }
   .bar .note { color: var(--muted); font-size: 12px; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 14px 16px; margin-bottom: 14px; max-width: 1100px; }
@@ -772,6 +774,10 @@
   #stylemain { overflow: auto; padding: 24px 28px; }
   .swatch-stage { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); min-height: 220px; display: grid; place-items: center; padding: 30px; margin-bottom: 14px; background-image: radial-gradient(var(--line-2) .6px, transparent .6px); background-size: 16px 16px; }
   .swatch-stage .sample { min-width: 160px; }
+  .swatch-stage .stylecanvas { position: relative; overflow: hidden; width: 100%; height: 200px; border-radius: 8px; } /* the preview's frame fills its holder: without it, it filled the window */
+  .swatch-stage .stylecanvas iframe { background: transparent; }
+  #stylemain .sets { margin-bottom: 14px; }
+  #stylemain .sets h4 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
   .styles .row { padding-left: 20px; }
   .styles .grp { padding: 10px 8px 4px; font-weight: 600; color: var(--ink); }
   #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%) translateY(8px); background: #14181f; color: #fff; padding: 9px 14px; border-radius: 8px; font-size: 12.5px; opacity: 0; transition: opacity .18s, transform .18s; pointer-events: none; z-index: 100; max-width: 70vw; box-shadow: var(--shadow); }
@@ -796,6 +802,13 @@
   .partcard .ptype, #wiringpanel .ptype { color: var(--muted); font-size: 12px; margin-top: 2px; }
   .partcard p { margin: 10px 0 0; color: var(--ink-2); }
   .partcard .acts { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .menu.partcard { max-height: calc(100vh - 16px); overflow: auto; }
+  .partcard .pwhat, #wiringpanel .pwhat { color: var(--ink); font-size: 12.5px; line-height: 1.45; margin: 8px 0 0; }
+  .partcard .pwires, .partcard .pwfs, #wiringpanel .pwires { margin-top: 10px; font-size: 12px; color: var(--ink-2); display: grid; gap: 3px; }
+  .partcard .pwires b, .partcard .pwfs b, #wiringpanel .pwires b { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .partcard .pwfs button { display: grid; grid-template-columns: 16px 1fr; column-gap: 6px; text-align: left; padding: 5px 6px; height: auto; }
+  .partcard .pwfs button svg { width: 14px; height: 14px; color: var(--orange, #ea580c); grid-row: span 2; align-self: center; }
+  .partcard .pwfs button small { grid-column: 2; color: var(--muted); font-size: 11px; }
   /* P128 S5 (STU-083): Help, the canon drawn whole (NodeGX docs/CANON.md, vendored), over the tab like the wiring */
   #helppanel { position: absolute; inset: 0; z-index: 46; background: var(--panel); display: flex; flex-direction: column; }
   #helppanel[hidden] { display: none; }
@@ -3407,19 +3420,51 @@ function renderLogic() {
 }
 /** A part's kind in words: "component · Wording", "States". */
 const partType = (n) => (placedComponent(n.type) ? `component · ${placedComponent(n.type).split('/').pop()}` : typeName(n.type));
+/* ---- STU-097 (Richard, Greenhouse: "explain the wiring … for a builder who finds what their AI built, or jump to that
+   page's workflows"): a part says what it does (its type's line in NodeGX's catalog, served as /api/node-summaries), what
+   it takes and gives along its wires, and which of the page's workflows run it or read it, each one a click away ---- */
+let NODE_SUMMARIES = {};
+fetch('/api/node-summaries').then((r) => (r.ok ? r.json() : {})).then((j) => { NODE_SUMMARIES = j; }).catch(() => { /* the card says less */ });
+const whatItDoes = (n) => (placedComponent(n.type) ? 'A component of this app, placed here: its own nodes and wires are inside it.' : NODE_SUMMARIES[n.type] || '');
+/** A node's wires in words, both ways: "Language's Value → its Language", at most `max` each way. */
+function wiresInWords(id, wires, nodeOf, nameOf, max = 5) {
+  const say = (list, line) => list.length > max ? [...list.slice(0, max).map(line), `and ${list.length - max} more`] : list.map(line);
+  const me = nodeOf(id);
+  return {
+    takes: say(wires.filter((c) => c.toId === id && nodeOf(c.fromId)), (c) => `${nameOf(nodeOf(c.fromId))}'s ${portLabel(nodeOf(c.fromId), 'output', c.fromProperty)} → its ${portLabel(me, 'input', c.toProperty)}`),
+    gives: say(wires.filter((c) => c.fromId === id && nodeOf(c.toId)), (c) => `its ${portLabel(me, 'output', c.fromProperty)} → ${nameOf(nodeOf(c.toId))}'s ${portLabel(nodeOf(c.toId), 'input', c.toProperty)}`)
+  };
+}
+const wireList = (title, lines) => (lines.length ? h('div', { class: 'pwires' }, h('b', {}, title), ...lines.map((l) => h('div', {}, l))) : null);
+/** The page's workflows that use a part: started by it, running it as a step, or a step reading a value from it or feeding it. */
+function workflowsUsing(id) {
+  const ids = (steps, out = new Set()) => { for (const s of steps) { out.add(s.id); if (s.branches) { ids(s.branches.yes, out); ids(s.branches.no, out); } } return out; };
+  return events().filter((ev) => {
+    if (ev.node === id) return true;
+    const steps = ids((lanesOf(ev) ?? [chain(ev.node, ev.port)]).flat());
+    return steps.has(id) || conns.some((c) => (c.fromId === id && steps.has(c.toId)) || (c.toId === id && steps.has(c.fromId)));
+  });
+}
 /** The card a part's chip or its row opens. `port`: the output the chip showed. */
 function partCard(e, id, port) {
   const n = byId[id]; if (!n) return;
   closeMenu();
   const r = (e.currentTarget || e.target)?.getBoundingClientRect?.();
-  const left = r ? Math.max(8, Math.min(r.left, innerWidth - 400)) : 120, top = r ? Math.max(8, Math.min(r.bottom + 6, innerHeight - 260)) : 120;
+  const left = r ? Math.max(8, Math.min(r.left, innerWidth - 400)) : 120, top = r ? Math.max(8, Math.min(r.bottom + 6, innerHeight - 420)) : 120;
   const comp = placedComponent(n.type);
+  const wires = wiresInWords(id, conns, (x) => byId[x], (x) => labelOf(x.id));
+  const uses = workflowsUsing(id);
   const card = h('div', { class: 'menu partcard', role: 'dialog', 'aria-label': labelOf(id), 'data-part': id, style: `left:${left}px;top:${top}px` },
     h('div', { class: 'phead' }, icon(comp ? 'component' : 'code'), h('b', {}, labelOf(id))),
     h('div', { class: 'ptype' }, comp ? `A component placed on this page: ${comp}` : `A ${typeName(n.type)} node`, port ? ` · its ${portLabel(n, 'output', port)} is the value here` : ''),
+    whatItDoes(n) ? h('p', { class: 'pwhat' }, whatItDoes(n)) : null,
+    wireList('Takes', wires.takes), wireList('Gives', wires.gives),
+    h('div', { class: 'pwfs', 'data-workflows': uses.length }, h('b', {}, uses.length ? `Workflows that use it · ${uses.length}` : 'Workflows that use it'),
+      uses.length ? uses.map((ev) => h('button', { class: 'quiet', 'data-ev': `${ev.node}.${ev.port}`, title: 'Open it in the Workflow tab', onclick: () => { closeMenu(); openCard(ev); } }, icon('bolt'), h('span', {}, cardName(ev)), h('small', {}, eventTitle(ev))))
+        : h('div', { class: 'note' }, 'None on this page: it works from its wires alone.')),
     h('p', {}, "Studio doesn't edit this. Look at the wiring underneath, or open it in the NodeGX editor."),
     h('div', { class: 'acts' },
-      h('button', { class: 'primary', 'data-act': 'wiring', onclick: () => { closeMenu(); openWiring(pageKey, id); } }, 'Wiring'),
+      h('button', { class: 'primary', 'data-act': 'wiring', onclick: () => { closeMenu(); openWiring(pageKey, id); } }, 'See the wiring'),
       h('button', { 'data-act': 'editor', title: EDITOR_DOWNLOAD, onclick: () => { closeMenu(); openOutside(EDITOR_DOWNLOAD); } }, 'Get the editor'),
       h('button', { class: 'quiet', 'data-act': 'ask', title: 'Ask your AI coder what it is and what it does', onclick: () => { closeMenu(); askAgent(pageKey, id); } }, 'Ask the agent')));
   document.body.append(card); dismissOnOutside(card);
@@ -3564,8 +3609,12 @@ function renderWiring(centre = false) {
   if (sn) {
     const comp = placedComponent(sn.type);
     const ins = wconns.filter((c) => c.toId === sn.id).length, outs = wconns.filter((c) => c.fromId === sn.id).length;
+    // STU-097: what it does and its wires, in words, beside the drawing
+    const said = wiresInWords(sn.id, wconns, (x) => wById.get(x), (x) => x.label || typeName(x.type));
     info.append(...[h('h4', {}, sn.label || typeName(sn.type)), h('div', { class: 'ptype' }, comp ? partType(sn) : typeName(sn.type)),
+      whatItDoes(sn) ? h('p', { class: 'pwhat' }, whatItDoes(sn)) : null,
       h('div', { class: 'wcount' }, `${ins} wire${ins === 1 ? '' : 's'} in · ${outs} out`),
+      wireList('Takes', said.takes), wireList('Gives', said.gives),
       !studioEditsHere(sn, level.key) ? h('div', { class: 'wnote' }, 'Studio does not edit this one.') : null,
       comp && registry()[comp] ? h('button', { 'data-act': 'into', onclick: () => wiringInto(comp) }, `Open ${comp.split('/').pop()}'s wiring ↗`) : null].filter(Boolean));
   } else info.append(h('div', { class: 'hint' }, 'Click a node to see what it is. A component placed here opens into its own wiring.'));
@@ -5801,7 +5850,7 @@ async function whoCanReach(card, type) {
 }
 
 /* ---- a field, in the backend manager's words (fields.js): made, changed and deleted on the project and the development backend together ---- */
-function closeDrawer() { $('drawer').hidden = true; $('drawer').innerHTML = ''; }
+function closeDrawer() { $('drawer').hidden = true; $('drawer').innerHTML = ''; if (app.open) markOpen(null); }
 function openDrawer(title, body, foot) {
   const d = $('drawer'); d.innerHTML = '';
   d.append(h('div', { class: 'dhead' }, h('h3', {}, title), h('button', { class: 'quiet tiny', title: 'Close', onclick: closeDrawer }, icon('x'))), h('div', { class: 'dbody' }, ...body), ...(foot ? [h('div', { class: 'dfoot' }, ...foot)] : [])); // no foot: nothing, not "null" (P123-STU-MAPBARNULL)
@@ -6226,7 +6275,7 @@ function renderRoles(main, map) {
 }
 
 /* ---- STU-063: App data — every row of a type, paged, searched, sorted, edited by its kind, exported and imported ---- */
-const app = { type: null, skip: 0, order: '-createdAt', q: '', picked: new Set(), schema: [], drawn: 0, missing: null };
+const app = { type: null, skip: 0, order: '-createdAt', q: '', picked: new Set(), schema: [], drawn: 0, missing: null, open: null, opening: 0 };
 const PAGE = 50;
 async function envTables() {
   if (env === 'live') { try { return ((await liveApi('/admin/schema')).tables || []).filter((t) => !t.name.startsWith('_')); } catch { return []; } }
@@ -6273,7 +6322,7 @@ async function renderAppData() {
   const tick = (id, on) => { on ? app.picked.add(id) : app.picked.delete(id); showPicked(); };
   main.append(h('h2', {}, t.name, h('span', { class: 'badge' }, env)),
     h('div', { class: 'appbar' }, search,
-      h('button', { class: 'primary', 'data-act': 'new', onclick: () => newRow(t, cols) }, icon('plus'), 'New entry'),
+      h('button', { class: 'primary', 'data-act': 'new', onclick: () => openRow(t, cols, null) }, icon('plus'), 'New entry'),
       del,
       h('button', { 'data-act': 'export', onclick: (e) => exportMenu(e, t) }, 'Export'),
       h('button', { 'data-act': 'import', onclick: () => importRows(t, cols) }, 'Import…'),
@@ -6285,15 +6334,24 @@ async function renderAppData() {
   const arrow = (name) => (app.order === name ? ' ↑' : app.order === `-${name}` ? ' ↓' : '');
   const all = h('input', { type: 'checkbox', onchange: (e) => { for (const r of rows) tick(r.objectId, e.target.checked); for (const i of main.querySelectorAll('td.pick input')) i.checked = e.target.checked; } });
   const table = h('table', {}, h('tr', {}, h('th', { class: 'pick' }, all), ...cols.map((c) => h('th', { class: 'sort', onclick: () => sortBy(c.name) }, c.name + arrow(c.name))), h('th', { class: 'sort', onclick: () => sortBy('createdAt') }, 'created' + arrow('createdAt'))));
+  // STU-095: the table only shows; a click on a row opens it in the drawer, where nothing is written until Save
   for (const row of rows) {
-    table.append(h('tr', { 'data-row': row.objectId },
+    table.append(h('tr', { 'data-row': row.objectId, 'aria-selected': app.open === row.objectId, onclick: (e) => { if (!e.target.closest('td.pick')) openRow(t, cols, row); } },
       h('td', { class: 'pick' }, h('input', { type: 'checkbox', checked: app.picked.has(row.objectId), onchange: (e) => tick(row.objectId, e.target.checked) })),
-      ...cols.map((c) => { const td = h('td', { class: 'cell', 'data-field': c.name, title: rowWords(t, c, row[c.name]), onclick: () => editCell(td, t, row, c) }, rowWords(t, c, row[c.name])); return td; }),
-      h('td', { class: 'note' }, (row.createdAt || '').slice(0, 16).replace('T', ' '))));
+      ...cols.map((c) => h('td', { class: 'cell', 'data-field': c.name, title: rowWords(t, c, row[c.name]) }, rowWords(t, c, row[c.name]))),
+      h('td', { class: 'note' }, cellWords({ type: 'Date' }, row.createdAt))));
   }
   main.append(h('div', { class: 'twrap' }, table));
   showPicked();
   if (!rows.length) main.append(h('div', { class: 'empty' }, missing && !app.q ? `Every row has a ${app.missing} now.` : app.q || missing ? 'Nothing matches.' : 'No rows yet.'));
+  else main.append(zoneNote());
+}
+/** P123-GH-DATEUTC: App data says a time as this computer's, and says so. */
+const zoneNote = () => h('div', { class: 'note zone', 'data-zone': '' }, `Dates and times are this computer's (${Intl.DateTimeFormat().resolvedOptions().timeZone}). Click a row to open it.`);
+/** The row App data has open in the drawer, marked in the table; cleared when the drawer closes without a save. */
+function markOpen(id) {
+  app.open = id;
+  for (const tr of document.querySelectorAll('#appmain tr[data-row]')) tr.setAttribute('aria-selected', String(tr.dataset.row === id));
 }
 /**
  * App data's User: the people with an account on the database the switch names, through the backend's Users API
@@ -6325,37 +6383,47 @@ async function renderPeople(main, mine) {
   const all = h('input', { type: 'checkbox', onchange: (e) => { for (const r of rows) tick(r.objectId, e.target.checked); for (const i of main.querySelectorAll('td.pick input')) i.checked = e.target.checked; } });
   const table = h('table', {}, h('tr', {}, h('th', { class: 'pick' }, all), ...cols.map((c) => h('th', {}, c.name)), h('th', {}, 'groups'), h('th', {}, 'created')));
   for (const row of rows) {
-    table.append(h('tr', { 'data-row': row.objectId },
+    table.append(h('tr', { 'data-row': row.objectId, 'aria-selected': app.open === row.objectId, onclick: (e) => { if (!e.target.closest('td.pick')) openPerson(row, cols); } },
       h('td', { class: 'pick' }, h('input', { type: 'checkbox', checked: app.picked.has(row.objectId), onchange: (e) => tick(row.objectId, e.target.checked) })),
-      ...cols.map((c) => { const td = h('td', { class: 'cell', 'data-field': c.name, title: cellWords(c, row[c.name]), onclick: () => editPerson(td, row, c) }, cellWords(c, row[c.name])); return td; }),
+      ...cols.map((c) => h('td', { class: 'cell', 'data-field': c.name, title: cellWords(c, row[c.name]) }, cellWords(c, row[c.name]))),
       h('td', { class: 'note' }, (row.roles || []).join(', ')),
-      h('td', { class: 'note' }, (row.createdAt || '').slice(0, 16).replace('T', ' '))));
+      h('td', { class: 'note' }, cellWords({ type: 'Date' }, row.createdAt))));
   }
   main.append(h('div', { class: 'twrap' }, table));
   showPicked();
   if (!rows.length) main.append(h('div', { class: 'empty' }, app.q ? 'Nothing matches.' : 'Nobody has an account yet.'));
+  else main.append(zoneNote());
 }
-/** One of a person's fields, changed: the account's own at the top of the body, the app's own under `properties`. */
-async function editPerson(td, row, c) {
-  if (td.querySelector('input, select')) return;
-  const ctl = await valueControl({ checks: [] }, c, row[c.name]);
-  td.textContent = ''; td.append(ctl); ctl.focus();
-  let done = false;
-  const back = () => { td.textContent = cellWords(c, row[c.name]); };
-  const commit = async () => {
-    if (done) return; done = true;
-    const w = toWire(c, ctl.value);
-    if (w.error) { toast(w.error); return back(); }
-    const account = ACCOUNT_COLS.some((a) => a.name === c.name);
-    if (account && c.type === 'Boolean' && w.value === null) return back();
-    try {
-      const r = await envApi(`/admin/users/${encodeURIComponent(row.objectId)}`, { method: 'PUT', body: JSON.stringify(account ? { [c.name]: w.value } : { properties: { [c.name]: w.value } }) });
-      Object.assign(row, r.user); back();
-    } catch (e) { toast(e.message); back(); }
-  };
-  ctl.onblur = commit; if (ctl.tagName === 'SELECT') ctl.onchange = () => ctl.blur();
-  ctl.onkeydown = (e) => { if (e.key === 'Enter') ctl.blur(); if (e.key === 'Escape') { done = true; back(); } };
+/**
+ * STU-095: a person opened in the drawer. Save sends what changed, once: the account's own fields at the top of the
+ * body, the app's own under `properties`.
+ */
+async function openPerson(row, cols) {
+  const mine = ++app.opening;
+  const ctls = [];
+  for (const c of cols) ctls.push([c, await valueControl({ checks: [] }, c, row[c.name])]);
+  if (mine !== app.opening) return;
+  markOpen(row.objectId);
+  const why = h('span', { class: 'why' });
+  const cancel = closeDrawer;
+  openDrawer(`${row.email || row.username} (${env})`, [...ctls.map(([c, ctl]) => h('label', { class: 'f', 'data-field': c.name }, c.name, ctl)), recordFacts(row)], [why, h('button', { class: 'quiet', 'data-act': 'cancel', onclick: cancel }, 'Cancel'), h('button', { class: 'primary', 'data-act': 'save', onclick: async () => {
+    const body = {}, properties = {};
+    for (const [c, ctl] of ctls) {
+      if (ctl.value === editText(c, row[c.name])) continue;
+      const w = toWire(c, ctl.value);
+      if (w.error) { why.textContent = w.error; return; }
+      const account = ACCOUNT_COLS.some((a) => a.name === c.name);
+      if (account && c.type === 'Boolean' && w.value === null) continue; // an account's yes / no is never empty
+      if (account) body[c.name] = w.value; else properties[c.name] = w.value;
+    }
+    if (Object.keys(properties).length) body.properties = properties;
+    if (!Object.keys(body).length) { cancel(); toast('Nothing changed'); return; }
+    try { await envApi(`/admin/users/${encodeURIComponent(row.objectId)}`, { method: 'PUT', body: JSON.stringify(body) }); cancel(); toast('Saved'); renderAppData(); }
+    catch (e) { why.textContent = e.message; }
+  } }, 'Save')]);
 }
+/** A record's id and times under its fields: the panel's, never editable. */
+const recordFacts = (row) => h('div', { class: 'note', 'data-facts': '' }, `Made ${cellWords({ type: 'Date' }, row.createdAt)}${row.updatedAt ? ` · changed ${cellWords({ type: 'Date' }, row.updatedAt)}` : ''} · id ${row.objectId}`);
 async function newPerson(own) {
   const ctls = [];
   for (const c of own) ctls.push([c, await valueControl({ checks: [] }, c, c.defaultValue)]);
@@ -6412,32 +6480,37 @@ async function valueControl(t, c, value) {
   }
   return h('input', { type: 'text', value: text });
 }
-async function editCell(td, t, row, c) {
-  if (td.querySelector('input, select')) return;
-  const ctl = await valueControl(t, c, row[c.name]);
-  td.textContent = ''; td.append(ctl); ctl.focus();
-  let done = false;
-  const back = () => { td.textContent = rowWords(t, c, row[c.name]); };
-  const commit = async () => {
-    if (done) return; done = true;
-    const w = toWire(c, ctl.value);
-    if (w.error) { toast(w.error); return back(); }
-    try { await envApi(`/classes/${encodeURIComponent(t.name)}/${row.objectId}`, { method: 'PUT', body: JSON.stringify({ [c.name]: w.value }) }); row[c.name] = w.value; back(); }
-    catch (e) { toast(e.message); back(); }
-  };
-  ctl.onblur = commit; if (ctl.tagName === 'SELECT') ctl.onchange = () => ctl.blur();
-  ctl.onkeydown = (e) => { if (e.key === 'Enter') ctl.blur(); if (e.key === 'Escape') { done = true; back(); } };
-}
-async function newRow(t, cols) {
+/**
+ * STU-095 (P123-GH-APPDATAINLINE): a row opened in the drawer, one control per field of its kind (a Link picks a row,
+ * a date is a date, a Choice is its options). Nothing is written until Save, and Save sends only what changed. With
+ * no row it is New entry: the same panel, empty, and Create.
+ */
+async function openRow(t, cols, row) {
+  const mine = ++app.opening;
   const ctls = [];
-  for (const c of cols) ctls.push([c, await valueControl(t, c, c.defaultValue)]);
+  for (const c of cols) ctls.push([c, await valueControl(t, c, row ? row[c.name] : c.defaultValue)]);
+  if (mine !== app.opening) return; // another row was clicked while this one's Link rows were asked for
+  markOpen(row?.objectId ?? null);
   const why = h('span', { class: 'why' });
-  openDrawer(`New ${t.name}`, ctls.map(([c, ctl]) => h('label', { class: 'f', 'data-field': c.name }, `${c.name}${c.required ? ' (required)' : ''}`, ctl)), [why, h('button', { class: 'quiet', onclick: closeDrawer }, 'Cancel'), h('button', { class: 'primary', 'data-act': 'create', onclick: async () => {
+  const cancel = closeDrawer;
+  const fields = ctls.map(([c, ctl]) => h('label', { class: 'f', 'data-field': c.name }, `${c.name}${c.required ? ' (required)' : ''}`, ctl));
+  const save = async () => {
     const body = {};
-    for (const [c, ctl] of ctls) { const w = toWire(c, ctl.value); if (w.error) { why.textContent = w.error; return; } if (w.value !== null) body[c.name] = w.value; }
-    try { await envApi(`/classes/${encodeURIComponent(t.name)}`, { method: 'POST', body: JSON.stringify(body) }); closeDrawer(); renderAppData(); }
-    catch (e) { why.textContent = e.message; }
-  } }, 'Create')]);
+    for (const [c, ctl] of ctls) {
+      if (row && ctl.value === editText(c, row[c.name])) continue;
+      const w = toWire(c, ctl.value);
+      if (w.error) { why.textContent = w.error; return; }
+      if (row || w.value !== null) body[c.name] = w.value;
+    }
+    if (row && !Object.keys(body).length) { cancel(); toast('Nothing changed'); return; }
+    try {
+      if (row) await envApi(`/classes/${encodeURIComponent(t.name)}/${row.objectId}`, { method: 'PUT', body: JSON.stringify(body) });
+      else await envApi(`/classes/${encodeURIComponent(t.name)}`, { method: 'POST', body: JSON.stringify(body) });
+      cancel(); if (row) toast('Saved'); renderAppData();
+    } catch (e) { why.textContent = e.message; }
+  };
+  openDrawer(row ? `${t.name}: ${rowLabel(row, t.columns)} (${env})` : `New ${t.name}`, row ? [...fields, recordFacts(row)] : fields,
+    [why, h('button', { class: 'quiet', 'data-act': 'cancel', onclick: cancel }, 'Cancel'), h('button', { class: 'primary', 'data-act': row ? 'save' : 'create', onclick: save }, row ? 'Save' : 'Create')]);
 }
 async function deleteRows(t, ids) {
   if (!(await askSure(`Delete ${ids.length} row(s) of ${t.name} from the ${env} database?`))) return;
@@ -6675,6 +6748,72 @@ $('newstyle').onclick = (e) => {
   for (const t of STYLE_TYPES.filter((t) => libIndex.has(t))) menu.append(h('div', { class: 'item', onclick: async () => { const name = await askName($('newstyle'), `Name of the new ${typeName(t)} style`); if (!name) return; const s = stylesFile(); s.variants ??= []; if (s.variants.some((v) => v.typename === t && v.name === name)) return toast('That style exists'); s.variants.push({ name, typename: t, parameters: {}, stateParameters: {}, stateTransitions: {}, defaultStateTransitions: {} }); writeStyles(s); selStyle = { typename: t, name }; renderStyles(); } }, icon(glyphOf(t)), typeName(t)));
   document.body.append(menu); dismissOnOutside(menu);
 };
+/**
+ * STU-096 (Richard, Greenhouse: "a list of pills"): a style is shown by what it styles. A second preview draws a
+ * made-up root holding one element of the style's type wearing it, over this project's own look files (styles, tokens,
+ * fonts in the project's head code) and none of its pages: as it rests, then once per state the style sets (hover,
+ * pressed…), that copy given the state's values as its own, which beat the style's.
+ */
+const STYLE_CANVAS = '__studio/Style canvas'; // its root is the holder's 200 px tall, on a faint grey so a white style shows
+const len = (value) => ({ value, unit: 'px' });
+const STYLE_SAMPLE = {
+  'net.noodl.controls.button': { label: 'Button', sizeMode: 'contentSize' },
+  Text: { text: 'The quick brown fox jumps over the lazy dog', sizeMode: 'contentHeight', width: len(260) },
+  'net.noodl.controls.textinput': { placeholder: 'Type here', sizeMode: 'contentHeight', width: len(240) },
+  'net.noodl.controls.options': { sizeMode: 'contentHeight', width: len(240), items: [{ Label: 'An option', Value: 'an-option' }] },
+  'net.noodl.controls.checkbox': { label: 'A checkbox', sizeMode: 'contentSize' },
+  'net.noodl.visual.icon': { sizeMode: 'contentSize' },
+  Image: { sizeMode: 'explicit', width: len(200), height: len(120) },
+  Group: { sizeMode: 'contentHeight', width: len(240), flexDirection: 'column' }
+};
+// a group shows its text with room around it, on each side the style leaves to the element (its own padding wins)
+const roomFor = (v) => (v.typename === 'Group' ? Object.fromEntries(['paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight'].filter((k) => v.parameters?.[k] === undefined).map((k) => [k, len(16)])) : {});
+function styleCanvasFiles(v) {
+  const out = {};
+  for (const [path, text] of Object.entries(files.entries())) if (!path.startsWith('components/')) out[path] = text;
+  const states = [['', 'As it is', {}], ...Object.entries(v.stateParameters || {}).filter(([, ps]) => ps && Object.keys(ps).length).map(([s, ps]) => [s, s[0].toUpperCase() + s.slice(1), ps])];
+  const caption = { fontSize: len(11), color: '#6b7280', sizeMode: 'contentSize' };
+  const nodes = [{ id: 'scRoot', type: 'Group', label: 'Style canvas', parameters: { sizeMode: 'explicit', width: { value: 100, unit: '%' }, height: len(200), backgroundColor: '#f4f5f7', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', columnGap: len(32) }, children: [] }];
+  states.forEach(([state, words, own], i) => {
+    const col = `scCol${i}`, el = `scEl${i}`, cap = `scCap${i}`;
+    nodes[0].children.push(col);
+    nodes.push({ id: col, type: 'Group', label: words, parent: 'scRoot', parameters: { sizeMode: 'contentSize', flexDirection: 'column', alignItems: 'center', rowGap: len(8) }, children: [el, cap] },
+      { id: el, type: v.typename, label: `${v.name}${state ? ` · ${state}` : ''}`, parent: col, variant: v.name, parameters: { ...(STYLE_SAMPLE[v.typename] || {}), ...roomFor(v), ...own }, ...(v.typename === 'Group' ? { children: [`${el}t`] } : {}) },
+      ...(v.typename === 'Group' ? [{ id: `${el}t`, type: 'Text', label: 'A line', parent: el, parameters: { text: 'A line of text in this group', sizeMode: 'contentHeight', width: { value: 100, unit: '%' } } }] : []),
+      { id: cap, type: 'Text', label: words, parent: col, parameters: { ...caption, text: words } });
+  });
+  // the app's own CSS on its root (the todo template's dark palette re-sets --primary there) dresses the canvas too
+  // the root is the component holding the project's rootNodeId (a template registers it "visual", Greenhouse "root")
+  let rootId = null; try { rootId = JSON.parse(files.read('nodegx.project.json')).rootNodeId; } catch { /* none */ }
+  for (const [key, r] of Object.entries(registry())) {
+    try {
+      const own = store.readComponent(key).files.nodes.nodes;
+      if (r.type !== 'root' && !own.some((n) => n.id === rootId)) continue;
+      for (const n of own) if (n.type === 'CSS Definition') nodes.push({ id: `scCss-${n.id}`, type: n.type, label: n.label, parameters: n.parameters });
+    } catch { /* skip */ }
+  }
+  const cid = '00000000-0000-5000-8000-00000057c1e0', at = '2026-10-30T00:00:00.000Z', dir = `components/${STYLE_CANVAS}/`;
+  out[dir + 'component.json'] = JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/component-v2.json', id: cid, name: 'Style canvas', path: '/' + STYLE_CANVAS, type: 'root', created: at, modified: at, modifiedBy: 'nodegx-studio' });
+  out[dir + 'nodes.json'] = JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/nodes-v2.json', componentId: cid, version: 1, visualRoots: ['scRoot'], nodes });
+  out[dir + 'connections.json'] = JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/connections-v2.json', componentId: cid, version: 1, connections: [] });
+  out['components/_registry.json'] = JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/registry-v2.json', version: 1, lastUpdated: at, components: { [STYLE_CANVAS]: { path: STYLE_CANVAS, type: 'root', nodeCount: nodes.length, connectionCount: 0, modified: at, created: at } } });
+  try { const p = JSON.parse(out['nodegx.project.json']); p.rootNodeId = 'scRoot'; out['nodegx.project.json'] = JSON.stringify(p); } catch { /* the export says what is wrong */ }
+  return out;
+}
+const styleHolder = h('div', { class: 'stylecanvas', 'data-canvas': '' });
+let stylePreview = null, styleDrawn = 0;
+async function drawStyle(v) {
+  const mine = ++styleDrawn;
+  styleHolder.dataset.drawn = '';
+  stylePreview ??= NodegxPreview.mountPreview(styleHolder, { runtimeBase: '/runtime/' });
+  const p = await stylePreview;
+  window.__ob.styleCanvas = p;
+  if (mine !== styleDrawn) return;
+  const s = await p.update(styleCanvasFiles(v));
+  if (mine !== styleDrawn) return;
+  styleHolder.dataset.drawn = s.status;
+  styleHolder.title = s.status === 'ok' ? `${v.name}, drawn by the app's runtime` : `Not drawn: ${s.report?.diagnostics?.find((d) => d.severity === 'error')?.message || s.message || s.status}`;
+}
 function renderStyles() {
   const list = $('stylelist'); list.innerHTML = '';
   const all = stylesFile().variants || [];
@@ -6691,14 +6830,15 @@ function renderStyles() {
   if (!v) { main.append(h('div', { class: 'empty' }, 'Pick a style. A style is a set of properties every element of one type can wear; here it is a variant in nodegx.styles.json.')); props.append(h('div', { class: 'empty' }, 'The style\'s properties appear here.')); return; }
   const wearers = []; for (const k of Object.keys(registry())) { try { for (const n of store.readComponent(k).files.nodes.nodes) if (n.variant === v.name && n.type === v.typename) wearers.push({ key: k, id: n.id, label: n.label || typeName(n.type) }); } catch { /* skip */ } }
   main.append(h('div', { style: 'color:var(--muted);font-size:12px;margin-bottom:4px' }, typeName(v.typename)), h('h2', {}, v.name));
-  const stage = h('div', { class: 'swatch-stage' });
-  const sample = h('div', { class: 'sample' });
+  // STU-096: the element wearing the style, drawn by the runtime; what it sets listed under it
+  const stage = h('div', { class: 'swatch-stage' }, styleHolder);
   const params = v.parameters || {};
   const keys = Object.keys(params);
-  if (!keys.length) sample.append(h('div', { class: 'note' }, 'No properties yet — set some on the right.'));
-  else sample.append(h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:460px' }, ...keys.map((k) => { const val = params[k]; const text = typeof val === 'object' && val ? `${val.value}${val.unit ?? ''}` : String(val); const isCol = /color|Color|background/.test(k) || /^#|^var\(--/.test(text); return h('span', { class: 'chip', style: 'background:#fff;color:var(--ink-2);border-color:var(--line-2)' }, isCol ? h('i', { style: `width:12px;height:12px;border-radius:3px;background:${resolveColor(text)};border:1px solid var(--line-2)` }) : null, `${k}: ${text}`); })));
-  stage.append(sample);
-  main.append(stage);
+  const sets = h('div', { class: 'sets' }, h('h4', {}, 'What it sets'));
+  if (!keys.length) sets.append(h('div', { class: 'note' }, 'No properties yet — set some on the right.'));
+  else sets.append(h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px' }, ...keys.map((k) => { const val = params[k]; const text = typeof val === 'object' && val ? `${val.value}${val.unit ?? ''}` : String(val); const isCol = /color|Color|background/.test(k) || /^#|^var\(--/.test(text); return h('span', { class: 'chip', style: 'background:#fff;color:var(--ink-2);border-color:var(--line-2)' }, isCol ? h('i', { style: `width:12px;height:12px;border-radius:3px;background:${resolveColor(text)};border:1px solid var(--line-2)` }) : null, `${k}: ${text}`); })));
+  main.append(stage, sets);
+  drawStyle(v);
   const card = h('div', { class: 'card' }, h('h4', {}, `Elements wearing it · ${wearers.length}`));
   if (!wearers.length) card.append(h('div', { class: 'note' }, 'None yet. Select an element in Design and pick this style at the top of its properties.'));
   for (const w of wearers.slice(0, 40)) card.append(h('div', { class: 'row', onclick: () => { if (registry()[w.key]?.type === 'page') { pageKey = w.key; readGraph(); } sel = w.id; switchTab('design'); rebuild(0); } }, icon(glyphOf(v.typename)), w.label, h('span', { class: 't' }, w.key)));
@@ -6707,7 +6847,7 @@ function renderStyles() {
   props.append(h('div', { class: 'head' }, h('input', { type: 'text', value: v.name, onchange: (e) => { const name = e.target.value.trim(); if (!name) return; const s = stylesFile(); const me = s.variants.find((x) => x.typename === v.typename && x.name === v.name); me.name = name; writeStyles(s); for (const w of wearers) edits(w.key, [{ edit: 'set_variant', component: w.key, id: w.id, variant: name }], { redraw: false }); selStyle.name = name; renderStyles(); } }), h('span'), h('div', { class: 'type' }, `a style of ${typeName(v.typename)}`)));
   const wrap = h('div', { class: 'props' });
   const fake = { id: undefined, type: v.typename, parameters: params };
-  const setter = (name) => (value) => { const s = stylesFile(); const me = s.variants.find((x) => x.typename === v.typename && x.name === v.name); me.parameters ??= {}; if (value === undefined) delete me.parameters[name]; else me.parameters[name] = value; writeStyles(s); };
+  const setter = (name) => (value) => { const s = stylesFile(); const me = s.variants.find((x) => x.typename === v.typename && x.name === v.name); me.parameters ??= {}; if (value === undefined) delete me.parameters[name]; else me.parameters[name] = value; writeStyles(s); drawStyle(me); };
   const groups = new Map();
   for (const p of editablePorts(fake)) { if (NOT_STYLE.has(p.name)) continue; const g = p.group || 'General'; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(p); }
   let first = true;

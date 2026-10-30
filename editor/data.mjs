@@ -77,7 +77,8 @@ export function cellWords(col, v) {
     case 'Date': {
       const iso = typeof v === 'object' ? v.iso : v;
       const d = new Date(iso);
-      return isNaN(d) ? String(iso) : d.toISOString().slice(0, 16).replace('T', ' ');
+      // this computer's time, as the date field it was typed into took it (P123-GH-DATEUTC: it was UTC, an hour off)
+      return isNaN(d) ? String(iso) : new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16).replace('T', ' ');
     }
     case 'Pointer':
       return typeof v === 'object' ? v.objectId ?? JSON.stringify(v) : String(v);

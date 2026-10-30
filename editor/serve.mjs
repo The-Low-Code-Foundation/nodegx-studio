@@ -343,6 +343,14 @@ async function setTrigger({ id, enabled, time }) {
   }
   return { file: rel, text, backend: stored };
 }
+/** STU-097: each node type's line from NodeGX's enriched catalog (`{ States: 'Named state machine: …' }`), read once; none: {}. */
+let summaries = null;
+function nodeSummaries() {
+  if (summaries) return summaries;
+  try { summaries = Object.fromEntries(JSON.parse(readFileSync(kit.nodeCatalog, 'utf8')).nodes.filter((n) => n.enrichment?.summary).map((n) => [n.typeName, n.enrichment.summary])); }
+  catch { summaries = {}; }
+  return summaries;
+}
 /** STU-061: the field kinds, from vendor/ or bundled once from the checkout NODEGX_REPO names. */
 let fieldsFile = kit.fields;
 async function fieldsModule() {
@@ -498,6 +506,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/app') return send(200, APP_PAGE, types['.html']);
     if (url.pathname === '/panel') return send(200, panelHtml(`http://127.0.0.1:${server.address().port}`), types['.html']);
     if (url.pathname === '/api/vocabulary') return send(200, readFileSync(join(here, 'vocabulary.json')), types['.json']);
+    if (url.pathname === '/api/node-summaries') return json(200, nodeSummaries());
     if (url.pathname === '/api/canon') return existsSync(kit.canon) ? send(200, readFileSync(kit.canon), 'text/markdown; charset=utf-8') : json(404, { error: 'This Studio carries no canon (vendor/docs/CANON.md)' });
     if (url.pathname === '/api/ask' && req.method === 'POST') {
       const { component, node, label, type, text } = JSON.parse((await readBody(req)).toString('utf8') || '{}');

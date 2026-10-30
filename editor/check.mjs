@@ -559,6 +559,11 @@ try {
     await b.evaluate(`[...document.querySelectorAll('#stylelist .row')].find(r => r.textContent.includes('Primary')).click()`); await wait(300);
     const wearers = await b.evaluate(`document.querySelector('#stylemain .card h4')?.textContent`);
     ok(/· 2$/.test(wearers || ''), 'the Styles tab lists the two buttons wearing it', wearers);
+    // STU-096 (Greenhouse: "a list of pills"): the style is shown by a button wearing it, drawn by the runtime
+    const inCanvas = (expr) => b.evaluate(`(() => { const el = __ob.styleCanvas?.frame?.contentDocument?.querySelector('button'); return el ? ${expr} : null; })()`);
+    const canvasDrawn = await b.until(`document.querySelector('#stylemain [data-canvas]')?.dataset.drawn || false`, 30000);
+    const canvas = { drawn: canvasDrawn, label: await inCanvas('el.textContent'), bg: await inCanvas('getComputedStyle(el).backgroundColor'), weight: await inCanvas('getComputedStyle(el).fontWeight') };
+    ok(canvas.drawn === 'ok' && canvas.label === 'Button' && canvas.bg === bgSign, 'the Styles tab draws a button wearing the style, in the colour the app draws its buttons', { ...canvas, app: bgSign });
     // P123-GH-PROPLOST (Greenhouse 2026-10-30): a length typed, then a weight picked straight after, keeps both
     const typed = await b.evaluate(`(() => { const sp = document.getElementById('styleprops'); for (const d of sp.querySelectorAll('details')) d.open = true; const i = sp.querySelector('.field .unit input'); i.focus(); i.select(); return i.closest('.field').querySelector('label').textContent; })()`);
     await b.type('23');
@@ -566,6 +571,8 @@ try {
     await wait(700);
     const pv = onDisk('nodegx.styles.json').variants.find((x) => x.name === 'Primary' && x.typename === 'net.noodl.controls.button').parameters;
     ok(weighed && Object.values(pv).some((x) => x?.value === 23) && String(pv.fontWeight) === '700', 'a length typed in a style and a weight picked straight after are both written', { typed, weighed, fontWeight: pv.fontWeight, lengths: Object.entries(pv).filter(([, x]) => x?.unit).map(([k, x]) => `${k}=${x.value}`) });
+    const redrawn = await b.until(`(() => { const el = __ob.styleCanvas?.frame?.contentDocument?.querySelector('button'); return !!el && getComputedStyle(el).fontWeight === '700'; })()`, 20000);
+    ok(canvas.weight !== '700' && redrawn, 'the style\'s canvas is drawn again after the edit: its button turns bold', { before: canvas.weight, after: await inCanvas('getComputedStyle(el).fontWeight') });
     await shot('styles');
     await b.clickSel('[data-tab=design]'); await wait(300); await shot('design');
     await b.clickSel('[data-tab=workflow]'); await wait(300); await shot('workflow');
@@ -1356,7 +1363,10 @@ try {
     ok(chip && chip.role === 'button' && chip.text.includes('Greeting (by language)'), 'P125-MUDDY-DEADCHIP: a text fed by a placed logic component is a chip that names it and can be pressed', chip);
     await b.clickSel('#right .chip.part[data-part=grWords]'); await wait(300);
     const card = await b.evaluate(`(() => { const c = document.querySelector('.partcard'); return c ? { part: c.dataset.part, text: c.innerText, acts: [...c.querySelectorAll('[data-act]')].map(a => a.textContent) } : null; })()`);
-    ok(card?.part === 'grWords' && card.text.includes('Logic/Greeting') && card.text.includes("Studio doesn't edit this. Look at the wiring underneath, or open it in the NodeGX editor.") && JSON.stringify(card.acts) === JSON.stringify(['Wiring', 'Get the editor', 'Ask the agent']), "the chip opens the part's card: what it is, that Studio doesn't edit it, Wiring, the editor, the agent", card);
+    ok(card?.part === 'grWords' && card.text.includes('Logic/Greeting') && card.text.includes("Studio doesn't edit this. Look at the wiring underneath, or open it in the NodeGX editor.") && JSON.stringify(card.acts) === JSON.stringify(['See the wiring', 'Get the editor', 'Ask the agent']), "the chip opens the part's card: what it is, that Studio doesn't edit it, See the wiring, the editor, the agent", card);
+    // STU-097 (Greenhouse: "explain the wiring … or jump to that page's workflows"): what it does, its wires in words, the workflows using it
+    const taught = await b.evaluate(`(() => { const c = document.querySelector('.partcard'); return { what: c.querySelector('.pwhat')?.textContent, wires: [...c.querySelectorAll('.pwires div')].map((d) => d.textContent), workflows: c.querySelector('[data-workflows]')?.dataset.workflows, none: c.querySelector('.pwfs .note')?.textContent }; })()`);
+    ok(/component of this app/.test(taught.what || '') && taught.wires.some((w) => /→ Greeting's Text$/.test(w)) && taught.workflows === '0' && /None on this page/.test(taught.none || ''), 'a part\'s card says what it is, where its value goes in words, and that no workflow on the page uses it', taught);
     await shot('wiring-card');
     const before = hashes(), storeBefore = await b.evaluate(`JSON.stringify(__ob.store.readComponent('Pages/Sign in').files)`);
     await b.clickSel('.partcard [data-act=wiring]'); await wait(700);
@@ -1393,6 +1403,15 @@ try {
     await b.clickSel('.partcard [data-act=ask]'); await wait(600);
     const qf = join(project, '.nodegx-questions.json'), qs = existsSync(qf) ? JSON.parse(readFileSync(qf, 'utf8')).questions : [];
     ok(qs.length === 1 && qs[0].component === 'Pages/Sign in' && qs[0].node === 'grWords' && qs[0].text.includes('Greeting (by language)'), "a part's row opens its card, and Ask the agent writes the question to .nodegx-questions.json", qs.map((q) => [q.component, q.node]));
+    // STU-097: the User node is read by the page's own workflow (its branch "Already signed in?"): the card names that workflow and opens it
+    await b.evaluate(`document.querySelector('#logiclist .row[data-part=siUser]').scrollIntoView()`);
+    await b.clickSel('#logiclist .row[data-part=siUser]'); await wait(300);
+    const user = await b.evaluate(`(() => { const c = document.querySelector('.partcard'); return { what: c.querySelector('.pwhat')?.textContent, takes: [...c.querySelectorAll('.pwires')].map((d) => d.innerText), uses: [...c.querySelectorAll('[data-ev]')].map((x) => ({ ev: x.dataset.ev, name: x.querySelector('span').textContent })) }; })()`);
+    const usedBy = user.uses[0];
+    if (usedBy) { await b.clickSel(`.partcard [data-ev="${usedBy.ev}"]`); await wait(600); }
+    const opened = await b.evaluate(`({ tab: document.querySelector('#rail [role=tab][aria-selected=true]')?.dataset.tab, card: document.querySelector('#workflow h2')?.textContent, card2: document.querySelector('#workflow .cardname')?.value })`);
+    ok(/signed-in user/.test(user.what || '') && user.uses.length === 1 && user.takes.some((t) => /Already signed in/.test(t)) && opened.tab === 'workflow' && (opened.card === usedBy.name || opened.card2 === usedBy.name), 'the User node\'s card says what it does, that it feeds Already signed in?, and its workflow opens in the Workflow tab', { user, opened });
+    await b.clickSel('[data-tab=design]'); await wait(300);
   }
   // STU-090 (s26): a repeating group's row says Click; the page hears it as the group's own event, with that row's record
   console.log('check: a repeating group\'s row is clicked (STU-090)');

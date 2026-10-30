@@ -1915,11 +1915,11 @@ them (STU-092).
 | 3 | can't edit backend workflows; can't see a run's data, what went in and out of each step, as in the NodeGX editor | STU-092 |
 | 4 | the Map is "our example for the rest of the app": its words (origins on the left, screens, functions, tables; "on its own") should be the Workflow tab's words for the backend; a backend workflow's "last run 21 mins ago: it worked" should open the run, drawn, with the dots flowing on the wires; maybe the app's own logic that talks to the backend (queries) as a column between screens and functions | STU-093 (ruling: the front-end logic column) |
 | 5 | option sets need fields that point at one or many options of another set (Bubble has it) | STU-094 |
-| 6 | App data edits in place: dangerous ("why I stopped using NocoDB"); click a record → side panel or modal | STU-095, P123-GH-APPDATAINLINE (high) |
-| 7 | a style's preview is a list of pills (`colour: #FFF`); show a dummy button, text, a group with text in it | STU-096 |
+| 6 | App data edits in place: dangerous ("why I stopped using NocoDB"); click a record → side panel or modal | **built** (s29) STU-095, P123-GH-APPDATAINLINE, P123-GH-DATEUTC |
+| 7 | a style's preview is a list of pills (`colour: #FFF`); show a dummy button, text, a group with text in it | **built** (s29) STU-096 |
 | 8 | Help should link the Studio docs; Help looks like a page, so picking another tab leaves you stuck on it | **fixed** P123-GH-HELPSTUCK: *NodeGX Studio guide ↗* (learn.nodegx.io/ways/studio); a tab closes Help and the wiring view |
 | 9 | Esc cancels placing a reusable but it stays blue | **fixed** P123-GH-ESCCOMPONENT |
-| 10 | Logic on this page should explain the wiring (more teaching, for a builder who finds what their AI built) OR jump to that page's workflows in the Workflow tab | STU-097 |
+| 10 | Logic on this page should explain the wiring (more teaching, for a builder who finds what their AI built) OR jump to that page's workflows in the Workflow tab | **built** (s29) STU-097 |
 | 11 | a backend workflow open, then Design → Interactions → a workflow: the tab still shows the backend one | **fixed** P123-GH-CARDBEHINDAUTO |
 | 12 | the composer shows `===` and empty quotes; wants a non-coder composer like Bubble's, with the same thing viewable as JS (Blockly) | STU-098, P123-GH-COMPOSERJS (ruling) |
 
@@ -1973,17 +1973,43 @@ The table is read only. A click on a row opens it in a side panel: one field per
 picks a record, a date is a date field, a choice is its set's options), *Save* and *Cancel*, nothing written until Save;
 *New entry* opens the same panel empty. P123-GH-DATEUTC (dates shown in UTC) is fixed in the same panel.
 
+**Done (s29).** The table only shows: a click on a row (not its tick box) opens it in the drawer (`openRow`), one control
+per field of its kind (`valueControl`, as before), the row marked in the table while it is open; *Save* sends only the
+fields that changed, *Cancel* (or the drawer's ×) writes nothing; *New entry* is the same panel, empty, with *Create*.
+User's people open the same way (`openPerson`): one PUT with the account's fields at the top and the app's own under
+`properties`. Under each the record's made / changed times and id. DATEUTC: `cellWords` says a date in this computer's
+time (the one the date field took), the table's *created* too, and a line under the table names the zone.
+`check:data` **84/84** (2 new: a click opens the drawer and a Choice changed there and cancelled is not written, then
+saved is; a date reads back as typed). Each App data edit in the gate now goes through the panel.
+
 ### STU-096 — a style shows what it styles
 
 The Styles tab's preview is the element wearing the style, drawn by the runtime: a button that says *Button*, a text
 in its font and colour, a group with a line of text in it, an input with a placeholder; states (hover, pressed) beside
 it. The property pills stay below as the list of what it sets.
 
+**Done (s29).** A second `mountPreview` (`drawStyle`) draws a made-up root (`styleCanvasFiles`: the project's own
+non-component files, so its styles, tokens and head code, the root component's CSS Definitions (the todo template's dark
+palette lives there), and one root component, none of the app's pages) holding the
+element wearing the style: a button that says *Button*, a text, an input with a placeholder, a group (16 px of room on
+any side the style does not pad) with a line of text in it. Each state the style sets (`stateParameters`: hover,
+pressed…) is a second copy beside it, given that state's values as its own. Redrawn when a property is edited on the
+right. *What it sets* lists the properties under it. Measured on a copy of Greenhouse: Primary, Card, Display and Field
+drawn; with a hover and a pressed colour added to Primary, three buttons in the three colours. `check:editor` rows: the
+button on the canvas is drawn in the colour the app draws its buttons, and turns bold after the style's weight is set.
+
 ### STU-097 — Logic on this page: understand it, or go to it
 
 Each row offers two ways: *See the wiring* (the view as today, plus a sentence per node saying what it does, from the
 node's own description, and the path a value takes) and *See its workflows* (Workflow tab, that page, the workflows
 that use it listed).
+
+**Done (s29).** A part's card (its row, or its chip) says what it does, in its type's line from NodeGX's enriched
+catalog (`/api/node-summaries`, read from `kit.nodeCatalog`), or "a component of this app, placed here"; what it *Takes*
+and *Gives* along its wires, in words ("its Words → Greeting's Text"); and *Workflows that use it* (`workflowsUsing`:
+started by it, running it as a step, or a step reading from it or feeding it), each a button that opens that workflow
+in the Workflow tab, or "None on this page: it works from its wires alone". *Wiring* is now *See the wiring*, and the
+wiring view says the same sentence and wires for the node selected in it.
 
 ### STU-098 — a composer for people who don't code
 

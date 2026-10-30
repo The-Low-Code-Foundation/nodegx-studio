@@ -10,7 +10,8 @@
  *      converts; a delete drops the column
  *   3. a field added outside Studio (as Claude Code would) is named as drift, and declared from the card; a Required the
  *      project and the backend disagree on is drift too, agreed either way (the backend's way only once no row is empty)
- *   4. App data: 120 rows paged 50 at a time with the count, a search, a Choice edited through its select, an import
+ *   4. App data: 120 rows paged 50 at a time with the count, a search, a row opened in the drawer (a click writes
+ *      nothing; a Choice changed and cancelled stays, saved is written), an import
  *      checked first, rows deleted together; the importer's backend/data/ files checked and loaded
  *   5. Privacy: a type made readable by anyone, through the map: the backend lets someone not signed in find it, and
  *      nodegx.security.json says the same
@@ -106,6 +107,8 @@ console.log('check: data.mjs');
   ok(toWire({ name: 'n', type: 'Number' }, '4.5').value === 4.5 && toWire({ name: 'n', type: 'Number' }, 'four').error && toWire({ name: 'b', type: 'Boolean' }, 'Yes').value === true && toWire({ name: 'd', type: 'Date' }, '2026-10-22T10:00').value.__type === 'Date' && toWire({ name: 'p', type: 'Pointer', targetClass: 'T' }, 'abc').value.className === 'T' && toWire({ name: 'x', type: 'String' }, '').value === null, 'a typed value goes to the backend in its own shape; a wrong one is refused in words; empty clears');
   ok(JSON.stringify(searchWhere([{ name: 'title', type: 'String' }, { name: 'n', type: 'Number' }], 'a.b')) === '{"$or":[{"title":{"$regex":"a\\\\.b","$options":"i"}}]}' && searchWhere([{ name: 'n', type: 'Number' }], 'x') === null, 'a search looks in the text fields only, the words taken literally');
   ok(cellWords({ type: 'Boolean' }, false) === 'No' && cellWords({ type: 'Pointer' }, { objectId: 'q1' }) === 'q1', 'a cell says Yes / No and a link\'s id');
+  const typed = '2026-10-30T15:02', said = cellWords({ type: 'Date' }, toWire({ name: 'd', type: 'Date' }, typed).value);
+  ok(said === typed.replace('T', ' '), 'P123-GH-DATEUTC: a date reads back as the time that was typed, this computer\'s, not UTC', { typed, said, zone: Intl.DateTimeFormat().resolvedOptions().timeZone });
 }
 
 console.log('check: rename.mjs');
@@ -296,12 +299,25 @@ try {
   ok((await ev(`document.querySelector('#appmain [data-pages]').textContent`)) === '51–100 of 121', 'the next page', await ev(`document.querySelector('#appmain [data-pages]').textContent`));
   await ev(`(() => { const s = document.querySelector('#appmain [data-input=search]'); s.value = 'ROW 01'; s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })); })()`); await settle();
   ok((await ev(`document.querySelector('#appmain [data-pages]').textContent`)).startsWith('1–10 of 10'), 'a search finds the rows whose text holds it, case aside', await ev(`document.querySelector('#appmain [data-pages]').textContent`));
+  // STU-095 (P123-GH-APPDATAINLINE): a click on a row opens it in the drawer; nothing is written until Save
   const first = await ev(`document.querySelector('#appmain tr[data-row]').dataset.row`);
+  const was = (await dev.get(`/classes/Note/${first}`)).state, other = was === 'open' ? 'closed' : 'open';
   await ev(`document.querySelector('#appmain tr[data-row] td[data-field=state]').click()`);
-  await until(`!!document.querySelector('#appmain td[data-field=state] select')`);
-  const opts = await ev(`[...document.querySelector('#appmain td[data-field=state] select').options].map(o => o.value).join()`);
-  await ev(`(() => { const s = document.querySelector('#appmain td[data-field=state] select'); s.value = 'open'; s.dispatchEvent(new Event('change')); })()`); await settle();
-  ok(opts === ',open,closed' && (await dev.get(`/classes/Note/${first}`)).state === 'open', 'a Choice is edited through its own values, and the backend has the new one', { opts });
+  await until(`!!document.querySelector('#drawer:not([hidden]) [data-field=state] select')`);
+  const opts = await ev(`[...document.querySelector('#drawer [data-field=state] select').options].map(o => o.value).join()`);
+  const inTable = await ev(`document.querySelectorAll('#appmain table input:not([type=checkbox]), #appmain table select').length`);
+  const marked = await ev(`document.querySelector('#appmain tr[aria-selected=true]')?.dataset.row`);
+  const pick = (v) => ev(`(() => { const s = document.querySelector('#drawer [data-field=state] select'); s.value = ${JSON.stringify(other)}; s.dispatchEvent(new Event('change')); s.dispatchEvent(new Event('blur')); })()`);
+  await pick(); await wait(800);
+  const unsaved = (await dev.get(`/classes/Note/${first}`)).state;
+  await ev(`document.querySelector('#drawer [data-act=cancel]').click()`); await wait(500);
+  ok(opts === ',open,closed' && !inTable && marked === first && unsaved === was && (await dev.get(`/classes/Note/${first}`)).state === was && (await ev(`!document.querySelector('#appmain tr[aria-selected=true]')`)), 'a click on a row opens it in the drawer, the table stays as it is, and a Choice changed there and cancelled changes nothing', { opts, inTable, marked, was, unsaved });
+  await ev(`document.querySelector('#appmain tr[data-row] td[data-field=title]').click()`);
+  await until(`!!document.querySelector('#drawer:not([hidden]) [data-field=state] select')`);
+  await pick();
+  await ev(`document.querySelector('#drawer [data-act=save]').click()`); await until(`document.getElementById('drawer').hidden`, 6000); await settle();
+  const saved = await dev.get(`/classes/Note/${first}`);
+  ok(saved.state === other && /^row 01/.test(saved.title) && (await ev(`document.querySelector('#appmain tr[data-row="${first}"] td[data-field=state]').textContent`)) === other, 'Save writes the Choice through its own values, only what changed, and the table shows it', { state: saved.state, title: saved.title });
   // an import, checked first
   await ev(`(() => { const s = document.querySelector('#appmain [data-input=search]'); s.value = ''; s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })); })()`); await settle();
   await ev(`(() => { const orig = HTMLInputElement.prototype.click; HTMLInputElement.prototype.click = function () { if (this.type !== 'file') return orig.call(this); const dt = new DataTransfer(); dt.items.add(new File(['title,state\\nimported a,open\\nimported b,closed\\n'], 'more.csv', { type: 'text/csv' })); this.files = dt.files; this.dispatchEvent(new Event('change')); HTMLInputElement.prototype.click = orig; }; document.querySelector('#appmain [data-act=import]').click(); })()`);
@@ -409,15 +425,15 @@ try {
   const people = await ev(`[...document.querySelectorAll('#appmain tr[data-row] td[data-field=email]')].map(td => td.textContent)`);
   const heads = await ev(`[...document.querySelectorAll('#appmain th')].map(th => th.textContent).join()`);
   ok(people.length === 1 && people[0] === visitor && heads.includes('nickname') && heads.includes('emailVerified'), 'User: the one who signed up in the app, with the account\'s fields and the app\'s own', { people, heads });
-  const editIn = async (field, value) => {
-    await ev(`document.querySelector('#appmain tr[data-row] td[data-field=${field}]').click()`);
-    await until(`!!document.querySelector('#appmain td[data-field=${field}] input, #appmain td[data-field=${field}] select')`);
-    await ev(`(() => { const c = document.querySelector('#appmain td[data-field=${field}] input, #appmain td[data-field=${field}] select'); c.value = ${JSON.stringify(value)}; c.dispatchEvent(new Event(c.tagName === 'SELECT' ? 'change' : 'input')); c.dispatchEvent(new Event('blur')); })()`); // the app's frame had the focus: a blur() would not fire
-    await wait(800);
-  };
-  await editIn('nickname', 'Paint person'); await editIn('emailVerified', 'yes');
+  // STU-095: a person opens in the drawer too; Save sends the account's field and the app's own together
+  await ev(`document.querySelector('#appmain tr[data-row] td[data-field=email]').click()`);
+  await until(`!!document.querySelector('#drawer:not([hidden]) [data-field=nickname] input')`);
+  await ev(`(() => { for (const [f, v] of [['nickname', 'Paint person'], ['emailVerified', 'yes']]) { const c = document.querySelector('#drawer [data-field=' + f + '] input, #drawer [data-field=' + f + '] select'); c.value = v; c.dispatchEvent(new Event(c.tagName === 'SELECT' ? 'change' : 'input')); c.dispatchEvent(new Event('blur')); } })()`);
+  await wait(800);
+  const beforeSave = (await dev.get('/admin/users')).users.find((u) => u.email === visitor);
+  await ev(`document.querySelector('#drawer [data-act=save]').click()`); await until(`document.getElementById('drawer').hidden`, 6000); await settle();
   const signedUpRow = (await dev.get('/admin/users')).users.find((u) => u.email === visitor);
-  ok(signedUpRow?.nickname === 'Paint person' && signedUpRow.emailVerified === true, 'a field of the app\'s own and a yes / no, changed in a cell, through the Users API', signedUpRow);
+  ok(beforeSave?.nickname !== 'Paint person' && signedUpRow?.nickname === 'Paint person' && signedUpRow.emailVerified === true, 'a field of the app\'s own and a yes / no, changed in the person\'s panel, written on Save only, through the Users API', { beforeSave: beforeSave?.nickname, signedUpRow });
   await ev(`document.querySelector('#appmain [data-act=new]').click()`);
   await until(`!!document.querySelector('#drawer [data-input=password]')`);
   await ev(`(() => { for (const [k, v] of [['email', 'added@example.com'], ['password', 'added-password-1']]) { const i = document.querySelector('#drawer [data-input=' + k + ']'); i.value = v; i.dispatchEvent(new Event('input')); } })()`);
