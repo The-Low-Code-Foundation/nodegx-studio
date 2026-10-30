@@ -59,6 +59,7 @@ const OPTION_ROW_SKIP = new Set(['display', 'sort_factor', 'db_value', 'deleted'
 function optionAttrValue(type, x) {
   if (x == null || typeof type !== 'string') return x;
   if (type.startsWith('list.')) return (Array.isArray(x) ? x : typeof x === 'object' ? Object.keys(x).sort((a, b) => a - b).map((k) => x[k]) : [x]).map((y) => optionAttrValue(type.slice(5), y)); // a list is stored as {"0": …, "1": …}
+  if (type.startsWith('option.')) return optionRow(optionSets[type.slice(7)], x)?.value ?? x; // STU-094: the other set's Value, as its rows hold it
   if (type === 'date' && typeof x === 'number') return new Date(x).toISOString();
   if ((type === 'image' || type === 'file') && typeof x === 'string' && x.startsWith('//')) return `https:${x}`; // Bubble's CDN links are protocol-relative
   return x;
@@ -1030,7 +1031,9 @@ for (const [key, os] of Object.entries(optionSets)) {
   if (!os || typeof os !== 'object' || os.deleted) continue; const name = os.display || key; const g = new Graph(`/Option sets/${safeName(name)}`, 'visual', `Bubble option set "${name}" (${key})`); components.push(g); stats.optionSets++;
   const rows = optionRows(os);
   // the attributes as NodeGX Studio's Data tab reads them (component metadata `optionSet.attributes`, display first)
-  g.metadata = { optionSet: { attributes: [{ name: 'display', type: 'text' }, ...liveEntries(os.attributes).map(([a, at]) => ({ name: a.replace(/_$/, ''), type: OPEN_BUBBLE_ATTR_TYPES[at.value] || 'text', bubbleType: at.value, display: at.display ?? a }))], bubbleKey: key } };
+  // STU-094: an attribute of type option.<set> / list.option.<set> points at that set, as NodeGX Studio's links do
+  const linkTo = (t) => { const m = /^(list\.)?option\.(.+)$/.exec(String(t)); const to = m && optionSets[m[2]]; return to && !to.deleted ? { type: m[1] ? 'options' : 'option', of: `Option sets/${safeName(to.display || m[2])}` } : null; };
+  g.metadata = { optionSet: { attributes: [{ name: 'display', type: 'text' }, ...liveEntries(os.attributes).map(([a, at]) => ({ name: a.replace(/_$/, ''), type: OPEN_BUBBLE_ATTR_TYPES[at.value] || 'text', ...linkTo(at.value), bubbleType: at.value, display: at.display ?? a }))], bubbleKey: key } };
   const data = g.add({ id: `os_${key}`, type: 'Static Data', label: `All options of ${name}`, parameters: { type: 'json', json: JSON.stringify(rows) }, x: 40, y: 40 });
   const outs = g.add({ id: `osout_${key}`, type: 'Component Outputs', label: 'All options', ports: [{ name: 'items', plug: 'input', type: 'array' }, { name: 'count', plug: 'input', type: 'number' }], x: 400, y: 40 });
   g.wire(data.id, 'items', outs.id, 'items'); g.wire(data.id, 'count', outs.id, 'count');

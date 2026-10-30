@@ -123,9 +123,20 @@ Gates that click the backend lists now click `[data-tab=backend]`. Not pushed (a
 *Start a backend* adopted Greenhouse's real running backend by the copied project id (P123-STU-COPYADOPTS, filed; only
 no-op writes reached it). Filed too: P123-STU-FNRUNVALUES (a function's run records no values: note 3's function half).
 
+**s31 (2026-10-30), STU-094 — option sets that point at other option sets (Greenhouse note 5)** (SCOPE, STU-094 "Done
+(s31)"). An attribute's Type can be *an option of <set>* / *a list of options of <set>*, picked in the table by label,
+held as Values; links follow the other set's Value changes and refuse removing a held option. The ⚡ menu reads a
+Choice through its set ("a task's language's Label"), one step on along a link ("…'s size's Label"): one Function
+node (`editor/optionsets.mjs`; 🔴 a Function's `Inputs.x` is the wire port `in-x`, `Outputs.x` is `out-x`: bare names
+wire to nothing and the field silently keeps its own text). That closes P123-GH-CHOICELABEL for page data and a page's
+own record; a repeating group's row is not read through yet. The importer maps Bubble's `option.<set>` attributes.
+Gates on the s31 tree: `check:shapes` **39/39** (11 new; mutant 36/39), `check:editor` **241/241**, `check:data`
+84/84, `check:timeline` 53/53, `check:app` 67/67, `check:import` 94/94. Not pushed (ask first).
+
 Next buildable, in order:
-00. Greenhouse notes left: STU-094 (option set → option set links, buildable), STU-093 (the Map's words; ruling: a
-    front-end logic column), STU-098 (ruling: drop the composer's *Both*). STU-092's leftovers: a workflow's own settings
+00. Greenhouse notes left: STU-093 (the Map's words; ruling: a front-end logic column), STU-098 (ruling: drop the
+    composer's *Both*); both need Richard's ruling, asked in plain words. STU-094's leftover: the row's read-through
+    (`throughSources` on a row's `One <Type>` Component Inputs ports, with a gate that makes a repeating group). STU-092's leftovers: a workflow's own settings
     (concurrency, time limits), a webhook trigger made in Studio, adding an *If it fails* route.
 0a. STU-090's open list (SCOPE): an option set linked to a Choice rather than copied; the crowded header (check it
    still is, with *+ Page* in the crumb); a page about one record previewed with one (Design sends it nothing).

@@ -28,6 +28,12 @@
  * `Français`; App data and Data types show the labels; a Value changed in Option sets, with a row holding the old one,
  * asks first, then moves the row, the rule (project file and backend) and the set; a held option is not removed.
  *
+ * 5. An option set that points at another (STU-094, Richard's Greenhouse note 5): Languages' `size` is an option of
+ * Sizes and `sizes` a list of them, picked in its table and held as Sizes' Values; a Value changed in Sizes moves them,
+ * an option they hold is not removed. Then ⚡ on a page reads the first Task's language through Languages, and on
+ * through Sizes ("a task's language's size's Label", P123-GH-CHOICELABEL): one Function node, and the running app
+ * shows Large.
+ *
  *   node editor/shapes-check.mjs          PASS n/n and exit 0, or the failing lines and exit 1
  */
 import { spawn } from 'node:child_process';
@@ -138,6 +144,10 @@ try {
   const start = JSON.parse(readFileSync(pf, 'utf8'));
   start.metadata.dbCollections = [{ name: 'Task', columns: [{ name: 'title', type: 'String' }] }];
   writeFileSync(pf, JSON.stringify(start, null, 2));
+  // section 5's page reads the first Task with nobody signed in: the template lets only someone signed in read one
+  const security = JSON.parse(readFileSync(join(project, 'nodegx.security.json'), 'utf8'));
+  Object.assign(security.collections.Task.permissions, { find: 'public', get: 'public' });
+  writeFileSync(join(project, 'nodegx.security.json'), JSON.stringify(security, null, 2));
   const example = JSON.parse(readFileSync(join(repo, 'docs/node-catalog/examples/option-set.json'), 'utf8')).components[0];
   const made = await asAgent(project, 'create_component', { path: example.name, type: 'logic', nodes: example.nodes, connections: example.connections });
   ok(!made.result?.isError && !made.error, 'the agent writes the example\'s option set', made.result?.content?.[0]?.text?.slice(0, 160));
@@ -237,6 +247,89 @@ try {
     await b.evaluate(`(() => { const t = [...document.querySelectorAll('#optmain table')][1]; [...t.querySelectorAll('tr')][2].querySelector('button.danger').click(); })()`); await wait(1500);
     const refused = await b.evaluate(`document.getElementById('toast').textContent`);
     ok(setRows() === 'en,fra' && rules() === 'en,fra' && /1 record of Task has language fra/.test(refused), 'removing Français while a Task holds fra is refused in words, and the set keeps it', { set: setRows(), file: rules(), refused });
+  }
+
+  console.log('check: an option set that points at another (STU-094)');
+  {
+    const setFile = (name) => { const dir = join(project, 'components', 'Option sets', name); return { rows: JSON.parse(JSON.parse(readFileSync(join(dir, 'nodes.json'), 'utf8')).nodes.find((n) => n.type === 'Static Data').parameters.json), attrs: JSON.parse(readFileSync(join(dir, 'component.json'), 'utf8')).metadata?.optionSet?.attributes } };
+    const openSet = async (name) => { await b.evaluate(`[...document.querySelectorAll('#optsets .row')].find((r) => r.textContent.includes(${JSON.stringify(name)})).click()`); await wait(500); };
+    const inRow = (row, sel) => `[...[...document.querySelectorAll('#optmain table')][1].querySelectorAll('tr')][${row}].querySelector(${JSON.stringify(sel)})`;
+    const choose = (sel, v) => b.evaluate(`(() => { const s = ${sel}; s.value = ${JSON.stringify(v)}; s.dispatchEvent(new Event('change')); })()`);
+    const settle = async (cond) => { for (let i = 0; i < 40 && !cond(); i++) await wait(200); };
+    const newAttr = async (name) => {
+      await b.evaluate(`[...document.querySelectorAll('#optmain .bar button')].find((x) => x.textContent.includes('New attribute')).click()`);
+      await b.until(`!!document.querySelector('.ask [data-input=askname]')`, 4000);
+      await b.evaluate(`document.querySelector('.ask [data-input=askname]').focus()`); await b.type(name); await b.key('Enter', 'Enter', 13); await wait(800);
+    };
+    await b.evaluate(`document.querySelector('[data-sub=options]').click()`); await wait(400);
+    await openSet('Sizes');
+    for (const [row, v] of [[1, 's'], [2, 'l']]) { await b.evaluate(`(() => { const i = ${inRow(row, 'td[data-attr=Value] input')}; i.value = ${JSON.stringify(v)}; i.dispatchEvent(new Event('change')); })()`); await wait(800); }
+    ok(setFile('Sizes').rows.map((o) => o.Value).join() === 's,l', 'Sizes is given Values: Small s, Large l', setFile('Sizes').rows);
+    await openSet('Languages');
+    await newAttr('size');
+    const offered = await b.evaluate(`[...document.querySelector('#optmain select[data-attrtype=size]').options].map((o) => o.textContent)`);
+    ok(offered.includes('an option of Sizes') && offered.includes('a list of options of Sizes') && !offered.some((t) => /of Languages/.test(t)), 'a new attribute of Languages can be an option, or a list of options, of another set (not of itself)', offered);
+    await choose(`document.querySelector('#optmain select[data-attrtype=size]')`, 'option:Option sets/Sizes'); await wait(800);
+    await choose(inRow(1, 'select[data-link=size]'), 'l'); await wait(800);
+    await newAttr('sizes');
+    await choose(`document.querySelector('#optmain select[data-attrtype=sizes]')`, 'options:Option sets/Sizes'); await wait(800);
+    for (const v of ['s', 'l']) { await choose(inRow(2, '[data-link=sizes] select.add'), v); await wait(800); }
+    let lang = setFile('Languages');
+    ok(JSON.stringify(lang.attrs.filter((a) => a.of)) === JSON.stringify([{ name: 'size', type: 'option', of: 'Option sets/Sizes' }, { name: 'sizes', type: 'options', of: 'Option sets/Sizes' }]) && lang.rows[0].size === 'l' && JSON.stringify(lang.rows[1].sizes) === '["s","l"]',
+      'picked in the table, English\'s size holds Large\'s Value l and Français\'s sizes the list s, l; the attributes name the set they point at', lang);
+    const shown = await b.evaluate(`({ one: (() => { const s = ${inRow(1, 'select[data-link=size]')}; return s.options[s.selectedIndex].textContent; })(), list: [...${inRow(2, '[data-link=sizes]')}.querySelectorAll('.chip')].map((c) => c.textContent) })`);
+    ok(shown.one === 'Large' && shown.list.join() === 'Small,Large', 'the table shows them by their labels', shown);
+    await openSet('Sizes');
+    await b.evaluate(`(() => { const i = ${inRow(2, 'td[data-attr=Value] input')}; i.value = 'xl'; i.dispatchEvent(new Event('change')); })()`);
+    await settle(() => setFile('Languages').rows[0].size === 'xl');
+    const followed = await b.evaluate(`document.getElementById('toast').textContent`);
+    lang = setFile('Languages');
+    ok(setFile('Sizes').rows[1].Value === 'xl' && lang.rows[0].size === 'xl' && JSON.stringify(lang.rows[1].sizes) === '["s","xl"]' && /Languages's size, sizes follows Sizes/.test(followed), 'Large\'s Value changed to xl: English\'s size and Français\'s sizes follow it, and Studio says so', { sizes: setFile('Sizes').rows, rows: lang.rows, followed });
+    await b.evaluate(`${inRow(2, 'button.danger')}.click()`); await wait(1200);
+    const refused = await b.evaluate(`document.getElementById('toast').textContent`);
+    ok(setFile('Sizes').rows.length === 2 && /English in Languages \(its size\), Français in Languages \(its sizes\) hold Large/.test(refused), 'removing Large while Languages\' options hold it is refused in words, and Sizes keeps it', { rows: setFile('Sizes').rows, refused });
+
+    console.log('check: ⚡ reads a Choice through its set, and on through a set it points at (STU-094, P123-GH-CHOICELABEL)');
+    const posted = await fetch(url + 'api/backend/classes/Task', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'A first task', language: 'en' }) });
+    ok(posted.status < 300, 'a Task in English is on the backend', posted.status);
+    const clickText = async (sel, text) => { const at = await b.evaluate(`(() => { const el = [...document.querySelectorAll(${JSON.stringify(sel)})].find(e => e.textContent.trim().startsWith(${JSON.stringify(text)})); if (!el) return null; el.scrollIntoView({ block: 'nearest' }); const r = el.getBoundingClientRect(); return { x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2) }; })()`); if (!at) throw new Error(`nothing to click: ${sel} "${text}"`); await b.click(at.x, at.y); await wait(250); };
+    const setIn = async (sel, value, event = 'input') => { await b.evaluate(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event(${JSON.stringify(event)})); })()`); await wait(event === 'input' ? 800 : 500); };
+    await b.evaluate(`document.querySelector('[data-tab=design]').click()`); await wait(600);
+    await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Pages/Sizes'; s.dispatchEvent(new Event('change')); })()`); await wait(1500);
+    await b.clickSel('#newpagedata');
+    await b.until('document.querySelector(".menu.newitem")', 4000);
+    await setIn('.menu.newitem input[aria-label=Name]', 'a task');
+    await setIn('.menu.newitem select[aria-label=Type]', 'Task', 'change');
+    await clickText('.menu.newitem .seg button', 'The first one'); await wait(200);
+    const button = await b.evaluate(`document.querySelector('.menu.newitem .foot .primary').textContent`);
+    await clickText('.menu.newitem .foot button', button); await wait(1000);
+    await clickText('#right .pageitem button', 'Sort by'); await wait(500);
+    await setIn('#right .pageitem .cond.sort input', 'title');
+    const at = await b.until(`(() => { const el = __ob.preview.elementsOf('prompt')[0]; if (!el || !el.getBoundingClientRect().height) return false; const r = el.getBoundingClientRect(); const o = document.getElementById('overlay').getBoundingClientRect(); return { x: Math.round(o.left + r.left + r.width / 2), y: Math.round(o.top + r.top + r.height / 2) }; })()`, 15000);
+    if (!at) throw new Error('the Sizes page has no prompt Text on screen');
+    const textField = `[...document.querySelectorAll('#right .field')].some((f) => f.querySelector('label')?.textContent === 'Text')`;
+    for (let i = 0; i < 3 && !(await b.evaluate(textField)); i++) { await b.click(at.x, at.y); await b.until(textField, 3000); }
+    const bolt = await b.evaluate(`(() => { const f = [...document.querySelectorAll('#right .field')].find((f) => f.querySelector('label')?.textContent === 'Text'); const btn = f?.querySelector('.bolt'); if (!btn) return null; btn.scrollIntoView({ block: 'nearest' }); const r = btn.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+    if (!bolt) throw new Error('no ⚡ on the prompt\'s Text');
+    await b.click(bolt.x, bolt.y);
+    await b.until(`document.querySelectorAll('.menu .item').length > 0`, 4000);
+    const items = await b.evaluate(`[...document.querySelectorAll('.menu .item')].map((e) => e.textContent)`);
+    const want = "a task's language's size's Label";
+    ok(items.some((t) => t.startsWith("a task's language's Label")) && items.some((t) => t.startsWith(want)), 'the ⚡ menu offers the first Task\'s language by its Label, and its size\'s Label', items.filter((t) => t.startsWith("a task's language")));
+    const n0 = await b.evaluate('__ob.shows || 0');
+    await clickText('.menu .item', want);
+    await b.until(`(__ob.shows || 0) > ${n0} && document.getElementById("status").textContent.startsWith("App on screen")`, 30000);
+    const page = JSON.parse(readFileSync(join(project, 'components', 'Pages', 'Sizes', 'nodes.json'), 'utf8')).nodes;
+    const wires = JSON.parse(readFileSync(join(project, 'components', 'Pages', 'Sizes', 'connections.json'), 'utf8')).connections;
+    const fn = page.find((n) => n.metadata?.optionRead);
+    const into = (port) => wires.find((c) => c.toId === fn?.id && c.toProperty === port);
+    const typeOf = (id) => page.find((n) => n.id === id)?.type;
+    ok(fn?.type === 'JavaScriptFunction' && into('in-value')?.fromProperty === 'prop-language' && typeOf(into('in-set0')?.fromId) === '/Option sets/Languages' && typeOf(into('in-set1')?.fromId) === '/Option sets/Sizes' && wires.some((c) => c.fromId === fn.id && c.fromProperty === 'out-result' && c.toId === 'prompt' && c.toProperty === 'text'),
+      'one Function node reads it: the record\'s language in, Languages and Sizes beside it, its result into the Text', { fn: fn && { type: fn.type, label: fn.label }, value: into('in-value'), set0: typeOf(into('in-set0')?.fromId), set1: typeOf(into('in-set1')?.fromId) });
+    const onScreen = await b.until(`(() => { const t = __ob.preview.elementsOf('prompt')[0]?.innerText.trim(); return t === 'Large' ? t : false; })()`, 15000);
+    ok(onScreen === 'Large', 'the running app shows Large: A first task\'s language en, English\'s size xl, its Label', onScreen || await b.evaluate(`(() => { const w = __ob.preview.frame.contentWindow; const objs = Object.values(w.Noodl?.Objects ?? {}).filter((o) => o && o.title !== undefined).map((o) => ({ title: o.title, language: o.language })); return { text: __ob.preview.elementsOf('prompt')[0]?.innerText, status: document.getElementById('status').textContent, row: document.querySelector('#pagedata .row[data-item]')?.innerText, requests: (w.__studioLog || []).filter((r) => /Task/.test(r.url || '')).map((r) => [r.status, r.rows, r.body && String(r.body).slice(0, 200)]), objs }; })()`));
+    const chip = await b.evaluate(`[...document.querySelectorAll('#right .field')].find((f) => f.querySelector('label')?.textContent === 'Text')?.querySelector('.chip')?.textContent`);
+    ok(chip === want, 'the Text field says where its words come from in the same words', chip);
   }
 } catch (err) {
   ok(false, `the gate stopped: ${err.stack || err.message}`);

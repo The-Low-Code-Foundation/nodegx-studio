@@ -1914,7 +1914,7 @@ them (STU-092).
 | 2 | page workflows and backend workflows/functions mixed in one list; "Workflows on this page" then "On the backend" is weird; workflows = automations, functions = logic called by the app or by a workflow, "two parts of the same machine"; maybe their own tab | **built** (s30) STU-092: a Backend tab |
 | 3 | can't edit backend workflows; can't see a run's data, what went in and out of each step, as in the NodeGX editor | **built** (s30) STU-092 for workflows; a function's run has no values to show (P123-STU-FNRUNVALUES) |
 | 4 | the Map is "our example for the rest of the app": its words (origins on the left, screens, functions, tables; "on its own") should be the Workflow tab's words for the backend; a backend workflow's "last run 21 mins ago: it worked" should open the run, drawn, with the dots flowing on the wires; maybe the app's own logic that talks to the backend (queries) as a column between screens and functions | STU-093 (ruling: the front-end logic column) |
-| 5 | option sets need fields that point at one or many options of another set (Bubble has it) | STU-094 |
+| 5 | option sets need fields that point at one or many options of another set (Bubble has it) | **built** (s31) STU-094, P123-GH-CHOICELABEL |
 | 6 | App data edits in place: dangerous ("why I stopped using NocoDB"); click a record → side panel or modal | **built** (s29) STU-095, P123-GH-APPDATAINLINE, P123-GH-DATEUTC |
 | 7 | a style's preview is a list of pills (`colour: #FFF`); show a dummy button, text, a group with text in it | **built** (s29) STU-096 |
 | 8 | Help should link the Studio docs; Help looks like a page, so picking another tab leaves you stuck on it | **fixed** P123-GH-HELPSTUCK: *NodeGX Studio guide ↗* (learn.nodegx.io/ways/studio); a tab closes Help and the wiring view |
@@ -2000,6 +2000,31 @@ and Back from a page card's function returns to the Workflow tab.
 An option set's attribute can be *an option of <set>* or *a list of options of <set>*, stored as that set's Value(s),
 picked from the other set's options in the set's table; the ⚡ menu reads through it (`Room's Look's picture`).
 Bubble's shape. Needs the attribute type in `Option sets/<Name>`'s metadata and in the importer's dictionary.
+
+**Done (s31).** An attribute's Type offers, for every other set, *an option of <set>* and *a list of options of <set>*
+(not the set itself; the first column stays text), written as `{ name, type: 'option' | 'options', of: 'Option sets/<set>' }`
+in the set's `metadata.optionSet.attributes`. Its cells are the other set's options to pick, shown by their labels and
+held as their Values (P123-GH-OPTSETCHOICE's ruling): one is a select, a list is chips with *+ Add…*. Pointing an
+attribute at a set turns each typed cell that names one of its options (by Value or Label) into that Value and drops
+the rest; pointing it back makes a list plain text. The links follow the set they point at (`followLinks`): a Value
+changed there moves them, in the same undo step and without asking (they are the app's lists, not records), with a
+toast saying which; an option they still hold is not removed ("English in Languages (its size) … hold Large. Pick
+another there first"). Deleting a set others point at says so.
+**The ⚡ menu reads through.** A record field that is a Choice from a set (page data's first item, the record a page
+is about) is offered through the set, each attribute by name ("a task's language's Label", P123-GH-CHOICELABEL), and
+one step on along a link ("a task's language's size's Label"). A pick places one Function node (`readThrough`, its
+script `optionsets.mjs` `readThroughScript`; a script's `Inputs.x` is the port `in-x`, `Outputs.x` is `out-x`), the
+value and each set's *All options* wired in, its result into the field; the same read placed again reuses it, and the
+field's chip says the read's words. It is a helper: not listed under Logic on this page.
+**The importer:** Bubble's `option.<set>` / `list.option.<set>` attribute types become these links, their values the
+other set's Values (`optionAttrValue`).
+- Gate: `check:shapes` **39/39** (11 new, section 5: the Type's choices, picked cells on disk and shown by label, a
+  Value changed and followed, a held option refused, the ⚡ entries, the Function's wires, and the running app showing
+  *Large* through Task → Languages → Sizes). Mutant (`followLinks` doing nothing): 36/39, the follow, the refusal and
+  the screen read. The gate's copy of the todo template lets anyone read a Task (the page reads it signed out).
+- Not built: a repeating group's row reads its fields from its Component Inputs, which are not read through yet (the
+  same `throughSources` on the row's `One <Type>` ports; not gated); an imported Bubble expression reading through an
+  option's attribute (`…'s room's look`) is not compiled through the set (not measured on an export with one).
 
 ### STU-095 — App data: a record opens in a panel, nothing changes on a click
 

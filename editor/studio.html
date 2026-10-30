@@ -1087,6 +1087,7 @@ import { hasSpec, specs, drawnPorts, portProjectFromStore, portContextFor, expre
 import { applyEdit } from './edits.mjs';
 import { layoutTips } from './layouttips.mjs';
 import { extractReusable } from './reusable.mjs';
+import { linkOf, valueKeys, convertCell, readThroughScript } from './optionsets.mjs';
 import { readRule, rulesOf, withoutArm, withValue, withCondition, addArm, valueOf, literal, SHOWING } from './rules.mjs';
 import { TYPES, TYPE_WORDS, dictionaryType, applyPhrase } from './phrases.mjs';
 import { OPERATORS, createEdits, updateEdits, removeEdits, readItems, readFrom, readersOf, itemOfSource, sameAs, signature, describe, lastRun, queriesOnOpen, requestMatches, readPageThing, pageThingEdits, sendsFollow, thingParam, thingName } from './pagedata.mjs';
@@ -1737,6 +1738,28 @@ function choiceSet(oneOf) {
   const byLabel = sets.find((x) => sameChoices(x.options.map((o) => optionLabel(x, o)).filter(Boolean), oneOf));
   return byLabel ? { set: byLabel, by: 'label' } : null;
 }
+/** The option set a type's field takes its choices from, by Value, or null. */
+function fieldSet(type, field) {
+  const c = projectJson()?.metadata?.dbCollections?.find((x) => x.name === type);
+  const r = c && declaredRules(c.checks).find((x) => x.field === field && Array.isArray(x.oneOf));
+  const from = r && choiceSet(r.oneOf);
+  return from?.by === 'value' ? from.set : null;
+}
+/**
+ * STU-094, P123-GH-CHOICELABEL: a field holding a set's Value read through the set ("Task's language's Label"), and one
+ * step on along an attribute that points at another set ("Task's language's size's Label"). `base` is where the value
+ * comes from (a node's port, or a page data item's field); `readThrough` places the read.
+ */
+function throughSources(base, set, text, sub, path = []) {
+  const out = [];
+  for (const a of set.attributes) {
+    const step = [...path, { set: set.key, attr: a.name }], says = `${text}'s ${a.name}`;
+    out.push({ through: { ...base, path: step, text: says }, text: says, sub: `${sub} · through ${set.name}`, kind: 'data' });
+    const next = !path.length && linkOf(a) && optionSet(linkOf(a));
+    if (next) out.push(...throughSources(base, next, says, sub, step));
+  }
+  return out;
+}
 /** A Choice's value as a person reads it: its option's label when the choices are a set's values. */
 function choiceWords(oneOf, v) {
   const from = choiceSet(oneOf);
@@ -1750,13 +1773,48 @@ function choiceWords(oneOf, v) {
  * (asked first); a removed option some rows still hold is refused in words. Runs the backend's rule through both lists
  * while the rows move (it refuses a rule a row breaks). Returns false when nothing may change.
  */
-async function followOptionSet(set, options) {
-  const old = set.options, now = optionValues(set, options);
-  // which old option each new one is: the panel changes one cell, adds one at the end, or removes one
+/** Which old option each new one is: the panel changes one cell, adds one at the end, or removes one. */
+function optionPairs(old, options) {
   const pairs = []; let removed = null;
   if (options.length === old.length) old.forEach((o, i) => pairs.push([o, options[i]]));
   else if (options.length === old.length + 1) old.forEach((o, i) => pairs.push([o, options[i]]));
   else if (options.length === old.length - 1) { const k = old.findIndex((o, i) => JSON.stringify(o) !== JSON.stringify(options[i])); removed = old[k]; old.forEach((o, i) => i !== k && pairs.push([o, options[i < k ? i : i - 1]])); }
+  return { pairs, removed };
+}
+/**
+ * STU-094: the other sets' options that point at this set, as they become when its options change. A changed Value
+ * moves with it (no asking: they are the app's own lists, not records); an option another set's option still holds is
+ * not removed (`refused`, in words).
+ */
+function followLinks(set, options) {
+  const { pairs, removed } = optionPairs(set.options, options);
+  const moves = new Map(pairs.map(([a, b]) => [optionValue(set, a), optionValue(set, b)]).filter(([a, b]) => a && b && a !== b));
+  const gone = removed ? optionValue(set, removed) : null;
+  const follow = [], held = [];
+  for (const k of optionSetKeys()) {
+    const s = k === set.key ? null : optionSet(k);
+    const links = s?.attributes.filter((a) => linkOf(a) === set.key) ?? [];
+    if (!links.length) continue;
+    let changed = false;
+    const next = s.options.map((o) => {
+      const c = { ...o };
+      for (const a of links) {
+        const v = c[a.name];
+        if (v === undefined || v === null) continue;
+        const list = [].concat(v).map(String);
+        if (gone && list.includes(gone)) held.push(`${optionLabel(s, o)} in ${s.name} (its ${a.name})`);
+        if (list.some((x) => moves.has(x))) { const m = list.map((x) => moves.get(x) ?? x); c[a.name] = Array.isArray(v) ? m : m[0]; changed = true; }
+      }
+      return c;
+    });
+    if (changed) follow.push({ set: s, options: next, says: `${s.name}'s ${links.map((a) => a.name).join(', ')}` });
+  }
+  if (held.length) return { refused: `${held.join(', ')} ${held.length === 1 ? 'holds' : 'hold'} ${optionLabel(set, removed)}. Pick another there first, then remove the option.` };
+  return { follow };
+}
+async function followOptionSet(set, options) {
+  const old = set.options, now = optionValues(set, options);
+  const { pairs, removed } = optionPairs(old, options);
   const hits = [];
   for (const c of projectJson()?.metadata?.dbCollections ?? []) for (const r of declaredRules(c.checks)) {
     if (!Array.isArray(r.oneOf) || sameChoices(r.oneOf, now)) continue;
@@ -3412,6 +3470,7 @@ function sourceChip(fromId, port) {
   const n = byId[fromId]; if (!n) return h('span', { class: 'chip' }, `${fromId.slice(0, 6)} · ${port}`);
   if (n.metadata?.customState) return h('span', { class: 'chip state' }, icon('state'), `${labelOf(n.metadata.customState.of)}'s ${stateName(n)}`);
   if (n.type.startsWith('/Option sets/')) return h('span', { class: 'chip opt' }, icon('list'), `${n.type.split('/').pop()} · ${portLabel(n, 'output', port)}`);
+  if (n.metadata?.optionRead) return h('span', { class: 'chip data' }, icon('db'), n.metadata.optionRead.text);
   if (isComposed(n)) return h('span', { class: 'chip expr' }, icon('fx'), composedPreview(n));
   if (isPageDataNode(n)) return h('span', { class: 'chip data' }, icon('db'), pageDataChip(fromId, port));
   // an element's own output (a field's text): the chip selects the element
@@ -3684,7 +3743,7 @@ function valueSources(forNode, forPort) {
   }
   if (pageThing) {
     const t = pageThing.type;
-    groups.push([thingName(t), [...fieldsOf(t).map((f) => ({ node: pageThing.recordId, port: 'prop-' + f, text: `${thingName(t)}'s ${f}`, sub: `the ${t} it was opened with`, kind: 'data' })),
+    groups.push([thingName(t), [...fieldsOf(t).flatMap((f) => { const e = { node: pageThing.recordId, port: 'prop-' + f, text: `${thingName(t)}'s ${f}`, sub: `the ${t} it was opened with`, kind: 'data' }; const set = fieldSet(t, f); return set ? [e, ...throughSources({ node: e.node, port: e.port }, set, e.text, e.sub)] : [e]; }),
       { node: pageThing.recordId, port: 'id', text: `${thingName(t)}'s id`, sub: 'text', kind: 'data' }]]);
   }
   const data = pageDataSources();
@@ -3695,13 +3754,36 @@ function valueSources(forNode, forPort) {
   if (sets.length) groups.push(['Option sets', sets]);
   const elements = [], logic = [];
   for (const n of nodes) {
-    if (n.id === forNode?.id || n.metadata?.customState || isComposed(n) || n.type.startsWith('/Option sets/') || isPageDataNode(n)) continue;
+    if (n.id === forNode?.id || isHelperNode(n)) continue;
     const list = isVisualType(n.type) ? elements : logic;
     for (const o of outs(n)) list.push({ node: n.id, port: o.name, text: `${labelOf(n.id)}'s ${o.label}`, sub: `${typeName(n.type)} · ${o.type}`, kind: isVisualType(n.type) ? 'el' : 'logic' });
   }
   if (elements.length) groups.push(['Elements', elements]);
   if (logic.length) groups.push(['Logic on this page', logic]);
   return groups;
+}
+/**
+ * The edits that read a value through option sets (`throughSources`): one Function node taking the value and each set's
+ * options (a script's `Inputs.x` is its port `in-x`, `Outputs.x` is `out-x`), reused when the same read is placed again; a set not on the page yet is placed in the same gesture.
+ */
+function readThrough(t) {
+  const list = [];
+  let from = { node: t.node, port: t.port };
+  if (t.item) { const r = readFrom(itemById(t.item), t.what, { component: pageKey, nodes }); list.push(...r.edits); from = { node: r.node, port: r.port }; }
+  const sig = JSON.stringify({ from, path: t.path });
+  const have = nodes.find((n) => n.metadata?.optionRead?.sig === sig);
+  if (have) return { node: have.id, port: 'out-result', text: t.text, edits: list };
+  const id = uuid(), logicN = nodes.filter((n) => !isVisualType(n.type)).length;
+  const steps = t.path.map((s) => ({ attr: s.attr, keys: valueKeys(optionSet(s.set)?.attributes) }));
+  list.push({ edit: 'add_node', component: pageKey, id, type: 'JavaScriptFunction', label: t.text, x: 1000, y: 100 + logicN * 70, parameters: { functionScript: readThroughScript(steps, t.text) }, metadata: { optionRead: { sig, text: t.text } } },
+    { edit: 'connect', component: pageKey, from, to: { node: id, port: 'in-value' } });
+  const placed = {};
+  t.path.forEach((s, i) => {
+    let inst = nodes.find((n) => n.type === '/' + s.set)?.id ?? placed[s.set];
+    if (!inst) { inst = placed[s.set] = uuid(); list.push({ edit: 'add_node', component: pageKey, id: inst, type: '/' + s.set, label: s.set.split('/').pop(), x: 1260, y: 100 + (logicN + Object.keys(placed).length) * 70 }); }
+    list.push({ edit: 'connect', component: pageKey, from: { node: inst, port: 'items' }, to: { node: id, port: `in-set${i}` } });
+  });
+  return { node: id, port: 'out-result', text: t.text, edits: list };
 }
 /** An instance of the option set on this page, placed once and reused: the Static Data is loaded with the page. */
 function optionSetInstance(setKey) {
@@ -3719,6 +3801,12 @@ function sourceMenu(e, node, p, onPick, initial = '') {
   const pick = (src) => {
     closeMenu(onPick ? '.menu:not(.composer)' : '.menu');
     if (src.setKey) src = { ...src, node: optionSetInstance(src.setKey), port: 'items' };
+    if (src.through) {
+      const r = readThrough(src.through);
+      if (onPick) { if (r.edits.length) edits(pageKey, r.edits, { redraw: false }); return onPick({ node: r.node, port: r.port, text: r.text }); }
+      edits(pageKey, [...r.edits, { edit: 'connect', component: pageKey, from: { node: r.node, port: r.port }, to: { node: node.id, port: p.name } }, ...stepOnly(node, p.name)]);
+      return toast(`${p.displayName || p.name} now comes from ${r.text}`);
+    }
     if (src.item) {
       // a first item's field must be listed on its record node first: in the same gesture as the wire when there is one
       const r = readFrom(itemById(src.item), src.what, { component: pageKey, nodes });
@@ -3842,7 +3930,11 @@ function pageDataSources() {
   for (const it of pageItems) {
     if (it.unsupported) continue;
     if (it.first) {
-      for (const f of [...new Set([...(it.fields || []), ...fieldsOf(it.collection)])]) out.push({ item: it.id, what: f, text: `${it.name}'s ${f}`, sub: `the first ${it.collection}`, kind: 'data' });
+      for (const f of [...new Set([...(it.fields || []), ...fieldsOf(it.collection)])]) {
+        out.push({ item: it.id, what: f, text: `${it.name}'s ${f}`, sub: `the first ${it.collection}`, kind: 'data' });
+        const set = fieldSet(it.collection, f);
+        if (set) out.push(...throughSources({ item: it.id, what: f }, set, `${it.name}'s ${f}`, `the first ${it.collection}`));
+      }
       out.push({ item: it.id, what: 'empty', text: `${it.name} is empty`, sub: 'yes / no', kind: 'data' });
     } else {
       out.push({ item: it.id, what: 'list', text: `${it.name} · the list`, sub: `every ${it.collection} it finds`, kind: 'data' });
@@ -4178,6 +4270,7 @@ function chipText(fromId, port) {
   const n = byId[fromId]; if (!n) return port;
   if (n.metadata?.customState) return `${labelOf(n.metadata.customState.of)}'s ${stateName(n)}`;
   if (n.type.startsWith('/Option sets/')) return `${n.type.split('/').pop()} · ${portLabel(n, 'output', port)}`;
+  if (n.metadata?.optionRead) return n.metadata.optionRead.text;
   if (isPageDataNode(n)) return pageDataChip(fromId, port);
   return `${labelOf(fromId)}'s ${portLabel(n, 'output', port)}`;
 }
@@ -4332,7 +4425,7 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
 /* ================= Workflow: events and their steps, read from the wires; a Condition splits the chain ================= */
 let selEvent = null; // { node, port }
 const draftEvents = [];
-const isHelperNode = (n) => n.metadata?.customState || isComposed(n) || n.type.startsWith('/Option sets/') || isPageDataNode(n);
+const isHelperNode = (n) => n.metadata?.customState || isComposed(n) || n.type.startsWith('/Option sets/') || isPageDataNode(n) || n.metadata?.optionRead;
 function events() {
   const list = [];
   const seen = new Set();
@@ -6995,18 +7088,69 @@ $('newoptset').onclick = async (e) => {
   toast(`${name} is an option set: a component the page loads as plain JSON`);
 };
 function writeOptionSet(set, { attributes, options }) {
-  // P123-GH-OPTSETCHOICE: the Choices taken from the set move first; refused, the panel shows the set as it was
-  if (options) return void followOptionSet(set, options).then((go) => (go ? writeSetFiles(set, { attributes, options }) : renderData()), (e) => { toast(`${set.name} was not changed: ${e.message}`); renderData(); });
+  if (options) {
+    // STU-094: another set's options pointing at this one follow its Values; an option one still holds stays
+    const links = followLinks(set, options);
+    if (links.refused) { toast(links.refused); return void renderData(); }
+    // P123-GH-OPTSETCHOICE: the Choices taken from the set move first; refused, the panel shows the set as it was
+    return void followOptionSet(set, options).then((go) => (go ? writeSetFiles(set, { attributes, options }, links.follow) : renderData()), (e) => { toast(`${set.name} was not changed: ${e.message}`); renderData(); });
+  }
   writeSetFiles(set, { attributes });
 }
-function writeSetFiles(set, { attributes, options }) {
+/** The set, and the sets whose links followed it, in one undo step. */
+function writeSetFiles(set, change, linked = []) {
+  snapshot();
+  try { for (const [s, ch] of [[set, change], ...linked.map((l) => [l.set, { options: l.options }])]) writeSetFile(s, ch); }
+  catch (err) { undoStack.pop(); toast(err.message); throw err; }
+  persist(); rebuild(); renderData();
+  if (linked.length) toast(`${linked.map((l) => l.says).join(', ')} ${linked.length === 1 ? 'follows' : 'follow'} ${set.name}'s options as they are now`);
+}
+function writeSetFile(set, { attributes, options }) {
   const c = store.readComponent(set.key);
   const out = JSON.parse(JSON.stringify(c.files));
   if (attributes) out.component.metadata = { ...(out.component.metadata || {}), optionSet: { attributes } };
   if (options) { const d = out.nodes.nodes.find((n) => n.id === set.dataId); d.parameters = { ...(d.parameters || {}), type: 'json', json: JSON.stringify(options, null, 2) }; }
-  snapshot();
-  try { store.writeComponent(set.key, out, { ifRevision: c.revision }); } catch (err) { undoStack.pop(); toast(err.message); throw err; }
-  persist(); rebuild(); renderData();
+  store.writeComponent(set.key, out, { ifRevision: c.revision });
+}
+/**
+ * STU-094: an attribute's type, or one option / a list of options of another set (Bubble's shape). Pointed at a set,
+ * each typed cell naming one of its options (by Value or Label) becomes that option's Value; one naming none is
+ * dropped. The first attribute is the option's name and stays text.
+ */
+function attrTypeSelect(set, attrs, a, i) {
+  const others = i === 0 ? [] : optionSetKeys().filter((k) => k !== set.key);
+  const nameOf = (k) => k.split('/').pop();
+  const cur = linkOf(a) ? `${a.type}:${a.of}` : a.type;
+  const choices = [...ATTR_TYPES.map((t) => [t, t]), ...others.flatMap((k) => [[`option:${k}`, `an option of ${nameOf(k)}`], [`options:${k}`, `a list of options of ${nameOf(k)}`]])];
+  if (linkOf(a) && !others.includes(a.of)) choices.push([cur, `${a.type === 'option' ? 'an option' : 'a list of options'} of ${nameOf(a.of)} (no such set)`]);
+  return h('select', { 'data-attrtype': a.name, onchange: (e) => {
+    const v = e.target.value, at = v.indexOf(':');
+    const [type, of] = at > 0 ? [v.slice(0, at), v.slice(at + 1)] : [v, null];
+    const was = linkOf(a);
+    a.type = type; if (of) a.of = of; else delete a.of;
+    if (!was && !of) return writeOptionSet(set, { attributes: attrs });
+    const target = of && optionSet(of);
+    const find = (w) => { const o = target?.options.find((x) => optionValue(target, x) === w || optionLabel(target, x) === w); return o ? optionValue(target, o) : undefined; };
+    const options = set.options.map((o) => { const { [a.name]: cell, ...rest } = o; const nv = convertCell(cell, of ? type : 'text', find); return nv === undefined ? rest : { ...rest, [a.name]: nv }; });
+    writeOptionSet(set, { attributes: attrs, options });
+  } }, ...choices.map(([v, t]) => h('option', { value: v, selected: v === cur }, t)));
+}
+/** STU-094: a cell of an attribute that points at a set: that set's options to pick, shown by their labels; the Value is kept. */
+function linkCell(set, options, o, a) {
+  const target = optionSet(a.of);
+  const write = (v) => { if (v === undefined || v === '' || (Array.isArray(v) && !v.length)) delete o[a.name]; else o[a.name] = v; writeOptionSet(set, { options }); };
+  const held = [].concat(o[a.name] ?? []).map(String);
+  if (!target) return h('span', { class: 'note', 'data-link': a.name }, `${held.join(', ') || '—'} (there is no set ${a.of.split('/').pop()})`);
+  const word = (v) => { const x = target.options.find((t) => optionValue(target, t) === v); return x ? optionLabel(target, x) : `${v} (not in ${target.name})`; };
+  const choices = (skip = []) => optionValues(target).filter((v) => !skip.includes(v)).map((v) => h('option', { value: v }, word(v)));
+  if (a.type === 'option') {
+    const sel = h('select', { 'data-link': a.name, onchange: (e) => write(e.target.value || undefined) }, h('option', { value: '' }, '—'), ...choices());
+    if (held[0] !== undefined && !optionValues(target).includes(held[0])) sel.append(h('option', { value: held[0] }, word(held[0])));
+    sel.value = held[0] ?? '';
+    return sel;
+  }
+  return h('span', { class: 'links', 'data-link': a.name }, ...held.map((v) => h('span', { class: 'chip opt', 'data-value': v }, word(v), h('button', { class: 'quiet tiny', title: `Take ${word(v)} out`, onclick: () => write(held.filter((x) => x !== v)) }, icon('x')))),
+    held.length < optionValues(target).length ? h('select', { class: 'add', title: `Add an option of ${target.name}`, onchange: (e) => e.target.value && write([...held, e.target.value]) }, h('option', { value: '' }, '+ Add…'), ...choices(held)) : null);
 }
 function renderOptionSets() {
   const box = $('optsets'); box.innerHTML = '';
@@ -7022,7 +7166,7 @@ function renderOptionSets() {
   const attrs = JSON.parse(JSON.stringify(set.attributes));
   attrs.forEach((a, i) => at.append(h('tr', {},
     h('td', {}, i === 0 ? h('span', {}, a.name, h('span', { class: 'note', style: 'margin-left:8px' }, 'built in')) : h('input', { type: 'text', value: a.name, onchange: (e) => { const old = a.name; a.name = slug(e.target.value); writeOptionSet(set, { attributes: attrs, options: set.options.map((o) => { const { [old]: v, ...rest } = o; return { ...rest, [a.name]: v }; }) }); } })),
-    h('td', {}, h('select', { onchange: (e) => { a.type = e.target.value; writeOptionSet(set, { attributes: attrs }); } }, ...ATTR_TYPES.map((t) => h('option', { value: t, selected: a.type === t }, t)))),
+    h('td', {}, attrTypeSelect(set, attrs, a, i)),
     h('td', {}, i === 0 ? '' : h('button', { class: 'quiet tiny danger', onclick: () => { attrs.splice(i, 1); writeOptionSet(set, { attributes: attrs, options: set.options.map((o) => { const { [a.name]: _, ...rest } = o; return rest; }) }); } }, icon('x'))))));
   card.append(at, h('div', { class: 'bar' }, h('button', { onclick: async (e) => { const name = await askName(e, 'Attribute name', { go: 'Add' }); if (!name) return; attrs.push({ name: slug(name), type: 'text' }); writeOptionSet(set, { attributes: attrs }); } }, icon('plus'), 'New attribute')));
   main.append(card);
@@ -7031,12 +7175,12 @@ function renderOptionSets() {
   const ot = h('table', {}, h('tr', {}, ...attrs.map((a) => h('th', {}, a.name)), h('th', {})));
   const options = JSON.parse(JSON.stringify(set.options));
   // an emptied cell other than the first is no field at all: a Dropdown takes an option's Label as its Value when it has none
-  options.forEach((o, i) => ot.append(h('tr', {}, ...attrs.map((a, j) => h('td', {}, h('input', { type: 'text', value: o[a.name] ?? '', onchange: (e) => { const v = e.target.value; if (j && v === '') delete o[a.name]; else o[a.name] = a.type === 'number' ? Number(v) : a.type === 'yes / no' ? /^(yes|true|1)$/i.test(v) : v; writeOptionSet(set, { options }); } }))), h('td', {}, h('button', { class: 'quiet tiny danger', onclick: () => { options.splice(i, 1); writeOptionSet(set, { options }); } }, icon('x'))))));
+  options.forEach((o, i) => ot.append(h('tr', {}, ...attrs.map((a, j) => h('td', { 'data-attr': a.name }, linkOf(a) ? linkCell(set, options, o, a) : h('input', { type: 'text', value: o[a.name] ?? '', onchange: (e) => { const v = e.target.value; if (j && v === '') delete o[a.name]; else o[a.name] = a.type === 'number' ? Number(v) : a.type === 'yes / no' ? /^(yes|true|1)$/i.test(v) : v; writeOptionSet(set, { options }); } }))), h('td', {}, h('button', { class: 'quiet tiny danger', onclick: () => { options.splice(i, 1); writeOptionSet(set, { options }); } }, icon('x'))))));
   const newRow = h('input', { type: 'text', placeholder: `New option (its ${attrs[0].name})`, style: 'max-width:280px', onkeydown: (e) => { if (e.key === 'Enter') addOpt(); } });
   const addOpt = () => { if (!newRow.value.trim()) return; options.push({ [attrs[0].name]: newRow.value.trim() }); writeOptionSet(set, { options }); };
   oc.append(ot, h('div', { class: 'bar' }, newRow, h('button', { class: 'primary', onclick: addOpt }, icon('plus'), 'Create')));
   main.append(oc);
-  main.append(h('div', { class: 'bar' }, h('button', { class: 'quiet danger', onclick: async () => { if (!(await askSure(`Delete the option set ${set.name}? Pages that read it keep a dangling instance.`))) return; snapshot(); store.deleteComponent(set.key); persist(); rebuild(); selSet = null; renderData(); } }, icon('trash'), 'Delete option set')));
+  main.append(h('div', { class: 'bar' }, h('button', { class: 'quiet danger', onclick: async () => { const pointing = optionSetKeys().filter((k) => k !== set.key).map(optionSet).filter((s) => s?.attributes.some((a) => linkOf(a) === set.key)).map((s) => s.name); if (!(await askSure(`Delete the option set ${set.name}? Pages that read it keep a dangling instance.${pointing.length ? ` ${pointing.join(', ')} ${pointing.length === 1 ? 'points' : 'point'} at it and keep${pointing.length === 1 ? 's' : ''} the Values ${pointing.length === 1 ? 'it holds' : 'they hold'}.` : ''}`))) return; snapshot(); store.deleteComponent(set.key); persist(); rebuild(); selSet = null; renderData(); } }, icon('trash'), 'Delete option set')));
 }
 
 /* ================= Styles: the project's variants in nodegx.styles.json, by element type (Bubble's styles, NodeGX's Looks) ================= */
