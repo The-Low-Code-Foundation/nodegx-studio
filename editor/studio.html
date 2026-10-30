@@ -5530,7 +5530,7 @@ async function whoCanReach(card, type) {
 function closeDrawer() { $('drawer').hidden = true; $('drawer').innerHTML = ''; }
 function openDrawer(title, body, foot) {
   const d = $('drawer'); d.innerHTML = '';
-  d.append(h('div', { class: 'dhead' }, h('h3', {}, title), h('button', { class: 'quiet tiny', title: 'Close', onclick: closeDrawer }, icon('x'))), h('div', { class: 'dbody' }, ...body), foot ? h('div', { class: 'dfoot' }, ...foot) : null);
+  d.append(h('div', { class: 'dhead' }, h('h3', {}, title), h('button', { class: 'quiet tiny', title: 'Close', onclick: closeDrawer }, icon('x'))), h('div', { class: 'dbody' }, ...body), ...(foot ? [h('div', { class: 'dfoot' }, ...foot)] : [])); // no foot: nothing, not "null" (P123-STU-MAPBARNULL)
   d.hidden = false;
 }
 /** The drawer's draft for a field as it stands: its kind read back with the type's checks (a Choice is a String with one-of). */
@@ -5801,11 +5801,11 @@ function renderMap() {
   const bar = $('mapbar'); bar.innerHTML = '';
   bar.append(h('div', { class: 'seg' }, ...[['model', 'Data model'], ['reach', 'Who can reach what']].map(([k, w]) => h('button', { 'aria-pressed': mapView === k, onclick: () => { mapView = k; renderMap(); } }, w))),
     h('span', { class: 'hint' }, mapView === 'model' ? 'Your data types, their fields, and what points at what. Click a card to change it.' : 'Which rows each person can reach, measured by running the app’s functions as them. Drag to move, scroll to zoom.'),
-    mapView === 'model' ? h('button', { class: 'tiny primary', onclick: (e) => newType(e) }, icon('plus'), 'New data type') : null);
+    ...(mapView === 'model' ? [h('button', { class: 'tiny primary', onclick: (e) => newType(e) }, icon('plus'), 'New data type')] : [])); // the DOM's append writes a null as "null" (P123-STU-MAPBARNULL)
   $('datamodel').hidden = mapView !== 'model'; $('mapframe').hidden = mapView !== 'reach';
   if (mapView === 'model') return renderDataModel($('datamodel'));
   const f = $('mapframe');
-  const want = `/backend-map/${mapFocus ? `?at=${encodeURIComponent(mapFocus)}#t:${encodeURIComponent(mapFocus)}` : ''}`;
+  const want = `/backend-map/?look=light${mapFocus ? `&at=${encodeURIComponent(mapFocus)}#t:${encodeURIComponent(mapFocus)}` : ''}`; // the map's light look (P123-STU-DARKMAP)
   if (f.getAttribute('src') !== want) f.src = want;
 }
 function openOnMap(type) { mapFocus = type; mapView = 'reach'; dataSub = 'map'; renderData(); }

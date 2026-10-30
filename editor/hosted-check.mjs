@@ -111,6 +111,9 @@ try {
   ok(shown, 'Map shows the map\'s frame, not the "Open the map" card');
   const opened = await until(`(() => { const d = ${F}?.contentDocument; const l = d?.getElementById('backendLine')?.textContent || ''; return d?.getElementById('map') && l && !/^Opening the backend/.test(l) ? l : false; })()`, 20000);
   ok(opened, 'the map draws inside it: its canvas, and the backend it read', opened || await ev(`${F}?.contentDocument?.body?.innerText?.slice(0, 200) ?? null`));
+  // P123-STU-DARKMAP: this frame has the host's URL, so Studio says the light look on the page's <html>
+  const look = await ev(`(() => { const d = ${F}?.contentDocument; return d ? [d.documentElement.dataset.look ?? null, getComputedStyle(d.body).backgroundColor] : null; })()`);
+  ok(look?.[0] === 'light' && look[1] === 'rgb(238, 240, 243)', 'the map in the conversation wears Studio\'s light look, not its dark one', look);
   await shot('map');
 
   if (drew) {

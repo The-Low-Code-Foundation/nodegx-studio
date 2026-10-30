@@ -278,6 +278,11 @@ try {
   await clickIn('#datamain h2 button', 'Open on the map'); await settle();
   ok((await ev(`document.getElementById('mapframe').getAttribute('src')`)).endsWith('#t:Note') && !(await ev(`document.getElementById('data-map').hidden`)), 'Open on the map: the Map sub-tab, on that table', await ev(`document.getElementById('mapframe').getAttribute('src')`));
   ok(await until(`(() => { try { return document.getElementById('mapframe').contentWindow.__map?.byId?.['t:Note'] ? true : false; } catch { return false; } })()`, 20000), 'the map draws the type Studio just made');
+  // P123-STU-DARKMAP, P123-STU-MAPBARNULL
+  const look = await ev(`(() => { const d = document.getElementById('mapframe').contentDocument; return [d.documentElement.dataset.look ?? null, getComputedStyle(d.body).backgroundColor]; })()`);
+  ok(look[0] === 'light' && look[1] === 'rgb(238, 240, 243)', 'the map wears Studio\'s light look, not its dark one', look);
+  const bar = await ev(`document.getElementById('mapbar').textContent`);
+  ok(!/null|undefined/.test(bar), 'the map\'s bar says nothing it should not ("null")', bar);
   await shot('0-map');
 
   console.log('check: STU-063 App data');

@@ -325,7 +325,7 @@ if (hosted) {
     el.innerHTML = '<p>The backend map could not be drawn here, so it opens in its own window: who can reach which rows, run as each person.</p><p class="why"></p><button type="button">Open the map ↗</button>';
     el.querySelector('.why').textContent = why;
     el.querySelector('button').addEventListener('click', async () => {
-      try { await app?.openLink({ url: ORIGIN + '/backend-map/' }); } catch (e) { say(`could not open the map: ${e.message}`); }
+      try { await app?.openLink({ url: ORIGIN + '/backend-map/?look=light' }); } catch (e) { say(`could not open the map: ${e.message}`); }
     });
     box.append(el);
     document.getElementById('mapframe')?.setAttribute('data-failed', '');
@@ -339,8 +339,10 @@ if (hosted) {
     try {
       const r = await nativeFetch(ORIGIN + '/backend-map/');
       if (!r.ok) throw new Error(`Studio answered ${r.status} for the map`);
-      const hash = new URL(want, ORIGIN + '/').hash;
-      const head = `<base href="${ORIGIN}/backend-map/">` + (hash ? `<script>history.replaceState(null, '', location.href.split('#')[0] + ${JSON.stringify(hash)})</script>` : ''); // not the bare hash: it would resolve against <base>, Studio's origin, and be refused
+      const { hash, searchParams } = new URL(want, ORIGIN + '/');
+      // this frame has the host's URL, so the look Studio asked for (`?look=light`) is said on <html> (P123-STU-DARKMAP)
+      const look = searchParams.get('look') === 'light' ? '<script>document.documentElement.dataset.look = \'light\'</script>' : '';
+      const head = `<base href="${ORIGIN}/backend-map/">` + look + (hash ? `<script>history.replaceState(null, '', location.href.split('#')[0] + ${JSON.stringify(hash)})</script>` : ''); // not the bare hash: it would resolve against <base>, Studio's origin, and be refused
       const page = (await r.text()).replace(/<head[^>]*>/i, (tag) => tag + head);
       if (drawn !== want) return; // a newer focus came in while this one was fetched
       const frame = document.createElement('iframe');
