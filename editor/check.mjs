@@ -559,6 +559,13 @@ try {
     await b.evaluate(`[...document.querySelectorAll('#stylelist .row')].find(r => r.textContent.includes('Primary')).click()`); await wait(300);
     const wearers = await b.evaluate(`document.querySelector('#stylemain .card h4')?.textContent`);
     ok(/· 2$/.test(wearers || ''), 'the Styles tab lists the two buttons wearing it', wearers);
+    // P123-GH-PROPLOST (Greenhouse 2026-10-30): a length typed, then a weight picked straight after, keeps both
+    const typed = await b.evaluate(`(() => { const sp = document.getElementById('styleprops'); for (const d of sp.querySelectorAll('details')) d.open = true; const i = sp.querySelector('.field .unit input'); i.focus(); i.select(); return i.closest('.field').querySelector('label').textContent; })()`);
+    await b.type('23');
+    const weighed = await b.evaluate(`(() => { const s = [...document.querySelectorAll('#styleprops .field select')].find((x) => [...x.options].some((o) => o.textContent.startsWith('Bold'))); if (!s) return false; s.value = '700'; s.dispatchEvent(new Event('change')); return true; })()`);
+    await wait(700);
+    const pv = onDisk('nodegx.styles.json').variants.find((x) => x.name === 'Primary' && x.typename === 'net.noodl.controls.button').parameters;
+    ok(weighed && Object.values(pv).some((x) => x?.value === 23) && String(pv.fontWeight) === '700', 'a length typed in a style and a weight picked straight after are both written', { typed, weighed, fontWeight: pv.fontWeight, lengths: Object.entries(pv).filter(([, x]) => x?.unit).map(([k, x]) => `${k}=${x.value}`) });
     await shot('styles');
     await b.clickSel('[data-tab=design]'); await wait(300); await shot('design');
     await b.clickSel('[data-tab=workflow]'); await wait(300); await shot('workflow');
@@ -1509,6 +1516,21 @@ try {
     const none = { pn: onDisk(NOTE + 'nodes.json').nodes.filter((n) => n.metadata?.pageThing).length, sent: sent() };
     await setType('Note'); await wait(800);
     ok(none.pn === 0 && none.sent.length === 0 && JSON.stringify(sent()) === '[]', "(none) takes the page's Record and Page Inputs away and what Sign in sent with them; Note again sends nothing until it is given one", { none, again: sent() });
+    // P123-GH-REFRESHTHING (Greenhouse 2026-10-30): Refresh page data offers the page's own Note, read again by its Record
+    const label = onDisk(NOTE + 'nodes.json').nodes.find((n) => n.type === 'Text')?.label;
+    await clickText('#tree .row', label); await wait(400);
+    await clickText('#right .ptabs button', 'Interaction'); await wait(300);
+    await clickText('#right .startwf button', 'When it'); await wait(600);
+    await clickText('#wfinspect button', 'Add the first action'); await wait(250);
+    await b.type('Refresh'); await wait(200); await menuItem('Refresh page data'); await wait(300);
+    const offered = await b.evaluate(`[...document.querySelectorAll('.menu .item')].map((x) => x.textContent)`);
+    const toastNow = await b.evaluate(`document.getElementById('toast').textContent`);
+    if (offered.some((t) => t.startsWith("This page's Note"))) { await menuItem("This page's Note"); await wait(800); } else console.log('    detail:', JSON.stringify({ offered, toastNow }));
+    const recNow = onDisk(NOTE + 'nodes.json').nodes.find((n) => n.type === 'DbModel2' && n.metadata?.pageThing);
+    const wired = onDisk(NOTE + 'connections.json').connections.filter((c) => c.toId === recNow?.id && c.toProperty === 'fetch').map((c) => c.fromProperty);
+    const card = await b.evaluate(`[...document.querySelectorAll('.flow .step h3')].map((x) => x.textContent).find((t) => t.startsWith('Refresh page data')) ?? null`);
+    ok(offered.some((t) => t.startsWith("This page's Note")) && wired.length === 1 && card === "Refresh page dataThis page's Note", "Refresh page data offers This page's Note: the click is wired to its Record's Fetch, and the step says what it refreshes", { offered, wired, card });
+    await b.clickSel('[data-tab=design]'); await wait(300); await clickText('#right .ptabs button', 'Visual'); await wait(200);
   }
   // P128 S5 (STU-083): Help draws NodeGX's canon from vendor/, its headings and its links as the canon has them
   console.log('check: Help, the canon drawn in Studio (STU-083)');
@@ -1526,6 +1548,21 @@ try {
     await shot('stu-083-help');
     await b.key('Escape', 'Escape', 27); await wait(200);
     ok(await b.evaluate(`document.getElementById('helppanel').hidden`), 'Esc closes Help');
+    // P123-GH-HELPSTUCK (Richard, Greenhouse 2026-10-30): Help covers every tab, so a tab picked while it is open must show
+    await b.clickSel('#helpbtn'); await wait(300);
+    const guide = await b.evaluate(`document.querySelector('#helppanel [data-act=docs]')?.textContent`);
+    await b.clickSel('#rail [data-tab=workflow]'); await wait(300);
+    const shown = await b.evaluate(`({ help: !document.getElementById('helppanel').hidden, tab: document.querySelector('#rail [aria-selected=true]')?.dataset.tab, steps: !document.getElementById('workflow').hidden })`);
+    ok(guide === 'NodeGX Studio guide ↗' && !shown.help && shown.tab === 'workflow' && shown.steps, "Help has the Studio guide's link, and picking the Workflow tab while Help is open closes it and shows Workflow", { guide, shown });
+    await b.clickSel('#rail [data-tab=design]'); await wait(300);
+  }
+  // P123-GH-ESCCOMPONENT (Richard, Greenhouse 2026-10-30): "it says 'esc to cancel' so I did that, but the component is still selected"
+  console.log('check: Esc cancels placing a reusable');
+  {
+    const btn = await b.evaluate(`(() => { const x = document.querySelector('#components button'); if (!x) return null; x.click(); return x.getAttribute('aria-pressed'); })()`);
+    await b.evaluate(`document.activeElement?.blur()`); await b.key('Escape', 'Escape', 27); await wait(200);
+    const after = await b.evaluate(`({ pressed: [...document.querySelectorAll('.palette button')].filter((x) => x.getAttribute('aria-pressed') === 'true').length, adding: !!document.querySelector('.adding') })`);
+    ok(btn === 'true' && after.pressed === 0 && !after.adding, 'a reusable armed for placing is lit, and Esc unlights it and stops placing', { btn, after });
   }
   ok((await status()).startsWith('App on screen'), 'after every edit the app still validates and draws', await status());
   const problems = b.problems.filter((p) => !/Invalid connection|doesn't have a port|Failed to load resource|fonts\.g|^\[noodl\]/.test(p)); // `[noodl]` lines are the app's own runtime (a Navigate with no target yet), not the editor

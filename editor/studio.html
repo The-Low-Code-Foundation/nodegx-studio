@@ -493,7 +493,10 @@
   #steps > .empty { color: var(--muted); padding: 24px 28px; }
   .wf { --fg: var(--ink); --sub: var(--ink-2); --dim: var(--muted); --edge: var(--line-2); --card: var(--panel); --blue: #1f5eff; --green: #16a34a; --red: #dc2626; --amber: #d97706; --pink: #db2777; --purple: #7c3aed; --cyan: #0891b2; --ghost: #c3c8d1;
     position: relative; min-height: 100%; padding: 18px 28px 64px; color: var(--sub); }
-  .flowarea { position: relative; }
+  /* P123-GH-FLOWNOSCROLLX: room past the last step, so a step under the panel's edge can be scrolled clear of it; the
+     empty canvas drags to pan (a mouse has no sideways wheel) */
+  .flowarea { position: relative; box-sizing: content-box; padding: 0 120px 40px 0; cursor: grab; }
+  #steps.panning, #steps.panning * { cursor: grabbing !important; user-select: none; }
   .flow { position: absolute; left: 0; top: 0; width: max-content; transform-origin: 0 0; }
   .flow svg.wires { position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; overflow: visible; }
   .flow > .chain, .flow > .lanesrow, .flow > .fncols { position: relative; z-index: 1; } /* the wires run behind the nodes and their labels */
@@ -993,7 +996,7 @@
     </section>
 
     <section id="helppanel" role="dialog" aria-label="Help" hidden>
-      <div class="hhead"><b>Help</b><span class="grow"></span><button class="quiet" data-act="close" title="Close (Esc)">Close</button></div>
+      <div class="hhead"><b>Help</b><span class="grow"></span><button class="quiet" data-act="docs" title="learn.nodegx.io/ways/studio">NodeGX Studio guide ↗</button><button class="quiet" data-act="close" title="Close (Esc)">Close</button></div>
       <div class="hbody"><div class="canon">Reading the page…</div></div>
     </section>
     <section id="wiringpanel" role="dialog" aria-label="The wiring underneath" hidden>
@@ -1683,6 +1686,83 @@ function optionSet(key) {
     return { key, name: key.split('/').pop(), attributes: c.component.metadata?.optionSet?.attributes || attributesOf(options), options, dataId: data?.id, files: c };
   } catch { return null; }
 }
+/* P123-GH-OPTSETCHOICE (Richard, 2026-10-30: a record stores the option's Value). A Dropdown of a set sends an option's
+   Value, or its Label when it has none, so a Choice taken from the set holds those; a set made before Label + Value
+   names its options by its first column. The set stays the one place its options live: a Choice whose choices are the
+   set's values is that set's, follows its edits, and is shown by its labels. */
+const optionValue = (set, o) => String(o?.Value ?? o?.Label ?? o?.[set.attributes[0]?.name] ?? o?.display ?? o?.value ?? '');
+const optionLabel = (set, o) => String(o?.Label ?? o?.[set.attributes[0]?.name] ?? o?.display ?? o?.Value ?? o?.value ?? '');
+const optionValues = (set, options = set.options) => options.map((o) => optionValue(set, o)).filter(Boolean);
+const sameChoices = (a, b) => a.length === b.length && a.map(String).sort().join('\n') === b.map(String).sort().join('\n');
+/** The set a Choice's choices come from: `by` 'value' (as Studio takes them), or 'label' (copied before the ruling). */
+function choiceSet(oneOf) {
+  if (!oneOf?.length) return null;
+  const sets = optionSetKeys().map(optionSet).filter((x) => x?.options.length);
+  const byValue = sets.find((x) => sameChoices(optionValues(x), oneOf));
+  if (byValue) return { set: byValue, by: 'value' };
+  const byLabel = sets.find((x) => sameChoices(x.options.map((o) => optionLabel(x, o)).filter(Boolean), oneOf));
+  return byLabel ? { set: byLabel, by: 'label' } : null;
+}
+/** A Choice's value as a person reads it: its option's label when the choices are a set's values. */
+function choiceWords(oneOf, v) {
+  const from = choiceSet(oneOf);
+  if (from?.by !== 'value') return v == null ? '' : String(v);
+  const o = from.set.options.find((x) => optionValue(from.set, x) === String(v));
+  return o ? optionLabel(from.set, o) : v == null ? '' : String(v);
+}
+/**
+ * An option set's options about to change: every Choice that took its choices from it takes the new ones, before the
+ * set is written, so the set and the rule never disagree. Rows holding a Value that changes are moved to the new one
+ * (asked first); a removed option some rows still hold is refused in words. Runs the backend's rule through both lists
+ * while the rows move (it refuses a rule a row breaks). Returns false when nothing may change.
+ */
+async function followOptionSet(set, options) {
+  const old = set.options, now = optionValues(set, options);
+  // which old option each new one is: the panel changes one cell, adds one at the end, or removes one
+  const pairs = []; let removed = null;
+  if (options.length === old.length) old.forEach((o, i) => pairs.push([o, options[i]]));
+  else if (options.length === old.length + 1) old.forEach((o, i) => pairs.push([o, options[i]]));
+  else if (options.length === old.length - 1) { const k = old.findIndex((o, i) => JSON.stringify(o) !== JSON.stringify(options[i])); removed = old[k]; old.forEach((o, i) => i !== k && pairs.push([o, options[i < k ? i : i - 1]])); }
+  const hits = [];
+  for (const c of projectJson()?.metadata?.dbCollections ?? []) for (const r of declaredRules(c.checks)) {
+    if (!Array.isArray(r.oneOf) || sameChoices(r.oneOf, now)) continue;
+    const by = sameChoices(r.oneOf, optionValues(set)) ? optionValue : sameChoices(r.oneOf, old.map((o) => optionLabel(set, o)).filter(Boolean)) ? optionLabel : null;
+    if (!by) continue;
+    const moves = pairs.map(([a, b]) => [by(set, a), optionValue(set, b)]).filter(([a, b]) => a && b && a !== b);
+    hits.push({ type: c.name, field: r.field, oneOf: r.oneOf, moves, gone: removed ? by(set, removed) : null });
+  }
+  if (!hits.length || !now.length) return true;
+  const live = (type) => backendUp() && allTypes().find((t) => t.name === type)?.onBackend;
+  const holding = async (h, v) => (live(h.type) ? (await api(`/classes/${encodeURIComponent(h.type)}?count=1&limit=0&where=${encodeURIComponent(JSON.stringify({ [h.field]: v }))}`)).count ?? 0 : 0);
+  let rows = 0; const said = [];
+  for (const h of hits) {
+    const kept = h.gone && (await holding(h, h.gone));
+    if (kept) { toast(`${F.recordsWord(kept)} of ${h.type} ${kept === 1 ? 'has' : 'have'} ${h.field} ${h.gone}. Give ${kept === 1 ? 'it' : 'them'} another ${h.field} in App data first, then remove the option.`); return false; }
+    for (const m of h.moves) { const n = await holding(h, m[0]); h.rows = (h.rows || 0) + n; rows += n; if (n) said.push(`${F.recordsWord(n)} of ${h.type} with ${h.field} ${m[0]}`); }
+  }
+  if (rows && !(await askSure(`${said.join(', ')}. Change ${rows === 1 ? 'it' : 'them'} to the new value as well? Otherwise nothing changes.`, { yes: 'Change them', danger: false }))) return false;
+  const ruleOn = async (h, oneOf) => {
+    const checks = (await api('/admin/schema')).tables.find((x) => x.name === h.type)?.checks ?? [];
+    await schemaAct({ action: 'setChecks', table: h.type, checks: checks.filter((c) => c.declared).map((c) => (c.rule.field === h.field && c.rule.oneOf ? { ...c.rule, oneOf } : c.rule)) });
+  };
+  for (const h of hits) {
+    if (!live(h.type)) continue;
+    const ok = await onBackend(`${h.type}'s ${h.field} did not follow ${set.name}`, async () => {
+      if (h.rows) {
+        await ruleOn(h, [...new Set([...h.oneOf.map(String), ...now])]); // both, while the rows move
+        for (const [from, to] of h.moves) {
+          const found = await api(`/classes/${encodeURIComponent(h.type)}?limit=1000&keys=objectId&where=${encodeURIComponent(JSON.stringify({ [h.field]: from }))}`);
+          for (const r of found.results ?? []) await api(`/classes/${encodeURIComponent(h.type)}/${r.objectId}`, { method: 'PUT', body: JSON.stringify({ [h.field]: to }) });
+        }
+      }
+      await ruleOn(h, now);
+    });
+    if (!ok) return false;
+  }
+  editProject((list) => { for (const c of list) for (const h of hits) if (c.name === h.type && c.checks) c.checks = declaredRules(c.checks).map((r) => (r.field === h.field && r.oneOf ? { ...r, oneOf: now } : r)); });
+  toast(`${hits.map((h) => `${h.type}'s ${h.field}`).join(', ')} take${hits.length === 1 ? 's' : ''} ${set.name}'s options as they are now${rows ? `; ${F.recordsWord(rows)} moved with ${rows === 1 ? 'it' : 'them'}` : ''}`);
+  return true;
+}
 
 let portProject = null;
 const specPortsFor = (type, params, nodeId) => {
@@ -2046,7 +2126,8 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && tab === 'workflow' && !selFn && !selAuto && cardBack && !inField && !document.querySelector('.menu')) { backFromCard(); return; }
   // Esc with nothing selected, inside a copy on its page: up one level, the copy selected (as the NodeGX editor's breadcrumb)
   if (e.key === 'Escape' && !inField && host && !sel && !pending && !document.querySelector('.menu') && tab === 'design') { editUp(); return; }
-  if (e.key === 'Escape') { closeMenu(); if (!inField) { pending = null; overlay.classList.remove('adding'); for (const b of $('palette').querySelectorAll('button')) b.setAttribute('aria-pressed', 'false'); select(null); } }
+  // P123-GH-ESCCOMPONENT: both lists (elements and reusables), as placing does — #palette alone left a reusable lit after Esc
+  if (e.key === 'Escape') { closeMenu(); if (!inField) { pending = null; overlay.classList.remove('adding'); for (const b of document.querySelectorAll('.palette button')) b.setAttribute('aria-pressed', 'false'); select(null); } }
   if (inField) return;
   if ((e.key === 'Delete' || e.key === 'Backspace') && sel && sel !== pageRootId() && $('design').hidden === false) { e.preventDefault(); removeNode(sel); }
 });
@@ -2492,7 +2573,11 @@ function tokensOf(category) {
   const pj = store.readProjectFile();
   return (pj?.metadata?.designTokens?.customTokens || []).filter((t) => !category || (t.category || '').startsWith(category)).map((t) => t.name);
 }
-let propTimer;
+let propTimer, propPending;
+/** P123-GH-PROPLOST: a typed value waits for the next keystroke, and touching any other field writes it first — one
+ *  shared timer used to drop it (a field filled 250 ms after the last kept 1 of 6 values). */
+function propLater(key, run, ms) { if (propPending && propPending.key !== key) propFlush(); clearTimeout(propTimer); propPending = { key, run }; propTimer = setTimeout(propFlush, ms); }
+function propFlush() { clearTimeout(propTimer); const p = propPending; propPending = null; p?.run(); }
 /* ================= STU-051: the panel as Bubble draws it =================
    Two tabs (Visual, Interaction) and Bubble's sections in Bubble's order — Content, Configure, Size, Layout, Style,
    Text, Appearance, Border, Background, Shadow — each claiming the element's ports by name; a port no section claims
@@ -3199,7 +3284,13 @@ function perCopyRename(s, from, to) {
 }
 function fieldFor(node, p, value, wire, setter) {
   const ty = tname(p.type);
-  const set = (v, immediate = true) => { clearTimeout(propTimer); const run = setter ? () => setter(v) : () => edits(pageKey, [{ edit: 'set_parameter', component: pageKey, id: node.id, name: p.name, value: v }], { rebuildApp: true }); immediate ? run() : (propTimer = setTimeout(run, 350)); };
+  const key = `${pageKey}|${node.id ?? node.type}|${p.name}`, pk = pageKey;
+  const set = (v, immediate = true) => {
+    const run = setter ? () => setter(v) : () => edits(pk, [{ edit: 'set_parameter', component: pk, id: node.id, name: p.name, value: v }], { rebuildApp: true });
+    if (!immediate) return propLater(key, run, 350);
+    if (propPending?.key === key) { clearTimeout(propTimer); propPending = null; } else propFlush();
+    run();
+  };
   const f = h('div', { class: `field${wire ? ' wired' : ''}`, title: p.description || '' }, h('label', {}, p.displayName || p.name));
   const units = p.type?.units;
   const srcNode = wire && byId[wire.fromId];
@@ -3408,6 +3499,7 @@ $('apppreviewbtn').hidden = !!window.__STUDIO_ORIGIN;
 $('apppreviewbtn').onclick = () => openOutside(`${location.origin}/app`);
 $('morehelp').onclick = () => openHelp();
 $('helppanel').querySelector('[data-act=close]').onclick = closeHelp;
+$('helppanel').querySelector('[data-act=docs]').onclick = () => openOutside('https://learn.nodegx.io/ways/studio');
 window.__ob.openHelp = openHelp;
 /** "Ask the agent": the question goes into the project (`.nodegx-questions.json`, which the agent's what_changed_since
     reads), and, inside a conversation whose host takes a message from Studio, into the conversation as the person's. */
@@ -3942,7 +4034,7 @@ function renderItem(right) {
     renderPageData();
     if (redraw) renderProps();
   };
-  const later = (fn) => { clearTimeout(propTimer); propTimer = setTimeout(fn, 400); };
+  const later = (fn) => propLater(`pagedata|${it.id}|name`, fn, 400);
   const fieldList = `fields-${slug(it.collection || 'none')}`;
   for (const old of document.querySelectorAll(`datalist[id^="fields-"]`)) old.remove();
   document.body.append(h('datalist', { id: fieldList }, ...fieldsOf(it.collection).map((f) => h('option', { value: f }))));
@@ -4292,7 +4384,8 @@ function cardMenu(e, evs) {
 }
 // the card opened from Design fills the tab, with no list beside it; Back returns to the element it was opened from
 let cardBack = null; // { node, page }
-function openCard(ev) { hideBoltTip(); selEvent = ev; cardBack = { node: ev.node, page: pageKey }; switchTab('workflow'); }
+// P123-GH-CARDBEHINDAUTO: a backend workflow or function left open in the Workflow tab is drawn before selEvent, so clear them
+function openCard(ev) { hideBoltTip(); selEvent = ev; selFn = null; selAuto = null; fnBack = []; cardBack = { node: ev.node, page: pageKey }; switchTab('workflow'); }
 function backFromCard() {
   const back = cardBack; cardBack = null;
   switchTab('design');
@@ -4972,6 +5065,27 @@ function fitFlow() {
   const val = $('steps').querySelector('.zoomval'); if (val) val.textContent = `${Math.round(flowZ * 100)}%`;
   drawWires();
 }
+/* P123-GH-FLOWNOSCROLLX: a press on the canvas around the steps drags it, as in the NodeGX editor. A step, a button, a field
+   or a chip keeps its press; under 4 px it stays a click (which closes the step's panel), and a drag swallows the click */
+let panEnded = 0;
+$('steps').addEventListener('pointerdown', (e) => {
+  const s = $('steps');
+  if (e.button !== 0 || !e.target.closest('.flowarea') || e.target.closest('.step, .evnode, .joinnote, button, input, select, textarea, label, a, .chip, .addrow, .wireplus')) return;
+  if (s.scrollWidth <= s.clientWidth && s.scrollHeight <= s.clientHeight) return;
+  const x0 = e.clientX, y0 = e.clientY, l0 = s.scrollLeft, t0 = s.scrollTop;
+  let moved = false;
+  const move = (m) => {
+    if (!moved && Math.hypot(m.clientX - x0, m.clientY - y0) < 4) return;
+    if (!moved) { moved = true; s.classList.add('panning'); }
+    s.scrollLeft = l0 - (m.clientX - x0); s.scrollTop = t0 - (m.clientY - y0);
+  };
+  const up = () => {
+    removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
+    if (moved) { panEnded = performance.now(); s.classList.remove('panning'); }
+  };
+  addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up);
+});
+$('steps').addEventListener('click', (e) => { if (performance.now() - panEnded < 250) { e.stopPropagation(); e.preventDefault(); } }, true);
 /* ---- STU-026: a step dragged where the person wants it. The layout stays the chain's; a drag saves the step's offset from
    where the chain puts it (`metadata.flowAt`, in the flow's own pixels), so a step added before it carries it along, and a
    step drawn on two cards is moved on both. The wires follow: they are drawn from where the nodes are. A press that moves
@@ -5149,9 +5263,9 @@ function stepCard(s, n) {
   if (s.refresh) {
     const it = itemById(s.id);
     return h('div', { class: `step${selStep === s.id ? ' picked' : ''}`, 'data-id': s.id, style: `--kind:${KIND_COLOUR.db}` }, h('div', { class: 'num' }, n),
-      h('h3', {}, 'Refresh page data', h('span', {}, it?.name ?? labelOf(s.id))),
+      h('h3', {}, 'Refresh page data', h('span', {}, it?.name ?? (s.id === pageThing?.recordId ? thingName(pageThing.type) : labelOf(s.id)))),
       h('div', { class: 'acts' }, h('button', { class: 'quiet tiny danger', title: 'Stop refreshing it here (the page data stays)', onclick: () => deleteStep(s) }, icon('trash'))),
-      h('div', { class: 'lines' }, h('span', {}, it ? sentence(it) : ''), h('span', { style: 'color:var(--muted)' }, 'What it asks is edited in Design → Page data.')));
+      h('div', { class: 'lines' }, h('span', {}, it ? sentence(it) : s.id === pageThing?.recordId ? `the ${pageThing.type} this page shows` : ''), h('span', { style: 'color:var(--muted)' }, 'What it asks is edited in Design → Page data.')));
   }
   const params = node.parameters || {};
   const isCond = node.type === 'Condition';
@@ -5245,7 +5359,7 @@ function stepPanel(panel, node) {
   if (s?.refresh) {
     const it = itemById(node.id);
     panel.append(h('div', { class: 'head' }, h('b', {}, 'Refresh page data'), h('button', { class: 'quiet danger', title: 'Stop refreshing it here (the page data stays)', onclick: () => deleteStep(s) }, icon('trash'))),
-      h('p', { class: 'what' }, `Asks the backend again for ${it?.name ?? labelOf(node.id)}${it ? ` (${sentence(it)})` : ''}, so every element reading it updates. What it asks is edited in Design → Page data.`));
+      h('p', { class: 'what' }, `Asks the backend again for ${it?.name ?? (node.id === pageThing?.recordId ? `the ${pageThing.type} this page shows` : labelOf(node.id))}${it ? ` (${sentence(it)})` : ''}, so every element reading it updates. What it asks is edited in Design → Page data.`));
     return;
   }
   panel.append(h('div', { class: 'head' },
@@ -5415,9 +5529,19 @@ function addActionMenu(e, from) {
 function refreshMenu(e, from) {
   if (from.also) return toast('A refresh ends the workflow: add it after the steps both sides go on to.');
   if (from.before) return toast('A refresh ends the workflow, so it cannot go between two steps: add it at the end.');
-  if (!pageItems.length) return toast('This page has no page data to refresh: make it in Design → Page data.');
+  if (!pageItems.length && !pageThing) return toast('This page has no page data to refresh: make it in Design → Page data.');
   const menu = popover(e);
   menu.append(h('div', { class: 'h' }, 'Refresh which page data?'));
+  // P123-GH-REFRESHTHING: the one record the page shows (its Type of content) is read again by its Record's Fetch
+  if (pageThing) menu.append(h('div', { class: 'item', onclick: () => {
+    closeMenu();
+    const name = thingName(pageThing.type);
+    if (conns.some((c) => c.fromId === from.node && c.fromProperty === from.port && c.toId === pageThing.recordId && c.toProperty === 'fetch')) return toast(`This workflow already refreshes ${name}`);
+    edits(pageKey, [{ edit: 'connect', component: pageKey, from: { node: from.node, port: from.port }, to: { node: pageThing.recordId, port: 'fetch' } }]);
+    if (!events().some((ev) => ev.node === selEvent.node && ev.port === selEvent.port)) draftEvents.length = 0;
+    renderWorkflow();
+    toast(`${labelOf(from.node)} now refreshes ${name}: it reads the ${pageThing.type} again, and every element showing it updates`);
+  } }, icon('db'), thingName(pageThing.type), h('small', {}, `the ${pageThing.type} this page shows`)));
   for (const it of pageItems) menu.append(h('div', { class: 'item', onclick: () => {
     closeMenu();
     if (conns.some((c) => c.fromId === from.node && c.fromProperty === from.port && c.toId === it.id && c.toProperty === 'storageFetch')) return toast(`This workflow already refreshes ${it.name}`);
@@ -5601,7 +5725,7 @@ function renderTypeMain(t) {
   for (const col of cols) {
     const kind = col.type ? F.kindOf(col, t.checks) : null;
     const rules = F.rulesOn(col.name, t.checks);
-    const details = [col.targetClass ? `points at ${col.targetClass}` : '', rules.find((r) => r.oneOf)?.oneOf.join(', '), col.required ? 'required' : '', F.defaultWords(col) ? `default ${F.defaultWords(col)}` : '', rules.find((r) => r.maxLength) ? `at most ${rules.find((r) => r.maxLength).maxLength} characters` : '', col.description || ''].filter(Boolean).join(' · ');
+    const details = [col.targetClass ? `points at ${col.targetClass}` : '', rules.find((r) => r.oneOf) && ((oneOf) => { const from = choiceSet(oneOf); return from?.by === 'value' ? `from ${from.set.name}: ${oneOf.map((v) => choiceWords(oneOf, v)).join(', ')}` : oneOf.join(', '); })(rules.find((r) => r.oneOf).oneOf), col.required ? 'required' : '', F.defaultWords(col) ? `default ${F.defaultWords(col)}` : '', rules.find((r) => r.maxLength) ? `at most ${rules.find((r) => r.maxLength).maxLength} characters` : '', col.description || ''].filter(Boolean).join(' · ');
     ft.append(h('tr', { 'data-field': col.name },
       h('td', {}, col.name),
       h('td', {}, kind ? h('span', { class: 'kind' }, h('i', {}, kind.icon), kind.label, h('span', { class: 'badge' }, col.type)) : h('span', { class: 'note' }, 'set by the app, no kind yet')),
@@ -5761,8 +5885,12 @@ async function fieldDrawer(t, col) {
       const box = h('textarea', { rows: 4, 'data-input': 'values', oninput: (e) => { d.values = e.target.value.split('\n').map((s) => s.trim()).filter(Boolean); check(); } }, d.values.join('\n'));
       // an option set made in Data → Option sets is the list a Bubble user reaches for: its options become the choices
       const sets = optionSetKeys().map(optionSet).filter((x) => x?.options.length);
-      if (sets.length) body.append(h('label', { class: 'f' }, 'Take the choices from an option set', h('select', { onchange: (e) => { const set = sets.find((x) => x.key === e.target.value); if (!set) return; d.values = set.options.map((o) => String(o?.[set.attributes[0]?.name] ?? o?.display ?? o?.Label ?? o?.value ?? '')).filter(Boolean); box.value = d.values.join('\n'); check(); } }, h('option', { value: '' }, 'None: type them below'), ...sets.map((x) => h('option', { value: x.key }, `${x.name} (${x.options.length} options)`)))));
+      // P123-GH-OPTSETCHOICE: the choices are the options' Values, what a Dropdown of the set sends
+      const from = choiceSet(d.values);
+      if (sets.length) body.append(h('label', { class: 'f' }, 'Take the choices from an option set', h('select', { 'data-input': 'fromset', onchange: (e) => { const set = sets.find((x) => x.key === e.target.value); if (!set) return; d.values = optionValues(set); draw(); } }, h('option', { value: '' }, 'None: type them below'), ...sets.map((x) => h('option', { value: x.key, selected: from?.by === 'value' && from.set.key === x.key }, `${x.name} (${x.options.length} options)`)))));
       body.append(h('label', { class: 'f' }, 'The choices, one per line', box));
+      if (from?.by === 'value') body.append(h('div', { class: 'note' }, `Each option's Value, which a Dropdown of ${from.set.name} sends. Studio shows them by their labels, and they follow ${from.set.name} when its options change.`));
+      else if (from?.by === 'label') body.append(h('div', { class: 'note warn', 'data-note': 'labels' }, `These are ${from.set.name}'s labels, but a Dropdown of ${from.set.name} sends each option's Value, so the backend refuses what it sends. Pick ${from.set.name} above to take its values.`));
     }
     if (d.kind === 'text') body.append(input('At most this many characters (optional)', 'maxLength'), h('label', { class: 'f' }, 'Must look like', h('select', { onchange: (e) => { d.looksLike = e.target.value; check(); } }, ...[['', 'anything'], ['email', 'an email address'], ['url', 'a web address']].map(([v, w]) => h('option', { value: v, selected: d.looksLike === v }, w)))));
     if (d.kind === 'number') body.append(input('Smallest (optional)', 'min'), input('Largest (optional)', 'max'), h('label', { class: 'c' }, h('input', { type: 'checkbox', checked: d.whole, onchange: (e) => { d.whole = e.target.checked; check(); } }), 'Whole numbers only'));
@@ -6160,7 +6288,7 @@ async function renderAppData() {
   for (const row of rows) {
     table.append(h('tr', { 'data-row': row.objectId },
       h('td', { class: 'pick' }, h('input', { type: 'checkbox', checked: app.picked.has(row.objectId), onchange: (e) => tick(row.objectId, e.target.checked) })),
-      ...cols.map((c) => { const td = h('td', { class: 'cell', 'data-field': c.name, title: cellWords(c, row[c.name]), onclick: () => editCell(td, t, row, c) }, cellWords(c, row[c.name])); return td; }),
+      ...cols.map((c) => { const td = h('td', { class: 'cell', 'data-field': c.name, title: rowWords(t, c, row[c.name]), onclick: () => editCell(td, t, row, c) }, rowWords(t, c, row[c.name])); return td; }),
       h('td', { class: 'note' }, (row.createdAt || '').slice(0, 16).replace('T', ' '))));
   }
   main.append(h('div', { class: 'twrap' }, table));
@@ -6266,11 +6394,13 @@ function renderStartBackend(main) {
   } }, 'Start a backend for this app');
   main.append(h('div', { class: 'card' }, h('p', {}, 'This app is bound to no backend, so it has nowhere to keep rows. Studio can start one on this computer — the same kind the NodeGX editor and Claude Code start — and bind the app to it.'), start));
 }
+/** A row's value as App data shows it: a Choice taken from an option set by its option's label (P123-GH-OPTSETCHOICE). */
+function rowWords(t, c, v) { const oneOf = c.type === 'String' && F.rulesOn(c.name, t.checks).find((r) => r.oneOf)?.oneOf; return oneOf ? choiceWords(oneOf, v) : cellWords(c, v); }
 /** A control for one value of this column's kind: a Choice's values, Yes / No, a date, a Link's rows by their label. */
 async function valueControl(t, c, value) {
   const kind = F.kindOf(c, t.checks).id;
   const text = editText(c, value);
-  if (kind === 'choice') return h('select', {}, h('option', { value: '' }, ''), ...F.rulesOn(c.name, t.checks).find((r) => r.oneOf).oneOf.map((v) => h('option', { value: v, selected: String(v) === text }, v)));
+  if (kind === 'choice') { const oneOf = F.rulesOn(c.name, t.checks).find((r) => r.oneOf).oneOf; return h('select', {}, h('option', { value: '' }, ''), ...oneOf.map((v) => h('option', { value: v, selected: String(v) === text }, choiceWords(oneOf, v)))); }
   if (kind === 'yesno') return h('select', {}, ...[['', ''], ['yes', 'Yes'], ['no', 'No']].map(([v, w]) => h('option', { value: v, selected: v === text }, w)));
   if (kind === 'date') return h('input', { type: 'datetime-local', value: text });
   if (kind === 'number') return h('input', { type: 'number', value: text, step: 'any' });
@@ -6287,7 +6417,7 @@ async function editCell(td, t, row, c) {
   const ctl = await valueControl(t, c, row[c.name]);
   td.textContent = ''; td.append(ctl); ctl.focus();
   let done = false;
-  const back = () => { td.textContent = cellWords(c, row[c.name]); };
+  const back = () => { td.textContent = rowWords(t, c, row[c.name]); };
   const commit = async () => {
     if (done) return; done = true;
     const w = toWire(c, ctl.value);
@@ -6476,6 +6606,11 @@ $('newoptset').onclick = async (e) => {
   toast(`${name} is an option set: a component the page loads as plain JSON`);
 };
 function writeOptionSet(set, { attributes, options }) {
+  // P123-GH-OPTSETCHOICE: the Choices taken from the set move first; refused, the panel shows the set as it was
+  if (options) return void followOptionSet(set, options).then((go) => (go ? writeSetFiles(set, { attributes, options }) : renderData()), (e) => { toast(`${set.name} was not changed: ${e.message}`); renderData(); });
+  writeSetFiles(set, { attributes });
+}
+function writeSetFiles(set, { attributes, options }) {
   const c = store.readComponent(set.key);
   const out = JSON.parse(JSON.stringify(c.files));
   if (attributes) out.component.metadata = { ...(out.component.metadata || {}), optionSet: { attributes } };
@@ -7000,7 +7135,8 @@ function switchTab(name) {
   $('previewmode-l').style.display = name === 'design' ? '' : 'none';
   renderAll();
 }
-for (const b of document.querySelectorAll('#rail [role=tab]')) b.onclick = () => { cardBack = null; hideBoltTip(); switchTab(b.dataset.tab); };
+// P123-GH-HELPSTUCK: Help and the wiring cover every tab, so picking a tab closes them (else the tab changes underneath, unseen)
+for (const b of document.querySelectorAll('#rail [role=tab]')) b.onclick = () => { cardBack = null; hideBoltTip(); closeHelp(); if (wiringOpen()) closeWiring(); switchTab(b.dataset.tab); };
 function renderAll() {
   renderPagePick(); renderDatalists();
   if (tab === 'design') { renderPalette(); renderPageData(); renderTree(); renderProps(); draw(); }

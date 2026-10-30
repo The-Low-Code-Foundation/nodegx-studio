@@ -23,6 +23,11 @@
  * file holds `{ Label }` rows under the columns Label and Value, and the example's page, placed by the agent on that
  * set, draws a Dropdown whose options are the two labels (read in the running app's frame).
  *
+ * 4. A Choice taken from an option set (P123-GH-OPTSETCHOICE, Richard 2026-10-30: a record stores the option's Value):
+ * Task.language from Languages holds `en`, `fr`; the backend takes `fr` (what the Dropdown sends) and refuses
+ * `Français`; App data and Data types show the labels; a Value changed in Option sets, with a row holding the old one,
+ * asks first, then moves the row, the rule (project file and backend) and the set; a held option is not removed.
+ *
  *   node editor/shapes-check.mjs          PASS n/n and exit 0, or the failing lines and exit 1
  */
 import { spawn } from 'node:child_process';
@@ -162,7 +167,8 @@ try {
   await b.until(`!!document.querySelector('#drawer:not([hidden]) .kinds')`, 6000);
   await b.evaluate(`document.querySelector('#drawer .kinds [data-kind=choice]').click()`); await wait(300);
   const choices = await b.evaluate(`(() => { const sel = [...document.querySelectorAll('#drawer label.f')].find((l) => l.textContent.startsWith('Take the choices'))?.querySelector('select'); const o = sel && [...sel.options].find((x) => x.textContent.includes('Languages')); if (!o) return null; sel.value = o.value; sel.dispatchEvent(new Event('change')); return document.querySelector('#drawer [data-input=values]').value; })()`);
-  ok(choices === 'English\nFrançais', 'a Choice takes its values from it', choices);
+  // P123-GH-OPTSETCHOICE (Richard, 2026-10-30): a record stores the option's Value, which a Dropdown of the set sends
+  ok(choices === 'en\nfr', 'a Choice takes its choices from it as its options\' Values', choices);
   await b.evaluate(`document.querySelector('#drawer .dfoot button')?.click()`); await wait(300); // Cancel
 
   console.log('check: an option set Studio made, in a Dropdown');
@@ -184,6 +190,54 @@ try {
   await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Pages/Sizes'; s.dispatchEvent(new Event('change')); })()`);
   const drawn = await b.until(`(() => { try { const o = [...__ob.preview.frame.contentDocument.querySelectorAll('select option')].map((x) => x.textContent).filter((t) => t && !/^Choose/.test(t)); return o.length ? o : false; } catch { return false; } })()`, 15000);
   ok(JSON.stringify(drawn) === JSON.stringify(['Small', 'Large']), 'its Dropdown, in the running app, offers Small and Large', drawn);
+
+  console.log('check: a Choice from an option set holds its Values');
+  {
+    const rules = () => declaredRules(JSON.parse(readFileSync(pf, 'utf8')).metadata.dbCollections.find((c) => c.name === 'Task').checks).find((r) => r.field === 'language')?.oneOf?.join();
+    const token = JSON.parse(readFileSync(join(process.env.NODEGX_BACKENDS_DIR, JSON.parse(readFileSync(pf, 'utf8')).metadata.cloudservices.instanceId, 'secrets.json'), 'utf8')).adminToken;
+    const endpoint = JSON.parse(readFileSync(pf, 'utf8')).metadata.cloudservices.endpoint.replace(/\/$/, '');
+    const onBackend = async () => (await (await fetch(`${endpoint}/admin/schema`, { headers: { Authorization: `Bearer ${token}` } })).json()).tables?.find((t) => t.name === 'Task')?.checks?.map((c) => c.rule).find((r) => r.field === 'language')?.oneOf?.join();
+    await b.evaluate(`document.querySelector('[data-tab=data]').click()`); await wait(600);
+    await b.evaluate(`document.querySelector('[data-sub=types]').click()`); await wait(500);
+    await b.evaluate(`document.querySelector('#types .row[data-type="Task"]').click()`); await wait(600);
+    await b.evaluate(`[...document.querySelectorAll('#datamain .bar button')].find(e => e.textContent.includes('New field')).click()`);
+    await b.until(`!!document.querySelector('#drawer:not([hidden]) .kinds')`, 6000);
+    await b.evaluate(`document.querySelector('#drawer .kinds [data-kind=choice]').click()`); await wait(300);
+    await b.evaluate(`(() => { const i = document.querySelector('#drawer [data-input=name]'); i.value = 'language'; i.dispatchEvent(new Event('input')); const s = document.querySelector('#drawer [data-input=fromset]'); s.value = [...s.options].find((o) => o.textContent.includes('Languages')).value; s.dispatchEvent(new Event('change')); })()`); await wait(300);
+    const note = await b.evaluate(`[...document.querySelectorAll('#drawer .note')].map((n) => n.textContent).find((t) => /Value/.test(t)) ?? null`);
+    await b.evaluate(`[...document.querySelectorAll('#drawer .dfoot button')].pop().click()`);
+    await b.until(`document.getElementById('drawer').hidden`, 8000); await wait(800);
+    ok(rules() === 'en,fr' && (await onBackend()) === 'en,fr' && /Dropdown of Languages sends/.test(note || ''), 'Task.language, its choices from Languages, is one of en, fr in the project file and on the backend, and the drawer says why', { file: rules(), backend: await onBackend(), note });
+    const put = async (v) => (await fetch(url + 'api/backend/classes/Task', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: `probe ${v}`, language: v }) })).status;
+    const sent = await put('fr'), label = await put('Français');
+    ok(sent < 300 && label >= 400, 'the backend takes fr, what a Dropdown of Languages sends, and refuses the label Français', { sent, label });
+    const details = await b.evaluate(`document.querySelector('#datamain tr[data-field=language] td.note')?.textContent`);
+    ok(/^from Languages: English, Français/.test(details || ''), 'Data types says the field is from Languages, by its labels', details);
+    await b.evaluate(`document.querySelector('[data-sub=app]').click()`); await wait(500);
+    await b.until(`!!document.querySelector('#apptypes .row[data-type=Task]')`, 6000);
+    await b.evaluate(`document.querySelector('#apptypes .row[data-type=Task]').click()`);
+    const cell = await b.until(`(() => [...document.querySelectorAll('#appmain tr[data-row] td[data-field=language]')].map((td) => td.textContent).find(Boolean) || false)()`, 8000);
+    ok(cell === 'Français', 'App data shows the stored fr as Français', cell);
+    await b.evaluate(`document.querySelector('[data-sub=options]').click()`); await wait(400);
+    await b.evaluate(`[...document.querySelectorAll('#optsets .row')].find((r) => r.textContent.includes('Languages')).click()`); await wait(500);
+    const setRows = () => JSON.parse(JSON.parse(readFileSync(join(project, 'components', 'Option sets', 'Languages', 'nodes.json'), 'utf8')).nodes.find((n) => n.type === 'Static Data').parameters.json).map((o) => o.Value).join();
+    const held = async () => (await (await fetch(url + 'api/backend/classes/Task?keys=language&limit=50')).json()).results.map((r) => r.language).filter(Boolean).join();
+    const editFr = (v) => b.evaluate(`(() => { const t = [...document.querySelectorAll('#optmain table')][1]; const i = [...t.querySelectorAll('tr')][2].querySelectorAll('input')[1]; i.value = ${JSON.stringify(v)}; i.dispatchEvent(new Event('change')); })()`);
+    const asked = () => b.until(`document.querySelector('.surescrim')?.textContent || false`, 8000);
+    await editFr('fra');
+    const ask = await asked();
+    await b.evaluate(`document.querySelector('.surescrim [data-act=no]').click()`); await wait(800);
+    ok(/1 record of Task with language fr/.test(ask || '') && setRows() === 'en,fr' && rules() === 'en,fr' && (await held()) === 'fr', 'fr\'s Value changed to fra while a Task holds fr: Studio asks first, and Cancel changes nothing', { ask, set: setRows(), file: rules(), held: await held() });
+    await b.evaluate(`[...document.querySelectorAll('#optsets .row')].find((r) => r.textContent.includes('Languages')).click()`); await wait(500);
+    await editFr('fra'); await asked();
+    await b.evaluate(`document.querySelector('.surescrim [data-act=yes]').click()`);
+    let moved = null; for (let i = 0; i < 40 && setRows() !== 'en,fra'; i++) await wait(200);
+    moved = await onBackend();
+    ok(setRows() === 'en,fra' && rules() === 'en,fra' && moved === 'en,fra' && (await held()) === 'fra', 'and Change them moves the Task to fra, the rule (project file and backend), then the set', { set: setRows(), file: rules(), backend: moved, held: await held() });
+    await b.evaluate(`(() => { const t = [...document.querySelectorAll('#optmain table')][1]; [...t.querySelectorAll('tr')][2].querySelector('button.danger').click(); })()`); await wait(1500);
+    const refused = await b.evaluate(`document.getElementById('toast').textContent`);
+    ok(setRows() === 'en,fra' && rules() === 'en,fra' && /1 record of Task has language fra/.test(refused), 'removing Français while a Task holds fra is refused in words, and the set keeps it', { set: setRows(), file: rules(), refused });
+  }
 } catch (err) {
   ok(false, `the gate stopped: ${err.stack || err.message}`);
 } finally {

@@ -1853,6 +1853,142 @@ button whose click creates a Listing, branches, and goes to a page.
   
 - The header is crowded at 1440 px ("App on sc…", "Preview ↗" wraps).
 
+## STU-091 — Greenhouse: a second whole app through Studio, built to look designed (Richard's ask, 2026-10-30)
+
+**Why.** Richard: *"another test build of a NodeGX Studio app that includes a backend with backend workflows … tests
+all parts of the studio, including styles, data, option sets, privacy, the lot. Something simple but that actually
+looks good, the last app you made in there looked like shit."* (Swapshop had no design: black default type, broken
+images, a blank page around three rows.)
+
+**The app.** `~/vscode_projects/NodeGX test projects/Greenhouse`: your houseplants and who needs water. Pictures:
+[home](look/stu-091-home.png), [a plant, just watered](look/stu-091-plant-watered.png), [sign in](look/stu-091-signin.png),
+[new plant](look/stu-091-newplant.png), [the backend workflow's last run](look/stu-091-backend-workflow.png), [Map](look/stu-091-map.png).
+
+**Through Studio's own UI** (headless Chrome over CDP; helpers in [stu-091-drive/](stu-091-drive/): `drv.mjs` attaches
+to a Chrome on :9341, `lib.mjs` = palette/tree/panel/⚡/composer, `wf.mjs` = action menu and step panel):
+- Data: option sets Room (Label + Value) and Look (Value = a picture path); types Plant (Text, Choice from Room, Number,
+  Date, Yes/No) and Watering (Link → Plant, Text, Date); Start a backend; six plants by App data → New entry; Privacy:
+  Plant read by anyone signed in, changed only by whoever made it.
+- Styles: 16 styles in the Styles tab (Display/Title/Brand/Body/Muted/Eyebrow texts in Georgia + the system stack,
+  Primary/Soft buttons, Canvas/Header/Card/Panel/pill groups, Field for inputs and dropdowns), every element wears one.
+- Design: four pages (Home, Plant with Type of content Plant, New plant, Sign in) built from the palette; Header made
+  reusable and placed on three pages; two repeating groups (Plant cards, Watering history) with their rows restyled;
+  Conditional rules (Thirsty / Happy pill, Mounted); composed texts ("Kitchen · water every 5 days", dates);
+  Dropdowns fed by option sets.
+- Workflows: sign up / log in / log out, Go to page (with Data to send = the clicked row), Create a new record ×2, Wait,
+  Refresh page data, a When-loaded branch (signed-out visitors go to Sign in).
+- Uploaded six illustrations through `/api/asset` (what Upload an image… posts).
+
+**Through the agent (MCP), because Studio has no way to:** the two cloud functions (Mark watered, Check thirst),
+the two backend workflows (When a plant is watered: validate → call Mark watered; The morning check: call Check
+thirst → return) and their triggers (Watering created; every day at 08:00); the Watering row's new `at` input;
+the Plant page's Record re-fetch after Refresh. Studio then drew all of it under On the backend, lit the workflow's
+real last run, and opened each function's steps.
+
+**Measured end to end in Studio's running app:** sign up → Home (thirsty first) → Pip → Water now → the db-change
+trigger ran the workflow, the function set Pip's lastWatered and thirsty=false and stamped the watering → the page
+showed "Last watered 30 October · Happy" and the history row; New plant saved Basil; the morning check made Basil
+thirsty; Sign out → Sign in; Log in → Home with Basil first.
+
+**Found (18 rows in NodeGX's ledger, `node scripts/bugs.js --from P123` — ids P123-GH-*):** high OPTSETCHOICE (a
+Dropdown of an option set sends Value, the Choice checks Labels: every save refused, silently); medium PROPLOST (a typed
+value dropped when the next field is touched within 350 ms), NOCURRENTUSER, NOCREATEDAT, ROWFROZEN, REFRESHTHING,
+NOTOKENS (needs a ruling); low MAPOPTPILLS (regression of 31892c3), HANDLECLICK, BOLTNOISE, STYLEDUPES, 403WORDS,
+OWNWRITEOUTSIDE, DATEUTC, TRIGGERSTALE, POINTS500 (backend), MCPBACKENDID and LINTWEIGHT (MCP). P123-RT-COLUMNSSCHEMA
+gained its driven Date and Pointer consequences (Invalid Date in pages AND cloud functions; Pointers to class
+"Unknown"): it reaches Studio only with an `@nodegx/preview` release.
+
+**Open.** Studio cannot make a backend workflow, a trigger or a cloud function (it shows, runs, lights and turns
+them on/off): the Bubble user's "backend workflows" are the agent's today — a ruling for Richard whether Studio
+should author them. Design shows a row or a page-about-one-record empty (no sample record sent).
+
+## Richard's Greenhouse notes (2026-10-30) — four fixed, seven tasks
+
+Richard drove Greenhouse in Studio himself and sent twelve notes. His words, then what happened to each. His note 3
+answers the open question above: *"I currently can't edit any backend workflows, which is sad"*: Studio should author
+them (STU-092).
+
+| # | Richard | Now |
+|---|---|---|
+| 1 | can't scroll sideways in a zoomed workflow; the step panel covers a node; wants room after it | **fixed** P123-GH-FLOWNOSCROLLX: drag the empty canvas to pan, 120 px after the last step |
+| 2 | page workflows and backend workflows/functions mixed in one list; "Workflows on this page" then "On the backend" is weird; workflows = automations, functions = logic called by the app or by a workflow, "two parts of the same machine"; maybe their own tab | STU-092 (ruling: where they live) |
+| 3 | can't edit backend workflows; can't see a run's data, what went in and out of each step, as in the NodeGX editor | STU-092 |
+| 4 | the Map is "our example for the rest of the app": its words (origins on the left, screens, functions, tables; "on its own") should be the Workflow tab's words for the backend; a backend workflow's "last run 21 mins ago: it worked" should open the run, drawn, with the dots flowing on the wires; maybe the app's own logic that talks to the backend (queries) as a column between screens and functions | STU-093 (ruling: the front-end logic column) |
+| 5 | option sets need fields that point at one or many options of another set (Bubble has it) | STU-094 |
+| 6 | App data edits in place: dangerous ("why I stopped using NocoDB"); click a record → side panel or modal | STU-095, P123-GH-APPDATAINLINE (high) |
+| 7 | a style's preview is a list of pills (`colour: #FFF`); show a dummy button, text, a group with text in it | STU-096 |
+| 8 | Help should link the Studio docs; Help looks like a page, so picking another tab leaves you stuck on it | **fixed** P123-GH-HELPSTUCK: *NodeGX Studio guide ↗* (learn.nodegx.io/ways/studio); a tab closes Help and the wiring view |
+| 9 | Esc cancels placing a reusable but it stays blue | **fixed** P123-GH-ESCCOMPONENT |
+| 10 | Logic on this page should explain the wiring (more teaching, for a builder who finds what their AI built) OR jump to that page's workflows in the Workflow tab | STU-097 |
+| 11 | a backend workflow open, then Design → Interactions → a workflow: the tab still shows the backend one | **fixed** P123-GH-CARDBEHINDAUTO |
+| 12 | the composer shows `===` and empty quotes; wants a non-coder composer like Bubble's, with the same thing viewable as JS (Blockly) | STU-098, P123-GH-COMPOSERJS (ruling) |
+
+**Fixed (s27):** `editor/studio.html` (pan, room, Help, Esc, openCard), two gate rows in `editor/check.mjs`;
+`check:editor` **235/235**. Driven on a copy of Greenhouse with its backend unbound (`docs/stu-091-drive/scrollx.mjs`,
+`fixes.mjs`, `fix11b.mjs`, 1440×900); note 11's fix mutant-checked (the old line shows "The morning check" again).
+
+**Fixed (s28):** P123-GH-PROPLOST (a typed value is written before another field's, never dropped: `propLater`),
+P123-GH-OPTSETCHOICE on Richard's ruling — *a record stores the option's Value*: a Choice taken from a set holds its
+Values, follows the set's edits (rows holding a changed Value asked about and moved first; a held option is not removed),
+and App data / Data types show the labels — and P123-GH-REFRESHTHING (Refresh page data offers *This page's <Type>*, its
+Record's Fetch). `check:editor` 237/237, `check:shapes` 28/28, `check:data` 82/82; each new row mutant-checked. Left:
+a page in the running app shows a set's Choice by its Value (P123-GH-CHOICELABEL).
+
+### STU-092 — backend workflows: their own place, editable, each step's data
+
+- **Where.** Recommended: a **Backend** tab on the rail (Design · Workflow · Data · Styles · Backend), its left list in
+  two groups, *Workflows* (what starts them: a change to a table, a time, a call) and *Functions* (logic the app or a
+  workflow calls), with one line saying how they meet ("a workflow's step can call a function"). The Workflow tab
+  keeps only the page's workflows. The other choice: keep one tab and split its list in two headed groups.
+- **Edit.** The same card and step panel as a page workflow, over the backend's own step kinds (`list_backend_step_kinds`
+  through the backend's API, the MCP's `update_backend_workflow` shape); add, delete, reorder, a step's settings;
+  New workflow with its trigger.
+- **A run, step by step.** A run row opens the run: each step lit, and a click on a step shows what went in and what
+  came out (the popover the NodeGX editor shows on a wire), from the backend's run record. Same for a function's run
+  (STU-085 lights the nodes today; add the values).
+
+### STU-093 — the Map's words everywhere, and a run drawn on it
+
+- The Workflow/Backend tab uses the Map's names and order: who starts it (a person, a time, a change) → screens →
+  functions → tables, "on its own" for a workflow nobody clicks.
+- A backend workflow's *Last run · 21 min ago · it worked* opens the run on the Map: the path it took lit, dots flowing
+  along the wires it crossed, a step's in/out on click (shared with STU-092).
+- **Ruling:** a column for the app's own logic that reaches the backend (a page's searches and saves) between the
+  screens and the functions, so front end and back end are told apart on one drawing. Recommended: yes, one node per
+  page's searches/saves, collapsed by default.
+
+### STU-094 — option sets that point at other option sets
+
+An option set's attribute can be *an option of <set>* or *a list of options of <set>*, stored as that set's Value(s),
+picked from the other set's options in the set's table; the ⚡ menu reads through it (`Room's Look's picture`).
+Bubble's shape. Needs the attribute type in `Option sets/<Name>`'s metadata and in the importer's dictionary.
+
+### STU-095 — App data: a record opens in a panel, nothing changes on a click
+
+The table is read only. A click on a row opens it in a side panel: one field per column with the right control (a link
+picks a record, a date is a date field, a choice is its set's options), *Save* and *Cancel*, nothing written until Save;
+*New entry* opens the same panel empty. P123-GH-DATEUTC (dates shown in UTC) is fixed in the same panel.
+
+### STU-096 — a style shows what it styles
+
+The Styles tab's preview is the element wearing the style, drawn by the runtime: a button that says *Button*, a text
+in its font and colour, a group with a line of text in it, an input with a placeholder; states (hover, pressed) beside
+it. The property pills stay below as the list of what it sets.
+
+### STU-097 — Logic on this page: understand it, or go to it
+
+Each row offers two ways: *See the wiring* (the view as today, plus a sentence per node saying what it does, from the
+node's own description, and the path a value takes) and *See its workflows* (Workflow tab, that page, the workflows
+that use it listed).
+
+### STU-098 — a composer for people who don't code
+
+Composer (words and chips) becomes the default and reads as a sentence: `Plant's room is "Kitchen"` with the value
+typed in a box of its kind (text, number, yes/no, date), never quotes to keep or delete; operators chosen from words.
+JavaScript is a second view of the same thing, editable by coders. **Ruling:** drop *Both*, or keep it behind
+JavaScript. Blockly-style blocks were weighed: a sentence with chips is what Bubble users know; blocks are a bigger
+build for the same expressions.
+
 ## Rulings open
 
 | id | question | from |
