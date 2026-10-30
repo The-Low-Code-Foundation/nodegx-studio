@@ -44,7 +44,7 @@ const project = join(tmp, 'todo-list');
 cpSync(join(kit.templates, 'todo-list'), project, { recursive: true });
 
 const children = [];
-let b, host, tab;
+let b, host, tab, strict;
 try {
   const port = await freePort();
   const server = spawn(process.execPath, [join(here, 'serve.mjs'), project, '--port', String(port)], { stdio: ['ignore', 'pipe', 'pipe'], env: process.env });
@@ -88,6 +88,10 @@ try {
   };
   const ready = await until(`(${P}?.title || '').startsWith('ready')`, 90000);
   ok(ready, 'the panel, drawn from another origin than Studio\'s, comes up', await ev(`${P}?.title`));
+  // P128-S4-HOSTEDPUSHSTATE: Todo sends a person not signed in to Sign in; the router's URL is on Studio's origin, which
+  // this frame (the host's URL) may not push: the probe pushes the same path on the frame's own origin instead
+  const moved = await until(`(() => { try { const f = ${P}.defaultView.__ob.preview.frame.contentWindow; return /\\/runtime\\/sign-in$/.test(f.location.pathname) && (f.__studioLog || []).some((e) => e.kind === 'nav' && e.path === '/runtime/sign-in'); } catch { return false; } })()`, 20000);
+  ok(moved && !b.problems.some((p) => /SecurityError.*(pushState|replaceState)/.test(p)), 'the app\'s redirect to Sign in moves the frame there and is logged, with no SecurityError from its history', { moved, problems: b.problems.filter((p) => /SecurityError/.test(p)) });
   const shot = async (name) => { if (shots) { await wait(600); await b.screenshot(name.startsWith('bko-00') ? join(here, '..', '..', 'OpenNoodl', 'dev-docs', 'tasks', 'phase-127-the-backend-in-the-open', 'look', `${name}.png`) : join(here, '..', 'docs', 'look', `bko-002-${name}.png`)); } };
 
   console.log('check: BKO-002 Privacy in the conversation');
@@ -333,12 +337,26 @@ try {
     ok(field && onDiskTitle && followed && followed.draws > 1 && followed.same === 'yes', 'the headline changed in Studio in the conversation changes in the /app tab, drawn again in the same page, no reload', { at, field, onDisk: onDiskTitle, followed, seen: field ? undefined : await ev(`({ head: ${P}.querySelector('#right .head input')?.value ?? null, fields: [...${P}.querySelectorAll('#right .field label')].map((l) => l.textContent).slice(0, 8), side: ${P}.documentElement.dataset.side ?? null, page: ${P}.getElementById('pagepick')?.value, hit: (() => { const e = document.elementFromPoint(${at?.x ?? 0}, ${at?.y ?? 0}); return e ? e.tagName + '#' + e.id : null; })() })`) });
     await shot('stu-080-preview');
   }
+
+  // P125-GOOSE-NOEVAL: a host whose sandbox has no 'unsafe-eval' (Goose's) stops the preview's script as it loads.
+  // The panel says so in its status, not "starting…" for ever
+  console.log('check: a chat whose sandbox forbids eval');
+  const strictPort = await freePort();
+  strict = http.createServer((req, res) => {
+    if (req.url === '/panel.html') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': cspFor(studio).replace(" 'unsafe-eval'", '') }); return res.end(panel); }
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(hostPage);
+  });
+  await new Promise((r) => strict.listen(strictPort, '127.0.0.1', r));
+  await b.goto(`http://127.0.0.1:${strictPort}/`);
+  const stopped = await until(`/^(ready|failed)/.test(${P}?.title || '') && { title: ${P}.title, status: ${P}.getElementById('status').textContent, bad: ${P}.getElementById('status').classList.contains('bad') }`, 60000);
+  ok(stopped && stopped.title.startsWith('failed') && stopped.bad && /can’t run inside this chat/.test(stopped.status), 'Studio says the app cannot run in that chat, instead of "starting…"', stopped);
 } catch (e) {
   ok(false, 'the gate ran to the end', e.message);
 } finally {
   if (tab) await tab.close().catch(() => {});
   if (b) await b.close().catch(() => {});
   if (host) host.close();
+  if (strict) strict.close();
   for (const c of children) c.kill('SIGTERM');
   await wait(1500); // the server stops the backends it started on SIGTERM
   rmSync(tmp, { recursive: true, force: true });

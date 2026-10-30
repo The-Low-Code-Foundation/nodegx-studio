@@ -966,6 +966,10 @@ try {
     await b.until(`document.querySelectorAll('.menu .item').length > 0`, 4000);
     const offeredAll = await b.evaluate(`[...document.querySelectorAll('.menu .item')].map((i) => i.textContent)`);
     ok(offeredAll.some((t) => t.startsWith('Refresh page data')) && !offeredAll.some((t) => /Fetch records|Query Records/.test(t)), 'the action list offers "Refresh page data" and no way to write a query', offeredAll.filter((t) => /Refresh|Fetch|Quer/.test(t)));
+    // P128-S2-ACTIONNAMES: three named rows are display names; the vocabulary's aliases place them under Actions
+    const named = await b.evaluate(`[...document.querySelectorAll('.menu .item:not(.dev)')].map((i) => i.textContent)`);
+    const aliased = ['Send an event', 'Go to a URL path', 'Show a popup'];
+    ok(aliased.every((w) => named.some((t) => t.startsWith(w))), 'Send an event, Go to a URL path and Show a popup are named actions, not only developer nodes', aliased.filter((w) => !named.some((t) => t.startsWith(w))));
     await menuItem('Refresh page data'); await menuItem('notes');
     const refreshes = onDisk(SIGN + 'connections.json').connections.filter((c) => c.toId === notes.id && c.toProperty === 'storageFetch');
     ok(refreshes.length === 1 && queries().length === 3, 'Refresh → notes is one wire into the item\'s Do, and no new query node', refreshes);

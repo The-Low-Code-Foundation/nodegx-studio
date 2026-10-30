@@ -1,7 +1,8 @@
 /**
  * P125 CCN-006 — the NodeGX Desktop Extension: one `.mcpb` that Claude Desktop installs by double-click.
  *
- *   npm run mcpb                 writes dist/nodegx-<version>.mcpb (version = the pinned @nodegx/mcp)
+ *   npm run mcpb                 writes dist/nodegx-<version>-<platform>-<arch>.mcpb (version = the pinned @nodegx/mcp)
+ *                                and the same file as dist/nodegx-<platform>-<arch>.mcpb, the name a release keeps
  *   npm run mcpb -- --stage-only writes dist/mcpb-stage/ and stops (to drive the server as Desktop would start it)
  *   npm run mcpb -- --mcp-tarball <@nodegx/mcp .tgz>   a test build on an unpublished server (version from the tarball)
  *   npm run mcpb -- --node darwin-x64                   the Node to bundle (default: this machine's platform-arch)
@@ -25,7 +26,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { studioRoot } from '../lib/nodegx.mjs';
 
@@ -42,6 +43,14 @@ const mcpTarball = arg('--mcp-tarball') && resolve(arg('--mcp-tarball'));
 const mcpVersion = mcpTarball
   ? JSON.parse(execFileSync('tar', ['-xOzf', mcpTarball, 'package/package.json'], { encoding: 'utf8' })).version
   : pkg.dependencies['@nodegx/mcp'];
+// P128-S3-HELPERNODE: a server before 0.2.9 starts its children on Desktop's own Node, Claude's helper binary, which
+// runs no script: Studio, the render and the backend never start. A bundle on one would install and do nothing.
+const MIN_MCP = [0, 2, 9];
+const below = (v, min) => { const a = String(v).replace(/^[^\d]*/, '').split('.').map(Number); for (let i = 0; i < 3; i++) if ((a[i] || 0) !== min[i]) return (a[i] || 0) < min[i]; return false; };
+if (below(mcpVersion, MIN_MCP)) {
+  console.error(`mcpb: @nodegx/mcp ${mcpVersion} is older than ${MIN_MCP.join('.')}, which Claude Desktop needs (P128-S3-HELPERNODE). Move Studio's pin, or pass --mcp-tarball.`);
+  process.exit(1);
+}
 const NODE_VERSION = 'v22.22.0';
 const nodeTarget = arg('--node') ?? `${process.platform}-${process.arch}`;
 const [nodePlatform] = nodeTarget.split('-');
@@ -152,4 +161,8 @@ const out = join(dist, `nodegx-${mcpVersion}-${nodeTarget}.mcpb`);
 rmSync(out, { force: true });
 execFileSync('npx', ['-y', MCPB_CLI, 'validate', join(stage, 'manifest.json')], { stdio: 'inherit' });
 execFileSync('npx', ['-y', MCPB_CLI, 'pack', stage, out], { stdio: 'inherit' });
-console.log(`mcpb: ${out} (${(statSync(out).size / 1e6).toFixed(1)} MB)`);
+// P128-S3B-MCPBNORELEASE: a link to releases/latest/download/<name> holds only while the name does, and this one carries
+// the server's version: the same bundle under a name without it is the one nodegx.io links
+const stable = join(dist, `nodegx-${nodeTarget}.mcpb`);
+copyFileSync(out, stable);
+console.log(`mcpb: ${out} (${(statSync(out).size / 1e6).toFixed(1)} MB), and as ${stable}`);

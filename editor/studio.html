@@ -1048,7 +1048,7 @@ import { readRule, rulesOf, withoutArm, withValue, withCondition, addArm, valueO
 import { TYPES, TYPE_WORDS, dictionaryType, applyPhrase } from './phrases.mjs';
 import { OPERATORS, createEdits, updateEdits, removeEdits, readItems, readFrom, readersOf, itemOfSource, sameAs, signature, describe, lastRun, queriesOnOpen, requestMatches } from './pagedata.mjs';
 import * as F from './fields.js';
-import { typesOf, driftOf, projectColumn, cellWords, editText, toWire, searchWhere, rowLabel, pageWords, rowsQuery } from './data.mjs';
+import { typesOf, driftOf, projectColumn, declaredRules, cellWords, editText, toWire, searchWhere, rowLabel, pageWords, rowsQuery } from './data.mjs';
 import { fieldReaders, typeReaders, renameField, renameType, appFields } from './rename.mjs';
 import { LANES, buildTimeline, lastRunOf, msText, shotAt, stepValues } from './timeline.mjs';
 import { runOver, lastActivity, watchSignals, runtimeTimers, runTimers } from './runwatch.mjs';
@@ -1085,6 +1085,15 @@ const slug = (s) => String(s).replace(/[^A-Za-z0-9]+/g, ' ').trim().split(' ').m
 const opened = await (await fetch('/api/project')).json();
 $('projname').textContent = opened.name;
 document.title = `${opened.name} — NodeGX Studio`;
+// P125-GOOSE-NOEVAL: with no preview Studio cannot draw the app; it says so rather than "starting…" for ever. Inside a
+// chat the preview's script is another origin's, so the browser hides why it stopped; a sandbox without eval (Goose) is
+// the one cause measured
+if (typeof NodegxPreview === 'undefined') {
+  status('The app can’t run inside this chat. Its sandbox blocks code the preview needs.', 'bad');
+  $('status').title = 'The preview’s script stopped while loading, or did not load. A chat whose sandbox does not allow eval stops it.';
+  document.title = 'failed: the preview did not start';
+  throw new Error('NodeGX Studio: the preview did not start');
+}
 let files = NodegxPreview.memoryFiles(opened.files);
 let store = new NodegxPreview.V2ProjectStore(files);
 
@@ -1649,13 +1658,21 @@ const propsOf = (n) => String(n.parameters?.properties || '').split(',').map((p)
 /** The expressions the composer made: Expression nodes that remember the field they feed. */
 const isComposed = (n) => n.type === 'Expression' && n.metadata?.composedFor;
 /** The option sets: logic components under `Option sets/`, one Static Data node each. */
+// P128-S2-OPTSETSHAPE: a set Studio did not make (the agent's, `{ Label, Value }` rows as a Dropdown reads them) names
+// no attributes in its metadata: its columns are its rows' keys, typed by their first value, not a blank `display`
+const attributesOf = (options) => {
+  const names = [...new Set(options.filter((o) => o && typeof o === 'object').flatMap(Object.keys))];
+  if (!names.length) return [{ name: 'display', type: 'text' }];
+  const typeOf = (v) => (typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'yes / no' : 'text');
+  return names.map((name) => ({ name, type: typeOf(options.find((o) => o?.[name] !== undefined && o?.[name] !== null)?.[name]) }));
+};
 const optionSetKeys = () => Object.keys(registry()).filter((k) => k.startsWith('Option sets/'));
 function optionSet(key) {
   try {
     const c = store.readComponent(key).files;
     const data = c.nodes.nodes.find((n) => n.type === 'Static Data');
     let options = []; try { options = JSON.parse(data?.parameters?.json || '[]'); } catch { options = []; }
-    return { key, name: key.split('/').pop(), attributes: c.component.metadata?.optionSet?.attributes || [{ name: 'display', type: 'text' }], options, dataId: data?.id, files: c };
+    return { key, name: key.split('/').pop(), attributes: c.component.metadata?.optionSet?.attributes || attributesOf(options), options, dataId: data?.id, files: c };
   } catch { return null; }
 }
 
@@ -5149,7 +5166,7 @@ function stepPanel(panel, node) {
 /** A record step's field that is a Choice on its data type: its choices, for a dropdown instead of a text box. */
 function choicesFor(node, port) {
   if (!port.startsWith('prop-') || !node.parameters?.collectionName) return null;
-  const rule = collections().find((c) => c.name === node.parameters.collectionName)?.checks?.find((r) => r.field === port.slice(5) && Array.isArray(r.oneOf));
+  const rule = declaredRules(collections().find((c) => c.name === node.parameters.collectionName)?.checks).find((r) => r.field === port.slice(5) && Array.isArray(r.oneOf));
   return rule ? rule.oneOf.map((v) => ({ value: v, label: String(v) })) : null;
 }
 function deleteStep(s) {
@@ -5402,7 +5419,7 @@ function allTypes() {
     if (t.file) t.declared = false;
     const live = liveTables.find((x) => x.name === t.name);
     // an empty list from the backend (a type made there before its choices were) does not hide the choices the project declares
-    t.checks = (live?.checks?.length ? live.checks : null) || declared.find((c) => c.name === t.name)?.checks?.map((rule) => ({ rule, declared: true })) || [];
+    t.checks = (live?.checks?.length ? live.checks : null) || declaredRules(declared.find((c) => c.name === t.name)?.checks).map((rule) => ({ rule, declared: true }));
     t.indexes = live?.indexes || [];
     t.backendColumns = live?.columns || [];
     t.drift = t.declared && t.onBackend ? driftOf(t.columns, t.backendColumns) : null;
@@ -5484,7 +5501,7 @@ function syncCards(main, t) {
     return card(`${t.name} is in the project but not on the development database yet, so the app can’t keep its rows.`,
       h('button', { class: 'primary', onclick: async () => {
         if (!(await onBackend(`${t.name} was not made`, () => schemaAct({ action: 'createTable', table: t.name, columns: t.columns })))) return;
-        const rules = collections().find((c) => c.name === t.name)?.checks || [];
+        const rules = declaredRules(collections().find((c) => c.name === t.name)?.checks);
         if (rules.length) await onBackend('Its rules for values were not set', () => schemaAct({ action: 'setChecks', table: t.name, checks: rules }));
         renderData();
       } }, 'Make it on the development database'));
@@ -5611,7 +5628,7 @@ async function fieldDrawer(t, col) {
       const box = h('textarea', { rows: 4, 'data-input': 'values', oninput: (e) => { d.values = e.target.value.split('\n').map((s) => s.trim()).filter(Boolean); check(); } }, d.values.join('\n'));
       // an option set made in Data → Option sets is the list a Bubble user reaches for: its options become the choices
       const sets = optionSetKeys().map(optionSet).filter((x) => x?.options.length);
-      if (sets.length) body.append(h('label', { class: 'f' }, 'Take the choices from an option set', h('select', { onchange: (e) => { const set = sets.find((x) => x.key === e.target.value); if (!set) return; d.values = set.options.map((o) => String(o.display ?? o.value ?? '')).filter(Boolean); box.value = d.values.join('\n'); check(); } }, h('option', { value: '' }, 'None: type them below'), ...sets.map((x) => h('option', { value: x.key }, `${x.name} (${x.options.length} options)`)))));
+      if (sets.length) body.append(h('label', { class: 'f' }, 'Take the choices from an option set', h('select', { onchange: (e) => { const set = sets.find((x) => x.key === e.target.value); if (!set) return; d.values = set.options.map((o) => String(o?.[set.attributes[0]?.name] ?? o?.display ?? o?.Label ?? o?.value ?? '')).filter(Boolean); box.value = d.values.join('\n'); check(); } }, h('option', { value: '' }, 'None: type them below'), ...sets.map((x) => h('option', { value: x.key }, `${x.name} (${x.options.length} options)`)))));
       body.append(h('label', { class: 'f' }, 'The choices, one per line', box));
     }
     if (d.kind === 'text') body.append(input('At most this many characters (optional)', 'maxLength'), h('label', { class: 'f' }, 'Must look like', h('select', { onchange: (e) => { d.looksLike = e.target.value; check(); } }, ...[['', 'anything'], ['email', 'an email address'], ['url', 'a web address']].map(([v, w]) => h('option', { value: v, selected: d.looksLike === v }, w)))));
@@ -5670,7 +5687,7 @@ async function saveField(t, col, d, records, why, picked = new Set()) {
       if (rules.length && !(await onBackend('Its rules were not set', () => schemaAct({ action: 'setChecks', table: t.name, checks: F.mergeRules(checks, name, rules) })))) return;
       if (d.unique) await onBackend('It was added, but not made unique', () => schemaAct({ action: 'setIndexes', table: t.name, indexes: [...(live?.indexes || []).filter((i) => i.declared !== false).map(({ fields, unique }) => ({ fields, ...(unique ? { unique } : {}) })), { fields: [name], unique: true }] }));
     }
-    editProject((list) => { const c = list.find((x) => x.name === t.name); c.columns ??= []; c.columns.push(projectColumn({ ...column, fillExisting: undefined })); if (rules.length) c.checks = F.mergeRules(c.checks?.map((rule) => ({ rule, declared: true })), name, rules); });
+    editProject((list) => { const c = list.find((x) => x.name === t.name); c.columns ??= []; c.columns.push(projectColumn({ ...column, fillExisting: undefined })); if (rules.length) c.checks = F.mergeRules(declaredRules(c.checks).map((rule) => ({ rule, declared: true })), name, rules); });
   } else {
     const from = F.kindById(F.kindOf(col, checks).id), to = F.kindById(d.kind);
     if (up && name !== col.name) {
@@ -5698,7 +5715,7 @@ async function saveField(t, col, d, records, why, picked = new Set()) {
       const c = list.find((x) => x.name === t.name);
       const at = c.columns.findIndex((x) => x.name === col.name);
       c.columns[at] = projectColumn({ ...col, name, type: to.storage, required: required || undefined });
-      const kept = (c.checks || []).filter((r) => r.field !== col.name);
+      const kept = declaredRules(c.checks).filter((r) => r.field !== col.name);
       c.checks = [...kept, ...rules];
       if (!c.checks.length) delete c.checks;
       if (name !== col.name && t.onBackend) renameForLive(pj, { table: t.name, from: col.name, to: name });
@@ -5716,7 +5733,7 @@ async function deleteField(t, col) {
     if (F.rulesOn(col.name, checks).length && !(await onBackend('Not deleted', () => schemaAct({ action: 'setChecks', table: t.name, checks: F.rulesWithout(checks, col.name) })))) return;
     if (!(await onBackend('Not deleted', () => schemaAct({ action: 'dropColumn', table: t.name, column: col.name })))) return;
   }
-  editProject((list) => { const c = list.find((x) => x.name === t.name); c.columns = c.columns.filter((x) => x.name !== col.name); if (c.checks) { c.checks = c.checks.filter((r) => r.field !== col.name); if (!c.checks.length) delete c.checks; } });
+  editProject((list) => { const c = list.find((x) => x.name === t.name); c.columns = c.columns.filter((x) => x.name !== col.name); if (c.checks) { c.checks = declaredRules(c.checks).filter((r) => r.field !== col.name); if (!c.checks.length) delete c.checks; } });
   renderData();
 }
 async function deleteType(t) {

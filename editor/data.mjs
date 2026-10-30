@@ -59,6 +59,15 @@ export function projectColumn(col) {
   return out;
 }
 
+/**
+ * P123-STU-TWOSHAPES: a type's declared rules for values, as `setChecks` takes them (`{ field, oneOf }`, …). The project
+ * file holds them in either of two shapes: that one (Studio, the agent) or the backend's entry (`{ name, rule, declared }`,
+ * cached by the NodeGX editor and provision_backend), whose undeclared ones are drift the backend found, not rules.
+ */
+export function declaredRules(checks) {
+  return (checks || []).map((c) => (c && typeof c === 'object' && 'rule' in c ? (c.declared === false ? null : c.rule) : c)).filter(Boolean);
+}
+
 /** A value from the backend, as a cell says it. */
 export function cellWords(col, v) {
   if (v === undefined || v === null || v === '') return '';

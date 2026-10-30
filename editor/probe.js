@@ -3,7 +3,8 @@
  * before the runtime does, in the frame only: the deployed app never has it. It writes down what the app asks the
  * backend and when the app moves to another page, so Studio can say how many queries a page runs on open and when
  * each page data item last ran — counted off the requests the app really made, never off the nodes that could make
- * them. Nothing here changes a request or its answer.
+ * them. Nothing here changes a request or its answer; the one thing it changes is a page URL the browser would refuse
+ * (on another origin than the frame's, inside a conversation), pushed instead as the same path on the frame's own.
  *
  *   window.__studioLog = [{ kind: 'request', method, url, path, body, t0, t1, status, rows, fetch? } | { kind: 'nav', path, t }]
  */
@@ -12,9 +13,21 @@
   var here = function () { return location.pathname + location.hash; };
   var nav = function () { var p = here(); var last = null; for (var i = log.length - 1; i >= 0; i--) if (log[i].kind === 'nav') { last = log[i]; break; } if (!last || last.path !== p) log.push({ kind: 'nav', path: p, t: performance.now() }); };
   nav();
+  // P128-S4-HOSTEDPUSHSTATE: inside a conversation this frame has the host's URL while the runtime's base is Studio's
+  // origin, so the router's page URL is on another origin and the browser throws SecurityError mid-navigation. The
+  // same path on the frame's own origin is what the router meant; the page is still the one the runtime drew.
   ['pushState', 'replaceState'].forEach(function (name) {
     var orig = history[name];
-    history[name] = function () { var r = orig.apply(this, arguments); nav(); return r; };
+    history[name] = function (state, title, url) {
+      var r;
+      try { r = orig.apply(this, arguments); } catch (err) {
+        var to = null; try { to = url == null ? null : new URL(String(url), document.baseURI); } catch (_) { /* not a URL */ }
+        if (!err || err.name !== 'SecurityError' || !to || to.origin === location.origin) throw err;
+        r = orig.call(this, state, title, location.origin + to.pathname + to.search + to.hash); // a bare path would resolve against the frame's <base>, Studio's origin again
+      }
+      nav();
+      return r;
+    };
   });
   addEventListener('popstate', nav);
   addEventListener('hashchange', nav);
