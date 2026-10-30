@@ -100,9 +100,17 @@ declaration from the project file: P123-MCP-RULESERASED, fixed in NodeGX eea8566
 not need it). `check:app` **67/67** run alone at load ~2 (Publish green; APPCHECKPUBLISH stays open: it has failed only
 under load, cause never read). Filed, read not measured: P123-STU-TWOSHAPES. Not pushed (ask first).
 
+**s27 (2026-10-30), STU-090: a page about one record** (SCOPE, STU-090 "Done (s27)"). Studio had no way to add a page:
+*+ Page* (name + Type of content) makes one and puts it in the Router; a page's *Type of content* is a Page Inputs
+parameter into a Record (`pagedata.mjs` `pageThingEdits`); Go to page to it shows *Data to send*, ⚡ starting with the
+ids of that type; a type change moves what other pages send (`sendsFollow`). Gates on the s27 tree: `check:editor`
+**233/233** (mutant 231/233), `check:app` 67/67, `check:data` 82/82, `check:hosted` 39/39, `check:timeline` 53/53.
+Committed, **not pushed** (ask first). Open from it: the importer's ChangePage *data to send* / *Current page's thing*
+(no fixture has the keys); Design draws such a page with nothing sent.
+
 Next buildable, in order:
-0a. STU-090's open list (SCOPE): the repeating group's row (a picture, a click that opens its record), the For Each's
-   panel saying which list it shows, an option set linked to a Choice rather than copied, the crowded header.
+0a. STU-090's open list (SCOPE): an option set linked to a Choice rather than copied; the crowded header (check it
+   still is, with *+ Page* in the crumb); a page about one record previewed with one (Design sends it nothing).
 0. STU-009 on Windows / Linux in the package workflow (only macOS was run). STU-026: nothing left that was asked.
 1. When NodeGX publishes a release with BACKENDPUBLIC: bump the pins, `npm run vendor`, every gate. Check npm first
    (`npm view @nodegx/preview versions`).

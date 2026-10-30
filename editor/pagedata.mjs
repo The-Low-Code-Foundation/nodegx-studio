@@ -340,3 +340,76 @@ export function queriesOnOpen(log, isPage, { quietMs = 1000, now = Infinity } = 
   }
   return { arrived: true, queries, settled: now > edge + quietMs };
 }
+
+/* ---------------- the page's thing (Bubble's "Type of content") ---------------- */
+
+/**
+ * A page that shows one record: Bubble's "Type of content", a Listing page opened with the listing to show. Two nodes on
+ * the page, as a NodeGX builder wires it by hand: a Page Inputs node naming one query parameter (`?listing=<id>`, which a
+ * Navigate sends as `pm-listing`, and which the address keeps, so the page opens again from a link) and a Record node
+ * whose Id is that parameter. Both carry `metadata.pageThing = { type, param }`.
+ *
+ * A Record, not a "first Listing where id is …" page data item: the Query Records node drops a condition whose value is
+ * empty, so a page opened with no id would show the newest Listing as if it had been sent. The Record shows nothing,
+ * and reads the record from the backend when the id arrives.
+ */
+export const PAGE_INPUTS = 'PageInputs';
+export const BY_ID = 'DbModel2';
+export const thingParam = (type) => portSlug(type);
+export const thingName = (type) => `This page's ${type}`;
+
+/** The page's thing as read from its nodes, or undefined: `{ type, param, recordId, inputsId }`. */
+export function readPageThing(nodes) {
+  const rec = nodes.find((n) => n.type === BY_ID && n.metadata?.pageThing);
+  if (!rec) return undefined;
+  const inputs = nodes.find((n) => n.type === PAGE_INPUTS && n.metadata?.pageThing);
+  return { type: rec.parameters?.collectionName ?? rec.metadata.pageThing.type, param: rec.metadata.pageThing.param, recordId: rec.id, inputsId: inputs?.id };
+}
+
+/** The edits that make the page show one `type` (or nothing, for a falsy type), from what it shows now (`current`, as read). */
+export function pageThingEdits(type, { component, current, x = 1000, y = 40 }) {
+  if (!type) return current ? [current.recordId, current.inputsId].filter(Boolean).map((id) => ({ edit: 'remove_node', component, id })) : [];
+  const param = thingParam(type), meta = { pageThing: { type, param } };
+  if (!current) {
+    const inputsId = uuid(), recordId = uuid();
+    return [
+      { edit: 'add_node', component, id: inputsId, type: PAGE_INPUTS, label: `${thingName(type)} (its id, from the address)`, x, y, parameters: { queryParams: param }, metadata: meta },
+      { edit: 'add_node', component, id: recordId, type: BY_ID, label: thingName(type), x: x + 260, y, parameters: { collectionName: type, idSource: 'explicit' }, metadata: meta },
+      { edit: 'connect', component, from: { node: inputsId, port: 'pm-' + param }, to: { node: recordId, port: 'modelId' } }
+    ];
+  }
+  if (current.type === type) return [];
+  return [
+    { edit: 'set_parameter', component, id: current.recordId, name: 'collectionName', value: type },
+    { edit: 'rename', component, id: current.recordId, label: thingName(type) },
+    { edit: 'set_metadata', component, id: current.recordId, metadata: meta },
+    ...(current.inputsId ? [
+      { edit: 'set_parameter', component, id: current.inputsId, name: 'queryParams', value: param },
+      { edit: 'rename', component, id: current.inputsId, label: `${thingName(type)} (its id, from the address)` },
+      { edit: 'set_metadata', component, id: current.inputsId, metadata: meta },
+      { edit: 'disconnect', component, from: { node: current.inputsId, port: 'pm-' + current.param }, to: { node: current.recordId, port: 'modelId' } },
+      { edit: 'connect', component, from: { node: current.inputsId, port: 'pm-' + param }, to: { node: current.recordId, port: 'modelId' } }
+    ] : [])
+  ];
+}
+
+/**
+ * When a page's thing changes from `fromParam` to `toParam`, what a Navigate elsewhere sends it follows: the wire or the
+ * typed value on `pm-<fromParam>` moves to `pm-<toParam>` (or goes, when the page shows nothing now). Edits for one
+ * component's `nodes` and `conns`; `target` is the page's legacy name ("/Pages/Listing").
+ */
+export function sendsFollow({ component, nodes, conns, target, fromParam, toParam }) {
+  const list = [], from = 'pm-' + fromParam, to = toParam ? 'pm-' + toParam : null;
+  for (const n of nodes) {
+    if (n.type !== 'RouterNavigate' || n.parameters?.target !== target) continue;
+    for (const c of conns) if (c.toId === n.id && c.toProperty === from) {
+      list.push({ edit: 'disconnect', component, from: { node: c.fromId, port: c.fromProperty }, to: { node: n.id, port: from } });
+      if (to) list.push({ edit: 'connect', component, from: { node: c.fromId, port: c.fromProperty }, to: { node: n.id, port: to } });
+    }
+    if (n.parameters?.[from] !== undefined) {
+      list.push({ edit: 'set_parameter', component, id: n.id, name: from, value: undefined });
+      if (to) list.push({ edit: 'set_parameter', component, id: n.id, name: to, value: n.parameters[from] });
+    }
+  }
+  return list;
+}

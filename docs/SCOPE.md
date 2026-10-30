@@ -1828,7 +1828,28 @@ button whose click creates a Listing, branches, and goes to a page.
   outputs only once wired, so Studio never offered them). `check:editor` 223/223 (4 new rows). The picture draws only
   once the runtime types a NodeGX File field (P123-RT-COLUMNSSCHEMA, fixed in NodeGX, not yet in `@nodegx/preview`):
   on today's pin the Image asks for `/runtime/[object Object]`. **Done (s26b):** selected, a repeating group's panel opens on *Data*: *Rows of*
-  (the row's type), *Data source* (the page's lists, ⚡ for any other, a different type warned), *Edit* its row. Still open: opening the clicked listing on a page needs Go to page to carry a record (Studio has no "data to send").
+  (the row's type), *Data source* (the page's lists, ⚡ for any other, a different type warned), *Edit* its row. ~~Still open: opening the clicked listing on a page needs Go to page to carry a record (Studio has no "data to send").~~
+  **Done (s27): a page about one record, and the Go to page that sends it** (Bubble's *Type of content* and *Data to
+  send*). Studio had no way to add a page at all: *+ Page* beside the page list asks a name and a type of content, makes
+  `Pages/<Name>` as the blank app's Home is made (a Page at `/<slug>`, Content, a heading), puts it in the Router, and
+  opens it. With a type, the page gets its thing (`editor/pagedata.mjs` `pageThingEdits`): a Page Inputs node naming one
+  query parameter (`?note=<id>`) wired into a Record node's Id, both `metadata.pageThing`, and a Text under the heading
+  already reading its title. A Record, not a "first Note where id is …" page data item: Query Records drops a condition
+  whose value is empty, so a page opened with no id would show the newest Note as if it had been sent; the Record shows
+  nothing. Page data shows *Type of content* on every page (change it, or (none)); ⚡ on that page has *This page's
+  Note* (its fields and id). A Go to page to such a page shows **Data to send · The Note to show** (the spec's own
+  `pm-note`), says while it is empty that the page opens showing none, and its ⚡ starts with *A Note to send* (a
+  repeating group's clicked row, a first page data item of that type, this page's own). A type changed on the page,
+  every Go to page elsewhere that sends to it follows (`sendsFollow`: the wire or value moves to the new parameter, or
+  goes with (none)); one gesture, one undo across the pages. `check:editor` **233/233** (7 new: the files, the panel,
+  the ⚡, in the app the Buy milk row opens Note at `?note=<its id>` showing *Buy milk*, the type changed to Task and
+  back, (none)); a mutant without the id wire reads 231/233 (the file row and the app row). Two gate traps on the way:
+  the Router's page changes a frame before the page is drawn (wait for what you assert, not for the page), and this
+  frame's body text includes the inline project data, so "Sign in" is in it on every page (read the drawn elements).
+  **Open:** the importer still writes Bubble's ChangePage *data to send* and *Current page's thing* as to-dos
+  (`import/app-to-nodegx.mjs` `ChangePage`, `CurrentPageItem`): no fixture carries either key, so their shape is
+  unread; with one, both map onto this. Design shows such a page with nothing sent (the Record reads "Missing Id."), so
+  its fields draw empty while it is edited.
   
 - The header is crowded at 1440 px ("App on sc…", "Preview ↗" wraps).
 

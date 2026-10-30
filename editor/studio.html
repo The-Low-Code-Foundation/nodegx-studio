@@ -448,6 +448,11 @@
   .pagedata .row small.run { font-variant-numeric: tabular-nums; }
   .pagedata .row[aria-selected=true] small, .pagedata .row[aria-selected=true] .name { color: var(--accent-ink); }
   .pagedata .hint { padding: 2px 8px 6px; }
+  .pagedata .thing { padding: 6px 8px 8px; display: flex; flex-direction: column; gap: 3px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+  .pagedata .thing .top { display: flex; align-items: center; gap: 8px; }
+  .pagedata .thing .top svg.i { width: 14px; height: 14px; color: var(--muted); }
+  .pagedata .thing .top select { margin-left: auto; max-width: 140px; }
+  .pagedata .thing small { color: var(--muted); font-size: 11px; padding-left: 22px; }
   .queries { margin-left: 10px; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
   .queries.none { background: var(--panel-2); color: var(--muted); }
   .queries.off { background: transparent; color: var(--muted); }
@@ -463,6 +468,7 @@
   .pageitem .hint.warn { color: var(--warn); padding: 6px 0; }
   .menu.newitem { width: 420px; padding: 10px 12px; }
   .menu.newitem .field { grid-template-columns: 64px 1fr; }
+  .menu.newitem.newpage .field { grid-template-columns: 110px 1fr; }
   .menu.newitem .cond { display: grid; grid-template-columns: 1fr 96px 1fr; gap: 4px; }
   .menu.newitem .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: var(--r); overflow: hidden; justify-self: start; }
   .menu.newitem .seg button { border: 0; border-radius: 0; padding: 4px 9px; color: var(--muted); }
@@ -886,7 +892,7 @@
     <button id="undo" title="Undo (⌘Z)"><svg class="i"><use href="#i-undo"/></svg><span class="tip">Undo <kbd>⌘Z</kbd></span></button>
   </nav>
   <header>
-    <div class="crumb"><span id="projname">…</span><span class="sep">/</span><label id="pagepick-l"><select id="pagepick" title="Page"></select></label><button id="renamereusable" class="quiet tiny" hidden title="Rename this reusable">✎</button><span class="queries" id="querycount" hidden></span></div>
+    <div class="crumb"><span id="projname">…</span><span class="sep">/</span><label id="pagepick-l"><select id="pagepick" title="Page"></select></label><button id="newpage" class="quiet tiny" title="Add a page to the app">+ Page</button><button id="renamereusable" class="quiet tiny" hidden title="Rename this reusable">✎</button><span class="queries" id="querycount" hidden></span></div>
     <div class="seg" id="widthseg" title="Preview width">
       <button data-w="100%" aria-pressed="true">Fill</button><button data-w="1280">1280</button><button data-w="1024">1024</button><button data-w="768">768</button><button data-w="390">Phone</button>
     </div>
@@ -1046,7 +1052,7 @@ import { layoutTips } from './layouttips.mjs';
 import { extractReusable } from './reusable.mjs';
 import { readRule, rulesOf, withoutArm, withValue, withCondition, addArm, valueOf, literal, SHOWING } from './rules.mjs';
 import { TYPES, TYPE_WORDS, dictionaryType, applyPhrase } from './phrases.mjs';
-import { OPERATORS, createEdits, updateEdits, removeEdits, readItems, readFrom, readersOf, itemOfSource, sameAs, signature, describe, lastRun, queriesOnOpen, requestMatches } from './pagedata.mjs';
+import { OPERATORS, createEdits, updateEdits, removeEdits, readItems, readFrom, readersOf, itemOfSource, sameAs, signature, describe, lastRun, queriesOnOpen, requestMatches, readPageThing, pageThingEdits, sendsFollow, thingParam, thingName } from './pagedata.mjs';
 import * as F from './fields.js';
 import { typesOf, driftOf, projectColumn, declaredRules, cellWords, editText, toWire, searchWhere, rowLabel, pageWords, rowsQuery } from './data.mjs';
 import { fieldReaders, typeReaders, renameField, renameType, appFields } from './rename.mjs';
@@ -1618,6 +1624,7 @@ function followApp(component) {
 }
 let nodes = [], conns = [], byId = {}, visualIds = [], depthOf = {}, legacyName = '';
 let pageItems = [], selItem = null; // the page's data items (STU-010), and the one open in the right panel
+let pageThing; // what the page shows one of (Bubble's "Type of content"), or undefined
 function readGraph() {
   // a page or a reusable gone from under the path (an undo, a rename, the agent): back to the reusable on its own
   if (host && (!isPage(host.key) || !registry()[pageKey] || host.path[host.path.length - 1]?.key !== pageKey)) host = null;
@@ -1632,6 +1639,7 @@ function readGraph() {
   const roots = comp.nodes.visualRoots?.length ? comp.nodes.visualRoots : nodes.filter((n) => n.parent === undefined && (n.children || isVisualType(n.type))).map((n) => n.id);
   for (const r of roots) walk(r, 0);
   pageItems = readItems(nodes, conns);
+  pageThing = isPage(pageKey) ? readPageThing(nodes) : undefined;
   if (selItem && !pageItems.some((i) => i.id === selItem)) selItem = null;
 }
 const typeDef = (type) => libIndex.get(type);
@@ -3497,11 +3505,25 @@ function zoomWiring(by, at) {
   wiring.pan = { x: cx - (cx - wiring.pan.x) * (z / wiring.zoom), y: cy - (cy - wiring.pan.y) * (z / wiring.zoom) };
   wiring.zoom = z; placeWiring();
 }
-/** Every value a field can take from the page, grouped as Bubble's dropdown is. */
-function valueSources(forNode) {
+/** Every value a field can take from the page, grouped as Bubble's dropdown is. A Go to page's Data to send (`forPort`)
+    starts with the ids of the type its page shows: a clicked row's, a first page data item's, this page's own. */
+function valueSources(forNode, forPort) {
   const groups = [];
   const rank = (o) => { const g = (o.raw?.group || o.group || 'General'); return g === 'General' ? 0 : /Advanced|Bounding Box|Mounted/.test(g) ? 3 : /States|Events|Component/.test(g) ? 1 : 2; };
   const outs = (n) => portsOf(n, 'output').filter((o) => !o.signal).sort((a, b) => rank(a) - rank(b));
+  const sends = forNode && forPort && sendsThing(forNode)?.param === forPort.name.replace(/^pm-/, '') ? sendsThing(forNode).type : null;
+  if (sends) {
+    const ids = [];
+    for (const n of nodes) if (n.type === 'For Each' && n.id !== forNode.id) ids.push({ node: n.id, port: 'itemActionItemId', text: `${labelOf(n.id)}'s clicked row (its id)`, sub: 'the row clicked, in a row\'s workflow', kind: 'el' });
+    for (const it of pageItems) if (it.first && it.collection === sends) ids.push({ item: it.id, what: 'id', text: `${it.name}'s id`, sub: `the first ${it.collection}`, kind: 'data' });
+    if (pageThing?.type === sends) ids.push({ node: pageThing.recordId, port: 'id', text: `${thingName(sends)}'s id`, sub: 'the one this page shows', kind: 'data' });
+    if (ids.length) groups.push([`A ${sends} to send`, ids]);
+  }
+  if (pageThing) {
+    const t = pageThing.type;
+    groups.push([thingName(t), [...fieldsOf(t).map((f) => ({ node: pageThing.recordId, port: 'prop-' + f, text: `${thingName(t)}'s ${f}`, sub: `the ${t} it was opened with`, kind: 'data' })),
+      { node: pageThing.recordId, port: 'id', text: `${thingName(t)}'s id`, sub: 'text', kind: 'data' }]]);
+  }
   const data = pageDataSources();
   if (data.length) groups.push(['Page data', data]);
   const states = statesOf().filter((n) => n.id !== forNode?.id).map((n) => ({ node: n.id, port: statePort(n), text: `${labelOf(n.metadata.customState.of)}'s ${stateName(n)}`, sub: n.metadata.customState.type, kind: 'state' }));
@@ -3551,7 +3573,7 @@ function sourceMenu(e, node, p, onPick, initial = '') {
     if (!q2 && !onPick) list.append(h('div', { class: 'item', onclick: () => { closeMenu(); openComposer(e, node, p, null, onPick); } }, icon('fx'), 'Compose an expression…', h('small', {}, 'chips, JavaScript, or both')));
     // Bubble's "Do a search for…": never a search in the field, always page data, made or reused here
     if (!q2 || /search|data|new/.test(q2)) list.append(h('div', { class: 'item', onclick: (ev) => newItemForm(ev, (it) => (it.first ? sourceMenu(e, node, p, onPick, `${it.name}'s`) : pick({ item: it.id, what: 'list', text: `${it.name} · the list` })), { keepComposer: !!onPick }) }, icon('plus'), 'New page data…', h('small', {}, 'do a search, once, for the page')));
-    for (const [title, items] of valueSources(node)) {
+    for (const [title, items] of valueSources(node, p)) {
       const shown = items.filter((it) => !q2 || it.text.toLowerCase().includes(q2));
       if (!shown.length) continue;
       list.append(h('div', { class: 'h' }, title));
@@ -3637,7 +3659,7 @@ function renderDatalists() {
 }
 
 /* ================= page data (STU-010 / STU-011): a search lives once on the page, by name, and elements read it ================= */
-const isPageDataNode = (n) => !!(n?.metadata?.pageData || n?.metadata?.pageDataRecord || n?.metadata?.pageDataShown || n?.metadata?.pageDataAsk); // the last two: a reusable item's "ask while shown" (STU-014)
+const isPageDataNode = (n) => !!(n?.metadata?.pageData || n?.metadata?.pageDataRecord || n?.metadata?.pageDataShown || n?.metadata?.pageDataAsk || n?.metadata?.pageThing); // a reusable item's "ask while shown" (STU-014); the page's thing
 const itemById = (id) => pageItems.find((i) => i.id === id);
 /** Every data type the app knows: declared, in backend/schema.json, named by its own nodes, or on the running backend. */
 const typeNames = () => [...new Set([...collections().map((c) => c.name), ...schemaTables().map((t) => t.table), ...appCollections().keys(), ...liveTables.map((t) => t.name)])].filter(Boolean).sort();
@@ -3668,6 +3690,8 @@ function pageDataSources() {
   return out;
 }
 function pageDataChip(fromId, port) {
+  const thing = byId[fromId]?.metadata?.pageThing;
+  if (thing) return port.startsWith('prop-') ? `${thingName(thing.type)}'s ${port.slice(5)}` : `${thingName(thing.type)}'s id`;
   const it = itemOfSource(pageItems, fromId);
   if (!it) return port;
   if (fromId === it.recordId && port.startsWith('prop-')) return `${it.name}'s ${port.slice(5)}`;
@@ -3694,6 +3718,7 @@ const sentence = (it) => describe(it, (from) => (from ? chipText(from.node, from
 
 function renderPageData() {
   const box = $('pagedata'); box.innerHTML = '';
+  if (isPage(pageKey)) box.append(thingRow());
   const log = frameLog();
   for (const it of pageItems) {
     const n = readersOf(it, nodes, conns).length;
@@ -3703,6 +3728,102 @@ function renderPageData() {
       h('small', { class: 'run' }, runText(lastRun(it, log)))));
   }
   if (!pageItems.length) box.append(h('div', { class: 'hint' }, isPage(pageKey) ? 'No page data yet. A search is made here once, by name, and any element reads it.' : 'No data yet. A search made here is asked by each copy while it is shown, and any element in the reusable reads it.'));
+}
+/* ---- Bubble's "Type of content": a page about one record (a Listing page), opened with the one to show (./pagedata.mjs) ---- */
+function thingRow() {
+  const types = typeNames(), t = pageThing?.type;
+  const pick = h('select', { 'aria-label': 'Type of content', onchange: (e) => setPageThing(e.target.value || null) },
+    h('option', { value: '' }, '(none)'), ...types.map((x) => h('option', { value: x, selected: x === t }, x)), ...(t && !types.includes(t) ? [h('option', { value: t, selected: true }, t)] : []));
+  return h('div', { class: 'thing', 'data-thing': t ?? '' }, h('div', { class: 'top' }, icon('page'), h('span', { class: 'name' }, 'Type of content'), pick),
+    h('small', {}, t ? `Opened with the ${t} it shows: a Go to page sends it (Data to send), and the address keeps it (?${pageThing.param}=…). ⚡ has its fields, as ${thingName(t)}.`
+      : 'For a page about one record (a Listing page): the type of record it is opened with.'));
+}
+/** Several components changed as one gesture, one undo: `[[key, edits]]`, each written once. */
+function editsAcross(list) {
+  snapshot();
+  try {
+    for (const [key, es] of list) { const c = store.readComponent(key); let cur = c.files; for (const e of es) cur = applyEdit(cur, e).files; store.writeComponent(key, cur, { ifRevision: c.revision }); }
+  } catch (err) { const snap = undoStack.pop(); if (snap) { files = NodegxPreview.memoryFiles(snap); store = new NodegxPreview.V2ProjectStore(files); } toast(err.message); return false; }
+  persist(); readGraph(); renderAll(); rebuild();
+  return true;
+}
+/** The page shows one `type` now (or none). What a Go to page elsewhere sends it follows the new parameter. */
+function setPageThing(type) {
+  const cur = pageThing, page = pageKey.split('/').pop(), toParam = type ? thingParam(type) : null;
+  const list = [[pageKey, pageThingEdits(type, { component: pageKey, current: cur })]];
+  if (!list[0][1].length) return;
+  if (cur && cur.param !== toParam) for (const k of store.componentKeys()) {
+    if (k === pageKey) continue;
+    const f = store.readComponent(k).files, e = sendsFollow({ component: k, nodes: f.nodes.nodes, conns: f.connections.connections, target: '/' + pageKey, fromParam: cur.param, toParam });
+    if (e.length) list.push([k, e]);
+  }
+  if (!editsAcross(list)) return;
+  const sent = list.length - 1, follow = sent ? ` (${sent === 1 ? 'a Go to page on 1 other page follows' : `Go to page steps on ${sent} other pages follow`})` : '';
+  toast(type ? `${page} shows one ${type}: a Go to page to it sends which one, under Data to send${follow}` : `${page} shows no record of its own now${follow}`);
+}
+$('newpage').onclick = (e) => newPageForm(e);
+/** Bubble's "Add a new page": a name, and the type of record it shows (if any). */
+function newPageForm(e) {
+  closeMenu();
+  const menu = popover(e, 'newitem newpage');
+  const name = h('input', { type: 'text', placeholder: 'Listing, About, Checkout…', 'aria-label': 'Page name' });
+  const type = h('select', { 'aria-label': 'Type of content' }, h('option', { value: '' }, '(none)'), ...typeNames().map((t) => h('option', { value: t }, t)));
+  const note = h('div', { class: 'note' }), create = h('button', { class: 'primary' }, 'Create');
+  const clean = () => name.value.replace(/\//g, ' ').trim();
+  const check = () => {
+    const n = clean();
+    note.textContent = !n ? 'Its name, as the page list shows it.' : registry()['Pages/' + n] ? `There is already a page called ${n}.` : type.value ? `${n} shows one ${type.value}: a Go to page to it says which, under Data to send.` : `${n}: an empty page the app can go to.`;
+    create.disabled = !n || !!registry()['Pages/' + n];
+  };
+  name.oninput = check; type.onchange = check;
+  name.onkeydown = (ev) => { if (ev.key === 'Enter' && !create.disabled) create.click(); else if (ev.key === 'Escape') closeMenu(); };
+  create.onclick = () => { const n = clean(); if (!n || registry()['Pages/' + n]) return; closeMenu(); makePage(n, type.value || null); };
+  menu.append(h('div', { class: 'h' }, 'New page'), h('div', { class: 'field' }, h('label', {}, 'Name'), name), h('div', { class: 'field' }, h('label', {}, 'Type of content'), type), note,
+    h('div', { class: 'foot' }, h('button', { onclick: () => closeMenu() }, 'Cancel'), create));
+  document.body.append(menu); name.focus(); check();
+  dismissOnOutside(menu);
+}
+/**
+ * A new page, as the blank app's Home is made (lib/blank.mjs): a Page with its own address, a Content group, a heading. It
+ * is put in the app's Router so a Go to page can reach it. With a type, it shows one: its thing (./pagedata.mjs), and a
+ * Text under the heading already reading its title (or the first field it has). One gesture, one undo; Design opens on it.
+ */
+function makePage(name, type) {
+  const key = `Pages/${name}`, legacy = '/' + key;
+  const at = store.componentKeys().map((k) => store.readComponent(k)).find((c) => c.files.nodes.nodes.some((n) => n.type === 'Router'));
+  if (!at) return toast('This app has no Router, so a new page could not be reached: add one in the NodeGX editor first');
+  const router = at.files.nodes.nodes.find((n) => n.type === 'Router'), pages = router.parameters?.pages || {};
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'page';
+  const px = (value) => ({ value, unit: 'px' });
+  const pageId = uuid(), boxId = uuid(), headId = uuid(), now = new Date().toISOString();
+  let page = {
+    component: { $schema: 'https://opennoodl.dev/schemas/component-v2.json', id: uuid(), name, path: legacy, type: 'page', created: now, modified: now, modifiedBy: 'nodegx-studio' },
+    nodes: { $schema: 'https://opennoodl.dev/schemas/nodes-v2.json', visualRoots: [pageId], nodes: [
+      { id: pageId, type: 'Page', label: name, parameters: { title: name, urlPath: slug }, children: [boxId] },
+      { id: boxId, type: 'Group', label: 'Content', parent: pageId, parameters: { paddingTop: px(48), paddingBottom: px(48), paddingLeft: px(24), paddingRight: px(24), rowGap: px(16) }, children: [headId] },
+      { id: headId, type: 'Text', label: 'Heading', parent: boxId, parameters: { text: name, fontSize: px(32), fontWeight: 600 } }] },
+    connections: { $schema: 'https://opennoodl.dev/schemas/connections-v2.json', connections: [] }
+  };
+  if (type) {
+    const made = pageThingEdits(type, { component: key, current: undefined });
+    const recordId = made.find((e) => e.type === 'DbModel2').id, fields = fieldsOf(type);
+    const shown = ['title', 'name'].find((f) => fields.includes(f)) ?? fields[0];
+    const textId = uuid();
+    if (shown) made.push({ edit: 'add_node', component: key, id: textId, type: 'Text', label: `${type}'s ${shown}`, parent: boxId, parameters: { text: '' } },
+      { edit: 'connect', component: key, from: { node: recordId, port: 'prop-' + shown }, to: { node: textId, port: 'text' } });
+    for (const e of made) page = applyEdit(page, e).files;
+  }
+  snapshot();
+  try {
+    store.writeComponent(key, page, { expectNew: true });
+    if (!(pages.routes || []).includes(legacy)) {
+      const r = applyEdit(at.files, { edit: 'set_parameter', id: router.id, name: 'pages', value: { ...pages, routes: [...(pages.routes || []), legacy] } }).files;
+      store.writeComponent(at.key, r, { ifRevision: at.revision });
+    }
+  } catch (err) { const snap = undoStack.pop(); if (snap) { files = NodegxPreview.memoryFiles(snap); store = new NodegxPreview.V2ProjectStore(files); } return toast(err.message); }
+  persist();
+  openComponent(key);
+  toast(type ? `${name} is a new page about one ${type}: a Go to page to it says which one, under Data to send` : `${name} is a new page, at /${slug}`);
 }
 function openItem(id) { selItem = id; sel = null; hover = null; renderTree(); renderPageData(); renderProps(); draw(); }
 
@@ -5149,8 +5270,14 @@ function stepPanel(panel, node) {
   const advanced = ports.filter((p) => ADVANCED_PORTS.has(p.name) || p.name.startsWith('runOnChange-') || /advanced|experimental/i.test(p.group || ''));
   const isRecord = ports.some((p) => p.name === 'collectionName');
   const record = isRecord ? ports.filter((p) => p.name.startsWith('prop-') && !advanced.includes(p)) : [];
-  const main = ports.filter((p) => !advanced.includes(p) && !record.includes(p)).sort((a, b) => (b.name === 'collectionName') - (a.name === 'collectionName'));
+  // Bubble's "Data to send": the page a Go to page opens shows one record (its Type of content), and this is the one it shows
+  const thing = sendsThing(node), sendPort = thing && ports.find((p) => p.name === 'pm-' + thing.param);
+  const main = ports.filter((p) => !advanced.includes(p) && !record.includes(p) && p !== sendPort).sort((a, b) => (b.name === 'collectionName') - (a.name === 'collectionName'));
   for (const p of main) wrap.append(field(p));
+  if (sendPort) {
+    wrap.append(h('div', { class: 'sechead' }, 'Data to send'), field({ ...sendPort, displayName: `The ${thing.type} to show` }));
+    if (!wiredIn[sendPort.name] && (params[sendPort.name] ?? '') === '') wrap.append(h('div', { class: 'warn', 'data-warn': 'nothingsent' }, `Nothing is sent yet: ${String(params.target).split('/').pop()} opens showing no ${thing.type}. ⚡ gives it one (a clicked row's id, say).`));
+  }
   if (record.length) { wrap.append(h('div', { class: 'sechead' }, `Fields of ${params.collectionName || 'the record'}`)); for (const p of record) wrap.append(field(p)); }
   else if (isRecord && !params.collectionName) wrap.append(h('div', { class: 'hint', style: 'padding:6px 0' }, 'Pick its data type, and its fields appear here.'));
   if (!ports.length && !isCond) wrap.append(h('div', { class: 'hint', style: 'padding:10px 0' }, 'This action has no settings to type; its inputs come from values.'));
@@ -5162,6 +5289,12 @@ function stepPanel(panel, node) {
     wrap.append(h('div', { class: 'after' }, h('button', { onclick: (e) => addActionMenu(e, next ? { node: node.id, port: done, before: { node: next.toId, port: next.toProperty } } : { node: node.id, port: done }) }, icon('plus'), next ? 'Put an action after this one' : 'Add an action after this one')));
   }
   panel.append(wrap);
+}
+/** What the page a Go to page opens shows one of (its Type of content), or undefined. */
+function sendsThing(node) {
+  const key = node?.type === 'RouterNavigate' && typeof node.parameters?.target === 'string' ? node.parameters.target.replace(/^\//, '') : null;
+  if (!key || !isPage(key)) return undefined;
+  try { return readPageThing(store.readComponent(key).files.nodes.nodes); } catch { return undefined; }
 }
 /** A record step's field that is a Choice on its data type: its choices, for a dropdown instead of a text box. */
 function choicesFor(node, port) {
@@ -6862,7 +6995,7 @@ function switchTab(name) {
   tab = name;
   for (const x of document.querySelectorAll('#rail [role=tab]')) x.setAttribute('aria-selected', x.dataset.tab === name);
   for (const s of document.querySelectorAll('main > section.tab')) s.hidden = s.id !== name;
-  $('pagepick-l').style.display = name === 'data' || name === 'styles' ? 'none' : '';
+  $('pagepick-l').style.display = $('newpage').style.display = name === 'data' || name === 'styles' ? 'none' : '';
   $('widthseg').style.display = name === 'design' ? '' : 'none';
   $('previewmode-l').style.display = name === 'design' ? '' : 'none';
   renderAll();

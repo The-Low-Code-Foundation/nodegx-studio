@@ -1442,6 +1442,74 @@ try {
     const traced = JSON.parse(await b.evaluate(`JSON.stringify(${ctx}.getTraceEvents(${before}).slice(0, 8).map(e => [e.fromNode, e.fromPort, e.toNode, e.toPort].join(' ')))`));
     ok(milk && heard.some(([p, v]) => p === 'itemActionItemId' && v === JSON.stringify(milk)) && heard.some(([p]) => p === 'itemOutputSignal-Click'), 'in the app, a click on the "Buy milk" row sends that note\'s id, then the event', { milk, heard, matches, traced, app: (await appText()).slice(0, 200) });
   }
+  // STU-090: Bubble's "Type of content" and "Data to send". A new page about one Note; the row click goes to it and sends
+  // the clicked row; in the app the page shows that note. The page's type changed, what Sign in sends follows
+  console.log('check: a page about one record, and the Go to page that sends it (STU-090)');
+  {
+    const NOTE = 'components/Pages/Note/';
+    const app = onDisk('components/App/nodes.json').nodes.find((n) => n.type === 'Router');
+    await b.clickSel('[data-tab=design]'); await wait(300);
+    await b.clickSel('#newpage'); await wait(250);
+    await b.evaluate(`document.querySelector('.menu.newpage input').focus()`); await b.type('Note');
+    await b.evaluate(`(() => { const s = document.querySelector('.menu.newpage select'); s.value = 'Note'; s.dispatchEvent(new Event('change')); })()`); await wait(150);
+    const said = await b.evaluate(`document.querySelector('.menu.newpage .note').textContent`);
+    await clickText('.menu.newpage button', 'Create'); await wait(1500);
+    const pn = existsSync(join(project, NOTE, 'nodes.json')) ? onDisk(NOTE + 'nodes.json').nodes : [], pc = existsSync(join(project, NOTE, 'connections.json')) ? onDisk(NOTE + 'connections.json').connections : [];
+    const pin = pn.find((n) => n.type === 'PageInputs'), rec = pn.find((n) => n.type === 'DbModel2'), title = pn.find((n) => n.type === 'Text' && pc.some((c) => c.fromId === rec?.id && c.fromProperty === 'prop-title' && c.toId === n.id && c.toProperty === 'text'));
+    const routes = onDisk('components/App/nodes.json').nodes.find((n) => n.id === app.id)?.parameters?.pages?.routes || [];
+    ok(/shows one Note/.test(said) && pn.some((n) => n.type === 'Page' && n.parameters?.urlPath === 'note') && pin?.parameters?.queryParams === 'note' && rec?.parameters?.collectionName === 'Note' && pc.some((c) => c.fromId === pin.id && c.fromProperty === 'pm-note' && c.toId === rec.id && c.toProperty === 'modelId') && title && routes.includes('/Pages/Note'),
+      'New page "Note", type of content Note: a Page at /note, its id from ?note= into a Record of Note, a Text reading its title, and the Router serves it', { said, pin: pin?.parameters, rec: rec?.parameters, title: !!title, routes });
+    const thing = await b.evaluate(`(() => { const s = document.querySelector('#pagedata .thing select'); return s && { page: document.getElementById('pagepick').value, value: s.value }; })()`);
+    ok(thing?.page === 'Pages/Note' && thing.value === 'Note', 'Design opens on the new page, and its Type of content reads Note', thing);
+    // back to Sign in: the row's workflow gets a Go to page after its log step
+    await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Pages/Sign in'; s.dispatchEvent(new Event('change')); })()`); await wait(1500);
+    const sn = onDisk(SIGN + 'nodes.json').nodes, group = sn.find((n) => n.type === 'For Each' && /Note row/.test(n.parameters?.template || '')), log = sn.find((n) => n.type === 'net.noodl.Log');
+    await b.clickSel('[data-tab=workflow]'); await wait(500);
+    await b.evaluate(`[...document.querySelectorAll('#events .row')].find(r => r.dataset.node === ${JSON.stringify(group?.id)} && /Click/.test(r.dataset.port || ''))?.click()`); await wait(600);
+    await b.evaluate(`document.querySelector('.flow .step[data-id=${JSON.stringify(log?.id)}]')?.click()`); await wait(400);
+    await clickText('#wfinspect .after button', 'Add an action after'); await wait(250);
+    await b.type('Go to page'); await wait(200); await menuItem('Go to page'); await wait(600);
+    let nav;
+    for (const t0 = Date.now(); Date.now() - t0 < 5000 && !nav; await wait(150)) nav = onDisk(SIGN + 'nodes.json').nodes.find((n) => n.type === 'RouterNavigate' && onDisk(SIGN + 'connections.json').connections.some((c) => c.fromId === log?.id && c.toId === n.id));
+    await b.evaluate(`(() => { const f = [...document.querySelectorAll('#wfinspect .field')].find(f => /^(target|page)$/i.test(f.querySelector('label')?.textContent || '')); const s = f?.querySelector('select'); if (!s) return; s.value = '/Pages/Note'; s.dispatchEvent(new Event('change')); })()`); await wait(800);
+    const panel = await b.evaluate(`(() => { const p = document.getElementById('wfinspect'); return { heads: [...p.querySelectorAll('.sechead')].map(x => x.textContent), labels: [...p.querySelectorAll('.field label')].map(x => x.textContent), warn: p.querySelector('[data-warn=nothingsent]')?.textContent ?? null }; })()`);
+    ok(nav && onDisk(SIGN + 'nodes.json').nodes.find((n) => n.id === nav.id)?.parameters?.target === '/Pages/Note' && panel.heads.includes('Data to send') && panel.labels.includes('The Note to show') && /Nothing is sent yet: Note opens showing no Note/.test(panel.warn || ''),
+      'a Go to page to Note asks, under Data to send, for "The Note to show", and says while it is empty that Note opens showing none', { nav: nav?.id, panel });
+    const i = panel.labels.indexOf('The Note to show');
+    await b.evaluate(`[...document.querySelectorAll('#wfinspect .field')][${i}].querySelector('.bolt').click()`); await wait(300);
+    const groups = await b.evaluate(`[...document.querySelectorAll('.menu .h')].map(x => x.textContent)`);
+    const n1 = await shows();
+    await menuItem("Repeating group of Note's clicked row (its id)");
+    const sent = () => onDisk(SIGN + 'connections.json').connections.filter((c) => c.toId === nav?.id && c.toProperty.startsWith('pm-')).map((c) => `${c.fromId === group?.id ? 'group' : c.fromId}.${c.fromProperty}→${c.toProperty}`);
+    for (let k = 0; k < 50 && !sent().length; k++) await wait(100);
+    ok(groups[0] === 'A Note to send' && JSON.stringify(sent()) === '["group.itemActionItemId→pm-note"]', "its ⚡ starts with the Notes it can send, and the clicked row's id is wired into pm-note", { groups, sent: sent() });
+    // in the app: a click on the "Buy milk" row goes to Note, which shows Buy milk (read from the backend by the id it was sent)
+    await rebuilt(n1); await wait(1500);
+    const milk = (await (await fetch(`http://127.0.0.1:${backendPort}/classes/Note?where=${encodeURIComponent(JSON.stringify({ title: 'Buy milk' }))}`, { headers: { 'X-Parse-Application-Id': 'studio_check' } })).json()).results?.[0]?.objectId;
+    const ctx = '__ob.preview.frame.contentWindow.Noodl.Navigation._noodlRuntime.context';
+    const before = await b.evaluate(`${ctx}.getTraceEvents(0).length`);
+    await b.evaluate(`(() => { const d = __ob.preview.frame.contentDocument, w = d.createTreeWalker(d.body, NodeFilter.SHOW_TEXT), all = []; while (w.nextNode()) if (w.currentNode.nodeValue.trim() === 'Buy milk') all.push(w.currentNode.parentElement); for (const t of all) t.dispatchEvent(new MouseEvent('click', { bubbles: true })); })()`);
+    const onPage = `${ctx}.rootComponent.nodeScope.getNodesWithTypeRecursive('Router')[0]._internal`;
+    let where = null;
+    for (const t0 = Date.now(); Date.now() - t0 < 8000; await wait(200)) { where = await b.evaluate(`(() => { const w = __ob.preview.frame.contentWindow, r = ${onPage}; return { page: r.currentPage?.component, params: JSON.stringify(r.currentParams ?? null), at: w.location.pathname + w.location.search + w.location.hash, text: [...w.document.body.children].filter((e) => !['SCRIPT', 'NOSCRIPT'].includes(e.tagName)).map((e) => e.innerText).join(' ') }; })()`); if (where.page === '/Pages/Note' && where.text.includes('Buy milk') && !where.text.includes('Sign in')) break; } // the Router's page changes a frame before the page is drawn
+    const traced = JSON.parse(await b.evaluate(`JSON.stringify(${ctx}.getTraceEvents(${before}).slice(0, 14).map(e => [e.fromNode === ${JSON.stringify(group?.id)} ? 'group' : e.fromNode === ${JSON.stringify(nav?.id)} ? 'nav' : e.fromNode === ${JSON.stringify(log?.id)} ? 'log' : e.fromNode, e.fromPort, e.toNode === ${JSON.stringify(nav?.id)} ? 'nav' : e.toNode === ${JSON.stringify(log?.id)} ? 'log' : e.toNode, e.toPort, e.value].join(' ')))`).catch(() => '[]'));
+    const opened = milk && where?.page === '/Pages/Note' && where.params?.includes(milk) && where.text.includes('Buy milk') && !where.text.includes('Sign in');
+    ok(opened, "in the app, the Buy milk row opens Note, sent that note's id, and Note shows Buy milk", { page: where?.page, text: where?.text?.replace(/\s+/g, ' ').trim().slice(-120) });
+    if (!opened) console.log('    detail:', JSON.stringify({ milk, where, traced }));
+    // Note's type changed to Task: what Sign in sends follows to pm-task; back to Note, it comes back
+    await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Pages/Note'; s.dispatchEvent(new Event('change')); })()`); await wait(1200);
+    await b.clickSel('[data-tab=design]'); await wait(400);
+    const setType = (v) => b.evaluate(`(() => { const s = document.querySelector('#pagedata .thing select'); s.value = ${JSON.stringify(v)}; s.dispatchEvent(new Event('change')); })()`);
+    await setType('Task'); await wait(800);
+    const asTask = { sent: sent(), q: onDisk(NOTE + 'nodes.json').nodes.find((n) => n.id === pin?.id)?.parameters?.queryParams, type: onDisk(NOTE + 'nodes.json').nodes.find((n) => n.id === rec?.id)?.parameters?.collectionName };
+    await setType('Note'); await wait(800);
+    ok(JSON.stringify(asTask) === JSON.stringify({ sent: ['group.itemActionItemId→pm-task'], q: 'task', type: 'Task' }) && JSON.stringify(sent()) === '["group.itemActionItemId→pm-note"]',
+      "Note's type of content changed to Task, Sign in's Go to page sends its row to pm-task; back to Note, to pm-note", { asTask, back: sent() });
+    await setType(''); await wait(800);
+    const none = { pn: onDisk(NOTE + 'nodes.json').nodes.filter((n) => n.metadata?.pageThing).length, sent: sent() };
+    await setType('Note'); await wait(800);
+    ok(none.pn === 0 && none.sent.length === 0 && JSON.stringify(sent()) === '[]', "(none) takes the page's Record and Page Inputs away and what Sign in sent with them; Note again sends nothing until it is given one", { none, again: sent() });
+  }
   // P128 S5 (STU-083): Help draws NodeGX's canon from vendor/, its headings and its links as the canon has them
   console.log('check: Help, the canon drawn in Studio (STU-083)');
   {
