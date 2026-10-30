@@ -19,6 +19,10 @@
  * the fields a Dropdown reads, and no `metadata.optionSet`). Data → Option sets shows its columns and options, not one
  * blank `display`, and a Choice takes its values from it.
  *
+ * 3. An option set Studio makes (Richard, 2026-10-30: Label + Value): New option set, two options typed in Studio; the
+ * file holds `{ Label }` rows under the columns Label and Value, and the example's page, placed by the agent on that
+ * set, draws a Dropdown whose options are the two labels (read in the running app's frame).
+ *
  *   node editor/shapes-check.mjs          PASS n/n and exit 0, or the failing lines and exit 1
  */
 import { spawn } from 'node:child_process';
@@ -159,6 +163,27 @@ try {
   await b.evaluate(`document.querySelector('#drawer .kinds [data-kind=choice]').click()`); await wait(300);
   const choices = await b.evaluate(`(() => { const sel = [...document.querySelectorAll('#drawer label.f')].find((l) => l.textContent.startsWith('Take the choices'))?.querySelector('select'); const o = sel && [...sel.options].find((x) => x.textContent.includes('Languages')); if (!o) return null; sel.value = o.value; sel.dispatchEvent(new Event('change')); return document.querySelector('#drawer [data-input=values]').value; })()`);
   ok(choices === 'English\nFrançais', 'a Choice takes its values from it', choices);
+  await b.evaluate(`document.querySelector('#drawer .dfoot button')?.click()`); await wait(300); // Cancel
+
+  console.log('check: an option set Studio made, in a Dropdown');
+  await b.evaluate(`document.querySelector('[data-sub=options]').click()`); await wait(400);
+  await b.evaluate(`document.getElementById('newoptset').click()`);
+  if (!(await b.until(`!!document.querySelector('.ask [data-input=askname]')`, 4000))) throw new Error('no name asked for the option set');
+  await b.evaluate(`document.querySelector('.ask [data-input=askname]').focus()`); await b.type('Sizes'); await b.key('Enter', 'Enter', 13);
+  await b.until(`!!document.querySelector('#optmain input[placeholder^="New option"]')`, 8000);
+  for (const name of ['Small', 'Large']) { await b.evaluate(`(() => { const i = document.querySelector('#optmain input[placeholder^="New option"]'); i.focus(); i.value = ''; })()`); await b.type(name); await b.key('Enter', 'Enter', 13); await wait(700); }
+  const setDir = join(project, 'components', 'Option sets', 'Sizes');
+  const rows = JSON.parse(JSON.parse(readFileSync(join(setDir, 'nodes.json'), 'utf8')).nodes.find((n) => n.type === 'Static Data').parameters.json);
+  const columns = JSON.parse(readFileSync(join(setDir, 'component.json'), 'utf8')).metadata?.optionSet?.attributes?.map((a) => a.name);
+  ok(JSON.stringify(rows) === JSON.stringify([{ Label: 'Small' }, { Label: 'Large' }]) && columns?.join() === 'Label,Value', 'a set made in Studio has the columns Label and Value, and its options are Label rows', { rows, columns });
+  const page = JSON.parse(readFileSync(join(repo, 'docs/node-catalog/examples/option-set.json'), 'utf8')).components[1];
+  const nodes = page.nodes.map((n) => (n.type === '/Option sets/Languages' ? { ...n, type: '/Option sets/Sizes' } : n.type === 'Page' ? { ...n, parameters: { ...n.parameters, title: 'Sizes', urlPath: 'sizes' } } : n));
+  const placed = await asAgent(project, 'create_component', { path: '/Pages/Sizes', type: 'page', nodes, connections: page.connections });
+  ok(!placed.result?.isError && !placed.error, 'the agent places the example\'s page on that set', placed.result?.content?.[0]?.text?.slice(0, 160));
+  await b.until(`[...document.getElementById('pagepick').options].some((o) => o.value === 'Pages/Sizes')`, 15000);
+  await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Pages/Sizes'; s.dispatchEvent(new Event('change')); })()`);
+  const drawn = await b.until(`(() => { try { const o = [...__ob.preview.frame.contentDocument.querySelectorAll('select option')].map((x) => x.textContent).filter((t) => t && !/^Choose/.test(t)); return o.length ? o : false; } catch { return false; } })()`, 15000);
+  ok(JSON.stringify(drawn) === JSON.stringify(['Small', 'Large']), 'its Dropdown, in the running app, offers Small and Large', drawn);
 } catch (err) {
   ok(false, `the gate stopped: ${err.stack || err.message}`);
 } finally {

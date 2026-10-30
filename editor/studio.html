@@ -1662,7 +1662,7 @@ const isComposed = (n) => n.type === 'Expression' && n.metadata?.composedFor;
 // no attributes in its metadata: its columns are its rows' keys, typed by their first value, not a blank `display`
 const attributesOf = (options) => {
   const names = [...new Set(options.filter((o) => o && typeof o === 'object').flatMap(Object.keys))];
-  if (!names.length) return [{ name: 'display', type: 'text' }];
+  if (!names.length) return OPTION_COLUMNS.map((a) => ({ ...a }));
   const typeOf = (v) => (typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'yes / no' : 'text');
   return names.map((name) => ({ name, type: typeOf(options.find((o) => o?.[name] !== undefined && o?.[name] !== null)?.[name]) }));
 };
@@ -6326,6 +6326,9 @@ async function copyDrawer() {
 
 /* ---- option sets: a logic component with one Static Data node (JSON) and Component Outputs (Items, Count) ---- */
 const ATTR_TYPES = ['text', 'number', 'yes / no', 'date'];
+// P128-S2-OPTSETSHAPE (Richard, 2026-10-30: "Label + Value"): a set Studio makes has the two fields a Dropdown reads off
+// each row, as the agent's sets and the published example have them. A set made before keeps its `display`
+const OPTION_COLUMNS = [{ name: 'Label', type: 'text' }, { name: 'Value', type: 'text' }];
 $('newoptset').onclick = async (e) => {
   const name = await askName(e, 'Name of the option set (e.g. Colours, Countries, Priorities)');
   if (!name) return;
@@ -6335,7 +6338,7 @@ $('newoptset').onclick = async (e) => {
     { id: 'data', type: 'Static Data', label: `${name} · the options`, x: 100, y: 100, parameters: { type: 'json', json: '[]' } },
     { id: 'out', type: 'Component Outputs', label: 'What the page reads', x: 420, y: 100, ports: [{ name: 'items', displayName: 'All options', plug: 'input', type: 'array' }, { name: 'count', displayName: 'Count', plug: 'input', type: 'number' }] }
   ], [{ fromId: 'data', fromProperty: 'items', toId: 'out', toProperty: 'items' }, { fromId: 'data', fromProperty: 'count', toId: 'out', toProperty: 'count' }],
-  { optionSet: { attributes: [{ name: 'display', type: 'text' }] } });
+  { optionSet: { attributes: OPTION_COLUMNS.map((a) => ({ ...a })) } });
   selSet = key; renderData();
   toast(`${name} is an option set: a component the page loads as plain JSON`);
 };
@@ -6370,8 +6373,9 @@ function renderOptionSets() {
   const oc = h('div', { class: 'card' }, h('h4', {}, 'Options'));
   const ot = h('table', {}, h('tr', {}, ...attrs.map((a) => h('th', {}, a.name)), h('th', {})));
   const options = JSON.parse(JSON.stringify(set.options));
-  options.forEach((o, i) => ot.append(h('tr', {}, ...attrs.map((a) => h('td', {}, h('input', { type: 'text', value: o[a.name] ?? '', onchange: (e) => { const v = e.target.value; o[a.name] = a.type === 'number' ? Number(v) : a.type === 'yes / no' ? /^(yes|true|1)$/i.test(v) : v; writeOptionSet(set, { options }); } }))), h('td', {}, h('button', { class: 'quiet tiny danger', onclick: () => { options.splice(i, 1); writeOptionSet(set, { options }); } }, icon('x'))))));
-  const newRow = h('input', { type: 'text', placeholder: 'New option (its display)', style: 'max-width:280px', onkeydown: (e) => { if (e.key === 'Enter') addOpt(); } });
+  // an emptied cell other than the first is no field at all: a Dropdown takes an option's Label as its Value when it has none
+  options.forEach((o, i) => ot.append(h('tr', {}, ...attrs.map((a, j) => h('td', {}, h('input', { type: 'text', value: o[a.name] ?? '', onchange: (e) => { const v = e.target.value; if (j && v === '') delete o[a.name]; else o[a.name] = a.type === 'number' ? Number(v) : a.type === 'yes / no' ? /^(yes|true|1)$/i.test(v) : v; writeOptionSet(set, { options }); } }))), h('td', {}, h('button', { class: 'quiet tiny danger', onclick: () => { options.splice(i, 1); writeOptionSet(set, { options }); } }, icon('x'))))));
+  const newRow = h('input', { type: 'text', placeholder: `New option (its ${attrs[0].name})`, style: 'max-width:280px', onkeydown: (e) => { if (e.key === 'Enter') addOpt(); } });
   const addOpt = () => { if (!newRow.value.trim()) return; options.push({ [attrs[0].name]: newRow.value.trim() }); writeOptionSet(set, { options }); };
   oc.append(ot, h('div', { class: 'bar' }, newRow, h('button', { class: 'primary', onclick: addOpt }, icon('plus'), 'Create')));
   main.append(oc);

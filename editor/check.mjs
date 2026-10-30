@@ -531,7 +531,8 @@ try {
     const data = onDisk(key + 'nodes.json').nodes.find((n) => n.type === 'Static Data');
     const json = JSON.parse(data.parameters.json);
     const attrs = onDisk(key + 'component.json').metadata?.optionSet?.attributes?.map((a) => a.name);
-    ok(json.length === 2 && json[0].display === 'High' && json[1].display === 'Low' && attrs?.includes('rank'), 'two options and an attribute are the Static Data\'s JSON and the component\'s metadata on disk', { json, attrs });
+    // P128-S2-OPTSETSHAPE: Label and Value, the fields a Dropdown reads (Richard, 2026-10-30); no Value typed is no Value
+    ok(json.length === 2 && json[0].Label === 'High' && json[1].Label === 'Low' && !('Value' in json[0]) && attrs?.slice(0, 2).join() === 'Label,Value' && attrs?.includes('rank'), 'a new set\'s columns are Label and Value; two options and an attribute are the Static Data\'s JSON and the component\'s metadata on disk', { json, attrs });
     await shot('option-sets');
     await wait(800);
     ok((await status()).startsWith('App on screen'), 'the app still validates and draws with the option set in the project', await status());
