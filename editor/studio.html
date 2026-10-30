@@ -2225,6 +2225,40 @@ function makeRepeat(parent, it, type) {
   sel = id; readGraph(); renderAll(); rebuild();
   toast(it ? `A repeating group of ${type}: one row per item of ${it.name}. Its row is ${key.split('/').pop()}; open it to change what a row shows.` : `A repeating group of ${type}, its row ${key.split('/').pop()}. Wire a list into its items: ⚡ on Items.`);
 }
+/** Bubble's "Type of content" and "Data source" on a repeating group: what each row shows, and which list it draws (its
+    `items` wire). A page data list is picked from the dropdown; ⚡ takes any other list (an option set, a value on the page,
+    or a new page data). Changing it replaces the wire: an input fed twice would take whichever spoke last. */
+function repeatDataSection(node, { section, row, wiredIn, claimed }) {
+  claimed.add('items');
+  const rowKey = String(node.parameters?.template ?? '').replace(/^\//, '');
+  let rowType = null;
+  try { rowType = store.readComponent(rowKey).files.nodes.nodes.find((n) => n.type === 'Component Inputs')?.label?.match(/^One (.+)$/)?.[1] ?? null; } catch { /* no row component */ }
+  const lists = pageItems.filter((it) => it.collection && !it.first);
+  const now = wiredIn.items;
+  const fromList = now && lists.find((it) => it.id === now.fromId && now.fromProperty === 'items');
+  const setSource = (src) => {
+    if (now && src && now.fromId === src.node && now.fromProperty === src.port) return;
+    edits(pageKey, [
+      ...(now ? [{ edit: 'disconnect', component: pageKey, from: { node: now.fromId, port: now.fromProperty }, to: { node: node.id, port: 'items' } }] : []),
+      ...(src ? [{ edit: 'connect', component: pageKey, from: { node: src.node, port: src.port }, to: { node: node.id, port: 'items' } }] : [])
+    ]);
+    toast(src ? `${labelOf(node.id)} now shows ${src.text || chipText(src.node, src.port)}` : `${labelOf(node.id)} shows nothing now`);
+  };
+  const other = now && !fromList ? chipText(now.fromId, now.fromProperty) : null;
+  const pick = h('select', { 'aria-label': 'Data source', onchange: (e) => { const v = e.target.value; if (v === '@other') return; const it = lists.find((x) => x.id === v); setSource(it ? { node: it.id, port: 'items', text: it.name } : null); } },
+    h('option', { value: '', selected: !now }, '(nothing)'),
+    other ? h('option', { value: '@other', selected: true }, other) : null,
+    ...lists.map((it) => h('option', { value: it.id, selected: fromList?.id === it.id }, `${it.name} · every ${it.collection}`)));
+  const listType = fromList?.collection;
+  return section('Data', [
+    row('Rows of', h('span', {}, rowType ?? '—')),
+    row('Data source', h('div', { style: 'display:flex;gap:6px;align-items:center;min-width:0' }, pick,
+      h('button', { class: 'quiet bolt', title: 'Take the list from somewhere else: other page data, an option set, a value on this page — or make new page data', onclick: (e) => sourceMenu(e, node, { name: 'items', displayName: 'Data source' }, setSource) }, icon('bolt')))),
+    rowType && listType && rowType !== listType ? h('div', { class: 'warn', style: 'color:var(--warn);font-size:12px;padding:4px 0' }, `Each row shows a ${rowType}, but ${fromList.name} holds ${listType} rows: their fields will not reach the row.`) : null,
+    !now ? h('div', { class: 'hint' }, lists.length ? 'Pick the list it shows.' : 'This page has no list yet: ⚡ → New page data… makes one (“every Listing”, say).') : null,
+    rowKey && registry()[rowKey] ? row('Each row', h('button', { class: 'tiny', onclick: () => openComponent(rowKey) }, icon('component'), `Edit ${rowKey.split('/').pop()}`)) : null
+  ]);
+}
 function placePending(hit) {
   const p = pending; pending = null; overlay.classList.remove('adding');
   for (const b of document.querySelectorAll('.palette button')) b.setAttribute('aria-pressed', 'false');
@@ -2609,6 +2643,7 @@ function renderBubblePanel(right, node) {
   // an icon is the Icon element's content; on a button or an input it is a setting, shown once the icon is on
   const isIcon = node.type === 'net.noodl.visual.icon', iconPorts = ['iconSourceType', 'iconIconSource', 'iconImageSource', 'iconSpacing', 'iconPlacement', 'iconSize', 'iconColor'];
   const content = CONTENT_PORTS.filter((n) => has(n) && (isIcon || !n.startsWith('icon')));
+  if (node.type === 'For Each') add(repeatDataSection(node, { section, row, wiredIn, claimed }));
   add(section('Content', content.map((n) => isImg(n) ? row(P[n].displayName || n, img(n)) : n === 'startValue' && !wired(n) ? (claimed.add(n), fieldFor(node, { ...P[n], displayName: CONFIGURE_AS[n] }, params[n], wiredIn[n])) : plain(n))));
   const configure = [...CONFIGURE_PORTS, ...(isIcon ? [] : ['iconSourceType', 'iconIconSource', 'iconImageSource'])].filter((n) => has(n) && !claimed.has(n))
     .filter((n) => isIcon || !has('useIcon') || eff('useIcon') || !iconPorts.includes(n));

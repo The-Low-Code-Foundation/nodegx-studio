@@ -1396,6 +1396,17 @@ try {
     const said = row?.nodes.find((n) => n.type === 'Component Outputs');
     ok(said?.ports?.some((p) => p.name === 'Click' && p.type === 'signal') && row.wires.some((w) => w.fromId === 'rowBox' && w.fromProperty === 'onClick' && w.toId === said.id && w.toProperty === 'Click'), 'Repeating group: its row says Click when the row is clicked', { rowKey, said, wires: row?.wires });
     const group = onDisk(SIGN + 'nodes.json').nodes.find((n) => n.type === 'For Each' && n.parameters?.template === '/' + rowKey);
+    // Bubble's "Type of content" / "Data source": the panel says which list it shows, and changes it
+    const notesId = onDisk(SIGN + 'nodes.json').nodes.find((n) => n.metadata?.pageData?.name === 'notes')?.id;
+    const itemsFrom = () => onDisk(SIGN + 'connections.json').connections.filter((c) => c.toId === group?.id && c.toProperty === 'items').map((c) => `${c.fromId === notesId ? 'notes' : c.fromId}.${c.fromProperty}`);
+    await b.evaluate(`[...document.querySelectorAll('#tree .row')].find(r => r.textContent.includes('Repeating group of Note'))?.click()`); await wait(500);
+    const data = await b.evaluate(`(() => { const s = document.querySelector('#right select[aria-label="Data source"]'); return s && { rowsOf: [...document.querySelectorAll('#right .field')].find(f => f.querySelector('label')?.textContent === 'Rows of')?.textContent, chosen: s.options[s.selectedIndex].textContent, options: [...s.options].map(o => o.textContent) }; })()`);
+    ok(data?.rowsOf?.includes('Note') && data.chosen === 'notes · every Note' && JSON.stringify(itemsFrom()) === '["notes.items"]', 'selected, the repeating group says its rows are of Note and its data source is notes', { data, wire: itemsFrom() });
+    const choose = (v) => b.evaluate(`(() => { const s = document.querySelector('#right select[aria-label="Data source"]'); s.value = ${v}; s.dispatchEvent(new Event('change')); })()`);
+    await choose(`''`); await wait(600);
+    const none = itemsFrom();
+    await choose(`[...document.querySelector('#right select[aria-label="Data source"]').options].find(o => o.textContent.startsWith('notes ·')).value`); await wait(600);
+    ok(none.length === 0 && JSON.stringify(itemsFrom()) === '["notes.items"]', '(nothing) takes its list away, and picking notes again puts back one wire, not two', { none, after: itemsFrom() });
     await b.clickSel('[data-tab=workflow]'); await wait(500);
     await b.clickSel('#newevent'); await wait(400);
     const offered = await b.evaluate(`[...document.querySelectorAll('.menu .item')].map(e => e.textContent)`);

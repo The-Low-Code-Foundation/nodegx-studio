@@ -1827,8 +1827,8 @@ button whose click creates a Listing, branches, and goes to a page.
   Listing has a row clicked*, with *clicked row (its id)* in ⚡ (P123-STU-ROWEVENT: the kit draws a For Each's row
   outputs only once wired, so Studio never offered them). `check:editor` 223/223 (4 new rows). The picture draws only
   once the runtime types a NodeGX File field (P123-RT-COLUMNSSCHEMA, fixed in NodeGX, not yet in `@nodegx/preview`):
-  on today's pin the Image asks for `/runtime/[object Object]`. Still open: the For Each's panel says nothing of the
-  list it shows; opening the clicked listing on a page needs Go to page to carry a record (Studio has no "data to send").
+  on today's pin the Image asks for `/runtime/[object Object]`. **Done (s26b):** selected, a repeating group's panel opens on *Data*: *Rows of*
+  (the row's type), *Data source* (the page's lists, ⚡ for any other, a different type warned), *Edit* its row. Still open: opening the clicked listing on a page needs Go to page to carry a record (Studio has no "data to send").
   
 - The header is crowded at 1440 px ("App on sc…", "Preview ↗" wraps).
 
