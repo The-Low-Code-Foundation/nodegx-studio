@@ -1933,6 +1933,10 @@ Values, follows the set's edits (rows holding a changed Value asked about and mo
 and App data / Data types show the labels — and P123-GH-REFRESHTHING (Refresh page data offers *This page's <Type>*, its
 Record's Fetch). `check:editor` 237/237, `check:shapes` 28/28, `check:data` 82/82; each new row mutant-checked. Left:
 a page in the running app shows a set's Choice by its Value (P123-GH-CHOICELABEL).
+**Next (s29), the open P123-GH rows in this order:** ROWFROZEN (a field added to a type reaches the rows made for it),
+NOCREATEDAT (measure first whether a Record of declared columns has `prop-createdAt` in the preview and the validator:
+the row's s28 note), NOCURRENTUSER, CHOICELABEL; APPDATAINLINE is STU-095's build. `node scripts/bugs.js --from P123`
+in NodeGX lists them.
 
 ### STU-092 — backend workflows: their own place, editable, each step's data
 
