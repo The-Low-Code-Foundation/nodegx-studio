@@ -1822,8 +1822,14 @@ button whose click creates a Listing, branches, and goes to a page.
   sets each declared type's rules on its table after provisioning; `app/blank-check.mjs` 11/11 (a "Cars" listing is refused).
   NodeGX's own `provision_backend` had the same gap and erased the declaration too: P123-MCP-RULESERASED, fixed in
   NodeGX eea8566e3, not yet released. Open: Studio reads one of the two shapes of a declared rule (P123-STU-TWOSHAPES, read).
-- The repeating group's row is plain text (no picture, no click-to-open-its-listing yet), and its For Each's panel says
-  nothing of the list it shows.
+- ~~The repeating group's row is plain text (no picture, no click)~~ **Done (s26):** a type with a File field gets its
+  first one as a 64 px picture beside the words; the row says *Click*, and the page hears it as *When Repeating group of
+  Listing has a row clicked*, with *clicked row (its id)* in ⚡ (P123-STU-ROWEVENT: the kit draws a For Each's row
+  outputs only once wired, so Studio never offered them). `check:editor` 223/223 (4 new rows). The picture draws only
+  once the runtime types a NodeGX File field (P123-RT-COLUMNSSCHEMA, fixed in NodeGX, not yet in `@nodegx/preview`):
+  on today's pin the Image asks for `/runtime/[object Object]`. Still open: the For Each's panel says nothing of the
+  list it shows; opening the clicked listing on a page needs Go to page to carry a record (Studio has no "data to send").
+  
 - The header is crowded at 1440 px ("App on sc…", "Preview ↗" wraps).
 
 ## Rulings open

@@ -1382,6 +1382,50 @@ try {
     const qf = join(project, '.nodegx-questions.json'), qs = existsSync(qf) ? JSON.parse(readFileSync(qf, 'utf8')).questions : [];
     ok(qs.length === 1 && qs[0].component === 'Pages/Sign in' && qs[0].node === 'grWords' && qs[0].text.includes('Greeting (by language)'), "a part's row opens its card, and Ask the agent writes the question to .nodegx-questions.json", qs.map((q) => [q.component, q.node]));
   }
+  // STU-090 (s26): a repeating group's row says Click; the page hears it as the group's own event, with that row's record
+  console.log('check: a repeating group\'s row is clicked (STU-090)');
+  {
+    await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Pages/Sign in'; s.dispatchEvent(new Event('change')); })()`); await wait(1500);
+    await b.clickSel('[data-tab=design]'); await wait(400);
+    await clickText('#palette button', 'Repeating group'); await wait(200);
+    const ov = await b.evaluate(`(() => { const r = document.getElementById('overlay').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + 120) }; })()`);
+    const n0 = await shows();
+    await b.click(ov.x, ov.y); await menuItem('notes'); await rebuilt(n0); await wait(800);
+    const rowKey = Object.keys(onDisk('components/_registry.json').components).find((k) => k.startsWith('Rows/Note row'));
+    const row = rowKey && { nodes: onDisk(`components/${rowKey}/nodes.json`).nodes, wires: onDisk(`components/${rowKey}/connections.json`).connections };
+    const said = row?.nodes.find((n) => n.type === 'Component Outputs');
+    ok(said?.ports?.some((p) => p.name === 'Click' && p.type === 'signal') && row.wires.some((w) => w.fromId === 'rowBox' && w.fromProperty === 'onClick' && w.toId === said.id && w.toProperty === 'Click'), 'Repeating group: its row says Click when the row is clicked', { rowKey, said, wires: row?.wires });
+    const group = onDisk(SIGN + 'nodes.json').nodes.find((n) => n.type === 'For Each' && n.parameters?.template === '/' + rowKey);
+    await b.clickSel('[data-tab=workflow]'); await wait(500);
+    await b.clickSel('#newevent'); await wait(400);
+    const offered = await b.evaluate(`[...document.querySelectorAll('.menu .item')].map(e => e.textContent)`);
+    ok(offered.some((t) => t.startsWith('When Repeating group of Note has a row clicked')), 'the New menu offers "When Repeating group of Note has a row clicked" among the usual events (before any workflow wires it)', offered);
+    // a menu item by what its text holds (menuItem matches its start)
+    const pick = async (text) => { await b.until(`[...document.querySelectorAll('.menu .item')].some(e => e.textContent.includes(${JSON.stringify(text)}))`, 4000); await b.evaluate(`[...document.querySelectorAll('.menu .item')].find(e => e.textContent.includes(${JSON.stringify(text)})).click()`); await wait(250); };
+    await pick('has a row clicked'); await wait(600);
+    await clickText('button', 'Add an action'); await wait(300);
+    await b.evaluate(`(() => { const i = document.querySelector('.menu input'); i.value = 'log'; i.dispatchEvent(new Event('input')); })()`); await wait(300);
+    await pick('Write to the log'); await wait(800);
+    const fields = await b.evaluate(`[...document.querySelectorAll('#wfinspect .field')].map(f => f.querySelector('label')?.textContent)`);
+    await b.evaluate(`[...document.querySelectorAll('#wfinspect .field')][${fields.indexOf('Message')}].querySelector('.bolt').click()`); await wait(300);
+    const n1 = await shows();
+    await pick("Repeating group of Note's clicked row (its id)"); // the page has another (Cards), whose row also says something
+    const log = onDisk(SIGN + 'nodes.json').nodes.find((n) => n.type === 'net.noodl.Log');
+    const wiresNow = () => onDisk(SIGN + 'connections.json').connections.filter((w) => w.fromId === group?.id).map((w) => `${w.fromProperty}→${w.toId === log?.id ? 'log' : w.toId}.${w.toProperty}`);
+    for (let i = 0; i < 50 && !wiresNow().includes('itemActionItemId→log.message'); i++) await wait(100); // the save lands a moment after the pick
+    const wires = wiresNow();
+    ok(wires.includes('itemOutputSignal-Click→log.log') && wires.includes('itemActionItemId→log.message'), 'the event starts the step, and the ⚡ gives it the clicked row (its id)', { wires, toast: await b.evaluate(`document.getElementById('toast').textContent`) });
+    await rebuilt(n1); await wait(1500);
+    const milk = (await (await fetch(`http://127.0.0.1:${backendPort}/classes/Note?where=${encodeURIComponent(JSON.stringify({ title: 'Buy milk' }))}`, { headers: { 'X-Parse-Application-Id': 'studio_check' } })).json()).results?.[0]?.objectId;
+    const ctx = '__ob.preview.frame.contentWindow.Noodl.Navigation._noodlRuntime.context';
+    const before = await b.evaluate(`${ctx}.getTraceEvents(0).length`);
+    // every "Buy milk" on the page: the latest-note text wired earlier is one, the row's title another
+    const matches = await b.evaluate(`(() => { const d = __ob.preview.frame.contentDocument, w = d.createTreeWalker(d.body, NodeFilter.SHOW_TEXT), all = []; while (w.nextNode()) if (w.currentNode.nodeValue.trim() === 'Buy milk') all.push(w.currentNode.parentElement); for (const t of all) t.dispatchEvent(new MouseEvent('click', { bubbles: true })); return all.length; })()`);
+    await wait(1000);
+    const heard = JSON.parse(await b.evaluate(`JSON.stringify(${ctx}.getTraceEvents(${before}).filter(e => e.fromNode === ${JSON.stringify(group?.id)}).map(e => [e.fromPort, e.value]))`));
+    const traced = JSON.parse(await b.evaluate(`JSON.stringify(${ctx}.getTraceEvents(${before}).slice(0, 8).map(e => [e.fromNode, e.fromPort, e.toNode, e.toPort].join(' ')))`));
+    ok(milk && heard.some(([p, v]) => p === 'itemActionItemId' && v === JSON.stringify(milk)) && heard.some(([p]) => p === 'itemOutputSignal-Click'), 'in the app, a click on the "Buy milk" row sends that note\'s id, then the event', { milk, heard, matches, traced, app: (await appText()).slice(0, 200) });
+  }
   // P128 S5 (STU-083): Help draws NodeGX's canon from vendor/, its headings and its links as the canon has them
   console.log('check: Help, the canon drawn in Studio (STU-083)');
   {

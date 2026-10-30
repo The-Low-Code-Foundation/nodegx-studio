@@ -1686,9 +1686,23 @@ function portsOf(node, plug) {
       for (const n of comp.nodes.nodes) if (n.type === ioType) for (const p of n.ports || []) if (!seen.has(p.name)) { const i = p.displayName ? null : inner(n.id, p.name); seen.set(p.name, { name: p.name, label: p.displayName || i?.label || portWords(p.name), type: tname(i?.type ?? p.type), raw: i ? { type: i.type } : undefined, signal: tname(p.type) === 'signal', group: 'Component', of: i?.of }); }
     } catch { /* unknown component */ }
   }
+  // a repeating group passes on what its row says (the row's Component Outputs, prefixed). The kit draws those ports only
+  // once wired (`onWire`), so an event nobody had started a workflow from could never be picked to start one
+  if (node.type === 'For Each' && plug === 'output' && typeof node.parameters?.template === 'string') {
+    try {
+      const row = store.readComponent(node.parameters.template.replace(/^\//, '')).files;
+      for (const n of row.nodes.nodes) if (n.type === 'Component Outputs') for (const p of n.ports || []) {
+        const signal = tname(p.type) === 'signal', name = (signal ? 'itemOutputSignal-' : 'itemOutput-') + p.name;
+        if (!seen.has(name)) seen.set(name, { name, label: p.displayName || p.name, type: tname(p.type), signal, group: 'Item Signals' });
+        if (signal && !seen.has('itemActionItemId')) seen.set('itemActionItemId', { name: 'itemActionItemId', label: 'clicked row (its id)', type: 'string', signal: false, group: 'Item Signals' });
+      }
+    } catch { /* a row that is not there */ }
+  }
   for (const p of libPorts(node.type)) if (p.plug === plug || p.plug === 'input/output') if (!seen.has(p.name)) seen.set(p.name, { name: p.name, label: p.displayName && p.displayName !== p.name ? p.displayName : portWords(p.name), type: tname(p.type), signal: tname(p.type) === 'signal', raw: p });
   const spec = specPortsFor(node.type, node.parameters || {}, node.id);
   if (spec) for (const p of spec[plug === 'input' ? 'inputs' : 'outputs']) if (!seen.has(p.name)) seen.set(p.name, p);
+  // what the row says is a signal; a value of the same name beside it would offer a click as a value in ⚡
+  if (node.type === 'For Each') for (const name of [...seen.keys()]) if (name.startsWith('itemOutputSignal-')) seen.delete('itemOutput-' + name.slice(17));
   for (const p of node.ports || []) if ((p.plug === plug || p.plug === 'input/output') && !seen.has(p.name)) seen.set(p.name, { name: p.name, label: p.displayName || p.name, type: tname(p.type), signal: tname(p.type) === 'signal' });
   for (const p of node.dynamicports || []) if ((p.plug === plug || p.plug === 'input/output') && !seen.has(p.name)) seen.set(p.name, { name: p.name, label: p.displayName || p.name, type: tname(p.type), signal: tname(p.type) === 'signal' });
   // an Expression's inputs are the free names of its text (the spec's own lexer)
@@ -2157,7 +2171,10 @@ function armPending(p, btn) {
 /* ---- Bubble's Repeating group: a list drawn one row per item. Placing one asks which page data list it shows, then makes a
    reusable row (Rows/<Type> row: Component Inputs named after the type's fields, a Text for each of the first few, wired
    from them) and a For Each on the page drawing it, the list's `items` wired in. A For Each fills a row's inputs from the
-   item's fields by name, so the row shows its record. Click a row to open the row, and change it as any reusable ---- */
+   item's fields by name, so the row shows its record. A type with a File field gets the first one as a picture beside the
+   words. The row says Click (its Component Outputs), which the For Each passes on as its own event with the clicked row's
+   record id (`itemActionItemId`): "When Repeating group of Listing has a row clicked". Click a row in Design to open the
+   row, and change it as any reusable ---- */
 const REPEAT = '@repeat';
 function placeRepeat(parent) {
   const lists = pageItems.filter((it) => it.collection && !it.first);
@@ -2175,16 +2192,26 @@ function makeRepeat(parent, it, type) {
   const fields = ((t?.columns.length ? t.columns : t?.backendColumns) || []).filter((c) => !['objectId', 'createdAt', 'updatedAt', 'ACL'].includes(c.name));
   const portOf = (c) => (c.type === 'Number' ? 'number' : c.type === 'Boolean' ? 'boolean' : 'string');
   const shown = fields.filter((c) => ['String', 'Number', 'Date'].includes(c.type)).slice(0, 3);
+  const photo = fields.find((c) => c.type === 'File');
   let key = `Rows/${type} row`;
   for (let i = 2; registry()[key]; i++) key = `Rows/${type} row ${i}`;
   const compId = uuid(), at = new Date().toISOString(), S = 'https://opennoodl.dev/schemas';
   const px = (v) => ({ value: v, unit: 'px' });
   const nodes = [
     { id: 'rowIn', type: 'Component Inputs', label: `One ${type}`, ports: [{ name: 'id', plug: 'output', type: 'string' }, ...fields.map((c) => ({ name: c.name, plug: 'output', type: portOf(c) }))], x: 420, y: 80 },
-    { id: 'rowBox', type: 'Group', label: `${type} row`, parameters: { flexDirection: 'column', sizeMode: 'contentHeight', width: { value: 100, unit: '%' }, rowGap: px(4), paddingTop: px(12), paddingBottom: px(12), paddingLeft: px(14), paddingRight: px(14), borderBottomStyle: 'solid', borderBottomWidth: px(1), borderBottomColor: '#e3e6eb' }, children: shown.map((c) => `rowText-${c.name}`) },
-    ...shown.map((c, i) => ({ id: `rowText-${c.name}`, type: 'Text', label: c.name, parent: 'rowBox', parameters: { text: '', sizeMode: 'contentHeight', width: { value: 100, unit: '%' }, ...(i === 0 ? { fontSize: px(15), fontWeight: 600 } : { fontSize: px(13), color: '#717886' }) } }))
+    { id: 'rowOut', type: 'Component Outputs', label: 'What a row says', ports: [{ name: 'Click', plug: 'input', type: 'signal' }], x: 420, y: 260 },
+    { id: 'rowBox', type: 'Group', label: `${type} row`, parameters: { flexDirection: photo ? 'row' : 'column', ...(photo ? { alignItems: 'center', columnGap: px(12) } : { rowGap: px(4) }), sizeMode: 'contentHeight', width: { value: 100, unit: '%' }, paddingTop: px(12), paddingBottom: px(12), paddingLeft: px(14), paddingRight: px(14), borderBottomStyle: 'solid', borderBottomWidth: px(1), borderBottomColor: '#e3e6eb' }, children: photo ? ['rowPhoto', 'rowWords'] : shown.map((c) => `rowText-${c.name}`) },
+    ...(photo ? [
+      { id: 'rowPhoto', type: 'Image', label: photo.name, parent: 'rowBox', parameters: { sizeMode: 'explicit', width: px(64), height: px(64), objectFit: 'cover', borderRadius: px(8), backgroundColor: '#eef0f3' } },
+      { id: 'rowWords', type: 'Group', label: 'Words', parent: 'rowBox', parameters: { flexDirection: 'column', rowGap: px(4), sizeMode: 'contentHeight', width: { value: 100, unit: '%' } }, children: shown.map((c) => `rowText-${c.name}`) }
+    ] : []),
+    ...shown.map((c, i) => ({ id: `rowText-${c.name}`, type: 'Text', label: c.name, parent: photo ? 'rowWords' : 'rowBox', parameters: { text: '', sizeMode: 'contentHeight', width: { value: 100, unit: '%' }, ...(i === 0 ? { fontSize: px(15), fontWeight: 600 } : { fontSize: px(13), color: '#717886' }) } }))
   ];
-  const wires = shown.map((c) => ({ fromId: 'rowIn', fromProperty: c.name, toId: `rowText-${c.name}`, toProperty: 'text' }));
+  const wires = [
+    ...shown.map((c) => ({ fromId: 'rowIn', fromProperty: c.name, toId: `rowText-${c.name}`, toProperty: 'text' })),
+    ...(photo ? [{ fromId: 'rowIn', fromProperty: photo.name, toId: 'rowPhoto', toProperty: 'src' }] : []),
+    { fromId: 'rowBox', fromProperty: 'onClick', toId: 'rowOut', toProperty: 'Click' }
+  ];
   snapshot();
   try {
     store.writeComponent(key, {
@@ -5157,6 +5184,8 @@ const EVENT_WORDS = { Click: 'is clicked', 'Did Mount': 'appears', 'Will Unmount
 function eventPhrase(node, port) {
   const label = portLabel(node, 'output', port);
   if (node.type === 'Page' && label === 'Did Mount') return 'is loaded';
+  // a repeating group passes on what its row says, with that row's record (makeRepeat)
+  if (node.type === 'For Each' && String(port).startsWith('itemOutputSignal-')) return label === 'Click' ? 'has a row clicked' : `has a row that says ${label}`;
   return EVENT_WORDS[label] || `says ${label}`;
 }
 const actionKind = (type) => actionRow(type)?.[2];

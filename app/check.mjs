@@ -227,10 +227,13 @@ try {
 
     console.log('3b. Publish (STU-008; the site itself is graded by check:publish)');
     ok(await b.evaluate(`!document.querySelector('#publishbtn').hidden`), 'the header has Publish in the desktop app');
+    // P123-STU008-APPCHECKPUBLISH: when no answer comes, say whether this page is still the one that pressed it
+    await b.evaluate(`window.__pressedHere = true`);
     await b.clickSel('#publishbtn');
     const busy = await b.until(`document.querySelector('#publishbtn').textContent === 'Publishing…' || window.__ob.published`, 5000);
     const pub = await b.until(`window.__ob.published`, 120000);
-    ok(busy && pub?.site === site && existsSync(join(site, 'index.html')) && existsSync(join(site, '.nodegx-publish.json')), 'clicking it publishes the open app to the folder chosen', { site: pub?.site, error: pub?.error });
+    const why = pub ? undefined : { busy: !!busy, samePage: await b.evaluate(`window.__pressedHere === true`), problems: b.problems.slice(-5) };
+    ok(busy && pub?.site === site && existsSync(join(site, 'index.html')) && existsSync(join(site, '.nodegx-publish.json')), 'clicking it publishes the open app to the folder chosen', { site: pub?.site, error: pub?.error, why });
     ok(pub?.asked?.[0] === 'This app’s backend runs on this computer' && pub.said?.some((l) => l.includes('on this computer only')), 'before writing, it says the backend is this computer\'s; after, where the site is and what it talks to', pub?.said);
     ok(pub?.said?.some((l) => l.includes('(such as /sign-in)') && l.includes('index.html')), 'and that a page\'s own address needs the server to answer it with index.html', pub?.said);
     ok((await b.evaluate(`document.querySelector('#publishbtn').textContent`)) === 'Publish', 'the button is ready again');
