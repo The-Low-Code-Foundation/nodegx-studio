@@ -135,11 +135,12 @@ export function agrees(kind, file, backend) {
   return said(file) === said(backend);
 }
 
-/** A run's steps by step id, from `GET /executions/:id` (the engine records each step under its id). The last one recorded wins. */
+/** A run's steps by step id, from `GET /executions/:id` (the engine records each step under its id). The last one recorded wins. A function's run records an outcome per node, never its values. */
 export function stepsOfRun(record) {
   const out = new Map();
   for (const s of [...(record?.steps ?? [])].sort((a, b) => (a.stepIndex ?? 0) - (b.stepIndex ?? 0))) {
-    out.set(s.nodeId, { status: s.status, durationMs: s.durationMs ?? (s.completedAt && s.startedAt ? s.completedAt - s.startedAt : undefined), error: s.errorMessage, index: s.stepIndex });
+    // STU-092: what went in (the payload, the step's params as resolved, `previous`) and what came out, as the backend recorded them
+    out.set(s.nodeId, { status: s.status, durationMs: s.durationMs ?? (s.completedAt && s.startedAt ? s.completedAt - s.startedAt : undefined), error: s.errorMessage, index: s.stepIndex, input: s.inputData, output: s.outputData });
   }
   return out;
 }
@@ -156,3 +157,99 @@ export function runLine(record, nameOf = (id) => id) {
   const where = failed ? ` at step ${failed[1].index + 1}, ${nameOf(failed[0])}` : '';
   return `● Last run ${when} · failed${where}${record.errorMessage || failed?.[1].error ? `: ${failed?.[1].error || record.errorMessage}` : ''}${ms}`;
 }
+
+/* ---- STU-092: a backend workflow edited in Studio. Pure: each takes a workflow and answers a new one (the input is not
+   touched), or throws a sentence saying why it can't. What the backend refuses beyond these (a param's shape) it says. ---- */
+const clone = (wf) => JSON.parse(JSON.stringify(wf));
+/** Every wire into `id`: [step, where ('next' | 'onError' | a route's name)]. */
+const into = (wf, id) => (wf.steps ?? []).flatMap((s) => [
+  ...((s.next ?? []).includes(id) ? [[s, 'next']] : []),
+  ...((s.onError ?? []).includes(id) ? [[s, 'onError']] : []),
+  ...Object.entries(s.routes ?? {}).filter(([, tos]) => (tos ?? []).includes(id)).map(([r]) => [s, r])]);
+const listAt = (s, where) => (where === 'next' || where === 'onError' ? (s[where] ??= []) : ((s.routes ??= {})[where] ??= []));
+
+/** An id for a new step of `kind`, unused in `wf`: the kind's name, then -2, -3… */
+export function newStepId(wf, kind) {
+  const used = new Set((wf.steps ?? []).map((s) => s.id));
+  const base = String(kind).replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^[^a-zA-Z0-9]+/, '') || 'step';
+  for (let i = 1; ; i++) { const id = i === 1 ? base : `${base}-${i}`; if (!used.has(id)) return id; }
+}
+
+/**
+ * `step` added after `afterId`, on its `where` ('next', or a route's name: a branch's ontrue). What came after there now
+ * comes after the new step, so nothing is cut off; on a route, the new step goes first on it. `afterId` null: the new
+ * step is the workflow's first, the old first after it.
+ */
+const ENDS = new Set(['return', 'stop']);
+export function addStepAfter(wf, afterId, where, step) {
+  const out = clone(wf);
+  if ((out.steps ?? []).some((s) => s.id === step.id)) throw new Error(`The workflow already has a step called ${step.id}`);
+  const fresh = { ...clone(step) };
+  if (afterId == null) {
+    if (out.entry) fresh.next = [out.entry];
+    out.steps = [fresh, ...(out.steps ?? [])]; out.entry = fresh.id;
+    return out;
+  }
+  const after = out.steps.find((s) => s.id === afterId);
+  if (!after) throw new Error(`The workflow has no step ${afterId}`);
+  if (ENDS.has(after.kind) && where === 'next') throw new Error(`Nothing runs after a ${after.kind === 'return' ? 'Return' : 'Stop'}: it ends the workflow.`);
+  const list = listAt(after, where);
+  if (ENDS.has(fresh.kind) && list.length) throw new Error(`A ${fresh.kind === 'return' ? 'Return' : 'Stop'} ends the workflow, so it goes at the end of a line of steps, not in the middle.`);
+  // a step that leads on by routes (a branch) carries on down its first side what came after
+  if (list.length) { if (fresh.routes) { const r = Object.keys(fresh.routes)[0] ?? 'ontrue'; fresh.routes[r] = [...list]; } else fresh.next = [...list]; }
+  list.splice(0, list.length, fresh.id);
+  out.steps.push(fresh);
+  return out;
+}
+
+/**
+ * Step `id` taken out. Each wire into it goes on to what it went to next (its `next`), so the steps after it still run;
+ * a step that leads on by routes (a branch) is deleted only when nothing hangs off its routes. The first step deleted
+ * makes its next the first. The last step is not deleted: a workflow has at least one (delete the workflow instead).
+ */
+export function deleteStep(wf, id) {
+  const out = clone(wf);
+  const s = out.steps.find((x) => x.id === id);
+  if (!s) throw new Error(`The workflow has no step ${id}`);
+  if (out.steps.length === 1) throw new Error('It is the workflow’s only step: delete the workflow instead.');
+  if (Object.values(s.routes ?? {}).some((tos) => tos?.length)) throw new Error('Steps hang off its sides: delete those first, or the workflow would lose them.');
+  const then = s.next ?? [];
+  if (out.entry === id) {
+    if (then.length !== 1) throw new Error('It is the first step and does not lead to exactly one other: there would be no first step.');
+    out.entry = then[0];
+  }
+  for (const [p, where] of into(out, id)) { const list = listAt(p, where); list.splice(list.indexOf(id), 1, ...then.filter((t) => !list.includes(t))); }
+  out.steps = out.steps.filter((x) => x.id !== id);
+  // a wire list left empty goes; a route left empty stays (a branch needs one of its sides named, even with nothing on it)
+  for (const x of out.steps) { if (x.next && !x.next.length) delete x.next; if (x.onError && !x.onError.length) delete x.onError; }
+  return out;
+}
+
+/** Whether `a` → `b` is a plain link two steps can swap places on: a's only way on is b, b's only way in is a, neither branches. */
+function swappable(wf, a, b) {
+  const plain = (s) => !Object.keys(s.routes ?? {}).length && !(s.onError ?? []).length;
+  return !!a && !!b && plain(a) && plain(b) && (a.next ?? []).length === 1 && a.next[0] === b.id && into(wf, b.id).length === 1 && (b.next ?? []).length <= 1;
+}
+/** Where step `id` can move: { earlier, later } (each a boolean). */
+export function canMove(wf, id) {
+  const s = (wf.steps ?? []).find((x) => x.id === id);
+  const prev = into(wf, id).length === 1 ? into(wf, id)[0][0] : null;
+  const next = (s?.next ?? []).length === 1 ? wf.steps.find((x) => x.id === s.next[0]) : null;
+  return { earlier: swappable(wf, prev, s), later: swappable(wf, s, next) };
+}
+/** Step `id` one place earlier (`dir` -1) or later (+1) on a plain run of steps: it and its neighbour swap places. */
+export function moveStep(wf, id, dir) {
+  const out = clone(wf);
+  const s = out.steps.find((x) => x.id === id);
+  const [a, b] = dir < 0 ? [into(out, id)[0]?.[0], s] : [s, out.steps.find((x) => x.id === s?.next?.[0])];
+  if (!swappable(out, a, b)) throw new Error(dir < 0 ? 'It can’t go earlier: the step before it branches, or more than one leads to it.' : 'It can’t go later: the step after it branches, or more than one leads to it.');
+  for (const [p, where] of into(out, a.id)) { const list = listAt(p, where); list[list.indexOf(a.id)] = b.id; }
+  if (out.entry === a.id) out.entry = b.id;
+  const after = b.next ?? [];
+  b.next = [a.id];
+  if (after.length) a.next = [...after]; else delete a.next;
+  return out;
+}
+
+/** A param's value as Studio's control shows it: `{ from: path }` for a value read from the run, else `{ typed: value }`. */
+export const valueForm = (v) => (v && typeof v === 'object' && !Array.isArray(v) && typeof v.$path === 'string' && Object.keys(v).length === 1 ? { from: v.$path } : { typed: v });

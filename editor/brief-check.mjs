@@ -135,7 +135,7 @@ try {
   await shot('map');
 
   console.log('check: functions, triggers, workflows');
-  await click('[data-tab=workflow]'); await wait(400);
+  await click('[data-tab=backend]'); await wait(400);
   const fnRows = await ev(`[...${P}.querySelectorAll('#fnlist .row')].map((r) => r.dataset.fn)`);
   for (const key of functions) {
     const has = fnRows.includes(key);

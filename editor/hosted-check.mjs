@@ -133,7 +133,7 @@ try {
 
   if (agentMade) {
     console.log('check: BKO-004 a cloud function in the conversation');
-    await click('[data-tab=workflow]');
+    await click('[data-tab=backend]');
     await click(`#fnlist .row[data-fn="${AGENT_FN}"]`);
     const read = `(() => { const v = ${P}.querySelector('#steps .fnview'); if (!v || v.querySelector('.fnfacts .touches').textContent.startsWith('Reading') || v.querySelector('.fnfacts .run').textContent.startsWith('Reading')) return false;
       const cards = [...v.querySelectorAll('.fnflow .step')]; return { key: v.dataset.fn, cards: cards.length, sized: cards.every((c) => c.getBoundingClientRect().width > 60 && c.getBoundingClientRect().height > 30),
@@ -194,7 +194,7 @@ try {
   await admin('POST', '/admin/workflow-defs', wfDef);
   await admin('POST', '/admin/triggers', trigDef);
   writeFileSync(join(project, 'nodegx.automations.json'), JSON.stringify({ version: 1, workflows: [{ ...wfDef, concurrency: 1 }], triggers: [trigDef] }, null, 2) + '\n');
-  await click('[data-tab=workflow]');
+  await click('[data-tab=backend]');
   const listedRow = await until(`(() => { const r = ${P}.querySelector('#autolist .row[data-trigger="nightly-at-2"]'); return r && /^Every day at 02:00/.test(r.innerText.trim()) ? r.innerText.replace(/\\s+/g, ' ').trim() : false; })()`, 15000);
   ok(listedRow, 'inside the conversation, the trigger is listed in the backend\'s words for its cron, asked across origins', listedRow || await ev(`${P}.getElementById('autolist')?.innerText`));
   await click('#autolist .row[data-workflow="nightly"]');

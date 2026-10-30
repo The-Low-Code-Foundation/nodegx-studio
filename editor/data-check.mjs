@@ -176,7 +176,7 @@ try {
   const shot = async (name) => { if (shots) { await wait(500); await b.screenshot(join(here, '..', 'docs', 'look', `stu-06${name}.png`)); } };
 
   console.log('check: STU-060 the map in Data');
-  ok((await ev(`[...document.querySelectorAll('#rail [role=tab]')].map(x => x.dataset.tab).join()`)) === 'design,workflow,data,styles', 'the rail has four tabs: the map is no longer one of them');
+  ok((await ev(`[...document.querySelectorAll('#rail [role=tab]')].map(x => x.dataset.tab).join()`)) === 'design,workflow,backend,data,styles', 'the rail has five tabs (STU-092: Backend): the map is no longer one of them');
   await ev(`document.querySelector('[data-tab=data]').click()`); await settle();
   ok((await ev(`[...document.querySelectorAll('#data .subtabs [data-sub]')].map(x => x.textContent).join()`)) === 'Data types,Privacy,App data,Option sets,Map', 'Data\'s sub-tabs: Data types, Privacy, App data, Option sets, Map');
 

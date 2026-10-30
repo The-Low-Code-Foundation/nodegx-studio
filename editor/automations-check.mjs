@@ -6,7 +6,7 @@
  *
  *   node editor/automations-check.mjs    PASS n/n and exit 0, or the failing lines and exit 1
  */
-import { agrees, atTime, readAutomations, runLine, scheduleTime, stepsOfRun, stepWires, targetOf, triggerHead, workflowLayout } from './automations.mjs';
+import { addStepAfter, agrees, atTime, canMove, deleteStep, moveStep, newStepId, readAutomations, runLine, scheduleTime, stepsOfRun, stepWires, targetOf, triggerHead, valueForm, workflowLayout } from './automations.mjs';
 
 const results = [];
 const ok = (cond, what, detail) => { results.push(!!cond); if (!cond || process.argv.includes('-v')) console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${what}${detail !== undefined ? ' — ' + JSON.stringify(detail).slice(0, 300) : ''}`); };
@@ -68,6 +68,38 @@ const S = stepsOfRun(failedRun);
 ok(S.get('check').status === 'success' && S.get('notify').status === 'error' && S.get('notify').durationMs === 29, 'a run read by step id: how each went and how long');
 ok(/failed at step 2, Notify the owner: no owner/.test(runLine(failedRun, (id) => (id === 'notify' ? 'Notify the owner' : id))), 'a failed run is said at the step it failed', runLine(failedRun, () => 'Notify the owner'));
 ok(runLine(null) === 'Not run on this backend yet.' && /finished/.test(runLine({ status: 'success', startedAt: 0 })), 'no run, and a run that finished');
+
+// STU-092: a step's data in a run
+const withData = stepsOfRun({ steps: [{ nodeId: 'mark', stepIndex: 0, status: 'success', inputData: { plant: 'p1' }, outputData: { result: { changed: 1 } } }] });
+ok(withData.get('mark').input.plant === 'p1' && withData.get('mark').output.result.changed === 1, 'a run step carries what went in and what came out');
+
+// STU-092: a workflow edited
+const line = { id: 'w', entry: 'a', steps: [{ id: 'a', kind: 'validate', next: ['b'] }, { id: 'b', kind: 'call-function', ref: 'F', next: ['c'] }, { id: 'c', kind: 'return' }] };
+const frozen = JSON.stringify(line);
+const deepEmpty = (wf) => Array.isArray(wf.steps.find((s) => s.id === 'if').routes.ontrue) && wf.steps.find((s) => s.id === 'if').routes.ontrue.length === 0;
+const order = (wf) => { const out = []; let at = wf.entry; const by = Object.fromEntries(wf.steps.map((s) => [s.id, s])); while (at && out.length < 10) { out.push(at); at = by[at].next?.[0]; } return out.join(' '); };
+ok(newStepId(line, 'wait') === 'wait' && newStepId({ steps: [{ id: 'wait' }] }, 'wait') === 'wait-2', 'a new step id is its kind, then -2');
+ok(order(addStepAfter(line, 'a', 'next', { id: 'n', kind: 'wait' })) === 'a n b c', 'a step added after another: what came after follows it', order(addStepAfter(line, 'a', 'next', { id: 'n', kind: 'wait' })));
+ok(order(addStepAfter(line, null, 'next', { id: 'n', kind: 'wait' })) === 'n a b c', 'a step added first is the entry, the old first after it');
+ok(order(addStepAfter({ ...line, steps: [...line.steps.slice(0, 2), { id: 'c', kind: 'wait' }] }, 'c', 'next', { id: 'n', kind: 'return' })) === 'a b c n', 'a step added at the end');
+ok(JSON.stringify(line) === frozen, 'the workflow given is not changed');
+ok(throws(() => addStepAfter(line, 'a', 'next', { id: 'b', kind: 'wait' })), 'an id already used is refused');
+ok(throws(() => addStepAfter(line, 'c', 'next', { id: 'n', kind: 'wait' }).steps && addStepAfter(line, 'a', 'next', { id: 'r', kind: 'return' })) && throws(() => addStepAfter({ ...line, steps: [...line.steps.slice(0, 2), { id: 'c', kind: 'stop' }] }, 'c', 'next', { id: 'n', kind: 'wait' })), 'a Return goes at the end, and nothing goes after a Stop');
+const br = addStepAfter(line, 'a', 'next', { id: 'if', kind: 'branch', routes: { ontrue: [] } });
+ok(br.steps.find((s) => s.id === 'if').routes.ontrue[0] === 'b' && !br.steps.find((s) => s.id === 'if').next, 'a branch put in a line carries on down its Yes side');
+ok(order(deleteStep(line, 'b')) === 'a c', 'a step deleted: the one before goes on to the one after');
+ok(order(deleteStep(line, 'a')) === 'b c' && deleteStep(line, 'a').entry === 'b', 'the first deleted: its next is the first');
+ok(!('next' in deleteStep(line, 'c').steps.find((s) => s.id === 'b')), 'the last deleted: no wire left to nowhere');
+ok(throws(() => deleteStep({ id: 'w', entry: 'a', steps: [{ id: 'a', kind: 'return' }] }, 'a')), 'the only step is not deleted');
+ok(throws(() => deleteStep(br, 'if')), 'a branch with steps on its sides is not deleted');
+const routed = { id: 'w', entry: 'if', steps: [{ id: 'if', kind: 'branch', routes: { ontrue: ['x'], onfalse: ['y'] } }, { id: 'x', kind: 'wait', next: ['z'] }, { id: 'y', kind: 'stop' }, { id: 'z', kind: 'return' }] };
+ok(deleteStep(routed, 'x').steps.find((s) => s.id === 'if').routes.ontrue[0] === 'z', 'a step deleted off a side: the side goes on to what followed it');
+ok(deepEmpty(deleteStep(deleteStep(routed, 'x'), 'z')), 'a side left with nothing on it stays named (a branch needs one)');
+ok(order(moveStep(line, 'b', -1)) === 'b a c' && moveStep(line, 'b', -1).entry === 'b', 'moved earlier: it and the one before swap, the entry with them');
+ok(order(moveStep(line, 'b', 1)) === 'a c b', 'moved later', order(moveStep(line, 'b', 1)));
+ok(canMove(line, 'a').earlier === false && canMove(line, 'a').later === true && canMove(routed, 'x').earlier === false, 'what can move: not before the first, not out of a branch');
+ok(throws(() => moveStep(routed, 'x', -1)), 'a move out of a branch is refused');
+ok(valueForm({ $path: 'body.plant' }).from === 'body.plant' && valueForm('Kitchen').typed === 'Kitchen' && valueForm({ $path: 'a', x: 1 }).typed, 'a value read from the run, and a typed one');
 
 const passed = results.filter(Boolean).length;
 console.log(`${passed === results.length ? 'PASS' : 'FAIL'} ${passed}/${results.length}`);

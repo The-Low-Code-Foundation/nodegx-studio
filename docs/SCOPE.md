@@ -1911,8 +1911,8 @@ them (STU-092).
 | # | Richard | Now |
 |---|---|---|
 | 1 | can't scroll sideways in a zoomed workflow; the step panel covers a node; wants room after it | **fixed** P123-GH-FLOWNOSCROLLX: drag the empty canvas to pan, 120 px after the last step |
-| 2 | page workflows and backend workflows/functions mixed in one list; "Workflows on this page" then "On the backend" is weird; workflows = automations, functions = logic called by the app or by a workflow, "two parts of the same machine"; maybe their own tab | STU-092 (ruling: where they live) |
-| 3 | can't edit backend workflows; can't see a run's data, what went in and out of each step, as in the NodeGX editor | STU-092 |
+| 2 | page workflows and backend workflows/functions mixed in one list; "Workflows on this page" then "On the backend" is weird; workflows = automations, functions = logic called by the app or by a workflow, "two parts of the same machine"; maybe their own tab | **built** (s30) STU-092: a Backend tab |
+| 3 | can't edit backend workflows; can't see a run's data, what went in and out of each step, as in the NodeGX editor | **built** (s30) STU-092 for workflows; a function's run has no values to show (P123-STU-FNRUNVALUES) |
 | 4 | the Map is "our example for the rest of the app": its words (origins on the left, screens, functions, tables; "on its own") should be the Workflow tab's words for the backend; a backend workflow's "last run 21 mins ago: it worked" should open the run, drawn, with the dots flowing on the wires; maybe the app's own logic that talks to the backend (queries) as a column between screens and functions | STU-093 (ruling: the front-end logic column) |
 | 5 | option sets need fields that point at one or many options of another set (Bubble has it) | STU-094 |
 | 6 | App data edits in place: dangerous ("why I stopped using NocoDB"); click a record → side panel or modal | **built** (s29) STU-095, P123-GH-APPDATAINLINE, P123-GH-DATEUTC |
@@ -1950,6 +1950,40 @@ in NodeGX lists them.
 - **A run, step by step.** A run row opens the run: each step lit, and a click on a step shows what went in and what
   came out (the popover the NodeGX editor shows on a wire), from the backend's run record. Same for a function's run
   (STU-085 lights the nodes today; add the values).
+
+**Done (s30).** The recommended shape. *Backend* on the rail (Design · Workflow · Backend · Data · Styles) draws on the
+Workflow tab's canvas (`#workflow[data-mode=backend]`); its list is *Workflows* (each trigger, then each workflow) and
+*Functions*, under one line saying how they meet; the Workflow tab lists the page's workflows only. A function or a
+backend workflow opened from anywhere (a page step that runs a function, the Map, a trigger) opens in the Backend tab,
+and Back from a page card's function returns to the Workflow tab.
+- **Edit.** A click on a backend workflow's step opens its settings in `#wfinspect`, built from the backend's own
+  catalog (`GET /admin/workflow-step-kinds`: each param's type, default, group): a value is *Typed* or *From the run*
+  (`{ $path }`, with `body.`, `previous.result`, `upstream.<step>.` offered); a branch's condition is a sentence (This ·
+  is / is greater than… · That, the catalog's operators; a condition of several parts stays JSON); a list of rules or a
+  transform's output is JSON, checked before it is sent; a function step picks its function and fills what that
+  function asks for (its Request's asks); the retry policy is under *More options*. *Then* names what follows (a
+  branch's Yes / No), with *Add a step after* / *Add on Yes* (the catalog's kinds by category), *Move earlier / later*
+  on a plain run of steps, and delete (what came after it reconnects). *Add a step at the start*, *Rename*, *Delete the
+  workflow* above the canvas; *New* makes a workflow and what starts it (a table's change, a time of day, or nothing),
+  its first step a function or an end to add steps before; a trigger can be deleted (a workflow a trigger starts is not).
+  The graph edits are pure (`automations.mjs` `addStepAfter`, `deleteStep`, `moveStep`, `canMove`); every change is the
+  whole workflow through `serve.mjs` `saveWorkflow` (`POST /api/automations/workflow`): the backend first (`PUT
+  /admin/workflow-defs/:id`, which validates), then `nodegx.automations.json` patched by id, the backend put back if
+  the file can't be written, as the MCP's `update_backend_workflow` and `setTrigger` do.
+- **A run, step by step.** With a last run, the step's panel says *In the last run*: ran / failed here (why) / not
+  reached, *What went in* (the payload, its params as resolved, `previous`) and *What came out*, from the backend's
+  record of that run (`stepsOfRun` now carries `inputData` / `outputData`). A cloud function's run records no values
+  (each node's outcome only), so its nodes stay lit without them: P123-STU-FNRUNVALUES, open.
+- Gates: `check:automations` **52/52** (19 new: the edits) and **42/42** in Chrome (9 new: the tabs' lists, a step's
+  in / out from a real run, a setting / an added step / a delete each read back from the file AND the backend, New
+  workflow with its schedule, the trigger and the workflow deleted). Mutant (the file write skipped, the run's values
+  dropped): 33/41. Driven on a copy of Greenhouse with an isolated backend (`NODEGX_BACKENDS_DIR`): the morning check's
+  wait added, changed, moved first and deleted, the file byte-identical to the original after.
+- Found: **P123-STU-COPYADOPTS** (high, open) — a copy of a project folder, its binding removed, still *adopts* the
+  original's running backend on *Start a backend* (the project id matches). The first drive did, and only no-op writes
+  reached Greenhouse's backend (its tables existed; the same declared rules). Drive a copy with `NODEGX_BACKENDS_DIR`.
+- Not built: the workflow's own settings (concurrency, time limits); a webhook trigger made in Studio; a step's error
+  route (*If it fails*) added here (it is drawn, and kept).
 
 ### STU-093 — the Map's words everywhere, and a run drawn on it
 

@@ -38,7 +38,9 @@
  *   GET  /api/images       STU-051: every image file in the project folder, `[path]`, for the image popover
  *   POST /api/asset?name=x the request's bytes as an image under `assets/` (the NodeGX editor's projectAssets.ts:
  *                          made unique before the extension, `logo-1.png`), answering `{ path }`
- *   POST /api/automations/trigger  P127 BKO-005: { id, enabled?, time?: { hour, minute }, client } one trigger turned on or
+ *   POST /api/automations/workflow STU-092: { workflow, remove?, trigger?, client } a backend workflow saved (or removed with
+ *                          `remove: id`), and a new trigger for it, on the backend and in `nodegx.automations.json` together
+ *   POST /api/automations/trigger  P127 BKO-005: { id, enabled?, time?: { hour, minute }, remove?, client } one trigger turned on or
  *                          off, or a daily schedule moved, on the backend and in `nodegx.automations.json` together
  *                          (BKO-001's rule: the backend first, then the file; the backend put back if the file fails).
  *                          Answers `{ file, text, backend }`: the file's new text and what the backend stored
@@ -309,7 +311,7 @@ async function adminOf(which) {
  * the truth (R1), so a trigger the file lacks is refused; a backend that is not running here is refused too, so the
  * two never part.
  */
-async function setTrigger({ id, enabled, time }) {
+async function setTrigger({ id, enabled, time, remove }) {
   const rel = AUTOMATIONS_FILE, file = join(projectDir, rel);
   const before = diskText(rel);
   const autos = readAutomations(before);
@@ -321,10 +323,24 @@ async function setTrigger({ id, enabled, time }) {
   if (time) {
     if (entry.type !== 'schedule' || !entry.schedule?.cron) throw new Error(`"${id}" is not a schedule, so it has no time to move.`);
     cron = atTime(entry.schedule.cron, time.hour, time.minute);
-  } else if (typeof enabled !== 'boolean') throw new Error('Say what to change: enabled (on or off) or time.');
+  } else if (typeof enabled !== 'boolean' && !remove) throw new Error('Say what to change: enabled (on or off), time, or remove.');
   const be = await adminOf('development').catch((e) => { throw new Error(`${e.message} The trigger is changed on the backend and in the project together, so start the backend first.`); });
   const path = `/admin/triggers/${encodeURIComponent(id)}`;
   const was = (await be.get(path)).trigger;
+  if (remove) { // STU-092: taken off the backend, then out of the file; put back (a new secret for a webhook) if the file can't be written
+    await be.del(path);
+    const json = JSON.parse(before);
+    json.triggers.splice(at, 1);
+    const text = JSON.stringify(json, null, 2) + (before.endsWith('\n') ? '\n' : '');
+    try { known.set(rel, text); writeFileSync(`${file}.studio-tmp`, text); renameSync(`${file}.studio-tmp`, file); }
+    catch (e) {
+      known.set(rel, before);
+      const { secret, createdAt, updatedAt, status, ...back } = was;
+      const undone = await be.post('/admin/triggers', back).then(() => true, () => false);
+      throw new Error(`The backend deleted it but ${rel} could not be written (${e.message}), ${undone ? 'so it was put back on the backend. Nothing changed.' : 'and putting it back failed: the project still has a trigger the backend does not.'}`);
+    }
+    return { file: rel, text, backend: null };
+  }
   const stored = cron
     ? (await be.put(path, { ...was, schedule: { ...was.schedule, cron } })).trigger
     : (await be.post(`${path}/enabled`, { enabled })).trigger;
@@ -342,6 +358,57 @@ async function setTrigger({ id, enabled, time }) {
     throw new Error(`The backend took the change but ${rel} could not be written (${e.message}), ${undone ? 'so the backend was put back as it was. Nothing changed.' : 'and putting the backend back failed too: the backend now has a change the project does not.'}`);
   }
   return { file: rel, text, backend: stored };
+}
+/** The project's shape of a workflow the backend stored (the MCP's `projectWorkflow`, nodegx-backend automations/shape.ts): no timestamps, no version. */
+const projectWorkflow = (w) => Object.fromEntries(Object.entries({ id: w.id, name: w.name, entry: w.entry, concurrency: w.concurrency ?? 1, timeoutMs: w.timeoutMs, stepTimeoutMs: w.stepTimeoutMs, steps: w.steps }).filter(([, v]) => v !== undefined));
+/**
+ * STU-092: a backend workflow written from Studio, as the MCP's `update_backend_workflow` / `delete_backend_workflow` do
+ * and as setTrigger does: the backend first (it validates, and answers with what it stored: `PUT` creates or replaces),
+ * then the project's file, the entry patched by id and nothing else touched. `trigger` (a new one, for a new workflow)
+ * goes to the backend after the workflow it starts. A file that cannot be written puts the backend back: both, or neither.
+ */
+async function saveWorkflow({ workflow, remove, trigger }) {
+  const rel = AUTOMATIONS_FILE, file = join(projectDir, rel);
+  const before = diskText(rel);
+  const autos = readAutomations(before);
+  if (autos.error) throw new Error(autos.error);
+  const id = remove ?? workflow?.id;
+  if (!id || typeof id !== 'string') throw new Error('Say which workflow: it has no id.');
+  const be = await adminOf('development').catch((e) => { throw new Error(`${e.message} A workflow is changed on the backend and in the project together, so start the backend first.`); });
+  const path = `/admin/workflow-defs/${encodeURIComponent(id)}`;
+  const was = await be.get(path).then((j) => j.workflow).catch(() => null);
+  if (remove) {
+    if (autos.triggers.some((t) => t.target?.kind === 'workflow' && t.target?.name === id)) throw new Error('A trigger still starts it: delete the trigger first, or it would start nothing.');
+    if (was) await be.del(path);
+  }
+  const stored = remove ? null : projectWorkflow((await be.put(path, workflow)).workflow);
+  let madeTrigger = null;
+  if (trigger) {
+    try { madeTrigger = (await be.post('/admin/triggers', { ...trigger, target: { kind: 'workflow', name: id } })).trigger; }
+    catch (e) { if (!was) await be.del(path).catch(() => {}); else await be.put(path, was).catch(() => {}); throw e; }
+  }
+  const json = before == null ? { version: 1, workflows: [], triggers: [] } : JSON.parse(before);
+  json.workflows = Array.isArray(json.workflows) ? json.workflows : []; json.triggers = Array.isArray(json.triggers) ? json.triggers : [];
+  const at = json.workflows.findIndex((w) => w.id === id);
+  if (remove) { if (at >= 0) json.workflows.splice(at, 1); }
+  else if (at >= 0) json.workflows[at] = stored; else json.workflows.push(stored);
+  // the project's shape of a trigger (the MCP's `projectTrigger`): what decides what runs and when, never its secret
+  if (madeTrigger) json.triggers.push(Object.fromEntries(['id', 'type', 'name', 'enabled', 'target', 'schedule', 'webhook', 'dbChange'].filter((k) => madeTrigger[k] !== undefined).map((k) => [k, madeTrigger[k]])));
+  const text = JSON.stringify(json, null, 2) + (before == null || before.endsWith('\n') ? '\n' : '');
+  try {
+    known.set(rel, text); // before the write, so the watcher's echo of it matches
+    writeFileSync(`${file}.studio-tmp`, text);
+    renameSync(`${file}.studio-tmp`, file);
+  } catch (e) {
+    known.set(rel, before);
+    let undone = true;
+    try {
+      if (madeTrigger) await be.del(`/admin/triggers/${encodeURIComponent(madeTrigger.id)}`);
+      if (was) await be.put(path, was); else if (!remove) await be.del(path);
+    } catch { undone = false; }
+    throw new Error(`The backend took the change but ${rel} could not be written (${e.message}), ${undone ? 'so the backend was put back as it was. Nothing changed.' : 'and putting the backend back failed too: the backend now has a change the project does not.'}`);
+  }
+  return { file: rel, text, workflow: stored, trigger: madeTrigger && { id: madeTrigger.id } };
 }
 /** STU-097: each node type's line from NodeGX's enriched catalog (`{ States: 'Named state machine: …' }`), read once; none: {}. */
 let summaries = null;
@@ -663,10 +730,20 @@ const server = http.createServer(async (req, res) => {
         return json(409, { error: err.message });
       }
     }
-    if (url.pathname === '/api/automations/trigger' && req.method === 'POST') {
-      const { id, enabled, time, client } = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+    if (url.pathname === '/api/automations/workflow' && req.method === 'POST') {
+      const { workflow, remove, trigger, client } = JSON.parse((await readBody(req)).toString('utf8') || '{}');
       try {
-        const done = await setTrigger({ id, enabled, time });
+        const done = await saveWorkflow({ workflow, remove, trigger });
+        tell({ changed: { [done.file]: done.text }, removed: [] }, client);
+        return json(200, done);
+      } catch (err) {
+        return json(409, { error: err.message });
+      }
+    }
+    if (url.pathname === '/api/automations/trigger' && req.method === 'POST') {
+      const { id, enabled, time, remove, client } = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      try {
+        const done = await setTrigger({ id, enabled, time, remove });
         tell({ changed: { [done.file]: done.text }, removed: [] }, client); // another Studio window on the project
         return json(200, done);
       } catch (err) {

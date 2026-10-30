@@ -137,7 +137,7 @@ try {
 
   // 1. the list
   console.log('check: Workflow → On the backend');
-  await b.clickSel('#rail [data-tab=workflow]');
+  await b.clickSel('#rail [data-tab=backend]');
   await b.until(`document.querySelectorAll('#autolist .row').length === 3 && !document.querySelector('#autolist')?.innerText.includes('0 9 * * *')`, 10000);
   const listed = await ev(`[...document.querySelectorAll('#autolist .row')].map((r) => ({ trigger: r.dataset.trigger, workflow: r.dataset.workflow, text: r.innerText.replace(/\\s+/g, ' ').trim() }))`);
   const said = (id) => listed.find((r) => r.trigger === id)?.text ?? '';
@@ -207,6 +207,69 @@ try {
   }
   ok(await b.until(`document.querySelector('#autolist .row[data-trigger="${dailyId}"]')?.innerText.trim().startsWith('Every day at 10:00')`, 5000), 'the list says it too', await ev(`document.querySelector('#autolist .row[data-trigger="${dailyId}"]')?.innerText`));
   await shot('trigger-moved');
+
+  // STU-092: the Backend tab — a workflow changed in Studio, on the backend and in the file together; a step's data in a run
+  console.log('check: STU-092, the Backend tab');
+  await b.clickSel('#rail [data-tab=workflow]'); await wait(300);
+  ok(await ev(`getComputedStyle(document.getElementById('autolist')).display === 'none' || !document.getElementById('autolist').offsetParent`), 'the Workflow tab lists the page\'s workflows only: the backend\'s are not in it');
+  await b.clickSel('#rail [data-tab=backend]'); await wait(300);
+  ok(await ev(`!!document.getElementById('autolist').offsetParent && !!document.getElementById('fnlist').offsetParent && !document.getElementById('events').offsetParent`), 'the Backend tab lists workflows and functions, and no page workflows');
+  await ev(`document.querySelector('#autolist .row[data-workflow="triage"]').click()`);
+  await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'triage' && !/Reading its last run/.test(document.querySelector('#steps .fnfacts')?.innerText) && !!document.querySelector('#steps .wfacts [data-act=addfirst]')`, 8000);
+  await ev(`document.querySelector('#steps .autoview .step[data-id="pause"]').click()`);
+  await b.until(`!document.getElementById('wfinspect').hidden && !!document.querySelector('#wfinspect .rdin')`, 5000);
+  {
+    const p = await ev(`({ type: document.querySelector('#wfinspect .type')?.innerText, into: document.querySelector('#wfinspect .rdin')?.textContent, out: document.querySelector('#wfinspect .rdout')?.textContent })`);
+    let into = null; try { into = JSON.parse(p.into); } catch { /* said below */ }
+    ok(/Step 1 · Wait/.test(p.type) && into?.duration === 10 && into?.unit === 'milliseconds' && into?.body?.title === 'Water the plants', 'a step clicked shows what went in, as the backend recorded the run: its settings and the row that started it', p);
+    ok(typeof p.out === 'string' && p.out !== '(nothing)' && p.out.trim().startsWith('{'), 'and what came out', p.out);
+  }
+  await ev(`document.querySelector('#steps .autoview .step[data-id="notify"]').click()`);
+  await b.until(`/Failed here/.test(document.querySelector('#wfinspect .rundata')?.innerText ?? '')`, 5000).catch(() => {});
+  ok(await ev(`/Failed here/.test(document.querySelector('#wfinspect .rundata')?.innerText) && !document.querySelector('#wfinspect .rdout')`), 'the step that failed says why, and nothing came out of it');
+  const beWf = async () => (await be('/admin/workflow-defs/triage')).workflow;
+  const order = (w) => { const by = Object.fromEntries((w?.steps ?? []).map((x) => [x.id, x])); const o = []; for (let at = w?.entry; at && o.length < 9; at = by[at]?.next?.[0]) o.push(at); return o.join(' '); };
+  // a setting changed
+  await ev(`document.querySelector('#steps .autoview .step[data-id="pause"]').click()`); await wait(300);
+  await ev(`(() => { const f = [...document.querySelectorAll('#wfinspect .field')].find((x) => x.querySelector('label')?.textContent === 'Duration'); const i = f.querySelector('.rvctl input'); i.value = '20'; i.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await b.until(`/Saved, on the backend and in the project/.test(document.body.innerText)`, 8000).catch(() => {});
+  await wait(300);
+  ok(fileNow().workflows[0].steps.find((x) => x.id === 'pause').params.duration === 20 && (await beWf()).steps.find((x) => x.id === 'pause').params.duration === 20, 'a setting changed in the panel: the file and the backend both say 20', fileNow().workflows[0].steps[0]);
+  // a step added after, then deleted
+  const before = JSON.stringify(fileNow().workflows[0]);
+  await ev(`document.querySelector('#wfinspect [data-act=addafter]').click()`); await wait(300);
+  await ev(`document.querySelector('.menu .item[data-kind="wait"]').click()`);
+  await b.until(`/Step 2 · Wait/.test(document.querySelector('#wfinspect .type')?.innerText ?? '')`, 8000).catch(() => {});
+  ok(order(fileNow().workflows[0]) === 'pause wait notify' && order(await beWf()) === 'pause wait notify', 'a step added after another: between it and the next, in the file and on the backend', [order(fileNow().workflows[0]), order(await beWf())]);
+  ok(JSON.stringify(await ev(`[...document.querySelectorAll('#steps .autoview .fncol')].map((c) => [...c.querySelectorAll('.step')].map((x) => x.dataset.id))`)) === '[["pause"],["wait"],["notify"],["giveup"]]', 'and drawn there');
+  await ev(`document.querySelector('#wfinspect .head .danger').click()`);
+  await b.until(`document.getElementById('wfinspect').hidden`, 8000).catch(() => {});
+  await wait(300);
+  ok(JSON.stringify(fileNow().workflows[0]) === before && order(await beWf()) === 'pause notify', 'deleted: the workflow is as it was, in the file and on the backend', [JSON.parse(before), fileNow().workflows[0]]);
+  // a new workflow and its trigger, then both deleted
+  await b.clickSel('#newauto'); await wait(300);
+  await ev(`(() => { const set = (sel, v) => { const el = document.querySelector('.menu.newauto ' + sel); el.value = v; el.dispatchEvent(new Event(el.tagName === 'INPUT' && el.type === 'text' ? 'input' : 'change', { bubbles: true })); }; set('input[aria-label="Workflow name"]', 'Nightly tidy'); set('select[aria-label="What starts it"]', 'schedule'); set('input[aria-label="The time it runs"]', '02:30'); })()`);
+  await ev(`[...document.querySelectorAll('.menu.newauto .foot button')].find((x) => x.textContent === 'Create').click()`);
+  await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'nightly-tidy'`, 8000).catch(() => {});
+  {
+    const f = fileNow(), t = f.triggers.find((x) => x.target?.name === 'nightly-tidy');
+    const beT = t && (await be(`/admin/triggers/${encodeURIComponent(t.id)}`)).trigger;
+    ok(f.workflows.some((w) => w.id === 'nightly-tidy' && w.name === 'Nightly tidy' && w.steps.length === 1 && w.steps[0].kind === 'return') && !!(await be('/admin/workflow-defs/nightly-tidy')).workflow, 'New workflow: made in the file and on the backend; in an app with no functions, its one step ends it', f.workflows);
+    ok(t?.type === 'schedule' && t.schedule.cron === '30 2 * * *' && beT?.schedule?.cron === '30 2 * * *' && !('secret' in t), 'with what starts it, every day at 02:30, in both (no secret in the file)', [t, beT]);
+    await ev(`document.querySelector('.wfacts [data-act=delete]').click()`); await wait(400);
+    ok(await ev(`/still starts it/.test(document.body.innerText)`) && fileNow().workflows.some((w) => w.id === 'nightly-tidy'), 'a workflow a trigger starts is not deleted: the trigger is named first');
+    await ev(`document.querySelector('#autolist .row[data-trigger="${t?.id}"]').click()`); await wait(600);
+    await ev(`document.querySelector('.wfacts [data-act=deltrigger]').click()`); await wait(300);
+    await ev(`document.querySelector('.menu [data-act=confirm]').click()`);
+    await b.until(`!document.querySelector('#autolist .row[data-trigger="${t?.id}"]')`, 8000).catch(() => {});
+    await ev(`document.querySelector('#autolist .row[data-workflow="nightly-tidy"]').click()`); await wait(600);
+    await ev(`document.querySelector('.wfacts [data-act=delete]').click()`); await wait(300);
+    await ev(`document.querySelector('.menu [data-act=confirm]').click()`);
+    await b.until(`!document.querySelector('#autolist .row[data-workflow="nightly-tidy"]')`, 8000).catch(() => {});
+    const gone = await fetch(url + 'api/backend/admin/workflow-defs/nightly-tidy');
+    ok(!fileNow().triggers.some((x) => x.id === t?.id) && !fileNow().workflows.some((w) => w.id === 'nightly-tidy') && gone.status === 404 && !(await be('/admin/triggers')).triggers.some((x) => x.id === t?.id), 'the trigger, then the workflow, deleted: gone from the file and the backend');
+  }
+  await shot('stu-092');
 
   // a trigger the file does not have is refused, and nothing changes
   const refused = await fetch(url + 'api/automations/trigger', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: 'nobody', enabled: false }) });

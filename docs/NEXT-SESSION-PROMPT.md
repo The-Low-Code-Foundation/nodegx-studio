@@ -108,7 +108,25 @@ ids of that type; a type change moves what other pages send (`sendsFollow`). Gat
 Committed, **not pushed** (ask first). Open from it: the importer's ChangePage *data to send* / *Current page's thing*
 (no fixture has the keys); Design draws such a page with nothing sent.
 
+**s28–s29 (2026-10-30)**: Greenhouse notes 6, 7, 10 built (STU-095/096/097, 393f376); see SCOPE § Richard's Greenhouse notes.
+
+**s30 (2026-10-30), STU-092 — backend workflows: a Backend tab, editable, each step's data** (SCOPE, STU-092 "Done
+(s30)"). *Backend* on the rail shares the Workflow tab's canvas (`#workflow[data-mode=backend]`); Workflow lists the
+page's workflows only. A backend workflow's step opens its settings from the backend's step catalog (Typed / From the
+run, a branch's condition as a sentence, JSON for rules), add / delete / move, New workflow with its trigger, a trigger
+deleted; every change through `serve.mjs` `saveWorkflow` (backend first, then the file, put back on failure). A run's
+step shows what went in and came out. Gates on the s30 tree: `check:editor` **241/241**, `check:automations` 52/52 +
+**42/42** (mutant 33/41), `check:functions` 695/695 + 46/46, `check:data` 84/84, `check:hosted` 39/39,
+`check:timeline` 53/53, `check:app` 67/67. `brief-check.mjs` was not run (it takes an app folder; not in `npm run check`).
+Gates that click the backend lists now click `[data-tab=backend]`. Not pushed (ask first).
+🔴 **Drive a copy of a project with `NODEGX_BACKENDS_DIR=<tmp>`**: deleting `metadata.cloudservices` is NOT enough —
+*Start a backend* adopted Greenhouse's real running backend by the copied project id (P123-STU-COPYADOPTS, filed; only
+no-op writes reached it). Filed too: P123-STU-FNRUNVALUES (a function's run records no values: note 3's function half).
+
 Next buildable, in order:
+00. Greenhouse notes left: STU-094 (option set → option set links, buildable), STU-093 (the Map's words; ruling: a
+    front-end logic column), STU-098 (ruling: drop the composer's *Both*). STU-092's leftovers: a workflow's own settings
+    (concurrency, time limits), a webhook trigger made in Studio, adding an *If it fails* route.
 0a. STU-090's open list (SCOPE): an option set linked to a Choice rather than copied; the crowded header (check it
    still is, with *+ Page* in the crumb); a page about one record previewed with one (Design sends it nothing).
 0. STU-009 on Windows / Linux in the package workflow (only macOS was run). STU-026: nothing left that was asked.

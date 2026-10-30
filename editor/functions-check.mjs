@@ -89,7 +89,7 @@ try {
       touches: v.querySelector('.fnfacts .touches')?.textContent ?? '', chips: [...v.querySelectorAll('.fnfacts .touch')].map((t) => t.textContent), run: v.querySelector('.fnfacts .run')?.textContent ?? '' }; })()`);
 
   console.log('check: Workflow → On the backend');
-  await clickSel('#rail [data-tab=workflow]');
+  await clickSel('#rail [data-tab=backend]');
   const listed = await b.evaluate(`[...document.querySelectorAll('#fnlist .row')].map((r) => r.dataset.fn)`);
   ok(listed.length === cloudKeys.length && cloudKeys.every((k) => listed.includes(k)), `"On the backend" lists every cloud function in the files (${cloudKeys.length})`, { listed: listed.length, files: cloudKeys.length });
   const endpoints = cloudKeys.filter((k) => filesOf(k).nodes.some((n) => n.type === 'noodl.cloud.request'));
@@ -134,6 +134,7 @@ try {
   // 3. from a button's workflow: Unsubscribe's "Stop these emails" runs unsubscribe (a public page: Settings sends a
   // visitor to Sign in, and Studio follows the app there)
   console.log('check: from a workflow');
+  await clickSel('#rail [data-tab=workflow]'); // STU-092: a page's workflows are the Workflow tab's; the function opens in the Backend tab
   await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Pages/Unsubscribe'; s.dispatchEvent(new Event('change')); })()`);
   await wait(600);
   const settings = JSON.parse(readFileSync(join(project, 'components/Pages/Unsubscribe/nodes.json'), 'utf8')).nodes;
@@ -153,12 +154,13 @@ try {
 
   // 4. an agent makes a function while Studio is open
   console.log('check: a function the agent makes');
+  await clickSel('#rail [data-tab=backend]'); // STU-092: functions are listed in the Backend tab; it is open while the agent writes
   let madeText = '', madeOk = true;
   try { madeText = await makeFunctionAsAgent(project, kit.mcpServer, repo); } catch (e) { madeOk = false; madeText = e.message; }
   ok(madeOk, 'the kit\'s MCP server makes "List Role Members", a cloud function, in the open project', madeText.slice(0, 300));
   const newKey = AGENT_FN;
   await b.until(`!!document.querySelector('#fnlist .row[data-fn="${newKey}"]')`, 20000).catch(() => {});
-  ok(await b.evaluate(`!!document.querySelector('#fnlist .row[data-fn="${newKey}"]')`), 'it arrives under "On the backend" while Studio is open');
+  ok(await b.evaluate(`!!document.querySelector('#fnlist .row[data-fn="${newKey}"]')`), 'it arrives under the Backend tab\'s Functions while Studio is open');
   await b.evaluate(`document.querySelector('#fnlist .row[data-fn="${newKey}"]')?.click()`);
   await wait(400);
   {

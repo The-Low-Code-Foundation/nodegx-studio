@@ -438,6 +438,19 @@
 
   /* ---- Workflow ---- */
   #workflow { grid-template-columns: 280px 1fr; }
+  /* STU-092: Workflow and Backend are one canvas; the left list is the page's or the backend's */
+  #workflow[data-mode=backend] .wfpage, #workflow:not([data-mode=backend]) .wfback { display: none; }
+  .wfacts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+  #wfinspect .rundata pre { margin: 4px 0 8px; padding: 8px; max-height: 220px; overflow: auto; font-size: 11.5px; line-height: 1.45; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; white-space: pre-wrap; word-break: break-word; }
+  #wfinspect .rundata .rdlabel { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+  #wfinspect .rundata .ok { color: var(--green); font-size: 12px; padding: 4px 0; }
+  #wfinspect .rvctl { display: grid; grid-template-columns: auto 1fr; gap: 4px; }
+  #wfinspect .rvctl .rvmode { width: auto; font-size: 11.5px; }
+  #wfinspect .field.wide { grid-template-columns: 1fr; }
+  #wfinspect textarea.json { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
+  #wfinspect textarea.json.bad { border-color: var(--red); }
+  #wfinspect .thenline { font-size: 12.5px; color: var(--ink-2); padding: 4px 0; }
+  #backhow { margin: 0 0 4px; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
   .events .row { padding: 7px 8px; flex-direction: column; align-items: flex-start; gap: 1px; white-space: normal; }
   /* page data (STU-011): one row per item — its name and readers, the question as a sentence, its last run in the app */
   .pagedata .row { padding: 6px 8px; flex-direction: column; align-items: stretch; gap: 1px; white-space: normal; }
@@ -862,6 +875,7 @@
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-design" viewBox="0 0 24 24"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></symbol>
   <symbol id="i-workflow" viewBox="0 0 24 24"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><path d="M9 6h6M18 9v6M6 9v9h9"/></symbol>
+  <symbol id="i-backend" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01M11 6.5h6M11 17.5h6"/></symbol>
   <symbol id="i-data" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></symbol>
   <symbol id="i-styles" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.7-.7 1.7-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.7 1.7-1.7H16c3.3 0 6-2.7 6-6 0-4.7-4.5-8.4-10-8.4z"/></symbol>
   <symbol id="i-map" viewBox="0 0 24 24"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7 6h10M6 8l5 8M18 8l-5 8"/></symbol>
@@ -901,6 +915,7 @@
     <div class="logo" title="NodeGX Studio"><svg viewBox="0 0 1024 1024" aria-hidden="true"><defs><linearGradient id="slw" x1="642" y1="287" x2="382" y2="737" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#4DA3FF"/><stop offset="1" stop-color="#1570EF"/></linearGradient><radialGradient id="slg" cx="0.5" cy="0.42" r="0.75"><stop offset="0" stop-color="#182231"/><stop offset="1" stop-color="#0B0E12"/></radialGradient></defs><rect width="1024" height="1024" rx="229" fill="url(#slg)"/><rect x="6" y="6" width="1012" height="1012" rx="223" fill="none" stroke="#232A33" stroke-width="12"/><path d="M642 287A150 150 0 1 0 512 512A150 150 0 1 1 382 737" fill="none" stroke="url(#slw)" stroke-width="66" stroke-linecap="round"/><circle cx="642" cy="287" r="81" fill="#EEF2F6"/><circle cx="382" cy="737" r="81" fill="#4DA3FF"/></svg></div>
     <button role="tab" data-tab="design" aria-selected="true" title="Design"><svg class="i"><use href="#i-design"/></svg><span class="tip">Design</span></button>
     <button role="tab" data-tab="workflow" title="Workflow"><svg class="i"><use href="#i-workflow"/></svg><span class="tip">Workflow</span></button>
+    <button role="tab" data-tab="backend" title="Backend"><svg class="i"><use href="#i-backend"/></svg><span class="tip">Backend</span></button>
     <button role="tab" data-tab="data" title="Data"><svg class="i"><use href="#i-data"/></svg><span class="tip">Data</span></button>
     <button role="tab" data-tab="styles" title="Styles"><svg class="i"><use href="#i-styles"/></svg><span class="tip">Styles</span></button>
     <div class="grow"></div>
@@ -947,12 +962,18 @@
     <section class="tab" id="workflow" hidden>
       <aside>
         <div class="search"><svg class="i"><use href="#i-search"/></svg><input type="text" id="wfsearch" placeholder="Search steps and what they change"></div>
-        <div class="wffilters"><select id="wfeffect" aria-label="What it does"></select><select id="wftrigger" aria-label="What starts it"></select></div>
-        <h3 class="sec"><span id="wfcount">Workflows on this page</span> <button class="tiny primary" id="newevent"><svg class="i"><use href="#i-plus"/></svg>New</button></h3>
-        <div class="events list" id="events"></div>
-        <h3 class="sec" id="fnsec">On the backend</h3>
-        <div class="events list" id="autolist"></div>
-        <div class="events list" id="fnlist"></div>
+        <div class="wfpage">
+          <div class="wffilters"><select id="wfeffect" aria-label="What it does"></select><select id="wftrigger" aria-label="What starts it"></select></div>
+          <h3 class="sec"><span id="wfcount">Workflows on this page</span> <button class="tiny primary" id="newevent"><svg class="i"><use href="#i-plus"/></svg>New</button></h3>
+          <div class="events list" id="events"></div>
+        </div>
+        <div class="wfback">
+          <p class="hint" id="backhow">Two parts of one machine. A <b>workflow</b> runs on its own when something starts it: a change to a table, a time of day. A <b>function</b> is logic the app calls, or a workflow's step calls.</p>
+          <h3 class="sec"><span id="autosec">Workflows</span> <button class="tiny primary" id="newauto" title="A workflow on the backend, and what starts it"><svg class="i"><use href="#i-plus"/></svg>New</button></h3>
+          <div class="events list" id="autolist"></div>
+          <h3 class="sec" id="fnsec">Functions</h3>
+          <div class="events list" id="fnlist"></div>
+        </div>
       </aside>
       <div id="steps"><div class="empty">Pick a workflow on the left.</div></div>
       <aside class="right" id="wfinspect" aria-label="The step's settings" hidden></aside>
@@ -1075,7 +1096,7 @@ import { fieldReaders, typeReaders, renameField, renameType, appFields } from '.
 import { LANES, buildTimeline, lastRunOf, msText, shotAt, stepValues } from './timeline.mjs';
 import { runOver, lastActivity, watchSignals, runtimeTimers, runTimers } from './runwatch.mjs';
 import { CLOUD, REQUEST, RESPONSE, functionList, functionLayout, helperKey, requestAsks, responseWords, touchesWords } from './fngraph.mjs';
-import { AUTOMATIONS_FILE, agrees, hhmm, readAutomations, runLine, scheduleTime, stepsOfRun, targetOf, triggerHead, workflowLayout } from './automations.mjs';
+import { AUTOMATIONS_FILE, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, moveStep, newStepId, readAutomations, runLine, scheduleTime, stepsOfRun, targetOf, triggerHead, valueForm, workflowLayout } from './automations.mjs';
 import { logicOnPage, placedComponent, studioEdits, wiringLayout, wiringSvg } from './wiring.mjs';
 import { look as canvasLook, nodeScheme, wireColors } from './look.js';
 // STU-084: what Studio draws and edits, as data (the element types, the action menu, the value sources), one file the
@@ -1337,7 +1358,7 @@ function edits(componentKey, list, { rebuildApp = true, redraw } = {}) {
   // an edit that changes which fields or steps exist redraws the panel; typing into a field does not (it would lose the caret).
   // A Go to page's page is picked from a list, and its step says when there is none
   const structural = redraw ?? list.some((e) => !['set_parameter', 'rename', 'move'].includes(e.edit) || (e.edit === 'set_parameter' && ['collectionName', 'target'].includes(e.name)));
-  if (structural) setTimeout(() => { if (tab === 'workflow') renderWorkflow(); else if (tab === 'design') { renderPageData(); renderTree(); renderProps(); } }, 0);
+  if (structural) setTimeout(() => { if (tab === 'workflow' || tab === 'backend') renderWorkflow(); else if (tab === 'design') { renderPageData(); renderTree(); renderProps(); } }, 0);
   return ids;
 }
 /** A brand-new component (an option set): three files and a registry entry through the store. */
@@ -2133,10 +2154,11 @@ window.addEventListener('keydown', (e) => {
   // STU-083: Help is words over the tab: no key reaches the page under it; Esc closes it
   if (!$('helppanel').hidden) { if (e.key === 'Escape') { e.preventDefault(); closeHelp(); } return; }
   if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !inField) { e.preventDefault(); undo(); return; }
-  if (e.key === 'Escape' && tab === 'workflow' && selFn && fnBack.length && !inField && !document.querySelector('.menu')) { backFromFn(); return; }
-  if (e.key === 'Escape' && tab === 'workflow' && !selFn && selAuto?.from && !inField && !document.querySelector('.menu')) { backFromAuto(); return; }
-  if (e.key === 'Escape' && tab === 'workflow' && !selFn && !selAuto && selStep && !inField && !document.querySelector('.menu')) { pickStep(null); return; }
-  if (e.key === 'Escape' && tab === 'workflow' && !selFn && !selAuto && cardBack && !inField && !document.querySelector('.menu')) { backFromCard(); return; }
+  if (e.key === 'Escape' && tab === 'backend' && selFn && fnBack.length && !inField && !document.querySelector('.menu')) { backFromFn(); return; }
+  if (e.key === 'Escape' && tab === 'backend' && !selFn && selAutoStep && !inField && !document.querySelector('.menu')) { pickAutoStep(null); return; }
+  if (e.key === 'Escape' && tab === 'backend' && !selFn && selAuto?.from && !inField && !document.querySelector('.menu')) { backFromAuto(); return; }
+  if (e.key === 'Escape' && tab === 'workflow' && selStep && !inField && !document.querySelector('.menu')) { pickStep(null); return; }
+  if (e.key === 'Escape' && tab === 'workflow' && cardBack && !inField && !document.querySelector('.menu')) { backFromCard(); return; }
   // Esc with nothing selected, inside a copy on its page: up one level, the copy selected (as the NodeGX editor's breadcrumb)
   if (e.key === 'Escape' && !inField && host && !sel && !pending && !document.querySelector('.menu') && tab === 'design') { editUp(); return; }
   // P123-GH-ESCCOMPONENT: both lists (elements and reusables), as placing does — #palette alone left a reusable lit after Esc
@@ -4523,8 +4545,6 @@ $('wfsearch').oninput = (e) => { wfFilter.q = e.target.value.trim(); renderEvent
 $('wfeffect').onchange = (e) => { wfFilter.effect = e.target.value; renderEvents(); };
 $('wftrigger').onchange = (e) => { wfFilter.trigger = e.target.value; renderEvents(); };
 function renderEvents() {
-  renderAutoList();
-  renderFnList();
   const box = $('events'); box.innerHTML = '';
   const all = workflowIndex();
   fillWfFilters(all);
@@ -4565,14 +4585,14 @@ function loadFnTouches() {
   fnTouches = { pending: true, byKey: new Map() };
   fetch('/api/functions').then((r) => r.json()).then((j) => { fnTouches = { byKey: new Map(j.functions.map((f) => [f.key, f.touches])), words: j.words }; })
     .catch((e) => { fnTouches = { byKey: new Map(), words: `What each function reads and writes could not be read: ${e.message}` }; })
-    .finally(() => { if (tab === 'workflow' && selFn) renderWorkflow(); });
+    .finally(() => { if (tab === 'backend' && selFn) renderWorkflow(); });
 }
 function renderFnList() {
   const box = $('fnlist'); box.innerHTML = '';
   const q = wfFilter.q.toLowerCase();
   const all = functionList(Object.keys(registry()), fnNodesOf);
   const shown = all.filter((f) => !q || f.name.toLowerCase().includes(q));
-  $('fnsec').textContent = shown.length < all.length ? `On the backend: ${shown.length} of ${all.length}` : 'On the backend';
+  $('fnsec').textContent = shown.length < all.length ? `Functions: ${shown.length} of ${all.length}` : 'Functions';
   if (!all.length) return box.append(h('div', { class: 'hint' }, 'No cloud functions in this app yet: the steps that run on the backend, out of reach of the device.'));
   for (const f of shown) box.append(h('div', { class: 'row', 'data-fn': f.key, 'aria-selected': selFn === f.key, onclick: () => openFunction(f.key) },
     h('span', {}, f.name), h('small', {}, `${f.endpoint ? 'Called from the app' : 'A part other functions use'} · ${f.steps} step${f.steps === 1 ? '' : 's'}`)));
@@ -4582,7 +4602,7 @@ function openFunction(key, from = null) {
   if (!registry()[key]) return toast(`This app has no cloud function called ${fnName(key)}`);
   fnBack = from ? [...fnBack, from] : [];
   selFn = key; selAuto = null; fnRun = null; fnTouches = null; hideBoltTip(); // read again: the agent may have changed a function since
-  if (tab !== 'workflow') switchTab('workflow'); else renderWorkflow();
+  if (tab !== 'backend') switchTab('backend'); else renderWorkflow();
   readFnRun(key);
 }
 function backFromFn() {
@@ -4590,11 +4610,12 @@ function backFromFn() {
   if (!back) { selFn = null; return renderWorkflow(); }
   if (back.kind === 'fn') { selFn = back.key; fnRun = null; readFnRun(back.key); return renderWorkflow(); }
   if (back.kind === 'map') { selFn = null; fnBack = []; dataSub = 'map'; return switchTab('data'); }
+  if (back.kind === 'card') { selFn = null; fnBack = []; selEvent = back.ev; cardBack = back.cardBack; return switchTab('workflow'); }
   // BKO-005: back to the trigger or the backend workflow whose step opened it
   if (back.kind === 'auto') { selFn = null; fnBack = []; selAuto = back.auto; if (selAuto.kind === 'workflow') readAutoRun(selAuto.id); return renderWorkflow(); }
   // back to the workflow card it was opened from, which keeps its own Back to the element in Design
   selFn = null; fnBack = []; selEvent = back.ev; cardBack = back.cardBack;
-  renderWorkflow();
+  switchTab('workflow');
 }
 /** The function's last run on the backend Studio runs (`GET /executions`), in a line, and the nodes it ran
     (`GET /executions/<id>`, as `readAutoRun` reads a workflow's): P127-BKO004-FNSTEPS. The backend records a step for
@@ -4681,7 +4702,7 @@ function renderFunction() {
   const back = fnBack.at(-1);
   const wf = h('div', { class: 'wf fnview', 'data-fn': key });
   wf.append(h('div', { class: 'cardnav' }, back ? h('button', { class: 'quiet back', title: 'Back to where you opened it (Esc)', onclick: backFromFn }, '← ', back.kind === 'fn' ? fnName(back.key) : back.title) : null,
-    h('button', { class: 'quiet tiny', title: 'Every workflow on this page, listed', onclick: () => { selFn = null; fnBack = []; cardBack = null; renderWorkflow(); } }, 'All workflows on this page')));
+    h('button', { class: 'quiet tiny', title: 'Every workflow and function on the backend, listed', onclick: () => { selFn = null; fnBack = []; cardBack = null; renderWorkflow(); } }, 'All on the backend')));
   wf.append(h('div', { class: 'event-card' }, h('div', { class: 'named' }, h('h2', {}, fnName(key)), h('small', {}, endpoint ? 'A cloud function: it runs on the backend, never on the device' : 'A part cloud functions place: it runs on the backend, inside each one')),
     h('div', { style: 'margin-left:auto;display:flex;gap:6px;align-items:center' }, h('div', { class: 'zoom' }, h('button', { title: 'Smaller', onclick: () => zoomFlow(-0.1) }, '−'), h('span', { class: 'zoomval' }), h('button', { title: 'Bigger', onclick: () => zoomFlow(0.1) }, '+'), h('button', { title: 'Fit the whole function in view', onclick: () => { flowZoom = null; fitFlow(); } }, 'Fit')))));
   wf.append(h('div', { class: 'fnfacts' },
@@ -4755,9 +4776,9 @@ function loadAutoBackend() {
   if (autoBe?.pending) return;
   autoBe = { pending: true };
   Promise.all([api('/admin/triggers'), api('/admin/workflow-defs'), api('/admin/workflow-step-kinds').catch(() => ({ kinds: [] }))])
-    .then(([t, w, k]) => { autoBe = { triggers: new Map((t.triggers ?? []).map((x) => [x.id, x])), workflows: new Map((w.workflows ?? w.definitions ?? []).map((x) => [x.id, x])), kinds: new Map((k.kinds ?? []).map((x) => [x.kind, x])) }; })
+    .then(([t, w, k]) => { autoBe = { triggers: new Map((t.triggers ?? []).map((x) => [x.id, x])), workflows: new Map((w.workflows ?? w.definitions ?? []).map((x) => [x.id, x])), kinds: new Map((k.kinds ?? []).map((x) => [x.kind, x])), ops: k.conditionLanguage?.ops ?? [] }; })
     .catch((e) => { autoBe = { triggers: new Map(), workflows: new Map(), kinds: new Map(), words: noBackend(e) ? 'No backend is bound, so what a backend runs now is not shown: these are the project’s.' : `The backend did not say its triggers and workflows: ${e.message}` }; })
-    .finally(() => { if (tab === 'workflow') renderWorkflow(); });
+    .finally(() => { if (tab === 'workflow' || tab === 'backend') renderWorkflow(); });
 }
 const switchOf = (t) => h('button', { class: 'trigswitch', role: 'switch', 'aria-checked': t.enabled !== false, title: t.enabled !== false ? 'On: turn it off, on the backend and in the project' : 'Off: turn it on, on the backend and in the project', onclick: (e) => { e.stopPropagation(); changeTrigger(t.id, { enabled: t.enabled === false }); } }, t.enabled !== false ? 'On' : 'Off');
 const startsWords = (t) => { const g = targetOf(t); return `${g.kind === 'workflow' ? 'the workflow' : 'the function'} ${g.kind === 'workflow' ? autos().workflows.find((w) => w.id === g.name)?.name || g.name : g.name}`; };
@@ -4768,6 +4789,7 @@ function renderAutoList() {
   if (!autoBe) loadAutoBackend();
   const a = autos(), be = beNow(), q = wfFilter.q.toLowerCase();
   if (a.error) return box.append(h('div', { class: 'hint' }, a.error));
+  if (!a.triggers.length && !a.workflows.length) box.append(h('div', { class: 'hint' }, 'No workflows on the backend yet: steps that run there on their own, when a table changes or at a time of day.'));
   for (const t of a.triggers) {
     const head = triggerHead(t, be?.triggers.get(t.id)?.scheduleWords);
     if (q && !`${head} ${targetOf(t).name}`.toLowerCase().includes(q)) continue;
@@ -4787,8 +4809,8 @@ function renderAutoList() {
 }
 function openAuto(target, from = null) {
   if (!autoEntry(target)) return toast(`The project has no ${target.kind} called ${target.id}`);
-  selAuto = { kind: target.kind, id: target.id, from }; selFn = null; fnBack = []; autoRun = null; hideBoltTip();
-  if (tab !== 'workflow') switchTab('workflow'); else renderWorkflow();
+  selAuto = { kind: target.kind, id: target.id, from }; selFn = null; fnBack = []; autoRun = null; selAutoStep = null; hideBoltTip();
+  if (tab !== 'backend') switchTab('backend'); else renderWorkflow();
   if (target.kind === 'workflow') readAutoRun(target.id);
 }
 const backFromAuto = () => { selAuto = selAuto?.from ? { kind: 'trigger', id: selAuto.from, from: null } : null; autoRun = null; renderWorkflow(); };
@@ -4797,6 +4819,7 @@ async function changeTrigger(id, change) {
   const j = await r.json().catch(() => ({}));
   if (!r.ok) return toast(j.error ?? `Nothing was changed (${r.status})`);
   files.write(j.file, j.text); persisted[j.file] = j.text; autoText = j.text; autoBe = null;
+  if (change.remove) { selAuto = null; return toast('Trigger deleted, on the backend and in the project'), renderWorkflow(); }
   toast(change.time ? `It runs at ${hhmm(change.time)} now, on the backend and in the project` : `Turned ${change.enabled ? 'on' : 'off'}, on the backend and in the project`);
   renderWorkflow();
 }
@@ -4814,7 +4837,7 @@ async function readAutoRun(id) {
 function autoNav() {
   const from = selAuto.from && autos().triggers.find((t) => t.id === selAuto.from);
   return h('div', { class: 'cardnav' }, from ? h('button', { class: 'quiet back', title: 'Back to the trigger that starts it (Esc)', onclick: backFromAuto }, '← ', triggerHead(from, beNow()?.triggers.get(from.id)?.scheduleWords)) : null,
-    h('button', { class: 'quiet tiny', title: 'Every workflow on this page, listed', onclick: () => { selAuto = null; renderWorkflow(); } }, 'All workflows on this page'));
+    h('button', { class: 'quiet tiny', title: 'Every workflow and function on the backend, listed', onclick: () => { selAuto = null; renderWorkflow(); } }, 'All on the backend'));
 }
 const agreeWords = (kind, entry) => {
   const be = beNow();
@@ -4855,6 +4878,7 @@ function renderTrigger(t) {
     t.type === 'schedule' ? (tm ? h('div', { class: 'trigline' }, 'Runs at ', timeIn, ' ', h('button', { class: 'quiet tiny trigmove', onclick: () => { const [hh, mm] = (timeIn.value || '').split(':').map(Number); if (Number.isInteger(hh) && Number.isInteger(mm) && (hh !== tm.hour || mm !== tm.minute)) changeTrigger(t.id, { time: { hour: hh, minute: mm } }); } }, 'Move it'), h('span', { style: 'color:var(--dim)' }, ' (the days stay as they are)'))
       : h('div', {}, 'It runs more than once a day (', h('code', {}, t.schedule?.cron ?? ''), '): ask the agent to change when.')) : null,
     h('div', { class: 'agree' }, agreeWords('trigger', t)),
+    h('div', { class: 'wfacts' }, h('button', { class: 'tiny quiet danger', 'data-act': 'deltrigger', onclick: (e) => confirmPop(e, `Delete “${head}”?`, `It stops starting ${startsWords(t)}, on the backend and in the project. ${g.kind === 'workflow' ? 'The workflow stays.' : 'The function stays.'}`, 'Delete it', () => changeTrigger(t.id, { remove: true })) }, icon('trash'), 'Delete the trigger')),
     st ? h('div', { class: 'run' }, `${st.lastFiredAt ? `Last fired ${new Date(st.lastFiredAt).toLocaleString()}` : 'Not fired yet'}${on && st.nextFireAt ? ` · next ${new Date(st.nextFireAt).toLocaleString()}` : ''}${st.fireCount ? ` · ${st.fireCount} time${st.fireCount === 1 ? '' : 's'} in all` : ''}`) : null));
   const headCard = h('div', { class: `step fnstart${on ? '' : ' trigoff'}`, 'data-id': 'trigger', style: `--kind:${FLOW.then}` }, h('div', { class: 'num' }, '1'), h('h3', {}, head, h('span', {}, on ? 'what starts it' : 'off')),
     h('div', { class: 'acts' }), h('div', { class: 'lines' }, ...(t.type === 'db-change' ? [h('span', {}, 'Data type: ', h('code', {}, t.dbChange?.collection ?? '?'))] : t.type === 'schedule' ? [h('span', {}, 'Cron: ', h('code', {}, t.schedule?.cron ?? '?'))] : [h('span', {}, 'Signed with ', h('code', {}, t.webhook?.scheme ?? 'hmac-sha256'))])));
@@ -4879,7 +4903,8 @@ function autoStepCard(step, n, lit, wfLabel) {
     else if (s.status === 'skipped') { cls += ' litnot'; lines.push(h('span', { class: 'lit' }, 'Skipped in the last run')); }
     else { cls += ' litok'; lines.push(h('span', { class: 'lit' }, `✓ Ran${s.durationMs != null ? ` in ${s.durationMs} ms` : ''}`)); }
   }
-  return h('div', { class: cls, 'data-id': step.id, 'data-kind': step.kind, style: `--kind:${runsFn ? KIND_COLOUR.bolt : step.kind === 'branch' || step.kind === 'switch' ? KIND_COLOUR.branch : KIND_COLOUR.code}` },
+  if (selAutoStep === step.id) cls += ' picked';
+  return h('div', { class: cls, 'data-id': step.id, 'data-kind': step.kind, title: 'Its settings, and what it took and gave in the last run', onclick: () => pickAutoStep(step.id), style: `--kind:${runsFn ? KIND_COLOUR.bolt : step.kind === 'branch' || step.kind === 'switch' ? KIND_COLOUR.branch : KIND_COLOUR.code}` },
     h('div', { class: 'num' }, String(n)), h('h3', {}, title, sub ? h('span', {}, sub) : null), h('div', { class: 'acts' }), h('div', { class: 'lines' }, ...lines));
 }
 function renderAutoWorkflow(w) {
@@ -4896,12 +4921,305 @@ function renderAutoWorkflow(w) {
     h('div', {}, starts.length ? ['Started by ', ...starts.map((t) => h('button', { class: 'quiet tiny startedby', 'data-trigger': t.id, onclick: () => openAuto({ kind: 'trigger', id: t.id }) }, triggerHead(t, beNow()?.triggers.get(t.id)?.scheduleWords)))] : 'No trigger starts it: the agent (or another workflow) runs it.'),
     h('div', { class: 'agree' }, agreeWords('workflow', w)),
     h('div', { class: `run ${autoRun?.run ? (failedRun ? 'refused' : 'ran') : ''}` }, autoRun ? autoRun.words ?? runLine(autoRun.run, nameOf) : 'Reading its last run…'),
-    L.dangling.length ? h('div', { style: 'color:var(--red)' }, `It names ${L.dangling.length === 1 ? 'a step' : 'steps'} it does not have: ${[...new Set(L.dangling.map((d) => d.to))].join(', ')}`) : null));
+    L.dangling.length ? h('div', { style: 'color:var(--red)' }, `It names ${L.dangling.length === 1 ? 'a step' : 'steps'} it does not have: ${[...new Set(L.dangling.map((d) => d.to))].join(', ')}`) : null,
+    // STU-092: changed here, on the backend and in the project together
+    h('div', { class: 'wfacts' }, editingUp() ? [
+      h('button', { class: 'tiny', 'data-act': 'addfirst', onclick: (e) => autoStepMenu(e, w, null, 'next') }, icon('plus'), 'Add a step at the start'),
+      h('button', { class: 'tiny quiet', 'data-act': 'rename', onclick: (e) => renameAutoWf(e, w) }, 'Rename'),
+      h('button', { class: 'tiny quiet danger', 'data-act': 'delete', onclick: (e) => deleteAutoWf(e, w) }, icon('trash'), 'Delete the workflow'),
+      h('span', { style: 'color:var(--dim)' }, autoRun?.run ? 'Click a step: its settings, and what went in and came out in the last run.' : 'Click a step to change it.')]
+      : h('span', { style: 'color:var(--dim)' }, beNow()?.words ? 'Start the backend (Data) to change it here: a workflow is changed on the backend and in the project together.' : 'Asking the backend what its steps take…'))));
   let n = 0;
   const columns = L.columns.map((col) => col.map((id) => autoStepCard(byStep[id], ++n, lit, label)));
   const ran = (id) => lit?.has(id) && lit.get(id).status !== 'skipped';
   autoFlow(wf, columns, L.wires.map((x) => ({ ...x, kind: x.kind === 'fail' ? 'fail' : 'then', ran: lit ? ran(x.from) && ran(x.to) : undefined })));
   wf.querySelector('.flowarea').after(h('div', { class: 'flowlegend' }, ...[['then', 'the next step'], ['fail', 'when a step fails']].map(([k, t]) => h('span', {}, h('i', { style: `border-color:${FLOW[k]}` }), t))));
+}
+/* ---- STU-092: a backend workflow edited in Studio. A click on a step opens its settings on the right, over the backend's
+   own step kinds (`GET /admin/workflow-step-kinds`: each kind's params, routes and words); every change is the whole
+   workflow written through serve.mjs's saveWorkflow (the backend first, which validates, then nodegx.automations.json),
+   as the MCP's update_backend_workflow writes it. The graph edits are ./automations.mjs's (add, delete, move). With a
+   run lit, the step says what went in and what came out, from the backend's record of that run. ---- */
+let selAutoStep = null;
+const kindSpec = (kind) => beNow()?.kinds.get(kind);
+const callableFns = () => functionList(Object.keys(registry()), fnNodesOf).filter((f) => f.endpoint).map((f) => fnName(f.key));
+const ROUTE_WORDS = { ontrue: 'Yes', onfalse: 'No', empty: 'If there are none', nonempty: 'If there are some', done: 'When the time comes', skipped: 'If it was already past', default: 'Anything else', onError: 'If it fails' };
+const KIND_GLYPH = (kind, spec) => (spec?.invokesFunction ? 'bolt' : kind === 'branch' || kind === 'switch' ? 'branch' : kind === 'wait' || kind === 'wait-until' ? 'repeat' : 'code');
+const editingUp = () => { const be = beNow(); return !!be && !be.words && be.kinds.size > 0; };
+function pickAutoStep(id) {
+  selAutoStep = id;
+  for (const el of $('steps').querySelectorAll('.autoview .fnflow .step[data-id]')) el.classList.toggle('picked', el.dataset.id === id);
+  renderStepPanel();
+}
+/** The workflow written, on the backend and in the project together; the list and canvas redrawn from what was stored. */
+async function saveAutoWf(next, words, extra = {}) {
+  const r = await fetch('/api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: next, ...extra, client: windowId }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { toast(j.error ?? `Nothing was changed (${r.status})`); renderWorkflow(); return null; }
+  files.write(j.file, j.text); persisted[j.file] = j.text; autoText = j.text;
+  // what the backend now runs is what it answered: kept, so the panel does not wait on asking again
+  const be = beNow();
+  if (j.trigger || !be) autoBe = null;
+  else if (j.workflow) be.workflows.set(j.workflow.id, j.workflow); else if (extra.remove) be.workflows.delete(extra.remove);
+  if (words) toast(words);
+  renderWorkflow();
+  return j;
+}
+const BOTH = ', on the backend and in the project';
+function newAutoStep(w, kind) {
+  const spec = kindSpec(kind);
+  const step = { id: newStepId(w, kind), kind };
+  if (spec?.invokesFunction) { const fns = callableFns(); if (!fns.length) throw new Error('This app has no cloud function for it to run yet: ask the agent for one.'); step.ref = fns[0]; }
+  const params = {};
+  for (const p of spec?.params ?? []) if (p.required && p.name !== 'ref' && p.default !== undefined) params[p.name] = structuredClone(p.default);
+  // what a kind cannot be stored without, in its simplest working form; changed in the panel
+  const first = { branch: { condition: { left: { $path: 'previous.result' }, op: 'truthy' } }, switch: { value: { $path: 'previous.result' }, cases: [{ label: 'first', equals: '' }] }, transform: { output: { result: { $path: 'previous.result' } } },
+    validate: { rules: [{ path: 'body.id', message: 'It arrived without an id.' }] }, wait: { duration: 1, unit: 'minutes' }, 'wait-until': { target: { $path: 'body.at' } }, split: { size: 10 } }[kind];
+  Object.assign(params, first);
+  if (Object.keys(params).length) step.params = params;
+  if (kind === 'branch') step.routes = { ontrue: [] };
+  return step;
+}
+function autoStepMenu(e, w, afterId, where) {
+  closeMenu();
+  const menu = popover(e, 'actions');
+  const search = h('input', { type: 'text', placeholder: 'Search steps…', oninput: () => fill(search.value) });
+  const list = h('div');
+  const kinds = [...(beNow()?.kinds.values() ?? [])];
+  const pick = (kind) => {
+    closeMenu();
+    try { const step = newAutoStep(w, kind); saveAutoWf(addStepAfter(w, afterId, where, step), `${kindSpec(kind)?.displayName ?? kind} added${BOTH}`).then((j) => { if (j) pickAutoStep(step.id); }); }
+    catch (err) { toast(err.message); }
+  };
+  const fill = (q) => {
+    list.innerHTML = '';
+    const q2 = q.trim().toLowerCase();
+    const shown = kinds.filter((k) => !q2 || `${k.displayName} ${k.kind} ${k.summary}`.toLowerCase().includes(q2));
+    for (const cat of [...new Set(shown.map((k) => k.category))]) {
+      list.append(h('div', { class: 'h' }, cat.replace(/^Workflow ?/, '') || 'Run'));
+      for (const k of shown.filter((x) => x.category === cat)) list.append(h('div', { class: 'item', 'data-kind': k.kind, title: k.whenToUse || '', onclick: () => pick(k.kind) },
+        h('span', { class: 'ic', style: `background:${KIND_COLOUR[KIND_GLYPH(k.kind, k)] ?? KIND_COLOUR.code}` }, icon(KIND_GLYPH(k.kind, k))), h('span', { class: 'words' }, k.displayName, h('small', {}, k.summary))));
+    }
+    if (!shown.length) list.append(h('div', { class: 'hint' }, `No step matches “${q}”.`));
+  };
+  fill('');
+  menu.append(h('div', { class: 'search' }, icon('search'), search), list); document.body.append(menu); search.focus();
+  dismissOnOutside(menu);
+}
+/** A value a step is given: typed, or read from the run (`{ $path }`: the caller's body, the step before, a named earlier one). */
+function runValueField(label, value, set, { type = 'any', enums = null, w = null, description = '' } = {}) {
+  const form = valueForm(value);
+  const f = h('div', { class: 'field runvalue', title: description }, h('label', {}, label));
+  const paths = ['body.', 'previous.result', 'trigger.', ...(w?.steps ?? []).filter((s) => s.id !== selAutoStep).map((s) => `upstream.${s.id}.`)];
+  const dl = `rv-${Math.random().toString(36).slice(2, 8)}`;
+  const mode = h('select', { class: 'rvmode', 'aria-label': `How ${label} is given`, onchange: (e) => set(e.target.value === 'from' ? { $path: form.from ?? 'previous.result' } : undefined) },
+    h('option', { value: 'typed', selected: !('from' in form) }, 'Typed'), h('option', { value: 'from', selected: 'from' in form }, 'From the run'));
+  let box;
+  if ('from' in form) box = h('input', { type: 'text', value: form.from, list: dl, placeholder: 'body.plant, previous.result…', onchange: (e) => set(e.target.value.trim() ? { $path: e.target.value.trim() } : undefined) });
+  else if (type === 'boolean') box = h('input', { type: 'checkbox', style: 'width:auto;justify-self:start', checked: !!form.typed, onchange: (e) => set(e.target.checked) });
+  else if (type === 'enum' && enums) box = h('select', { onchange: (e) => set(e.target.value === '' ? undefined : e.target.value) }, h('option', { value: '' }, '(default)'), ...enums.map((o) => h('option', { value: o, selected: form.typed === o }, o)));
+  else box = h('input', { type: type === 'number' ? 'number' : 'text', value: form.typed == null ? '' : typeof form.typed === 'object' ? JSON.stringify(form.typed) : String(form.typed), onchange: (e) => {
+    const t = e.target.value;
+    if (t === '') return set(undefined);
+    if (type === 'number') return set(Number(t));
+    if (type === 'string') return set(t);
+    try { return set(/^(-?\d+(\.\d+)?|true|false|null|[[{].*)$/s.test(t.trim()) ? JSON.parse(t) : t); } catch { return set(t); } // "any": a number, a yes/no or a list read as one
+  } });
+  f.append(h('div', { class: 'ctl rvctl' }, mode, box, h('datalist', { id: dl }, ...paths.map((p) => h('option', { value: p })))));
+  return f;
+}
+/** A value the backend keeps as written (a list of rules, a transform's output): its JSON, checked before it is sent. */
+function jsonField(label, value, set, description = '') {
+  const ta = h('textarea', { rows: Math.min(10, Math.max(3, JSON.stringify(value ?? null, null, 2).split('\n').length)), spellcheck: false, class: 'json', onchange: (e) => {
+    const t = e.target.value.trim();
+    if (!t) return set(undefined);
+    try { set(JSON.parse(t)); e.target.classList.remove('bad'); } catch (err) { e.target.classList.add('bad'); toast(`Not saved: that is not JSON (${err.message})`); }
+  } }, value === undefined ? '' : JSON.stringify(value, null, 2));
+  return h('div', { class: 'field wide', title: description }, h('label', {}, label), ta);
+}
+/** A branch's condition in words: a value, how it compares, another value. A condition of several parts (all / any / not) is its JSON. */
+function condField(label, value, set, w) {
+  const ops = beNow()?.ops ?? [];
+  const c = value && typeof value === 'object' && 'op' in value ? value : null;
+  if (!c || !ops.length) return jsonField(label, value, set, 'A condition of several parts: { all: [...] }, { any: [...] } or { not: … }');
+  const op = ops.find((o) => o.name === c.op);
+  const wrap = h('div', { class: 'condwords' }, h('div', { class: 'sechead' }, label));
+  wrap.append(runValueField('This', c.left, (v) => set({ ...c, left: v }), { w }));
+  wrap.append(h('div', { class: 'field' }, h('label', {}, ''), h('select', { 'aria-label': 'How it compares', onchange: (e) => { const o = ops.find((x) => x.name === e.target.value); const next = { ...c, op: o.name }; if (o.unary) delete next.right; else if (!('right' in next)) next.right = ''; set(next); } },
+    ...ops.map((o) => h('option', { value: o.name, selected: o.name === c.op }, o.label)))));
+  if (op && !op.unary) wrap.append(runValueField('That', c.right, (v) => set({ ...c, right: v ?? '' }), { w }));
+  return wrap;
+}
+/** A param the catalog gives no display name, in words: maxAttempts → "Max attempts". */
+const paramWords = (name) => { const w = name.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]/g, ' ').toLowerCase(); return w.charAt(0).toUpperCase() + w.slice(1).replace(/\bms\b/, '(ms)'); };
+const prettyJson = (v) => { const t = JSON.stringify(v, null, 2); return t === undefined ? '(nothing)' : t; };
+function autoStepPanel(panel, w, step) {
+  const spec = kindSpec(step.kind), up = editingUp();
+  const save = (next, words) => saveAutoWf(next, words);
+  const change = (fn, words = `Saved${BOTH}`) => { const next = structuredClone(w); fn(next.steps.find((s) => s.id === step.id)); return save(next, words); };
+  const setParam = (name) => (v) => change((s) => { s.params ??= {}; if (v === undefined) delete s.params[name]; else s.params[name] = v; if (!Object.keys(s.params).length) delete s.params; });
+  const num = $('steps').querySelector(`.autoview .step[data-id="${CSS.escape(step.id)}"] .num`)?.textContent || '';
+  const glyph = KIND_GLYPH(step.kind, spec);
+  panel.append(h('div', { class: 'head' },
+    h('input', { type: 'text', value: step.name || '', disabled: !up, placeholder: `Name this step (${spec?.displayName ?? step.kind})`, title: 'A name for this step, shown on its card', onchange: (e) => change((s) => { const v = e.target.value.trim(); if (v) s.name = v; else delete s.name; }, `Renamed${BOTH}`) }),
+    h('button', { class: 'quiet danger', title: 'Delete this step', disabled: !up, onclick: () => { try { const next = deleteAutoStep(w, step.id); selAutoStep = null; save(next, `Step deleted${BOTH}`); } catch (err) { toast(err.message); } } }, icon('trash')),
+    h('div', { class: 'type' }, h('span', { class: 'stepkind', style: `background:${KIND_COLOUR[glyph] ?? KIND_COLOUR.code}` }, icon(glyph)), `${num ? `Step ${num} · ` : ''}${spec?.displayName ?? step.kind}`)));
+  if (spec?.summary) panel.append(h('p', { class: 'what' }, spec.summary));
+  const wrap = h('div', { class: 'props' });
+  if (!up) wrap.append(h('div', { class: 'warn' }, beNow()?.words ?? 'Asking the backend what its steps take…', ' A workflow is changed on the backend and in the project together, so its settings open when the backend answers.'));
+  // the run: what this step was given and what it gave, as the backend recorded that run
+  const ran = autoRun?.run ? stepsOfRun(autoRun.run).get(step.id) : null;
+  if (autoRun?.run) {
+    const box = h('div', { class: 'rundata' }, h('div', { class: 'sechead' }, 'In the last run'));
+    if (!ran) box.append(h('div', { class: 'hint' }, 'Not reached: the run ended, or went another way, before this step.'));
+    else {
+      box.append(h('div', { class: ran.status === 'error' ? 'warn' : 'ok' }, ran.status === 'error' ? `✗ Failed here${ran.error ? `: ${ran.error}` : ''}` : ran.status === 'skipped' ? 'Skipped' : `✓ Ran${ran.durationMs != null ? ` in ${ran.durationMs} ms` : ''}`));
+      box.append(h('div', { class: 'rdlabel' }, 'What went in'), h('pre', { class: 'rdin' }, ran.input === undefined ? '(not recorded)' : prettyJson(ran.input)));
+      if (ran.status !== 'error') box.append(h('div', { class: 'rdlabel' }, 'What came out'), h('pre', { class: 'rdout' }, ran.output === undefined ? '(nothing)' : prettyJson(ran.output)));
+    }
+    wrap.append(box);
+  }
+  if (up) {
+    wrap.append(h('div', { class: 'sechead' }, 'Settings'));
+    if (spec?.invokesFunction) {
+      const fns = callableFns(); if (step.ref && !fns.includes(step.ref)) fns.unshift(step.ref);
+      wrap.append(h('div', { class: 'field' }, h('label', {}, 'Function'), h('select', { 'aria-label': 'The function it runs', onchange: (e) => change((s) => { s.ref = e.target.value; }, `It runs ${e.target.value} now${BOTH}`) }, ...fns.map((n) => h('option', { value: n, selected: n === step.ref }, n.replace(/^Cloud Functions\//, ''))))));
+    }
+    const params = step.params ?? {}, own = spec?.params ?? [];
+    const more = h('details', { class: 'more' }, h('summary', {}, ''));
+    let moreN = 0;
+    for (const p of own) {
+      if (p.name === 'ref') continue;
+      const label = p.displayName || paramWords(p.name), v = params[p.name], into = p.group ? more : wrap;
+      if (p.group) moreN++;
+      if (p.type === 'condition') into.append(condField(label, v, setParam(p.name), w));
+      else if (p.raw || p.type === 'object' || p.type === 'array') into.append(jsonField(label, v, setParam(p.name), p.description));
+      else into.append(runValueField(label, v, setParam(p.name), { type: p.type, enums: p.enums, w, description: `${p.description}${p.default !== undefined ? ` (when left empty: ${JSON.stringify(p.default)})` : ''}` }));
+    }
+    // a function step's own names: what it sends the function (the function's asks first, then any other name it was given)
+    if (step.kind === 'call-function') {
+      const asks = (() => { try { const req = fnNodesOf(CLOUD + step.ref).find((n) => n.type === REQUEST); return req ? requestAsks(req).map((a) => a.name) : []; } catch { return []; } })();
+      const named = [...new Set([...asks, ...Object.keys(params).filter((k) => !own.some((p) => p.name === k))])];
+      wrap.append(h('div', { class: 'sechead' }, 'What it sends the function'));
+      if (!named.length) wrap.append(h('div', { class: 'hint' }, 'The function asks for nothing.'));
+      for (const name of named) wrap.append(runValueField(name, params[name], setParam(name), { w, description: asks.includes(name) ? 'The function asks for it' : 'Sent under this name' }));
+    }
+    if (moreN) { more.firstChild.textContent = `More options (${moreN})`; wrap.append(more); }
+    // what comes next
+    wrap.append(h('div', { class: 'sechead' }, 'Then'));
+    const nameOf = (id) => w.steps.find((s) => s.id === id)?.name || id;
+    const routes = spec?.routes?.length ? [...new Set([...spec.routes.filter((r) => !r.dynamic).map((r) => r.name), ...(step.kind === 'switch' ? (params.cases ?? []).map((c) => c.label) : []), ...Object.keys(step.routes ?? {})])] : [];
+    const ends = step.kind === 'return' || (step.kind === 'stop' && params.isError !== false);
+    const after = h('div', { class: 'after' });
+    if (ends) wrap.append(h('div', { class: 'hint' }, 'It ends the workflow: nothing runs after it.'));
+    else if (!routes.length) {
+      wrap.append(h('div', { class: 'thenline' }, (step.next ?? []).length ? `Next: ${step.next.map(nameOf).join(', ')}` : 'Nothing after it: the workflow ends here.'));
+      after.append(h('button', { class: 'primary', 'data-act': 'addafter', onclick: (e) => autoStepMenu(e, w, step.id, 'next') }, icon('plus'), 'Add a step after'));
+    } else for (const r of routes) {
+      const tos = step.routes?.[r] ?? [];
+      wrap.append(h('div', { class: 'thenline' }, h('b', {}, `${ROUTE_WORDS[r] ?? r}: `), tos.length ? tos.map(nameOf).join(', ') : 'nothing'));
+      after.append(h('button', { 'data-act': `add-${r}`, onclick: (e) => autoStepMenu(e, w, step.id, r) }, icon('plus'), `Add on ${ROUTE_WORDS[r] ?? r}`));
+    }
+    const can = canMove(w, step.id);
+    if (can.earlier) after.append(h('button', { 'data-act': 'earlier', onclick: () => { try { save(moveStep(w, step.id, -1), `Moved earlier${BOTH}`); } catch (err) { toast(err.message); } } }, '← Move earlier'));
+    if (can.later) after.append(h('button', { 'data-act': 'later', onclick: () => { try { save(moveStep(w, step.id, 1), `Moved later${BOTH}`); } catch (err) { toast(err.message); } } }, 'Move later →'));
+    wrap.append(after);
+  }
+  panel.append(wrap);
+}
+function renderAutoStepPanel(panel) {
+  const w = !selFn && selAuto?.kind === 'workflow' ? autoEntry(selAuto) : null;
+  if (selAutoStep && !w?.steps?.some((s) => s.id === selAutoStep)) selAutoStep = null;
+  const on = !!w && !!selAutoStep;
+  $('workflow').classList.toggle('inspecting', on);
+  panel.hidden = !on;
+  const a = document.activeElement, focusAt = on && a && panel.contains(a) && a.matches('input,select,textarea') ? [...panel.querySelectorAll('input,select,textarea')].indexOf(a) : -1;
+  panel.innerHTML = '';
+  if (!on) return;
+  autoStepPanel(panel, w, w.steps.find((s) => s.id === selAutoStep));
+  if (focusAt >= 0) panel.querySelectorAll('input,select,textarea')[focusAt]?.focus();
+}
+/** New workflow: its name, what starts it (a change to a table, a time of day, or nothing: run by the agent or another
+    workflow) and its first step, a function it runs. Made on the backend and in the project together, trigger and all. */
+function newAutoForm(e) {
+  closeMenu();
+  if (!editingUp()) return toast(beNow()?.words ?? 'Asking the backend… try again in a moment. A workflow is made on the backend and in the project together.');
+  const fns = callableFns();
+  const menu = popover(e, 'newitem newpage newauto');
+  const name = h('input', { type: 'text', placeholder: 'The morning check, When an order arrives…', 'aria-label': 'Workflow name' });
+  const starts = h('select', { 'aria-label': 'What starts it' }, h('option', { value: 'db-change' }, 'A change to a table'), h('option', { value: 'schedule' }, 'A time of day'), h('option', { value: '' }, 'Nothing yet (the agent or another workflow runs it)'));
+  const table = h('select', { 'aria-label': 'Which table' }, ...typeNames().map((t) => h('option', { value: t }, t)));
+  const act = h('select', { 'aria-label': 'Which change' }, h('option', { value: 'create' }, 'is created'), h('option', { value: 'update' }, 'is changed'), h('option', { value: 'delete' }, 'is deleted'));
+  const time = h('input', { type: 'time', value: '08:00', 'aria-label': 'The time it runs' });
+  // a workflow has at least one step: a function it runs, or an end to add steps before
+  const fn = h('select', { 'aria-label': 'The function it runs first' }, ...fns.map((n) => h('option', { value: n }, n.replace(/^Cloud Functions\//, ''))), h('option', { value: '' }, 'Nothing yet: I’ll add its steps'));
+  const tableRow = h('div', { class: 'field' }, h('label', {}, 'When a'), h('div', { style: 'display:flex;gap:6px' }, table, act));
+  const timeRow = h('div', { class: 'field' }, h('label', {}, 'Every day at'), time);
+  const note = h('div', { class: 'note' }), create = h('button', { class: 'primary' }, 'Create');
+  const slug = () => name.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+  const check = () => {
+    tableRow.hidden = starts.value !== 'db-change'; timeRow.hidden = starts.value !== 'schedule';
+    const id = slug(), taken = autos().workflows.some((w) => w.id === id);
+    if (starts.value === 'db-change' && !typeNames().length) note.textContent = 'The app has no data types yet to watch for a change.';
+    else note.textContent = !id ? 'Its name, as the list shows it.' : taken ? `There is already a workflow called ${id}.` : fn.value ? `It runs ${fn.value.replace(/^Cloud Functions\//, '')} first; add its other steps on the canvas.` : 'It starts with one step that ends it: add its steps before that one.';
+    create.disabled = !id || taken || (starts.value === 'db-change' && !typeNames().length);
+  };
+  for (const el of [name, starts, table, fn]) el.addEventListener(el === name ? 'input' : 'change', check);
+  name.onkeydown = (ev) => { if (ev.key === 'Enter' && !create.disabled) create.click(); else if (ev.key === 'Escape') closeMenu(); };
+  create.onclick = async () => {
+    const id = slug(); if (!id) return;
+    closeMenu();
+    const wf = { id, name: name.value.trim(), entry: 'first', concurrency: 1, steps: [fn.value ? { id: 'first', kind: 'call-function', ref: fn.value } : { id: 'first', name: 'The end', kind: 'return' }] };
+    const [hh, mm] = (time.value || '08:00').split(':').map(Number);
+    const trigger = starts.value === 'db-change' ? { type: 'db-change', name: `When a ${table.value} ${act.selectedOptions[0].textContent}`, enabled: true, dbChange: { collection: table.value, actions: [act.value] } }
+      : starts.value === 'schedule' ? { type: 'schedule', name: `Every day at ${hhmm({ hour: hh, minute: mm })}`, enabled: true, schedule: { cron: `${mm} ${hh} * * *`, missedFirePolicy: 'run-once-on-start' } } : undefined;
+    const j = await saveAutoWf(wf, `${wf.name} made${BOTH}`, trigger ? { trigger } : {});
+    if (j) { openAuto({ kind: 'workflow', id }); }
+  };
+  menu.append(h('div', { class: 'h' }, 'New workflow on the backend'), h('div', { class: 'field' }, h('label', {}, 'Name'), name), h('div', { class: 'field' }, h('label', {}, 'Starts on'), starts), tableRow, timeRow,
+    h('div', { class: 'field' }, h('label', {}, 'First it runs'), fn), note, h('div', { class: 'foot' }, h('button', { onclick: () => closeMenu() }, 'Cancel'), create));
+  document.body.append(menu); name.focus(); check();
+  dismissOnOutside(menu);
+}
+$('newauto').onclick = (e) => newAutoForm(e);
+/** Asked in Studio's own popover (a page inside the conversation may have no confirm()): STU-082's rule. */
+function confirmPop(e, title, words, yes, then) {
+  closeMenu();
+  const menu = popover(e, 'newitem');
+  const go = h('button', { class: 'primary danger', 'data-act': 'confirm', onclick: () => { closeMenu(); then(); } }, yes);
+  menu.append(h('div', { class: 'h' }, title), h('div', { class: 'note' }, words), h('div', { class: 'foot' }, h('button', { onclick: () => closeMenu() }, 'Cancel'), go));
+  document.body.append(menu); go.focus();
+  dismissOnOutside(menu);
+}
+function deleteAutoWf(e, w) {
+  const by = autos().triggers.filter((t) => targetOf(t).kind === 'workflow' && targetOf(t).name === w.id);
+  if (by.length) return toast(`${triggerHead(by[0], beNow()?.triggers.get(by[0].id)?.scheduleWords)} still starts it: open that trigger and delete it first, or it would start nothing.`);
+  confirmPop(e, `Delete “${w.name || w.id}”?`, 'It is taken off the backend and out of the project. Its past runs stay in the backend’s history.', 'Delete it', async () => {
+    const j = await saveAutoWf(undefined, `${w.name || w.id} deleted${BOTH}`, { remove: w.id });
+    if (j) { selAuto = null; selAutoStep = null; renderWorkflow(); }
+  });
+}
+function renameAutoWf(e, w) {
+  closeMenu();
+  const menu = popover(e, 'newitem');
+  const name = h('input', { type: 'text', value: w.name || '', 'aria-label': 'Workflow name' });
+  const go = h('button', { class: 'primary', onclick: () => { const v = name.value.trim(); closeMenu(); if (v && v !== w.name) saveAutoWf({ ...structuredClone(w), name: v }, `Renamed${BOTH}`); } }, 'Rename');
+  name.onkeydown = (ev) => { if (ev.key === 'Enter') go.click(); else if (ev.key === 'Escape') closeMenu(); };
+  menu.append(h('div', { class: 'h' }, 'Rename the workflow'), h('div', { class: 'field' }, h('label', {}, 'Name'), name), h('div', { class: 'note' }, `Its id stays ${w.id}: the triggers that start it name it by that.`), h('div', { class: 'foot' }, h('button', { onclick: () => closeMenu() }, 'Cancel'), go));
+  document.body.append(menu); name.focus(); name.select();
+  dismissOnOutside(menu);
+}
+/** STU-092: the Backend tab. Its list is the backend's workflows (with what starts them) and its functions; its canvas the one picked. */
+function renderBackend() {
+  renderAutoList(); renderFnList();
+  if (selFn && !registry()[selFn]) { selFn = null; fnBack = []; }
+  if (selAuto && !autoEntry(selAuto)) selAuto = null;
+  renderStepPanel();
+  if (selFn) return renderFunction();
+  if (selAuto) return renderAuto();
+  $('workflow').classList.remove('card');
+  $('steps').innerHTML = '';
+  $('steps').append(h('div', { class: 'empty' }, 'Pick a workflow or a function on the left, or make a new workflow.'));
 }
 function renderAuto() {
   const entry = autoEntry(selAuto);
@@ -4971,15 +5289,12 @@ const offer = (src, to) => wire(src, to, src?.kind === 'dead' ? 'dead' : src && 
 const neverDone = (s) => !s.refresh && byId[s.id]?.type === 'RouterNavigate' && !byId[s.id].parameters?.target && !conns.some((c) => c.toId === s.id && c.toProperty === 'target');
 let shownEv = null;
 function renderWorkflow() {
+  if (tab === 'backend') return renderBackend();
   renderEvents();
-  if (selFn && !registry()[selFn]) { selFn = null; fnBack = []; }
-  if (selAuto && !autoEntry(selAuto)) selAuto = null;
   // another workflow (or none) shown: its own steps, none of them picked yet
-  const evKey = selFn || selAuto || !selEvent ? null : `${selEvent.node}.${selEvent.port}`;
+  const evKey = !selEvent ? null : `${selEvent.node}.${selEvent.port}`;
   if (evKey !== shownEv) { shownEv = evKey; selStep = null; }
   renderStepPanel();
-  if (selFn) return renderFunction();
-  if (selAuto) return renderAuto();
   const main = $('steps'); main.innerHTML = '';
   if (!selEvent || !byId[selEvent.node]) cardBack = null;
   $('workflow').classList.toggle('card', !!cardBack);
@@ -5377,8 +5692,9 @@ function pickStep(id) {
 }
 function renderStepPanel() {
   const panel = $('wfinspect'); if (!panel) return;
+  if (tab === 'backend') return renderAutoStepPanel(panel);
   if (selStep && selStep !== 'event' && !byId[selStep]) selStep = null;
-  const on = tab === 'workflow' && !selFn && !selAuto && !!selEvent && !!byId[selEvent.node] && !!selStep;
+  const on = tab === 'workflow' && !!selEvent && !!byId[selEvent.node] && !!selStep;
   $('workflow').classList.toggle('inspecting', on);
   panel.hidden = !on;
   // a redraw keeps the focus on the same control, as Design's panel does
@@ -7269,8 +7585,12 @@ let tab = 'design';
 function switchTab(name) {
   tab = name;
   for (const x of document.querySelectorAll('#rail [role=tab]')) x.setAttribute('aria-selected', x.dataset.tab === name);
-  for (const s of document.querySelectorAll('main > section.tab')) s.hidden = s.id !== name;
-  $('pagepick-l').style.display = $('newpage').style.display = name === 'data' || name === 'styles' ? 'none' : '';
+  // STU-092: the Backend tab draws on the Workflow tab's canvas, its list the backend's
+  const section = name === 'backend' ? 'workflow' : name;
+  for (const s of document.querySelectorAll('main > section.tab')) s.hidden = s.id !== section;
+  $('workflow').dataset.mode = name === 'backend' ? 'backend' : 'page';
+  $('wfsearch').placeholder = name === 'backend' ? 'Search workflows and functions' : 'Search steps and what they change';
+  $('pagepick-l').style.display = $('newpage').style.display = name === 'data' || name === 'styles' || name === 'backend' ? 'none' : '';
   $('widthseg').style.display = name === 'design' ? '' : 'none';
   $('previewmode-l').style.display = name === 'design' ? '' : 'none';
   renderAll();
@@ -7280,7 +7600,7 @@ for (const b of document.querySelectorAll('#rail [role=tab]')) b.onclick = () =>
 function renderAll() {
   renderPagePick(); renderDatalists();
   if (tab === 'design') { renderPalette(); renderPageData(); renderTree(); renderProps(); draw(); }
-  if (tab === 'workflow') renderWorkflow();
+  if (tab === 'workflow' || tab === 'backend') renderWorkflow();
   if (tab === 'data') renderData();
   if (tab === 'styles') renderStyles();
 }
