@@ -227,6 +227,7 @@ try {
     ok(sources.some((s) => s.includes("Sign-in card's state")) && sources.some((s) => s.startsWith('Compose an expression')), 'the ⚡ lists the custom state and the composer', sources.slice(0, 4));
     await menuItem('Compose an expression');
     ok(await b.evaluate(`!!document.querySelector('.composer')`), 'the composer opens');
+    ok(await b.evaluate(`document.querySelector('.composer .seg [aria-pressed=true]')?.dataset.m === 'chips' && !!document.querySelector('.composer .sentence')`), 'it opens on Composer, the sentence (STU-098), not on code');
     await b.evaluate(`[...document.querySelectorAll('.composer .seg button')].find(b => b.dataset.m === 'mixed').click()`); await wait(100);
     await clickText('.composer .tools button', 'Insert a value'); await wait(250);
     await menuItem("Sign-in card's state");
@@ -238,8 +239,20 @@ try {
     await b.type('+ " world"');
     const jsAfter = await b.evaluate(`document.querySelector('.composer textarea').value`);
     await b.evaluate(`[...document.querySelectorAll('.composer .seg button')].find(b => b.dataset.m === 'chips').click()`); await wait(100);
-    const chipsView = await b.evaluate(`[...document.querySelectorAll('.composer .chips > *')].map(e => e.classList.contains('chip') ? '[' + e.textContent + ']' : e.textContent)`);
-    ok(jsAfter.trim() === `${jsBefore.trim()} + " world"` && chipsView[0]?.startsWith("[Sign-in card's state") && chipsView.includes('"world"') === false && chipsView.some((t) => t.includes('world')), 'the JavaScript view shows the same text with the chip as a name; the composer view shows the chip, the operator and the literal', { js: jsAfter, chips: chipsView });
+    // a typed value is a box ({…}: its value), a chip [ … ], a word as it reads; the caret is left out
+    const readSentence = () => b.evaluate(`[...document.querySelectorAll('.composer .sentence > :not(.caret)')].map(e => e.classList.contains('chip') ? '[' + e.textContent + ']' : e.querySelector('input,select') ? '{' + e.querySelector('input,select').value + '}' : e.textContent)`);
+    const chipsView = await readSentence();
+    ok(jsAfter.trim() === `${jsBefore.trim()} + " world"` && chipsView[0]?.startsWith("[Sign-in card's state") && chipsView[1] === '+' && chipsView[2] === '{ world}' && !chipsView.join(' ').includes('"'), 'the JavaScript view shows the same text with the chip as a name; the Composer view shows the chip, the word, and the text in a box with no quotes to keep (STU-098)', { js: jsAfter, chips: chipsView });
+    // STU-098: Backspace on the sentence takes out the piece before the caret and goes no further: the sentence is drawn
+    // again, and before the fix the page heard the same key with nothing focused and deleted the selected element
+    await b.evaluate(`document.querySelector('.composer .sentence').focus()`);
+    await b.key('Backspace', 'Backspace', 8); await wait(500);
+    const afterBack = await readSentence();
+    ok(afterBack.length === 2 && afterBack[1] === '+' && onDisk(SIGN + 'nodes.json').nodes.some((n) => n.id === title1) && (await b.evaluate(`!document.querySelector('#toast')?.textContent.startsWith('Deleted')`)), 'Backspace on the sentence removes the text before the caret, and the selected element is still there', afterBack);
+    await clickText('.composer .tools button', 'Text'); await wait(200);
+    ok(await b.evaluate(`document.activeElement?.matches('.composer .sentence input.vbox')`), 'Text adds an empty box where the caret was, and it takes the keys');
+    await b.type(' world'); await wait(100);
+    ok((await readSentence())[2] === '{ world}', 'typed into, the box is the text again', await readSentence());
     await shot('composer');
     const n0 = await shows();
     await clickText('.composer .foot button', 'Save'); await rebuilt(n0);
@@ -380,7 +393,7 @@ try {
     const condExpr = nodes.find((n) => n.type === 'Expression' && n.metadata?.composedFor?.node === cond.id && n.metadata.composedFor.port === 'condition');
     ok(condExpr && condExpr.parameters.expression === '1 > 2' && wires.some((w) => w.fromId === condExpr.id && w.fromProperty === 'result' && w.toId === cond.id && w.toProperty === 'condition'), 'the branch\'s condition is an Expression (1 > 2) wired into the Condition\'s input', { expression: condExpr?.parameters?.expression });
     const shown = await b.evaluate(`document.querySelector('#steps .step.cond .cond-line')?.textContent`);
-    ok(/1 > 2/.test(shown || ''), 'the branch card reads the condition back', shown);
+    ok(/1 is more than 2/.test(shown || ''), 'the branch card reads the condition back, in words (STU-098: "1 is more than 2", not 1 > 2)', shown);
     // a named card keeps its name through the steps added since; emptied, it reads its steps again (the branch, by its test)
     const kept = await cardHead();
     ok(kept.name === 'Check the card' && Object.values(namesOnDisk()).includes('Check the card'), 'STU-023: a renamed card keeps its name after a branch and two steps are added to it', kept);
@@ -388,7 +401,7 @@ try {
     await b.evaluate(`document.querySelector('#steps .event-card input.cardname').value = ''`);
     await b.key('Enter', 'Enter', 13); await wait(400);
     const unnamed = await cardHead();
-    ok(/^If 1 > 2/.test(unnamed.name || '') && !Object.values(namesOnDisk()).includes('Check the card'), 'STU-023: an emptied name gives the card back to its steps, and the name leaves the file; the branch made here has no label, so it reads its composed condition ("If 1 > 2"), not "Branch"', { unnamed, onDisk: namesOnDisk() });
+    ok(/^If 1 is more than 2/.test(unnamed.name || '') && !Object.values(namesOnDisk()).includes('Check the card'), 'STU-023: an emptied name gives the card back to its steps, and the name leaves the file; the branch made here has no label, so it reads its composed condition ("If 1 is more than 2"), not "Branch"', { unnamed, onDisk: namesOnDisk() });
     // STU-013-NAVLOOP: NodeGX re-tests a Condition when its value changes, Evaluate wired or not. A branch tests when its
     // event reaches it: its value arriving as the app opens must not send No's "Go to page" (the runtime's own trace says)
     ok(nodes.find((n) => n.id === cond.id)?.parameters?.['runOnChange-condition'] === false, 'the branch is written to test only when its event reaches it (run on change off)', nodes.find((n) => n.id === cond.id)?.parameters);
@@ -411,7 +424,7 @@ try {
     for (const t0 = Date.now(); Date.now() - t0 < 5000 && !joined; await wait(150)) { const g = onSign(); joined = g.nodes.find((n) => !before.has(n.id) && n.type === 'Set Variable'); if (joined && intoDo(g, joined.id).length < 2) joined = null; }
     ok(joinOffered.join() === 'Then, after Yes or No,Branch after both' && joined && intoDo(onSign(), joined.id).join() === [setV.id, noNav.id].sort().join(), 'R4: under a branch whose sides both end, "Then, after Yes or No" adds one step, the end of Yes and the end of No both wired into it', { joinOffered, joined: joined?.id, into: joined && intoDo(onSign(), joined.id) });
     const drawn = JSON.parse(await b.evaluate(`JSON.stringify({ note: document.querySelector('#steps .flow > .chain > .joinnote')?.textContent, after: [...document.querySelectorAll('#steps .flow > .chain > .step')].map(s => s.querySelector('.num').textContent), yes: document.querySelectorAll('#steps .branch.yes .step').length, no: document.querySelectorAll('#steps .branch.no .step').length, offered: document.querySelectorAll('#steps .joinrow').length, title: document.querySelector('#steps .event-card h2')?.textContent })`));
-    ok(drawn.note === 'Then, after Yes or No' && drawn.after.length === 2 && drawn.after[1] === '2' && drawn.yes === 1 && drawn.no === 1 && drawn.offered === 0 && drawn.title === "If 1 > 2 → Set Sign-in card's state", 'R4: the card draws it once, after the branch (step 2, under "Then, after Yes or No"), not in either column, and names itself by it', drawn);
+    ok(drawn.note === 'Then, after Yes or No' && drawn.after.length === 2 && drawn.after[1] === '2' && drawn.yes === 1 && drawn.no === 1 && drawn.offered === 0 && drawn.title === "If 1 is more than 2 → Set Sign-in card's state", 'R4: the card draws it once, after the branch (step 2, under "Then, after Yes or No"), not in either column, and names itself by it', drawn);
     // STU-026 (Richard, 2026-10-23: "It looks hot, I approve"): the flow drawn as NodeGX draws. Wires are read off the svg:
     // what each leaves (data-from), reaches (data-to) and carries (data-kind)
     const paths = JSON.parse(await b.evaluate(`JSON.stringify([...document.querySelectorAll('#steps svg.wires path')].map(p => ({ kind: p.dataset.kind, from: p.dataset.from, to: p.dataset.to })))`));

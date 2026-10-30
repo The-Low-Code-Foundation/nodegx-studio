@@ -650,6 +650,20 @@
   .composer .chips { min-height: 44px; border: 1px solid var(--line-2); border-radius: var(--r); padding: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-family: var(--mono); font-size: 12px; }
   .composer .chips .lit { color: var(--ink-2); }
   .composer .chips .op { color: #9333ea; font-weight: 500; }
+  /* STU-098: the Composer view, a sentence: words, chips, and each typed value in a box of its kind */
+  .composer .chips.sentence { font-family: Inter, sans-serif; font-size: 13px; gap: 5px; cursor: text; outline: none; }
+  .composer .chips.sentence:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .composer .sentence > * { flex: none; }
+  .composer .sentence .piece { position: relative; display: inline-flex; align-items: center; }
+  .composer .sentence .word, .composer .sentence .lead { color: var(--lane-workflow); font-weight: 500; cursor: pointer; }
+  .composer .sentence .code { font-family: var(--mono); font-size: 12px; color: var(--ink-2); cursor: pointer; }
+  .composer .sentence .piece > .x { display: none; position: absolute; top: -8px; right: -8px; width: 16px; height: 16px; padding: 0; border-radius: 50%; align-items: center; justify-content: center; background: var(--panel); border: 1px solid var(--line-2); z-index: 1; }
+  .composer .sentence .piece:hover > .x { display: inline-flex; }
+  .composer .sentence .vbox { width: auto; flex: none; padding: 1px 6px; font: inherit; line-height: 20px; }
+  .composer .sentence input.vbox[type=number] { width: 8ch; }
+  .composer .sentence .caret { width: 2px; align-self: stretch; min-height: 20px; background: var(--accent); margin: 0 -2px; animation: recpulse 1s steps(1) infinite; }
+  .composer .chips.sentence:not(:focus-within) .caret { opacity: .35; animation: none; }
+  .composer .tools .sep { width: 1px; background: var(--line); margin: 2px 2px; }
   .composer .mixed { min-height: 60px; border: 1px solid var(--line-2); border-radius: var(--r); padding: 8px; font-family: var(--mono); font-size: 12.5px; line-height: 1.7; white-space: pre-wrap; outline: none; }
   .composer .mixed:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   .composer .mixed .chip { font-family: Inter, sans-serif; vertical-align: baseline; user-select: all; }
@@ -1090,6 +1104,7 @@ import { extractReusable } from './reusable.mjs';
 import { linkOf, valueKeys, convertCell, readThroughScript } from './optionsets.mjs';
 import { readRule, rulesOf, withoutArm, withValue, withCondition, addArm, valueOf, literal, SHOWING } from './rules.mjs';
 import { TYPES, TYPE_WORDS, dictionaryType, applyPhrase } from './phrases.mjs';
+import * as S from './sentence.mjs';
 import { OPERATORS, createEdits, updateEdits, removeEdits, readItems, readFrom, readersOf, itemOfSource, sameAs, signature, describe, lastRun, queriesOnOpen, requestMatches, readPageThing, pageThingEdits, sendsFollow, thingParam, thingName } from './pagedata.mjs';
 import * as F from './fields.js';
 import { typesOf, driftOf, projectColumn, declaredRules, cellWords, editText, toWire, searchWhere, rowLabel, pageWords, rowsQuery } from './data.mjs';
@@ -2206,7 +2221,8 @@ overlay.addEventListener('mousedown', (e) => {
 });
 window.addEventListener('mouseup', (e) => { if (gesture) endGesture(e); });
 window.addEventListener('keydown', (e) => {
-  const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
+  // the composer's sentence (STU-098) is a field: its Backspace removes a word, never the selected element under it
+  const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable || document.activeElement?.getAttribute('role') === 'textbox';
   // STU-084: the wiring underneath is read only and over Design: no key reaches the page under it (Delete, ⌘Z); Esc goes back, then closes
   if (wiringOpen()) { if (e.key === 'Escape' && !document.querySelector('.menu')) { e.preventDefault(); wiringBack(); } return; }
   // STU-083: Help is words over the tab: no key reaches the page under it; Esc closes it
@@ -3821,7 +3837,7 @@ function sourceMenu(e, node, p, onPick, initial = '') {
   const fill = (q) => {
     list.innerHTML = '';
     const q2 = (q || '').toLowerCase();
-    if (!q2 && !onPick) list.append(h('div', { class: 'item', onclick: () => { closeMenu(); openComposer(e, node, p, null, onPick); } }, icon('fx'), 'Compose an expression…', h('small', {}, 'chips, JavaScript, or both')));
+    if (!q2 && !onPick) list.append(h('div', { class: 'item', onclick: () => { closeMenu(); openComposer(e, node, p, null, onPick); } }, icon('fx'), 'Compose an expression…', h('small', {}, 'values and words, or JavaScript')));
     // Bubble's "Do a search for…": never a search in the field, always page data, made or reused here
     if (!q2 || /search|data|new/.test(q2)) list.append(h('div', { class: 'item', onclick: (ev) => newItemForm(ev, (it) => (it.first ? sourceMenu(e, node, p, onPick, `${it.name}'s`) : pick({ item: it.id, what: 'list', text: `${it.name} · the list` })), { keepComposer: !!onPick }) }, icon('plus'), 'New page data…', h('small', {}, 'do a search, once, for the page')));
     for (const [title, items] of valueSources(node, p)) {
@@ -4274,15 +4290,17 @@ function chipText(fromId, port) {
   if (isPageDataNode(n)) return pageDataChip(fromId, port);
   return `${labelOf(fromId)}'s ${portLabel(n, 'output', port)}`;
 }
+/** STU-098: what an expression says, in the composer's words ("[Plant's room] is “Kitchen”"), never its JavaScript. */
 function composedPreview(expr) {
   const text = expr.parameters?.expression || '';
   const chips = chipsOf(expr);
-  return text.replace(/[A-Za-z_$][\w$]*/g, (m) => (chips.has(m) ? `[${chips.get(m).text}]` : m)) || '(empty expression)';
+  return S.sentenceLine(text, (n) => chips.get(n).text, (n) => chips.has(n)) || '(empty expression)';
 }
 /** STU-052: the dictionary's phrases by type (serve.mjs /phrasebook.json); empty when the NodeGX checkout has none. */
 let PHRASES = {};
 fetch('/phrasebook.json').then((r) => (r.ok ? r.json() : {})).then((j) => { PHRASES = j; }).catch(() => {});
-const OPS = [['is', ' === '], ['is not', ' !== '], ['and', ' && '], ['or', ' || '], ['+', ' + '], ['−', ' - '], ['×', ' * '], ['÷', ' / '], ['>', ' > '], ['<', ' < '], ['not', '!'], ['( )', '()'], ['contains', '.includes()'], ['? :', ' ? : ']];
+// STU-098: the typed values a person adds, each in a box of its kind; the JavaScript is written for them
+const VALUE_KINDS = [['Text', 'text', ''], ['Number', 'number', 0], ['Yes / No', 'yesno', true], ['Date', 'date', '']];
 function openComposer(e, node, p, existing, onPick, { text: given, chips: givenChips, onCompose } = {}) {
   closeMenu();
   // onCompose: a rule's condition — the text and its chips are handed back, nothing is written here
@@ -4291,20 +4309,23 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
   // STU-052: the chip a follow-up applies to (the last inserted, or the one clicked), the type each chip is read as (its
   // port's, until the person says), and the slots a phrase left: a name with no value yet, drawn as an empty box to fill
   let focus = null; const chipTypes = new Map(); const slots = new Map();
-  let mode = localStorage.getItem('ob.composer.mode') || 'mixed';
+  // STU-098: Composer (a sentence) is where everyone starts; a new key, so an earlier pick of Both is not kept
+  let mode = localStorage.getItem('ob.composer.view') || 'chips';
   const menu = popover(e, 'composer');
   menu.style.left = `${Math.max(8, Math.min(e.clientX - 200, innerWidth - 580))}px`;
   const fieldName = p.displayName || p.name;
   const seg = h('div', { class: 'seg' });
   const body = h('div', { class: 'body' });
   const note = h('div', { class: 'note' });
-  const setMode = (m) => { mode = m; localStorage.setItem('ob.composer.mode', m); for (const b of seg.children) b.setAttribute('aria-pressed', b.dataset.m === m); renderBody(); };
+  const setMode = (m) => { mode = m; caretAt = null; localStorage.setItem('ob.composer.view', m); for (const b of seg.children) b.setAttribute('aria-pressed', b.dataset.m === m); renderBody(); };
   for (const [m, label] of [['chips', 'Composer'], ['mixed', 'Both'], ['js', 'JavaScript']]) seg.append(h('button', { 'data-m': m, 'aria-pressed': m === mode, onclick: () => setMode(m) }, label));
   const check = () => {
     const names = exprNames(text);
     const unknown = names.filter((n) => !chips.has(n) && !slots.has(n)), empty = names.filter((n) => slots.has(n));
-    try { new Function(...names, 'Noodl', 'return (' + (text || 'undefined') + ');'); note.className = 'note'; note.textContent = text ? (empty.length ? `Fill the empty slot${empty.length > 1 ? 's' : ''} (${empty.map((n) => slots.get(n)).join(', ')}): click ${empty.length > 1 ? 'one' : 'it'} and pick a value` : unknown.length ? `${unknown.join(', ')} ${unknown.length > 1 ? 'are names' : 'is a name'} with no value yet — insert a value for ${unknown.length > 1 ? 'them' : 'it'}, or it is a JavaScript global` : `Reads ${names.length} value${names.length === 1 ? '' : 's'} · JavaScript, run by the app's Expression node`) : 'Type JavaScript, or insert values as chips.'; }
-    catch (err) { note.className = 'note bad'; note.textContent = `Will not compile: ${err.message}`; }
+    const words = mode === 'chips'; // the Composer view says it without JavaScript
+    note.title = '';
+    try { new Function(...names, 'Noodl', 'return (' + (text || 'undefined') + ');'); note.className = 'note'; note.textContent = text ? (empty.length ? `Fill the empty slot${empty.length > 1 ? 's' : ''} (${empty.map((n) => slots.get(n)).join(', ')}): click ${empty.length > 1 ? 'one' : 'it'} and pick a value` : unknown.length ? (words ? `${unknown.join(', ')} ${unknown.length > 1 ? 'have' : 'has'} no value yet: remove ${unknown.length > 1 ? 'them' : 'it'}, or insert a value` : `${unknown.join(', ')} ${unknown.length > 1 ? 'are names' : 'is a name'} with no value yet — insert a value for ${unknown.length > 1 ? 'them' : 'it'}, or it is a JavaScript global`) : `Reads ${names.length} value${names.length === 1 ? '' : 's'}${words ? '' : " · JavaScript, run by the app's Expression node"}`) : words ? 'Insert a value, then a word for what to do with it.' : 'Type JavaScript, or insert values as chips.'; }
+    catch (err) { note.className = 'note bad'; if (words) { note.textContent = 'Not finished yet: a word is missing a value on one side, or a value is missing a word between it and the next.'; note.title = err.message; } else note.textContent = `Will not compile: ${err.message}`; }
   };
   /** A chip for a name in the text; in the mixed view it is a non-editable island with its own delete. */
   const chip = (name, editable) => h('span', { class: `chip ${chipKind(name)}${focus === name ? ' on' : ''}`, contenteditable: editable ? 'false' : undefined, 'data-name': name, title: `${name} · click it for what can follow it`, onclick: (ev) => { if (ev.target.closest('button')) return; focus = name; renderBody(); } }, chips.get(name).text, h('button', { title: 'Remove', onclick: (ev) => { ev.preventDefault(); removeName(name); } }, icon('x')));
@@ -4334,7 +4355,7 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
         const r = applyPhrase(text, focus, ph, new Set([...chips.keys(), ...slots.keys()])); if (!r) return;
         text = r.text; for (const [slot, v] of Object.entries(r.slots)) slots.set(slot, ph.insert.others[v]);
         renderBody();
-      } }, h('span', {}, ph.bubble), h('small', {}, phraseShape(ph))));
+      } }, h('span', {}, ph.bubble), h('small', {}, mode === 'chips' ? S.sentenceLine(phraseShape(ph)) : phraseShape(ph))));
       else {
         const instead = ph.kind === 'node' ? `the ${ph.node} node` : ph.kind === 'function' ? 'a Function node' : 'no NodeGX answer';
         m.append(h('div', { class: 'item off', title: (ph.prose || ph.code || '').replace(/\*\*|`/g, ''), onclick: () => { m.remove(); toast(`${ph.bubble}: ${ph.kind === 'node' ? `the ${ph.node} node does this, not an expression` : ph.kind === 'function' ? 'a Function node does this (its code is in the phrasebook)' : 'NodeGX has no equivalent'}`); } }, h('span', {}, ph.bubble), h('small', {}, instead)));
@@ -4344,25 +4365,87 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
     setTimeout(() => document.addEventListener('mousedown', function outside(e2) { if (!m.isConnected) return; if (!m.contains(e2.target)) m.remove(); else document.addEventListener('mousedown', outside, { once: true }); }, { once: true }), 0);
   };
   let mixedEl = null, caretAt = null;
-  const insertAtCaret = (s) => {
-    if (mode === 'mixed' && mixedEl && caretAt !== null) { const before = text.slice(0, caretAt), after = text.slice(caretAt); const pad = (before && !/\s$/.test(before) ? ' ' : '') + s + (after && !/^\s/.test(after) ? ' ' : ''); text = before + pad + after; caretAt += pad.length; }
-    else text = (text && !/\s$/.test(text) ? text + ' ' : text) + s + ' ';
+  // `back`: the caret stays that far before the end of what was inserted (inside `.includes()`'s brackets)
+  const insertAtCaret = (s, back = 0) => {
+    const tight = s.startsWith('.'); // `.includes()` follows its value with no space
+    if (caretAt !== null && caretAt > text.length) caretAt = null;
+    if (mode !== 'js' && caretAt !== null && (mode === 'chips' || mixedEl)) {
+      const before = text.slice(0, caretAt), after = text.slice(caretAt);
+      const lead = before && !/\s$/.test(before) && !tight ? ' ' : '', trail = after && !/^\s/.test(after) ? ' ' : '';
+      text = (tight ? before.trimEnd() : before) + lead + s + trail + after;
+      caretAt = (tight ? before.trimEnd() : before).length + lead.length + s.length + (back ? -back : trail.length);
+    } else {
+      const base = tight ? text.trimEnd() : text && !/\s$/.test(text) ? text + ' ' : text;
+      text = base + s + ' ';
+      if (back) caretAt = base.length + s.length - back; else if (mode === 'chips') caretAt = null;
+    }
     renderBody();
   };
+  // STU-098: a typed value, in a box of its kind; the new box takes the keys
+  let boxFocus = null;
+  const insertValue = (kind, v) => { insertAtCaret(S.literal[kind](v)); boxFocus = { kind, before: caretAt ?? text.length }; renderBody(); };
   // a token per word, text, number, operator (`===` is one, not `= = =`) or single character
   const tokens = () => { const out = []; const re = /[A-Za-z_$][\w$]*|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\d+(?:\.\d+)?|\s+|===|!==|==|!=|<=|>=|&&|\|\||\?\?|\?\.|=>|\.\.\.|./g; let m; while ((m = re.exec(text))) out.push(m[0]); return out; };
   function renderBody() {
+    const hadFocus = body.contains(document.activeElement); // the sentence keeps the keys when it is drawn again
     body.innerHTML = '';
     if (mode === 'chips') {
-      const row = h('div', { class: 'chips' });
-      for (const t of tokens()) {
-        if (chips.has(t)) row.append(chip(t, false));
-        else if (slots.has(t)) row.append(slotEl(t, false));
-        else if (/^\s+$/.test(t)) continue;
-        else row.append(h('span', { class: /^["'\d]/.test(t) ? 'lit' : /^[A-Za-z_$]/.test(t) ? '' : 'op', style: 'cursor:text', title: 'Edit it in the Both or JavaScript view' }, t));
+      // STU-098: the expression as a sentence. A click on a piece puts the caret after it (what is inserted goes there),
+      // ← → move it, Backspace removes the piece before it; a typed value is changed in its box, its JavaScript written
+      const boxes = new Map();
+      const row =h('div', { class: 'chips sentence', tabindex: '0', role: 'textbox', 'aria-label': `${fieldName}, as a sentence` });
+      const ps = S.pieces(text, (n) => chips.has(n) || slots.has(n));
+      // after a piece: past the brackets it leaves open (after "fern" in contains "fern" is after the bracket)
+      const closes = new Set(ps.filter((q) => q.close).map((q) => q.close.from));
+      const after = (q) => { let at = q.to; for (;;) { const m = /^\s*/.exec(text.slice(at))[0].length; if (!closes.has(at + m)) return at; at += m + 1; } };
+      if (caretAt !== null && caretAt > text.length) caretAt = null;
+      const at = caretAt ?? text.length;
+      const stops = [...new Set([0, ...ps.map(after), at])].sort((a, b) => a - b);
+      const place = (pos) => { caretAt = pos >= text.trimEnd().length ? null : pos; renderBody(); };
+      const remove = (q) => { if (q.kind === 'name') return removeName(q.name); text = S.removePiece(text, q); caretAt = Math.min(q.from, text.length) || null; renderBody(); };
+      // a box's change rewrites its own bit of the text and moves what follows it, without drawing again (the box keeps the keys)
+      const write = (q, code) => {
+        const end = q.to, d = code.length - (q.to - q.from);
+        text = S.splice(text, q.from, q.to, code); q.to += d;
+        for (const o of ps) { if (o !== q && o.from >= end) { o.from += d; o.to += d; } if (o.close && o.close.from >= end) { o.close.from += d; o.close.to += d; } }
+        if (caretAt !== null && caretAt >= end) caretAt += d;
+        check();
+      };
+      const xBtn = (q) => h('button', { class: 'x quiet', title: 'Remove', onclick: (ev) => { ev.stopPropagation(); remove(q); } }, icon('x'));
+      const box = (q) => {
+        if (q.kind === 'text') return h('input', { type: 'text', class: 'vbox', value: q.value, placeholder: 'text', size: Math.max(4, String(q.value).length + 1), 'aria-label': 'A text', oninput: (ev) => { ev.target.size = Math.max(4, ev.target.value.length + 1); write(q, S.literal.text(ev.target.value)); } });
+        if (q.kind === 'number') return h('input', { type: 'number', class: 'vbox', value: q.value, 'aria-label': 'A number', oninput: (ev) => write(q, S.literal.number(ev.target.value)) });
+        if (q.kind === 'yesno') return h('select', { class: 'vbox', 'aria-label': 'Yes or no', onchange: (ev) => write(q, S.literal.yesno(ev.target.value === 'yes')) }, h('option', { value: 'yes', selected: q.value }, 'yes'), h('option', { value: 'no', selected: !q.value }, 'no'));
+        return h('input', { type: 'date', class: 'vbox', value: q.value, 'aria-label': 'A date', oninput: (ev) => ev.target.value && write(q, S.literal.date(ev.target.value)) });
+      };
+      let caretDrawn = false;
+      const caretMark = () => { caretDrawn = true; return h('span', { class: 'caret', 'aria-hidden': 'true' }); };
+      if (S.opensWithIf(ps)) row.append(h('span', { class: 'lead' }, 'if'));
+      for (const q of ps) {
+        if (!caretDrawn && at <= q.from) row.append(caretMark());
+        const pick = (ev) => { ev.stopPropagation(); place(after(q)); };
+        let el;
+        if (q.kind === 'name') { el = chips.has(q.name) ? chip(q.name, false) : slotEl(q.name, false); if (chips.has(q.name)) el.addEventListener('click', () => { caretAt = after(q) >= text.trimEnd().length ? null : after(q); }, true); }
+        else if (q.kind === 'word') el = h('span', { class: 'piece' }, h('span', { class: 'word', title: `${q.code.replace(/\($/, '(…)')} in JavaScript · click to add after it`, onclick: pick }, q.word), xBtn(q));
+        else if (q.kind === 'code') el = h('span', { class: 'piece' }, h('span', { class: 'code', title: 'JavaScript Studio has no word for · click to add after it', onclick: pick }, q.code), xBtn(q));
+        else { const b = box(q); boxes.set(q, b); el = h('span', { class: 'piece', 'data-kind': q.kind }, b, xBtn(q)); }
+        row.append(el);
       }
-      if (!text) row.append(h('span', { style: 'color:var(--muted);font-family:Inter' }, 'Nothing composed yet. Insert a value, an operator, a text or a number.'));
+      if (!caretDrawn) row.append(caretMark());
+      if (!text) row.append(h('span', { style: 'color:var(--muted)' }, 'Nothing yet. Insert a value, then a word for what to do with it.'));
+      row.onclick = (ev) => { if (ev.target === row) place(text.length); };
+      row.onkeydown = (ev) => {
+        if (ev.target !== row) return;
+        // a key handled here goes no further: the sentence is drawn again, so by the time the page heard this Backspace
+        // nothing had the focus, and it deleted the selected element
+        if (['ArrowLeft', 'ArrowRight', 'Backspace', 'Delete'].includes(ev.key)) ev.stopPropagation();
+        if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') { ev.preventDefault(); const to = ev.key === 'ArrowLeft' ? stops.filter((s) => s < at).at(-1) : stops.find((s) => s > at); if (to !== undefined) place(to); }
+        else if (ev.key === 'Backspace') { ev.preventDefault(); const q = ps.filter((x) => after(x) <= at).at(-1); if (q) remove(q); }
+      };
       body.append(row);
+      const target = boxFocus && ps.filter((q) => q.kind === boxFocus.kind && q.to <= boxFocus.before).at(-1);
+      boxFocus = null;
+      setTimeout(() => { if (target) boxes.get(target)?.focus(); else if (hadFocus) row.focus(); }, 0);
     } else if (mode === 'js') {
       const ta = h('textarea', { spellcheck: 'false', oninput: (ev) => { text = ev.target.value; check(); } }, text);
       body.append(ta);
@@ -4378,8 +4461,9 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
       body.append(mixedEl);
     }
     const tools = h('div', { class: 'tools' }, h('button', { class: 'primary', onclick: (ev) => sourceMenu(ev, node, p, insertName) }, icon('bolt'), 'Insert a value'));
-    for (const [label, js] of OPS) tools.append(h('button', { title: js.trim(), onclick: () => insertAtCaret(js.trim()) }, label));
-    tools.append(h('button', { onclick: () => insertAtCaret('""') }, '"text"'), h('button', { onclick: () => insertAtCaret('0') }, '123'));
+    for (const [label, js, back] of S.INSERTS) tools.append(h('button', { title: mode === 'chips' ? undefined : js, onclick: () => insertAtCaret(js, back) }, label));
+    tools.append(h('span', { class: 'sep' }));
+    for (const [label, kind, v] of VALUE_KINDS) tools.append(h('button', { 'data-value': kind, title: `A ${label.toLowerCase()} you type in`, onclick: () => insertValue(kind, v) }, label));
     body.append(tools);
     if (focus && !chips.has(focus)) focus = null;
     if (focus && Object.keys(PHRASES).length) {
@@ -4410,7 +4494,8 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
     closeMenu();
     edits(pageKey, list);
     if (onPick) onPick({ node: exprId, port: 'result', text: composedPreview(byId[exprId]) });
-    toast(`${fieldName} is now the expression ${text.slice(0, 60)}`);
+    const said = S.sentenceLine(text, (n) => chips.get(n).text, (n) => chips.has(n));
+    toast(`${fieldName} is now: ${said.length > 80 ? `${said.slice(0, 79)}…` : said}`);
   };
   menu.append(
     h('div', { class: 'bar' }, icon('fx'), h('strong', {}, fieldName), h('span', { style: 'color:var(--muted)' }, onCompose ? `— a rule on ${labelOf(node.id)}` : `of ${labelOf(node.id)}`), seg),

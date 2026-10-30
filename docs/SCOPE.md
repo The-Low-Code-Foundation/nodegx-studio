@@ -1921,7 +1921,7 @@ them (STU-092).
 | 9 | Esc cancels placing a reusable but it stays blue | **fixed** P123-GH-ESCCOMPONENT |
 | 10 | Logic on this page should explain the wiring (more teaching, for a builder who finds what their AI built) OR jump to that page's workflows in the Workflow tab | **built** (s29) STU-097 |
 | 11 | a backend workflow open, then Design → Interactions → a workflow: the tab still shows the backend one | **fixed** P123-GH-CARDBEHINDAUTO |
-| 12 | the composer shows `===` and empty quotes; wants a non-coder composer like Bubble's, with the same thing viewable as JS (Blockly) | STU-098, P123-GH-COMPOSERJS (ruling) |
+| 12 | the composer shows `===` and empty quotes; wants a non-coder composer like Bubble's, with the same thing viewable as JS (Blockly) | **built** (s32) STU-098: Composer is the default, a sentence with typed boxes; only the ruling (keep *Both*?) is open |
 
 **Fixed (s27):** `editor/studio.html` (pan, room, Help, Esc, openCard), two gate rows in `editor/check.mjs`;
 `check:editor` **235/235**. Driven on a copy of Greenhouse with its backend unbound (`docs/stu-091-drive/scrollx.mjs`,
@@ -2077,6 +2077,31 @@ typed in a box of its kind (text, number, yes/no, date), never quotes to keep or
 JavaScript is a second view of the same thing, editable by coders. **Ruling:** drop *Both*, or keep it behind
 JavaScript. Blockly-style blocks were weighed: a sentence with chips is what Bubble users know; blocks are a bigger
 build for the same expressions.
+
+**Done (s32), all but the ruling.** The composer opens on *Composer* for everyone (a new key, `ob.composer.view`, so
+an earlier pick of *Both* is not kept), and Composer is a sentence (`editor/sentence.mjs`, pure): each operator a word
+(`===` *is*, `!==` *is not*, `&&` *and*, `>` *is more than*, `.includes(…)` *contains* with its bracket hidden, `? :`
+*if … then … otherwise*, `null` *nothing*), each value a chip, and each typed value a box of its kind: a text (no
+quotes; quotes typed in it are part of the text), a number, yes / no, a date (`new Date("2026-10-30")`). A box's
+change rewrites only its bit of the JavaScript. A click on a piece puts the caret after it and what is inserted goes
+there (*contains* and *( )* leave it inside their brackets); ← → move it, Backspace takes out the piece before it
+(*contains* with its bracket), and a piece's × on hover. The buttons are words, then *Text*, *Number*, *Yes / No*,
+*Date*, each adding an empty box that takes the keys. JavaScript the sentence has no word for is shown as it is
+(mono). Composer's note never says JavaScript ("Not finished yet: a word is missing a value on one side…"). The
+field's chip, a branch's name ("If 1 is more than 2"), the composer's *more…* phrases and the save toast all say
+the sentence, never the code. *Both* and *JavaScript* are unchanged.
+- Found while building it and fixed before commit: Backspace in the sentence also reached the page's own Delete and
+  deleted the selected element (the sentence is drawn again, so the page heard the key with nothing focused); the
+  sentence stops the keys it handles and counts as a field. The boxes first drew over the next word: Studio's canvas
+  already owns `.box` (`position:absolute`); they are `.vbox`.
+- Gates: `check:sentence` **27/27** (new, in `npm run check`); `check:editor` **245/245** (4 new: it opens on
+  Composer; the text is a box with no quotes; Backspace takes it out and the selected element stays, the case that
+  deleted it; *Text* adds a box that takes the keys; three branch-name rows now read the words). Driven on a copy of
+  Greenhouse (`docs/stu-091-drive/shots/stu098-*.png`): "This page's Plant's room is Kitchen" composed from nothing,
+  saved as `thisPagePlantRoom === "Kitchen"`; the Plant page's status read as *if … then Thirsty otherwise Happy*,
+  `Needs "water"` typed in a box written `"Needs \"water\""`.
+- Open: **the ruling** (keep *Both*, or drop it). What a *more…* phrase inserts that has no word in `sentence.mjs`
+  (`.length`, `.toUpperCase()`) is shown as code in the sentence; words for those were not added.
 
 ## Rulings open
 

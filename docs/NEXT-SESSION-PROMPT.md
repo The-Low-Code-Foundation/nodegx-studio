@@ -133,9 +133,18 @@ own record; a repeating group's row is not read through yet. The importer maps B
 Gates on the s31 tree: `check:shapes` **39/39** (11 new; mutant 36/39), `check:editor` **241/241**, `check:data`
 84/84, `check:timeline` 53/53, `check:app` 67/67, `check:import` 94/94. Not pushed (ask first).
 
+**s32 (2026-10-30), STU-098 — the composer for people who don't code (Greenhouse note 12)** (SCOPE, STU-098 "Done
+(s32)"). Composer is the default and a sentence (`editor/sentence.mjs`): operators as words, values as chips, a typed
+text / number / yes-no / date in a box of its kind (no quotes), a caret placed by clicking a piece, Backspace takes
+out a piece. Chips, branch names and the save toast say the sentence. 🔴 Studio owns `.box` (the canvas's
+`position:absolute` outline): never name a class `box`. 🔴 A key a re-drawn widget handles must `stopPropagation`:
+the page's keydown sees focus on nothing and runs its own Delete. Gates on the s32 tree: `check:sentence` **27/27**
+(new), `check:editor` **245/245**, `check:data` 84/84, `check:timeline` 53/53, `check:shapes` 39/39, `check:hosted`
+39/39, `check:app` 67/67. Not pushed (ask first).
+
 Next buildable, in order:
-00. Greenhouse notes left: STU-093 (the Map's words; ruling: a front-end logic column), STU-098 (ruling: drop the
-    composer's *Both*); both need Richard's ruling, asked in plain words. STU-094's leftover: the row's read-through
+00. Greenhouse notes left: STU-093 (the Map's words; ruling: a front-end logic column) and STU-098's ruling (keep or
+    drop the composer's *Both*); both are Richard's, asked in plain words. STU-094's leftover: the row's read-through
     (`throughSources` on a row's `One <Type>` Component Inputs ports, with a gate that makes a repeating group). STU-092's leftovers: a workflow's own settings
     (concurrency, time limits), a webhook trigger made in Studio, adding an *If it fails* route.
 0a. STU-090's open list (SCOPE): an option set linked to a Choice rather than copied; the crowded header (check it
