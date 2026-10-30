@@ -93,6 +93,13 @@ Five bugs filed and fixed in NodeGX's ledger (P123-STU-ACTIONALIASES, -CHOICELOS
 data model feel on his own app; whether the backend map itself should go light (that is `@nodegx/backend-map`, NodeGX
 P124's package, and a release).
 
+**s26 (2026-10-30), STU-090's bugs continued.** P123-STU-CHOICENOTENFORCED: *Start a backend* sent NodeGX's provision
+columns only, so Swapshop's Choice was never on the backend (a "Cars" listing was created). `provisionFor` now sets each
+declared type's rules (dd314bb; `app/blank-check.mjs` 11/11, 9/11 without it). Its NodeGX twin was worse, erasing the
+declaration from the project file: P123-MCP-RULESERASED, fixed in NodeGX eea8566e3, **not released** (Studio's fix does
+not need it). `check:app` **67/67** run alone at load ~2 (Publish green; APPCHECKPUBLISH stays open: it has failed only
+under load, cause never read). Filed, read not measured: P123-STU-TWOSHAPES. Not pushed (ask first).
+
 Next buildable, in order:
 0a. STU-090's open list (SCOPE): the repeating group's row (a picture, a click that opens its record), the For Each's
    panel saying which list it shows, an option set linked to a Choice rather than copied, the crowded header.

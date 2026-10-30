@@ -1820,7 +1820,8 @@ button whose click creates a Listing, branches, and goes to a page.
 - An option set and a Choice field are still two things: the choices are copied, not linked.
 - ~~A provisioned backend did not carry the project's Choice rule~~ **Fixed (s26, P123-STU-CHOICENOTENFORCED):** `provisionFor`
   sets each declared type's rules on its table after provisioning; `app/blank-check.mjs` 11/11 (a "Cars" listing is refused).
-  NodeGX's own `provision_backend` still seeds columns only (read): its fix is NodeGX's, and a release.
+  NodeGX's own `provision_backend` had the same gap and erased the declaration too: P123-MCP-RULESERASED, fixed in
+  NodeGX eea8566e3, not yet released. Open: Studio reads one of the two shapes of a declared rule (P123-STU-TWOSHAPES, read).
 - The repeating group's row is plain text (no picture, no click-to-open-its-listing yet), and its For Each's panel says
   nothing of the list it shows.
 - The header is crowded at 1440 px ("App on sc…", "Preview ↗" wraps).
