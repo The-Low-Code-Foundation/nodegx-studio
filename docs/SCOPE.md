@@ -2023,8 +2023,18 @@ link into it.
 - Gate: `check:automations`'s drive **50/50** (8 new: the list's two rows in the Map's words with a real failed run,
   the run played in order with a dot along pause→notify and no dot on a wire it did not cross, stopped and lit, played
   again; the trigger card's last fire and its *Open that run*). Mutant (the play never starting): 46/50.
-- Open: **the ruling** (the app's own searches and saves as a column on the Map, between the screens and the
-  functions); a function's own runs in the list (one more request per function); the Map's link published.
+- Open: a function's own runs in the list (one more request per function); the Map's link published.
+- **Ruled (Richard, 2026-10-31): "Yes please"** to *a column for the app's own logic that reaches the backend (a
+  page's searches and saves) between the screens and the functions, one node per page, collapsed by default*.
+- **Built (s34), in the Map's source** (NodeGX P124 `editor/public/app.js`, `@nodegx/backend-map` after 0.1.6: not
+  published, Richard's). *THE APP'S OWN LOGIC* ("its searches and saves, in the app") is a column between the screens
+  and the functions: one block per page that reads or writes its tables itself (backend-kit's `uses`), level with its
+  page, "6 searches, 22 saves" under its name, a magnifier for its icon. The wires go screen → its own logic → each
+  table (no wire straight from a screen to a table any more). Clicked, its panel is the list (each search and save, the
+  table, who the table's rule lets) and says it runs in the browser, so the table's rule is all that keeps a row safe.
+  It lights with its page and tables, and takes part in *Look at it as*. The map's any-app test, on the todo template:
+  3 new checks (the column's place, no straight wire, the panel), 41/41; the whole map suite passes. Picture:
+  `phase-124…/editor` test shots `stu-093-own-logic.png` (not kept in the repo).
 
 ### STU-094 — option sets that point at other option sets
 
@@ -2131,7 +2141,17 @@ the sentence, never the code. *Both* and *JavaScript* are unchanged.
   Greenhouse (`docs/stu-091-drive/shots/stu098-*.png`): "This page's Plant's room is Kitchen" composed from nothing,
   saved as `thisPagePlantRoom === "Kitchen"`; the Plant page's status read as *if … then Thirsty otherwise Happy*,
   `Needs "water"` typed in a box written `"Needs \"water\""`.
-- Open: **the ruling** (keep *Both*, or drop it). What a *more…* phrase inserts that has no word in `sentence.mjs`
+- **Ruled (Richard, 2026-10-31)**, asked "keep *Both*, or drop it?": *"Drop it probably no? Or is there a way to show
+  both that's kind of educational?"* Proposed and built (s34): *Both* becomes the teaching view, the sentence over its
+  JavaScript, each piece lighting its own characters in the code and back, with what the operator means.
+- **Done (s34).** *Both* is the sentence (editable, as in Composer) over *The same, in JavaScript*. Pointing at a piece
+  on either side lights its other half (a chip and its name in the code, *is* and `===`, *contains* and `.includes(`
+  with the bracket that closes it, a text and its quotes) and a line under the code says what that code is and does
+  (`sentence.mjs` `teach`, `MEANS`: every operator Studio has a word for says what it does; `codeSegments` cuts the code
+  at the pieces' edges). The code follows a box as it is typed in. The old *Both* (chips inside editable JavaScript)
+  is gone; to type code, *JavaScript*. Gates: `check:sentence` **42/42** (15 new), `check:editor` **248/248** (3 new;
+  mutant with the lighting off 246/248). Pictures [look/stu-098-both-chip.png](look/stu-098-both-chip.png),
+  [look/stu-098-both-text.png](look/stu-098-both-text.png) (Greenhouse's Room line). What a *more…* phrase inserts that has no word in `sentence.mjs`
   (`.length`, `.toUpperCase()`) is shown as code in the sentence; words for those were not added.
 
 ## Rulings open

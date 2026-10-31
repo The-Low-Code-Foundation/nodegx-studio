@@ -231,8 +231,22 @@ try {
     await b.evaluate(`[...document.querySelectorAll('.composer .seg button')].find(b => b.dataset.m === 'mixed').click()`); await wait(100);
     await clickText('.composer .tools button', 'Insert a value'); await wait(250);
     await menuItem("Sign-in card's state");
-    const chipNames = await b.evaluate(`[...document.querySelectorAll('.composer .mixed .chip')].map(c => c.dataset.name)`);
-    ok(chipNames.length === 1 && /^signInCard/i.test(chipNames[0]), 'the state becomes a chip in the mixed view, a name in the text', chipNames);
+    const chipNames = await b.evaluate(`[...document.querySelectorAll('.composer .sentence .chip')].map(c => c.dataset.name)`);
+    ok(chipNames.length === 1 && /^signInCard/i.test(chipNames[0]), 'the state becomes a chip in the sentence of Both, a name in the text', chipNames);
+    // Both is the teaching view (Richard, 2026-10-31): the sentence over its code, a piece pointed at lights its other half
+    await clickText('.composer .tools button', 'is'); await wait(100);
+    await clickText('.composer .tools button', 'Text'); await wait(150);
+    await b.type('on'); await wait(100);
+    const point = (sel) => b.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); e.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); const lit = [...document.querySelectorAll('.composer [data-p].lit')]; return { code: document.querySelector('.composer .teachcode')?.textContent, lit: lit.map((x) => (x.closest('.teachcode') ? 'code:' : 'sentence:') + x.textContent.trim()), say: document.querySelector('.composer .teachsay')?.textContent }; })()`);
+    const onIs = await point('.composer .sentence .word');
+    ok(new RegExp(`^${chipNames[0]} === "on"\\s*$`).test(onIs.code ?? '') && onIs.lit.includes('code:===') && onIs.lit.some((x) => x.startsWith('sentence:is')) && /=== in the code: true when both sides are the same/.test(onIs.say), 'Both: pointing at "is" lights === in the code under it, and says what it does', onIs);
+    const onCode = await point('.composer .teachcode [data-p="0"]');
+    ok(onCode.lit.some((x) => x.startsWith("sentence:Sign-in card's state")) && onCode.lit.includes(`code:${chipNames[0]}`) && /is the name .* in the code/.test(onCode.say), 'and back: pointing at the name in the code lights its chip in the sentence', onCode);
+    const typedIn = await b.evaluate(`document.querySelector('.composer .teachcode')?.textContent`);
+    ok(/"on"/.test(typedIn), 'the code follows the box as it is typed in', typedIn);
+    // back to the chip alone, for what follows
+    await b.evaluate(`[...document.querySelectorAll('.composer .seg button')].find(b => b.dataset.m === 'js').click()`); await wait(100);
+    await b.evaluate(`(() => { const t = document.querySelector('.composer textarea'); t.value = ${JSON.stringify(chipNames[0] ?? '')} + ' '; t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
     await b.evaluate(`[...document.querySelectorAll('.composer .seg button')].find(b => b.dataset.m === 'js').click()`); await wait(100);
     const jsBefore = await b.evaluate(`document.querySelector('.composer textarea').value`);
     await b.evaluate(`(() => { const t = document.querySelector('.composer textarea'); t.focus(); t.setSelectionRange(t.value.length, t.value.length); })()`);

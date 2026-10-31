@@ -83,6 +83,48 @@ export function pieces(text, isName = () => false) {
   return out;
 }
 
+/* ---- Both, the teaching view (Richard, 2026-10-31: "is there a way to show both that's kind of educational?"): the
+   sentence over its JavaScript, each piece lighting its own characters in the code, and what that code does. ---- */
+
+/** What each operator does, in a sentence a person who does not code reads. */
+export const MEANS = {
+  '===': 'true when both sides are the same', '==': 'true when both sides are the same (loosely: "3" and 3 count as the same)',
+  '!==': 'true when the two sides differ', '!=': 'true when the two sides differ (loosely)',
+  '&&': 'true only when both sides are true', '||': 'true when either side is true', '!': 'turns true into false, and false into true',
+  '>': 'true when the left side is bigger', '<': 'true when the left side is smaller', '>=': 'true when the left side is bigger or the same', '<=': 'true when the left side is smaller or the same',
+  '+': 'adds two numbers, or joins two texts into one', '-': 'takes the right number away from the left', '*': 'multiplies', '/': 'divides the left number by the right',
+  '?': 'if what comes before it is true, the answer is what comes after it…', ':': '…and if not, the answer is what comes after this',
+  '??': 'the left side, or the right side when the left one is empty', null: 'no value at all', undefined: 'no value at all',
+  '.includes(': 'true when the text or list holds what is in the brackets',
+};
+
+/** What a piece is in the code, and what that code does: the line the teaching view says while a piece is pointed at. */
+export function teach(piece, chipText = (n) => n) {
+  if (piece.kind === 'name') return `[${chipText(piece.name)}] is the name ${piece.name} in the code: the app hands the value to the expression under that name.`;
+  if (piece.kind === 'text') return 'A text goes in quotes in the code, so the app knows where it starts and ends.';
+  if (piece.kind === 'number') return 'A number is written as it is, no quotes.';
+  if (piece.kind === 'yesno') return `Yes and no are true and false in the code: this one is ${piece.value}.`;
+  if (piece.kind === 'date') return 'A date is new Date("year-month-day") in the code.';
+  if (piece.kind === 'word') return `“${piece.word}” is ${piece.code === '.includes(' ? '.includes( … )' : piece.code} in the code: ${MEANS[piece.code] ?? 'JavaScript'}.`;
+  return 'Studio has no word for this: it is JavaScript as it is.';
+}
+
+/** The text cut at the pieces' edges: each segment is `{ text, piece }`, `piece` the index of the piece that wrote it
+    (a closing bracket a piece owns is that piece's), or null for the spaces between. Their texts join back to `text`. */
+export function codeSegments(text, ps) {
+  const marks = [];
+  ps.forEach((q, i) => { marks.push({ from: q.from, to: q.to, piece: i }); if (q.close) marks.push({ from: q.close.from, to: q.close.to, piece: i }); });
+  marks.sort((a, b) => a.from - b.from);
+  const out = []; let at = 0;
+  for (const m of marks) {
+    if (m.from < at) continue;
+    if (m.from > at) out.push({ text: text.slice(at, m.from), piece: null });
+    out.push({ text: text.slice(m.from, m.to), piece: m.piece }); at = m.to;
+  }
+  if (at < text.length) out.push({ text: text.slice(at), piece: null });
+  return out;
+}
+
 /** The text with a range replaced. */
 export const splice = (text, from, to, code) => text.slice(0, from) + code + text.slice(to);
 

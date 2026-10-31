@@ -667,14 +667,18 @@
   .composer .sentence .code { font-family: var(--mono); font-size: 12px; color: var(--ink-2); cursor: pointer; }
   .composer .sentence .piece > .x { display: none; position: absolute; top: -8px; right: -8px; width: 16px; height: 16px; padding: 0; border-radius: 50%; align-items: center; justify-content: center; background: var(--panel); border: 1px solid var(--line-2); z-index: 1; }
   .composer .sentence .piece:hover > .x { display: inline-flex; }
+  /* Both, the teaching view: the sentence's pieces and their code light together */
+  .composer .teach { margin-top: 10px; border-top: 1px dashed var(--line-2); padding-top: 8px; }
+  .composer .teachhead { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 4px; }
+  .composer .teachcode { margin: 0; padding: 8px 10px; border-radius: var(--r); background: var(--panel-2); font: 12.5px/1.6 var(--mono); white-space: pre-wrap; word-break: break-word; }
+  .composer .teachcode [data-p] { border-radius: 3px; padding: 1px 0; cursor: default; transition: background .12s; }
+  .composer .teachcode [data-p].lit, .composer .sentence [data-p].lit { background: var(--accent-soft); box-shadow: 0 0 0 2px var(--accent-line); border-radius: 4px; }
+  .composer .teachsay { margin-top: 6px; font-size: 12px; color: var(--ink-2); min-height: 2.8em; }
   .composer .sentence .vbox { width: auto; flex: none; padding: 1px 6px; font: inherit; line-height: 20px; }
   .composer .sentence input.vbox[type=number] { width: 8ch; }
   .composer .sentence .caret { width: 2px; align-self: stretch; min-height: 20px; background: var(--accent); margin: 0 -2px; animation: recpulse 1s steps(1) infinite; }
   .composer .chips.sentence:not(:focus-within) .caret { opacity: .35; animation: none; }
   .composer .tools .sep { width: 1px; background: var(--line); margin: 2px 2px; }
-  .composer .mixed { min-height: 60px; border: 1px solid var(--line-2); border-radius: var(--r); padding: 8px; font-family: var(--mono); font-size: 12.5px; line-height: 1.7; white-space: pre-wrap; outline: none; }
-  .composer .mixed:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-  .composer .mixed .chip { font-family: Inter, sans-serif; vertical-align: baseline; user-select: all; }
   .composer textarea { min-height: 72px; }
   .composer .tools { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
   .composer .tools button { padding: 3px 8px; font-size: 12px; }
@@ -4328,7 +4332,7 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
   const body = h('div', { class: 'body' });
   const note = h('div', { class: 'note' });
   const setMode = (m) => { mode = m; caretAt = null; localStorage.setItem('ob.composer.view', m); for (const b of seg.children) b.setAttribute('aria-pressed', b.dataset.m === m); renderBody(); };
-  for (const [m, label] of [['chips', 'Composer'], ['mixed', 'Both'], ['js', 'JavaScript']]) seg.append(h('button', { 'data-m': m, 'aria-pressed': m === mode, onclick: () => setMode(m) }, label));
+  for (const [m, label, tip] of [['chips', 'Composer', 'A sentence'], ['mixed', 'Both', 'The sentence over its JavaScript: point at a piece to see its other half'], ['js', 'JavaScript', 'The code, to type']]) seg.append(h('button', { 'data-m': m, 'aria-pressed': m === mode, title: tip, onclick: () => setMode(m) }, label));
   const check = () => {
     const names = exprNames(text);
     const unknown = names.filter((n) => !chips.has(n) && !slots.has(n)), empty = names.filter((n) => slots.has(n));
@@ -4374,12 +4378,12 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
     document.body.append(m);
     setTimeout(() => document.addEventListener('mousedown', function outside(e2) { if (!m.isConnected) return; if (!m.contains(e2.target)) m.remove(); else document.addEventListener('mousedown', outside, { once: true }); }, { once: true }), 0);
   };
-  let mixedEl = null, caretAt = null;
+  let caretAt = null;
   // `back`: the caret stays that far before the end of what was inserted (inside `.includes()`'s brackets)
   const insertAtCaret = (s, back = 0) => {
     const tight = s.startsWith('.'); // `.includes()` follows its value with no space
     if (caretAt !== null && caretAt > text.length) caretAt = null;
-    if (mode !== 'js' && caretAt !== null && (mode === 'chips' || mixedEl)) {
+    if (mode !== 'js' && caretAt !== null) {
       const before = text.slice(0, caretAt), after = text.slice(caretAt);
       const lead = before && !/\s$/.test(before) && !tight ? ' ' : '', trail = after && !/^\s/.test(after) ? ' ' : '';
       text = (tight ? before.trimEnd() : before) + lead + s + trail + after;
@@ -4387,19 +4391,17 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
     } else {
       const base = tight ? text.trimEnd() : text && !/\s$/.test(text) ? text + ' ' : text;
       text = base + s + ' ';
-      if (back) caretAt = base.length + s.length - back; else if (mode === 'chips') caretAt = null;
+      if (back) caretAt = base.length + s.length - back; else if (mode !== 'js') caretAt = null;
     }
     renderBody();
   };
   // STU-098: a typed value, in a box of its kind; the new box takes the keys
   let boxFocus = null;
   const insertValue = (kind, v) => { insertAtCaret(S.literal[kind](v)); boxFocus = { kind, before: caretAt ?? text.length }; renderBody(); };
-  // a token per word, text, number, operator (`===` is one, not `= = =`) or single character
-  const tokens = () => { const out = []; const re = /[A-Za-z_$][\w$]*|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\d+(?:\.\d+)?|\s+|===|!==|==|!=|<=|>=|&&|\|\||\?\?|\?\.|=>|\.\.\.|./g; let m; while ((m = re.exec(text))) out.push(m[0]); return out; };
   function renderBody() {
     const hadFocus = body.contains(document.activeElement); // the sentence keeps the keys when it is drawn again
     body.innerHTML = '';
-    if (mode === 'chips') {
+    if (mode === 'chips' || mode === 'mixed') {
       // STU-098: the expression as a sentence. A click on a piece puts the caret after it (what is inserted goes there),
       // ← → move it, Backspace removes the piece before it; a typed value is changed in its box, its JavaScript written
       const boxes = new Map();
@@ -4419,8 +4421,9 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
         text = S.splice(text, q.from, q.to, code); q.to += d;
         for (const o of ps) { if (o !== q && o.from >= end) { o.from += d; o.to += d; } if (o.close && o.close.from >= end) { o.close.from += d; o.close.to += d; } }
         if (caretAt !== null && caretAt >= end) caretAt += d;
-        check();
+        check(); drawCode();
       };
+      let drawCode = () => {};
       const xBtn = (q) => h('button', { class: 'x quiet', title: 'Remove', onclick: (ev) => { ev.stopPropagation(); remove(q); } }, icon('x'));
       const box = (q) => {
         if (q.kind === 'text') return h('input', { type: 'text', class: 'vbox', value: q.value, placeholder: 'text', size: Math.max(4, String(q.value).length + 1), 'aria-label': 'A text', oninput: (ev) => { ev.target.size = Math.max(4, ev.target.value.length + 1); write(q, S.literal.text(ev.target.value)); } });
@@ -4431,7 +4434,7 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
       let caretDrawn = false;
       const caretMark = () => { caretDrawn = true; return h('span', { class: 'caret', 'aria-hidden': 'true' }); };
       if (S.opensWithIf(ps)) row.append(h('span', { class: 'lead' }, 'if'));
-      for (const q of ps) {
+      for (const [i, q] of ps.entries()) {
         if (!caretDrawn && at <= q.from) row.append(caretMark());
         const pick = (ev) => { ev.stopPropagation(); place(after(q)); };
         let el;
@@ -4439,6 +4442,7 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
         else if (q.kind === 'word') el = h('span', { class: 'piece' }, h('span', { class: 'word', title: `${q.code.replace(/\($/, '(…)')} in JavaScript · click to add after it`, onclick: pick }, q.word), xBtn(q));
         else if (q.kind === 'code') el = h('span', { class: 'piece' }, h('span', { class: 'code', title: 'JavaScript Studio has no word for · click to add after it', onclick: pick }, q.code), xBtn(q));
         else { const b = box(q); boxes.set(q, b); el = h('span', { class: 'piece', 'data-kind': q.kind }, b, xBtn(q)); }
+        el.dataset.p = i;
         row.append(el);
       }
       if (!caretDrawn) row.append(caretMark());
@@ -4453,6 +4457,18 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
         else if (ev.key === 'Backspace') { ev.preventDefault(); const q = ps.filter((x) => after(x) <= at).at(-1); if (q) remove(q); }
       };
       body.append(row);
+      // Both (Richard, 2026-10-31: "a way to show both that's kind of educational"): the sentence over its JavaScript;
+      // pointing at a piece on either side lights its other half and says what that code does (sentence.mjs teach)
+      if (mode === 'mixed') {
+        const hint = 'Point at a piece of the sentence or of the code: its other half lights up, and this line says what it does.';
+        const say = h('div', { class: 'teachsay' }, hint), code = h('pre', { class: 'teachcode', 'aria-label': 'The same, in JavaScript' });
+        drawCode = () => code.replaceChildren(...S.codeSegments(text, ps).map((x) => (x.piece === null ? x.text : h('span', { 'data-p': x.piece }, x.text))));
+        drawCode();
+        const teach = h('div', { class: 'teach' }, h('div', { class: 'teachhead' }, 'The same, in JavaScript'), code, say);
+        const light = (i) => { for (const e of [...row.querySelectorAll('[data-p]'), ...code.querySelectorAll('[data-p]')]) e.classList.toggle('lit', e.dataset.p === String(i)); say.textContent = i == null ? hint : S.teach(ps[i], (n) => chips.get(n)?.text ?? slots.get(n) ?? n); };
+        for (const el of [row, code]) { el.addEventListener('mouseover', (ev) => { const t = ev.target.closest('[data-p]'); light(t ? Number(t.dataset.p) : null); }); el.addEventListener('mouseleave', () => light(null)); }
+        body.append(teach);
+      }
       const target = boxFocus && ps.filter((q) => q.kind === boxFocus.kind && q.to <= boxFocus.before).at(-1);
       boxFocus = null;
       setTimeout(() => { if (target) boxes.get(target)?.focus(); else if (hadFocus) row.focus(); }, 0);
@@ -4460,15 +4476,6 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
       const ta = h('textarea', { spellcheck: 'false', oninput: (ev) => { text = ev.target.value; check(); } }, text);
       body.append(ta);
       body.append(h('div', { class: 'hint', style: 'padding:6px 0 0' }, chips.size ? ['Chips in the text: ', ...[...chips.keys()].flatMap((n, i) => [i ? ', ' : '', h('code', {}, n), ` = ${chips.get(n).text}`])] : 'A chip you insert becomes a name in the text.'));
-    } else {
-      mixedEl = h('div', { class: 'mixed', contenteditable: 'true', spellcheck: 'false' });
-      for (const t of tokens()) mixedEl.append(chips.has(t) ? chip(t, true) : slots.has(t) ? slotEl(t, true) : document.createTextNode(t));
-      const read = () => { let s = ''; for (const n of mixedEl.childNodes) s += n.nodeType === 3 ? n.textContent : n.dataset?.name ? n.dataset.name : n.textContent; return s; };
-      const caret = () => { const selx = getSelection(); if (!selx.rangeCount || !mixedEl.contains(selx.anchorNode)) return null; const r = selx.getRangeAt(0).cloneRange(); r.setStart(mixedEl, 0); let s = ''; for (const n of r.cloneContents().childNodes) s += n.nodeType === 3 ? n.textContent : n.dataset?.name ? n.dataset.name : n.textContent; return s.length; };
-      mixedEl.oninput = () => { text = read(); for (const m of [chips, slots]) for (const n of [...m.keys()]) if (!new RegExp(`\\b${n}\\b`).test(text)) m.delete(n); check(); };
-      mixedEl.onkeyup = mixedEl.onmouseup = () => { caretAt = caret(); };
-      mixedEl.onpaste = (ev) => { ev.preventDefault(); document.execCommand('insertText', false, ev.clipboardData.getData('text/plain')); };
-      body.append(mixedEl);
     }
     const tools = h('div', { class: 'tools' }, h('button', { class: 'primary', onclick: (ev) => sourceMenu(ev, node, p, insertName) }, icon('bolt'), 'Insert a value'));
     for (const [label, js, back] of S.INSERTS) tools.append(h('button', { title: mode === 'chips' ? undefined : js, onclick: () => insertAtCaret(js, back) }, label));

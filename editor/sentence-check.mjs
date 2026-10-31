@@ -4,7 +4,7 @@
  *
  *   node editor/sentence-check.mjs      PASS n/n and exit 0, or the failing lines and exit 1
  */
-import { pieces, sentenceLine, removePiece, splice, literal, INSERTS } from './sentence.mjs';
+import { pieces, sentenceLine, removePiece, splice, literal, INSERTS, WORDS, MEANS, teach, codeSegments } from './sentence.mjs';
 
 const results = [];
 const ok = (cond, what, detail) => { results.push(!!cond); console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${what}${!cond && detail !== undefined ? ' — ' + String(detail).slice(0, 300) : ''}`); };
@@ -44,6 +44,22 @@ for (const [label, code] of INSERTS) {
   let good = true; try { run(expr, { count: 1, tags: ['a'] }); } catch { good = false; }
   ok(good, `"${label}" inserts ${code}`, expr);
 }
+
+console.log('check: Both, the teaching view: each piece lights its own code, and says what it does');
+for (const t of ['room === "Kitchen" && count < 10', 'tags.includes("fern") || !done', 'count > 2 ? "many" : "few"', 'when > new Date("2026-10-30")', 'room   ===  null']) {
+  const ps = pieces(t, isName), seg = codeSegments(t, ps);
+  ok(seg.map((x) => x.text).join('') === t, `the segments join back to the code, nothing lost or doubled: ${t}`, JSON.stringify(seg));
+  ok(ps.every((q, i) => seg.some((x) => x.piece === i && x.text === t.slice(q.from, q.to))) && seg.every((x) => x.piece !== null || /^\s*$/.test(x.text)), `every piece owns its characters and only spaces belong to none: ${t}`, JSON.stringify(seg));
+}
+{
+  const t = 'tags.includes("fern")', ps = pieces(t, isName), seg = codeSegments(t, ps);
+  const contains = ps.findIndex((q) => q.word === 'contains');
+  ok(seg.filter((x) => x.piece === contains).map((x) => x.text).join('|') === '.includes(|)', '"contains" lights .includes( and the bracket that closes it', JSON.stringify(seg));
+}
+ok(Object.keys(WORDS).filter((k) => !MEANS[k]).length === 0, 'every operator Studio has a word for says what it does', Object.keys(WORDS).filter((k) => !MEANS[k]));
+ok(teach(pieces('room === "x"', isName)[1]) === '“is” is === in the code: true when both sides are the same.', 'pointing at "is" says it is === and what that does', teach(pieces('room === "x"', isName)[1]));
+ok(teach(pieces('room', isName)[0], chip) === "[Plant's room] is the name room in the code: the app hands the value to the expression under that name.", 'pointing at a chip says the name it has in the code', teach(pieces('room', isName)[0], chip));
+ok(/true and false .* false/.test(teach(pieces('false', isName)[0])), 'a yes / no says it is true / false in the code');
 
 const passed = results.filter(Boolean).length;
 console.log(`${passed === results.length ? 'PASS' : 'FAIL'} ${passed}/${results.length}`);
