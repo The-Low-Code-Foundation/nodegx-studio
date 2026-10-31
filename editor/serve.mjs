@@ -56,7 +56,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, watch, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { fieldsBundle, kit, nodegxRepo, studioRoot } from '../lib/nodegx.mjs';
 import * as backends from '../lib/backend.mjs';
 import * as lives from '../lib/live.mjs';
@@ -454,16 +454,16 @@ async function backendMap() {
 /**
  * P127 BKO-004: what each cloud function reads and writes, in the map's own reading (`analyseProject`: record nodes,
  * scripts, and the helpers a function places). The tables a script names are the project's own and, with a backend
- * up, the backend's. Read from the files on disk at each ask; nothing is run. The map's package exports only its
- * server, so its reader is imported by file; without it the answer says so and names no touches.
+ * up, the backend's. Read from the files on disk at each ask; nothing is run. The reader is the backend kit's
+ * (`@nodegx/backend-kit`, P127 BKO-008/009: the map ships only its server from 0.1.6 and reads through the kit);
+ * without it the answer says so and names no touches.
  */
 async function functionTouches() {
   let lib;
   try {
-    const pkg = createRequire(import.meta.url).resolve('@nodegx/backend-map/package.json');
-    lib = await import(pathToFileURL(join(dirname(pkg), 'lib', 'project.mjs')).href);
+    lib = await import('@nodegx/backend-kit');
   } catch {
-    return { functions: [], words: 'The backend map isn’t installed in this copy of Studio, so what each function reads and writes is not said.' };
+    return { functions: [], words: 'The backend kit isn’t installed in this copy of Studio, so what each function reads and writes is not said.' };
   }
   const project = lib.openProject(projectDir);
   let rules = null; try { rules = JSON.parse(readFileSync(join(projectDir, 'nodegx.security.json'), 'utf8')); } catch { /* none */ }

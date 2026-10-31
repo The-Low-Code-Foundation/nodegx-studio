@@ -13,6 +13,8 @@
  *   3. "See it on the map" opens the map on that type (`#t:<type>`), and the map's live feed answers
  *   4. (BKO-004) a cloud function the agent made opens on Workflow as its graph, says what it touches (asked across
  *      origins) and, once it has run on the backend, its last run, with the nodes that run acted in lit (FNSTEPS)
+ *   5. (BKO-007) the map's hands: "Anyone at all" dragged onto Task makes the rule on the backend and in the rules file
+ *      together, across origins, and the toast's Undo puts both back
  *
  *   node editor/hosted-check.mjs            PASS n/n and exit 0, or the failing lines and exit 1
  *   node editor/hosted-check.mjs --shots    also writes ../docs/look/bko-002-*.png
@@ -224,6 +226,52 @@ try {
       return { title: n.title, kind: n.kind, notOnBackend: n.trigger.notOnBackend, edges: (m.edges || []).filter((e) => e.from === 'g:task-added').map((e) => e.kind + '>' + e.to) }; })()`, 25000);
     ok(onMap && onMap.kind === 'trigger' && !onMap.notOnBackend && onMap.edges.includes('fires>f:List Role Members') && onMap.edges.includes('watches>t:Task'), 'inside the conversation the map draws the trigger, wired to the function it runs and the table that starts it', onMap || { made: madeTrig, ids: await ev(`Object.keys(${MF}?.contentWindow?.__map?.byId ?? {}).slice(0, 20)`) });
     await shot('bko-005-hosted-map-trigger');
+  }
+
+  // P127 BKO-007 AC9 (@nodegx/backend-map 0.1.6): the hands inside the conversation. "Anyone at all" dragged onto Task
+  // with the mouse, asked twice, made: the backend and nodegx.security.json say the same; the toast's Undo puts both
+  // back as they were. The map's frame is the host's origin, so each gesture's POST crosses to Studio, as its reads do
+  console.log('check: BKO-007 the hands inside the conversation');
+  await click('[data-tab=data]'); await wait(300);
+  await click('[data-sub=map]'); await wait(1500); // the map drawn by the steps above, written into its frame again as the tab opens
+  const HF = `${P}.getElementById('mapframe')`, HW = `${HF}.contentWindow`, HD = `${HF}.contentDocument`;
+  const handsUp = await until(`!!${HW}?.__map?.byId?.['w:public'] && !!${HW}.__map.byId['t:Task'] && !${HD}.getElementById('hands')?.hidden`, 25000);
+  ok(handsUp, 'the map in the conversation has its hands: anyone at all, Task, and the hint bar', handsUp || await ev(`Object.keys(${HW}?.__map?.byId ?? {}).slice(0, 20)`));
+  if (handsUp) {
+    const secFile = join(project, 'nodegx.security.json');
+    const liveTask = async () => JSON.stringify((await admin('GET', '/admin/permissions')).config?.collections?.Task ?? null);
+    const fileTask = () => JSON.stringify(JSON.parse(readFileSync(secFile, 'utf8')).collections?.Task ?? null);
+    const fileBefore = readFileSync(secFile, 'utf8'), liveBefore = await liveTask();
+    // both blocks in the open middle of the map's frame, then where each is on the screen: the conversation's frame,
+    // the map's frame inside it, the block on the map's canvas (the chooser below says the drop landed on Task)
+    // read once the frame has settled: the map's frame is written again when Studio reopens it, and its window with it
+    const ends = await until(`(() => { const s = ${HW}?.__map, A = document.getElementById('app').getBoundingClientRect(), F = ${HF}.getBoundingClientRect();
+      const a = s?.byId?.['w:public'], t = s?.byId?.['t:Task']; if (!a || !t || !F.width) return false;
+      s.cam.z = Math.min(0.55, (F.width * 0.4) / Math.abs(t.x - a.x + t.w)); s.cam.x = F.width * 0.06 - a.x * s.cam.z; s.cam.y = F.height / 2 - ((a.y + t.y) / 2 + a.h / 2) * s.cam.z;
+      const at = (n) => { const x = n.x * s.cam.z + s.cam.x + (n.w * s.cam.z) / 2, y = (n.y + n.h / 2) * s.cam.z + s.cam.y; return { x: Math.round(A.left + F.left + x), y: Math.round(A.top + F.top + y) }; };
+      return { from: at(a), to: at(t) }; })()`, 20000);
+    await wait(300);
+    // after the redraw, what a person would put the mouse on at each end: the map's canvas, not a card over it
+    const hits = ends && await ev(`(() => { const A = document.getElementById('app').getBoundingClientRect(), F = ${HF}.getBoundingClientRect(), d = ${HD};
+      return [${JSON.stringify(ends)}.from, ${JSON.stringify(ends)}.to].map((p) => d.elementFromPoint(p.x - A.left - F.left, p.y - A.top - F.top)?.id ?? null); })()`);
+    ok(hits && hits.every((h) => h === 'map'), 'anyone at all and Task are both in the open: the mouse goes down and comes up on the map, not on a card', { ends, hits });
+    if (ends) await b.drag(ends.from, ends.to);
+    const asked = await until(`(() => { const h = ${HD}.getElementById('hand'); return h && !h.classList.contains('hidden') ? h.innerText : false; })()`, 5000);
+    ok(asked && /Anyone at all/i.test(asked) && /Task/.test(asked), 'dropped on Task, the chooser says what it will do before it does it', asked || ends);
+    await shot('bko-007-hosted-chooser');
+    const same = readFileSync(secFile, 'utf8') === fileBefore && (await liveTask()) === liveBefore;
+    ok(same, 'nothing has changed yet, in either place');
+    await ev(`${HD}.getElementById('toast').classList.add('hidden')`);
+    await ev(`${HD}.getElementById('handGo')?.click()`); // "Yes, I mean anyone": anyone at all is asked twice
+    await until(`${HD}.getElementById('handGo')?.textContent === 'Make it so'`, 3000);
+    await ev(`${HD}.getElementById('handGo')?.click()`);
+    const undoUp = await until(`!!${HD}.getElementById('undoLast') && !${HD}.getElementById('toast').classList.contains('hidden')`, 15000);
+    const made = { live: await liveTask(), file: fileTask(), toast: await ev(`${HD}.getElementById('toast')?.textContent ?? null`) };
+    ok(undoUp && made.live === made.file && /"public"/.test(made.live), 'Make it so, inside the conversation: the backend and nodegx.security.json both let anyone at all see Task, and the toast offers Undo', made);
+    await shot('bko-007-hosted-made');
+    await ev(`${HD}.getElementById('undoLast')?.click()`);
+    const back = await (async () => { const t = Date.now(); while (Date.now() - t < 10000) { if (readFileSync(secFile, 'utf8') === fileBefore && (await liveTask()) === liveBefore) return true; await wait(200); } return false; })();
+    ok(back, 'Undo: nodegx.security.json byte-identical to before, and the backend\'s Task rule as it was', back ? undefined : { live: await liveTask(), file: fileTask() });
   }
 
   // P125-MUDDY-NATIVEDIALOG: the host's frame has no allow-modals, so prompt() and confirm() answer nothing there. Studio
