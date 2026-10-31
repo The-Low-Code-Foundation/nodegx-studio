@@ -156,8 +156,16 @@ sequence: "closing a tab stops its editor server", not reproduced alone). Pictur
 of Greenhouse, isolated backend). **Found: P123-STU-NOFNDEPLOY** — Studio's *Start a backend* never deploys the app's
 cloud functions, so on a fresh backend Greenhouse's workflow fails "function not found". Not pushed (ask first).
 
+**s34 (2026-10-31), Richard's two rulings, both built.** (1) The Map's own-logic column: *"Yes please"*: built in
+NodeGX's P124 map source (OpenNoodl 49a843784; map suite all passed, any-app 41/41); not published: needs a
+`@nodegx/backend-map` after 0.1.6 (Richard's), then Studio's pin. The s33 *Open that run in Studio ▶* link rides the
+same release. (2) The composer's *Both*: *"Drop it probably no? Or is there a way to show both that's kind of
+educational?"*: *Both* is now the teaching view (996d055): the sentence over its JavaScript, a piece pointed at lights
+its other half and says what the code does. `check:sentence` 42/42, `check:editor` 248/248, every other gate green.
+P127's peer moved Studio to map 0.1.6 / kit 0.1.0 (ef72785) between s33 and s34.
+
 Next buildable, in order:
-00. Greenhouse notes left: STU-093's ruling (the app's own searches and saves as a column on the Map, between the
+00. Greenhouse notes: all twelve built and both rulings taken; the map release is Richard's. Was: STU-093's ruling (the app's own searches and saves as a column on the Map, between the
     screens and the functions) and STU-098's ruling (keep or drop the composer's *Both*); both are Richard's, asked
     in plain words. P123-STU-NOFNDEPLOY (above) is the next defect on the alpha line. STU-094's leftover: the row's read-through
     (`throughSources` on a row's `One <Type>` Component Inputs ports, with a gate that makes a repeating group). STU-092's leftovers: a workflow's own settings
