@@ -139,11 +139,13 @@ try {
   console.log('check: Workflow → On the backend');
   await b.clickSel('#rail [data-tab=backend]');
   await b.until(`document.querySelectorAll('#autolist .row').length === 3 && !document.querySelector('#autolist')?.innerText.includes('0 9 * * *')`, 10000);
+  // STU-093: the Map's words for when it last ran ("just now: it failed") arrive with its words.js
+  await b.until(`/last run/.test(document.querySelector('#autolist .row[data-workflow="triage"]')?.innerText ?? '') && !/\\d{4}/.test(document.querySelector('#autolist .row[data-workflow="triage"]')?.innerText ?? '')`, 8000).catch(() => {});
   const listed = await ev(`[...document.querySelectorAll('#autolist .row')].map((r) => ({ trigger: r.dataset.trigger, workflow: r.dataset.workflow, text: r.innerText.replace(/\\s+/g, ' ').trim() }))`);
   const said = (id) => listed.find((r) => r.trigger === id)?.text ?? '';
   ok(/^Every day at 09:00 ?On ?Starts the function sendDigest$/.test(said(dailyId)), 'the daily trigger: "Every day at 09:00", on, starting sendDigest (the backend\'s words for its cron)', said(dailyId));
-  ok(/^When a Task is created ?On ?Starts the workflow Triage a new task$/.test(said(rowsId)), 'the row-change trigger: "When a Task is created", starting the workflow by its name', said(rowsId));
-  ok(listed.some((r) => r.workflow === 'triage' && /^Triage a new task A workflow on the backend · 3 steps$/.test(r.text)), 'the workflow, by its name, with its three steps', listed);
+  ok(/^When a Task is created ?On ?Starts the workflow Triage a new task · last run (just now|\d+ seconds ago): it failed \(A step failed/.test(said(rowsId)), 'the row-change trigger: "When a Task is created", starting the workflow by its name, and how its last fire went (STU-093)', said(rowsId));
+  ok(listed.some((r) => r.workflow === 'triage' && /^Triage a new task Started by When a Task is created · 3 steps · last run (just now|\d+ seconds ago): it failed$/.test(r.text)), 'the workflow, by its name: what starts it, its three steps, and its last run in the Map\'s words (STU-093)', listed);
   ok(!listed.some((r) => /differs/.test(r.text)), 'the backend agrees with the project on every one');
   await shot('list');
 
@@ -173,6 +175,39 @@ try {
     ok(/Open its steps/.test(card('notify')?.text) || /not in the project/.test(card('notify')?.text), 'its function step says it runs notifyOwner, which the app does not have', card('notify')?.text);
   }
   await shot('workflow-failed');
+
+  // 3b. STU-093: a "last run" in the list opens the run, played: nothing lit, then each step in the order it ran, a dot
+  // along each wire it crossed into the next, then the run stays lit as in 3
+  console.log('check: a "last run" opens the run, played');
+  await ev(`document.querySelector('#autolist .row[data-trigger="${dailyId}"]').click()`);
+  await b.until(`document.querySelector('#steps .autoview')?.dataset.trigger === ${JSON.stringify(dailyId)}`, 5000);
+  await ev(`window.__playLog = []; clearInterval(window.__playTimer); window.__playTimer = setInterval(() => { const f = document.querySelector('#steps .autoview[data-workflow] .flow'); if (!f) return;
+    const e = (f.classList.contains('playing') ? 'P' : '-') + '|' + [...f.querySelectorAll('.step.played')].map((x) => x.dataset.id).join(',') + '|' + [...f.querySelectorAll('circle.playdot')].map((c) => { const p = [...f.querySelectorAll('svg.wires path[data-ran]')].find((q) => q.getAttribute('d') === c.querySelector('animateMotion')?.getAttribute('path')); return p ? p.dataset.from + '>' + p.dataset.to : '?'; }).join(',');
+    if (window.__playLog.at(-1) !== e) window.__playLog.push(e); }, 25); 0`);
+  await ev(`document.querySelector('#autolist .row[data-workflow="triage"] .lastrun').click()`);
+  await b.until(`(window.__playLog ?? []).some((e) => e.startsWith('P')) && window.__playLog.at(-1).startsWith('-')`, 10000).catch(() => {});
+  {
+    const log = await ev(`(clearInterval(window.__playTimer), window.__playLog)`);
+    const v = await view();
+    const lit = (e) => e.split('|')[1];
+    const sets = [...new Set(log.filter((e) => e.startsWith('P')).map(lit))];
+    ok(v?.workflow === 'triage' && log.some((e) => e.startsWith('P')), 'the workflow opens playing its run', log);
+    ok(sets[0] === '' && sets.includes('pause') && sets.indexOf('pause') < sets.indexOf('pause,notify'), 'nothing lit first, then step 1, then step 2: the order the run took', sets);
+    ok(log.some((e) => e.startsWith('P|pause|') && e.endsWith('pause>notify')), 'a dot runs the wire from step 1 into step 2 while step 2 waits', log);
+    ok(!log.some((e) => /\?/.test(e.split('|')[2] ?? '')), 'a dot only ever runs a wire the run crossed', log);
+    ok(log.at(-1)?.startsWith('-|') && /litok/.test(v?.cards.find((c) => c.id === 'pause')?.cls) && /litfail/.test(v?.cards.find((c) => c.id === 'notify')?.cls), 'then it stops, the run lit as before', { last: log.at(-1), cards: v?.cards.map((c) => c.cls) });
+    ok(/Play the run/.test(v?.facts), 'and it can be played again', v?.facts);
+  }
+  // the trigger's card says its last fire the same way, and opens that run too
+  await ev(`document.querySelector('#autolist .row[data-trigger="${rowsId}"]').click()`);
+  await b.until(`document.querySelector('#steps .autoview')?.dataset.trigger === ${JSON.stringify(rowsId)} && !!document.querySelector('#steps .openrun')`, 8000).catch(() => {});
+  {
+    const v = await view();
+    ok(/Last fired (just now|\d+ seconds ago): it failed/.test(v?.facts) && /1 time in all/.test(v?.facts), 'the trigger\'s card: when it last fired, how it went, how often', v?.facts);
+    await ev(`document.querySelector('#steps .openrun')?.click()`);
+    ok(await b.until(`!!document.querySelector('#steps .autoview[data-workflow="triage"] .flow.playing')`, 8000).catch(() => false), 'its Open that run opens the workflow, playing');
+    await b.until(`!document.querySelector('#steps .flow.playing')`, 8000).catch(() => {});
+  }
 
   // 4. turned off in Studio
   console.log('check: the daily trigger turned off in Studio');

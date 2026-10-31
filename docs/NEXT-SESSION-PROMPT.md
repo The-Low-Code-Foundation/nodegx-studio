@@ -142,9 +142,24 @@ the page's keydown sees focus on nothing and runs its own Delete. Gates on the s
 (new), `check:editor` **245/245**, `check:data` 84/84, `check:timeline` 53/53, `check:shapes` 39/39, `check:hosted`
 39/39, `check:app` 67/67. Not pushed (ask first).
 
+**s33 (2026-10-31), STU-093 — Greenhouse note 4, all but its ruling** (SCOPE, STU-093 "Done (s33)"). The Backend tab
+in the Map's order and words: *On its own* (triggers, workflows) then *Functions* ("the doors to the data"); each
+trigger and workflow says its last run as the Map does ("last run 5 seconds ago: it failed"), each function who runs it
+("Run by “The morning check”"). A *last run* (the list, a trigger card's *Open that run ▶*, a workflow's *▶ Play the
+run*) opens the workflow and plays the run: nothing lit, then each step in the order it ran, a dot along each wire it
+crossed (`autoPlay`, `runDot`). P123-GH-TRIGGERSTALE fixed (the backend asked again on each visit, the old answer kept
+until the new one). The Map's half (*Open that run in Studio ▶*, posting `open-workflow`) is written in NodeGX's P124
+`editor/public/app.js`, not published (map source 0.1.6, Studio pins 0.1.4). Gates on the s33 tree:
+`check:automations` drive **50/50** (8 new; mutant 46/50) + 52/52, `check:editor` 245/245, `check:functions` 695/695
++ 46/46, `check:hosted` 39/39, `check:data` 84/84, `check:timeline` 53/53, `check:app` 67/67 alone (66/67 once in the
+sequence: "closing a tab stops its editor server", not reproduced alone). Pictures `docs/look/stu-093-*.png` (a copy
+of Greenhouse, isolated backend). **Found: P123-STU-NOFNDEPLOY** — Studio's *Start a backend* never deploys the app's
+cloud functions, so on a fresh backend Greenhouse's workflow fails "function not found". Not pushed (ask first).
+
 Next buildable, in order:
-00. Greenhouse notes left: STU-093 (the Map's words; ruling: a front-end logic column) and STU-098's ruling (keep or
-    drop the composer's *Both*); both are Richard's, asked in plain words. STU-094's leftover: the row's read-through
+00. Greenhouse notes left: STU-093's ruling (the app's own searches and saves as a column on the Map, between the
+    screens and the functions) and STU-098's ruling (keep or drop the composer's *Both*); both are Richard's, asked
+    in plain words. P123-STU-NOFNDEPLOY (above) is the next defect on the alpha line. STU-094's leftover: the row's read-through
     (`throughSources` on a row's `One <Type>` Component Inputs ports, with a gate that makes a repeating group). STU-092's leftovers: a workflow's own settings
     (concurrency, time limits), a webhook trigger made in Studio, adding an *If it fails* route.
 0a. STU-090's open list (SCOPE): an option set linked to a Choice rather than copied; the crowded header (check it

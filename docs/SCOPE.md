@@ -1913,7 +1913,7 @@ them (STU-092).
 | 1 | can't scroll sideways in a zoomed workflow; the step panel covers a node; wants room after it | **fixed** P123-GH-FLOWNOSCROLLX: drag the empty canvas to pan, 120 px after the last step |
 | 2 | page workflows and backend workflows/functions mixed in one list; "Workflows on this page" then "On the backend" is weird; workflows = automations, functions = logic called by the app or by a workflow, "two parts of the same machine"; maybe their own tab | **built** (s30) STU-092: a Backend tab |
 | 3 | can't edit backend workflows; can't see a run's data, what went in and out of each step, as in the NodeGX editor | **built** (s30) STU-092 for workflows; a function's run has no values to show (P123-STU-FNRUNVALUES) |
-| 4 | the Map is "our example for the rest of the app": its words (origins on the left, screens, functions, tables; "on its own") should be the Workflow tab's words for the backend; a backend workflow's "last run 21 mins ago: it worked" should open the run, drawn, with the dots flowing on the wires; maybe the app's own logic that talks to the backend (queries) as a column between screens and functions | STU-093 (ruling: the front-end logic column) |
+| 4 | the Map is "our example for the rest of the app": its words (origins on the left, screens, functions, tables; "on its own") should be the Workflow tab's words for the backend; a backend workflow's "last run 21 mins ago: it worked" should open the run, drawn, with the dots flowing on the wires; maybe the app's own logic that talks to the backend (queries) as a column between screens and functions | **built** (s33) STU-093's words and run: the Backend tab in the Map's order and words, a last run opens played; the Map's own link written, not published; the ruling (a front-end logic column) open |
 | 5 | option sets need fields that point at one or many options of another set (Bubble has it) | **built** (s31) STU-094, P123-GH-CHOICELABEL |
 | 6 | App data edits in place: dangerous ("why I stopped using NocoDB"); click a record → side panel or modal | **built** (s29) STU-095, P123-GH-APPDATAINLINE, P123-GH-DATEUTC |
 | 7 | a style's preview is a list of pills (`colour: #FFF`); show a dummy button, text, a group with text in it | **built** (s29) STU-096 |
@@ -1994,6 +1994,37 @@ and Back from a page card's function returns to the Workflow tab.
 - **Ruling:** a column for the app's own logic that reaches the backend (a page's searches and saves) between the
   screens and the functions, so front end and back end are told apart on one drawing. Recommended: yes, one node per
   page's searches/saves, collapsed by default.
+
+**Done (s33), all but the ruling.** Built in Studio, where Richard reads a backend workflow, and on the Map's side as a
+link into it.
+- **The Map's words and order.** The Backend tab's list is *On its own* ("what the backend starts by itself": each
+  trigger, then each workflow) and *Functions* ("the doors to the data"), the Map's headings. A trigger says what it
+  starts and its last fire, as the Map's trigger panel says it (`… · last run 21 minutes ago: it worked`, or *it failed
+  (why)*: the backend's `status.lastResult`, in `@nodegx/backend-map`'s own `words.js`). A workflow says what starts it
+  ("Started by When a Task is created", or "No trigger: the agent or a workflow runs it"), its steps, and its last run
+  (`lastRuns` from `GET /admin/workflow-defs`). A function says who calls it: the pages a step runs it on (a reusable
+  placed there included: `nodeEffects`), the workflows whose step runs it, the triggers that start it ("Run by “The
+  morning check”"), or "Nothing in the app calls it yet". Before, every function with a Request was "Called from the
+  app" (P123-GH-TRIGGERSTALE's second half).
+- **A last run opens the run, played.** The *last run* in a row, the trigger card's *Open that run ▶* and the
+  workflow's own *▶ Play the run* open the workflow with nothing lit, then light its steps one at a time in the order
+  they ran (`stepsOfRun`, the backend's step index), a dot running each wire the run crossed into the next step (an svg
+  `animateMotion` on the wire's own path, `runDot`), then leave the run lit as before (the white pulse back on). 700 ms a
+  step. The play's state lives in `autoPlay`, so a redraw mid-play (the backend answering, a resize) carries on from
+  the step it was at. With *reduce motion* set it does not play: the run is shown lit at once. A trigger that starts a
+  function opens the function with its last run lit (BKO-004).
+- **P123-GH-TRIGGERSTALE fixed.** What the backend says (each trigger's status, the workflows' last runs) is asked again
+  on each visit to the Backend tab and each card opened, and what it said last stays drawn until the answer comes (no
+  "Asking the backend…" flash). Before, it was read once per Studio load, so a trigger that fired said "Not fired yet".
+- **The Map's half, written and not published.** NodeGX's P124 `editor/public/app.js` (the source of
+  `@nodegx/backend-map`, now at 0.1.6; Studio pins 0.1.4): a trigger's panel inside Studio adds *Open that run in Studio
+  ▶* under "Its last run", posting `{ nodegx: 'open-workflow', id }`; Studio takes that message from its own map frame
+  only and opens the workflow, played. It reaches Studio when the map is published and Studio's pin moves (Richard's).
+- Gate: `check:automations`'s drive **50/50** (8 new: the list's two rows in the Map's words with a real failed run,
+  the run played in order with a dot along pause→notify and no dot on a wire it did not cross, stopped and lit, played
+  again; the trigger card's last fire and its *Open that run*). Mutant (the play never starting): 46/50.
+- Open: **the ruling** (the app's own searches and saves as a column on the Map, between the screens and the
+  functions); a function's own runs in the list (one more request per function); the Map's link published.
 
 ### STU-094 — option sets that point at other option sets
 

@@ -225,6 +225,7 @@
   aside.right { border-right: 0; border-left: 1px solid var(--line); }
   h3.sec { margin: 0; padding: 12px 12px 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); display: flex; align-items: center; justify-content: space-between; }
   h3.sec button { padding: 1px 6px; }
+  p.secsub { margin: -4px 12px 4px; font-size: 11.5px; color: var(--dim); }
   .search { position: relative; padding: 8px 12px 4px; }
   .search input { padding-left: 28px; }
   .search svg { position: absolute; left: 20px; top: 15px; width: 14px; height: 14px; color: var(--muted); pointer-events: none; }
@@ -608,6 +609,13 @@
   .flow .step.ran, .flow .evnode.ran { box-shadow: 0 0 0 1.5px var(--green), 0 0 0 5px rgba(22,163,74,.14); }
   .flow .step.ran::after, .flow .evnode.ran::after { content: 'ran'; position: absolute; top: -9px; right: 12px; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 8px; background: var(--green); color: #fff; }
   .flow svg.wires path.pulse { animation: flowpulse .9s linear infinite; }
+  /* STU-093: a backend run played: what it has not reached yet waits faded, a dot runs each wire it crosses */
+  .flow.playing .step:not(.played) { opacity: .35; } .flow.playing .step:not(.played) .lit { visibility: hidden; }
+  .flow.playing svg.wires path.pulse { display: none; }
+  .flow.playing .step.played { animation: played .45s ease-out; }
+  @keyframes played { from { box-shadow: 0 0 0 1.5px var(--green), 0 0 0 12px rgba(22,163,74,.28); } }
+  .flow svg.wires circle.playdot { fill: var(--green); stroke: #fff; stroke-width: 2.5; filter: url(#flowglow); }
+  button.linkish { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; text-align: left; cursor: pointer; } button.linkish:hover { text-decoration: underline; }
   @keyframes flowpulse { to { stroke-dashoffset: -18; } }
   @media (prefers-reduced-motion: reduce) { .flow svg.wires path.pulse { animation: none; } }
   /* a "+" on a wire puts a step between the two it joins */
@@ -982,10 +990,12 @@
           <div class="events list" id="events"></div>
         </div>
         <div class="wfback">
-          <p class="hint" id="backhow">Two parts of one machine. A <b>workflow</b> runs on its own when something starts it: a change to a table, a time of day. A <b>function</b> is logic the app calls, or a workflow's step calls.</p>
-          <h3 class="sec"><span id="autosec">Workflows</span> <button class="tiny primary" id="newauto" title="A workflow on the backend, and what starts it"><svg class="i"><use href="#i-plus"/></svg>New</button></h3>
+          <p class="hint" id="backhow">In the Map's order. What the backend starts <b>on its own</b> (a change to a table, a time of day) runs <b>functions</b>, the doors to the data that the app's screens call too.</p>
+          <h3 class="sec"><span id="autosec">On its own</span> <button class="tiny primary" id="newauto" title="A workflow on the backend, and what starts it"><svg class="i"><use href="#i-plus"/></svg>New</button></h3>
+          <p class="secsub">what the backend starts by itself</p>
           <div class="events list" id="autolist"></div>
           <h3 class="sec" id="fnsec">Functions</h3>
+          <p class="secsub">the doors to the data</p>
           <div class="events list" id="fnlist"></div>
         </div>
       </aside>
@@ -4772,8 +4782,13 @@ function renderFnList() {
   const shown = all.filter((f) => !q || f.name.toLowerCase().includes(q));
   $('fnsec').textContent = shown.length < all.length ? `Functions: ${shown.length} of ${all.length}` : 'Functions';
   if (!all.length) return box.append(h('div', { class: 'hint' }, 'No cloud functions in this app yet: the steps that run on the backend, out of reach of the device.'));
-  for (const f of shown) box.append(h('div', { class: 'row', 'data-fn': f.key, 'aria-selected': selFn === f.key, onclick: () => openFunction(f.key) },
-    h('span', {}, f.name), h('small', {}, `${f.endpoint ? 'Called from the app' : 'A part other functions use'} · ${f.steps} step${f.steps === 1 ? '' : 's'}`)));
+  // P123-GH-TRIGGERSTALE's second half: "Called from the app" was said of every function with a Request, called or not
+  const callers = fnCallers();
+  for (const f of shown) {
+    const who = callersWords(callers.get(f.name));
+    box.append(h('div', { class: 'row', 'data-fn': f.key, 'aria-selected': selFn === f.key, onclick: () => openFunction(f.key) },
+      h('span', {}, f.name), h('small', {}, `${f.endpoint ? (who ? who[0].toUpperCase() + who.slice(1) : 'Nothing in the app calls it yet') : 'A part other functions use'} · ${f.steps} step${f.steps === 1 ? '' : 's'}`)));
+  }
 }
 /** `from`: { kind: 'card', ev, cardBack, title } (a step that runs it), { kind: 'fn', key } (a function placing a helper) or { kind: 'map' } (the map's panel); none from the list. */
 function openFunction(key, from = null) {
@@ -4935,7 +4950,10 @@ window.__ob.openFunction = openFunction;
 window.__ob.openWiring = openWiring;
 // the map's "Open its steps" (Data → Map, @nodegx/backend-map in Studio's frame): only from that frame, only a function
 addEventListener('message', (e) => {
-  if (e.data?.nodegx !== 'open-function' || e.source !== $('mapframe')?.contentWindow || typeof e.data.component !== 'string') return;
+  if (e.source !== $('mapframe')?.contentWindow) return;
+  // STU-093: the map's "Last run …: it worked" on a trigger opens that run in the Backend tab, played
+  if (e.data?.nodegx === 'open-workflow' && typeof e.data.id === 'string') return void openAuto({ kind: 'workflow', id: e.data.id }, null, { play: true });
+  if (e.data?.nodegx !== 'open-function' || typeof e.data.component !== 'string') return;
   const key = e.data.component.replace(/^\/?#?/, '');
   if (key.startsWith(CLOUD)) openFunction(key, { kind: 'map', title: 'the map' });
 });
@@ -4950,13 +4968,71 @@ const autos = () => readAutomations(files.read(AUTOMATIONS_FILE));
 const autoEntry = (a) => (a.kind === 'trigger' ? autos().triggers : autos().workflows).find((x) => x.id === a.id);
 const beNow = () => (autoBe && !autoBe.pending ? autoBe : null);
 const noBackend = (e) => /not bound|503/.test(e.message);
+/** Asks the backend again. What it said last stays shown until the answer comes (P123-GH-TRIGGERSTALE: a card read once
+    said "Not fired yet" after its trigger had fired, until Studio reloaded). */
+let autoBeAsking = false;
 function loadAutoBackend() {
-  if (autoBe?.pending) return;
-  autoBe = { pending: true };
+  if (autoBeAsking) return;
+  autoBeAsking = true;
+  if (!autoBe) autoBe = { pending: true };
   Promise.all([api('/admin/triggers'), api('/admin/workflow-defs'), api('/admin/workflow-step-kinds').catch(() => ({ kinds: [] }))])
-    .then(([t, w, k]) => { autoBe = { triggers: new Map((t.triggers ?? []).map((x) => [x.id, x])), workflows: new Map((w.workflows ?? w.definitions ?? []).map((x) => [x.id, x])), kinds: new Map((k.kinds ?? []).map((x) => [x.kind, x])), ops: k.conditionLanguage?.ops ?? [] }; })
-    .catch((e) => { autoBe = { triggers: new Map(), workflows: new Map(), kinds: new Map(), words: noBackend(e) ? 'No backend is bound, so what a backend runs now is not shown: these are the project’s.' : `The backend did not say its triggers and workflows: ${e.message}` }; })
-    .finally(() => { if (tab === 'workflow' || tab === 'backend') renderWorkflow(); });
+    .then(([t, w, k]) => { autoBe = { triggers: new Map((t.triggers ?? []).map((x) => [x.id, x])), workflows: new Map((w.workflows ?? w.definitions ?? []).map((x) => [x.id, x])), lastRuns: w.lastRuns ?? {}, kinds: new Map((k.kinds ?? []).map((x) => [x.kind, x])), ops: k.conditionLanguage?.ops ?? [] }; })
+    .catch((e) => { autoBe = { triggers: new Map(), workflows: new Map(), lastRuns: {}, kinds: new Map(), words: noBackend(e) ? 'No backend is bound, so what a backend runs now is not shown: these are the project’s.' : `The backend did not say its triggers and workflows: ${e.message}` }; })
+    .finally(() => { autoBeAsking = false; if (tab === 'workflow' || tab === 'backend') renderWorkflow(); });
+}
+/* ---- STU-093: the Map's words. When it last ran and how it went, said as the Map's panel says it ("21 minutes ago: it
+   worked", @nodegx/backend-map's own words.js), and a click on it opens that run, played. ---- */
+function agoWords(at) {
+  const ms = typeof at === 'number' ? at : Date.parse(at);
+  if (!Number.isFinite(ms)) return '';
+  if (!mapWords) { // the Map's words, then drawn again in them
+    if (mapWords === null) (mapWords = undefined, import('/backend-map/words.js')).then((W) => { mapWords = W; if (tab === 'backend') renderWorkflow(); }).catch(() => { mapWords = false; });
+    return new Date(ms).toLocaleString();
+  }
+  return mapWords.ago(ms);
+}
+/** A workflow's newest run (the backend's `lastRuns`), or a trigger's last result, in a few words; '' when it never ran. */
+function lastRunWords(kind, id) {
+  const be = beNow(); if (!be || be.words) return '';
+  if (kind === 'workflow') {
+    const r = be.lastRuns?.[id]; if (!r) return '';
+    const how = r.status === 'success' ? 'it worked' : r.status === 'running' || r.status === 'pending' ? 'still running' : r.engineStatus === 'cancelled' ? 'it was stopped' : 'it failed';
+    return `${agoWords(r.startedAt)}: ${how}`;
+  }
+  const st = be.triggers.get(id)?.status;
+  if (st?.lastResult) return `${agoWords(st.lastResult.at)}: ${st.lastResult.ok ? 'it worked' : `it failed${st.lastResult.error ? ` (${st.lastResult.error})` : ''}`}`;
+  return st?.lastFiredAt ? agoWords(st.lastFiredAt) : '';
+}
+/** "last run 21 minutes ago: it worked", a link that opens the run (a workflow's, played) — or nothing when it never ran. */
+function lastRunLink(words, open, lead = 'Last run') {
+  if (!words) return null;
+  return h('button', { class: 'linkish lastrun', title: 'Open that run: each step lit in turn, the wires it crossed', onclick: (e) => { e.stopPropagation(); open(); } }, `${lead} ${words}`);
+}
+/** Opens what a trigger starts at its last run: a workflow played, a function with its last run lit on its nodes. */
+function openTriggerRun(t) {
+  const g = targetOf(t);
+  if (g.kind === 'workflow') return openAuto({ kind: 'workflow', id: g.name }, t.id, { play: true });
+  openFunction(g.key, { kind: 'auto', auto: { kind: 'trigger', id: t.id, from: null }, title: triggerHead(t, beNow()?.triggers.get(t.id)?.scheduleWords) });
+}
+/** Who calls each function, by its name: the app's pages (a step that runs it, in a component placed there too), the
+    backend's workflows (a step), its triggers. The Map draws these as its wires; the list says them. */
+function fnCallers() {
+  const by = new Map(), add = (name, who) => { const k = String(name); if (!by.has(k)) by.set(k, new Set()); by.get(k).add(who); };
+  for (const k of pageKeys()) {
+    let nodes = []; try { nodes = store.readComponent(k).files.nodes.nodes; } catch { continue; }
+    for (const e of nodes.flatMap((n) => nodeEffects(n, new Set()))) if (e.kind === 'backend') add(e.target, `page:${k.split('/').pop()}`);
+  }
+  const a = autos();
+  for (const w of a.workflows ?? []) for (const s of w.steps ?? []) if (s.ref) add(s.ref, `workflow:${w.name || w.id}`);
+  for (const t of a.triggers ?? []) { const g = targetOf(t); if (g.kind === 'function') add(g.name, `trigger:${triggerHead(t, beNow()?.triggers.get(t.id)?.scheduleWords)}`); }
+  return by;
+}
+function callersWords(who) {
+  if (!who?.size) return '';
+  const of = (kind) => [...who].filter((x) => x.startsWith(`${kind}:`)).map((x) => x.slice(kind.length + 1));
+  const list = (xs) => (xs.length < 3 ? xs.join(' and ') : `${xs.slice(0, 2).join(', ')} and ${xs.length - 2} more`);
+  const pages = of('page'), runs = [...of('workflow').map((x) => `“${x}”`), ...of('trigger')];
+  return [pages.length ? `called on ${list(pages)}` : '', runs.length ? `run by ${list(runs)}` : ''].filter(Boolean).join(' · ');
 }
 const switchOf = (t) => h('button', { class: 'trigswitch', role: 'switch', 'aria-checked': t.enabled !== false, title: t.enabled !== false ? 'On: turn it off, on the backend and in the project' : 'Off: turn it on, on the backend and in the project', onclick: (e) => { e.stopPropagation(); changeTrigger(t.id, { enabled: t.enabled === false }); } }, t.enabled !== false ? 'On' : 'Off');
 const startsWords = (t) => { const g = targetOf(t); return `${g.kind === 'workflow' ? 'the workflow' : 'the function'} ${g.kind === 'workflow' ? autos().workflows.find((w) => w.id === g.name)?.name || g.name : g.name}`; };
@@ -4973,21 +5049,25 @@ function renderAutoList() {
     if (q && !`${head} ${targetOf(t).name}`.toLowerCase().includes(q)) continue;
     const same = !be || be.words || agrees('trigger', t, be.triggers.get(t.id));
     box.append(h('div', { class: 'row trig', 'data-trigger': t.id, 'aria-selected': selAuto?.kind === 'trigger' && selAuto.id === t.id, onclick: () => openAuto({ kind: 'trigger', id: t.id }) },
-      h('span', {}, icon('bolt'), ' ', head, switchOf(t)), h('small', {}, `Starts ${startsWords(t)}${same ? '' : ' · the backend’s copy differs'}`)));
+      h('span', {}, icon('bolt'), ' ', head, switchOf(t)), h('small', {}, `Starts ${startsWords(t)}${same ? '' : ' · the backend’s copy differs'}`, lastRunWords('trigger', t.id) ? ' · ' : '', lastRunLink(lastRunWords('trigger', t.id), () => openTriggerRun(t), 'last run'))));
   }
   for (const w of a.workflows) {
     if (q && !`${w.name ?? ''} ${w.id}`.toLowerCase().includes(q)) continue;
     const same = !be || be.words || agrees('workflow', w, be.workflows.get(w.id));
+    const by = a.triggers.filter((t) => targetOf(t).kind === 'workflow' && targetOf(t).name === w.id).map((t) => triggerHead(t, be?.triggers.get(t.id)?.scheduleWords));
+    const last = lastRunWords('workflow', w.id);
     box.append(h('div', { class: 'row', 'data-workflow': w.id, 'aria-selected': selAuto?.kind === 'workflow' && selAuto.id === w.id, onclick: () => openAuto({ kind: 'workflow', id: w.id }) },
-      h('span', {}, w.name || w.id), h('small', {}, `A workflow on the backend · ${(w.steps ?? []).length} step${(w.steps ?? []).length === 1 ? '' : 's'}${same ? '' : ' · the backend’s copy differs'}`)));
+      h('span', {}, w.name || w.id), h('small', {}, `${by.length ? `Started by ${by.join(' or ')}` : 'No trigger: the agent or a workflow runs it'} · ${(w.steps ?? []).length} step${(w.steps ?? []).length === 1 ? '' : 's'}${same ? '' : ' · the backend’s copy differs'}`, last ? ' · ' : '', lastRunLink(last, () => openAuto({ kind: 'workflow', id: w.id }, null, { play: true }), 'last run'))));
   }
   // the file is the truth: what only the backend has is said, not drawn
   const only = be && !be.words ? [...be.triggers.keys()].filter((id) => !a.triggers.some((t) => t.id === id)).length + [...be.workflows.keys()].filter((id) => !a.workflows.some((w) => w.id === id)).length : 0;
   if (only) box.append(h('div', { class: 'hint' }, `${only} more on the backend only, not in the project’s files: ask the agent to keep ${only === 1 ? 'it' : 'them'} in the project.`));
 }
-function openAuto(target, from = null) {
+/** `opts.play`: the run is played once it is read (STU-093: a "last run" link opens the run, not just the workflow). */
+function openAuto(target, from = null, opts = {}) {
   if (!autoEntry(target)) return toast(`The project has no ${target.kind} called ${target.id}`);
-  selAuto = { kind: target.kind, id: target.id, from }; selFn = null; fnBack = []; autoRun = null; selAutoStep = null; hideBoltTip();
+  selAuto = { kind: target.kind, id: target.id, from, play: !!opts.play }; selFn = null; fnBack = []; autoRun = null; selAutoStep = null; autoPlay = null; hideBoltTip();
+  if (beNow()) loadAutoBackend(); // P123-GH-TRIGGERSTALE: a card says what the backend says now, not when the list was first read
   if (tab !== 'backend') switchTab('backend'); else renderWorkflow();
   if (target.kind === 'workflow') readAutoRun(target.id);
 }
@@ -5011,6 +5091,47 @@ async function readAutoRun(id) {
   if (selAuto?.kind !== 'workflow' || selAuto.id !== id) return;
   autoRun = { run, words };
   renderWorkflow();
+  if (selAuto.play && run) { selAuto.play = false; playAutoRun(); }
+}
+/* ---- STU-093: a run, played. Its steps light one after another in the order they ran, a dot travelling each wire it
+   crossed between them (the Map's particles), then it stays lit as before. Kept in `autoPlay`, so a redraw mid-play (the
+   backend answering, a resize) carries on from the step it was at. ---- */
+let autoPlay = null;
+const PLAY_HOP = 700;
+function playAutoRun() {
+  const lit = autoRun?.run ? stepsOfRun(autoRun.run) : null;
+  clearTimeout(autoPlay?.timer); autoPlay = null;
+  if (!lit || selAuto?.kind !== 'workflow' || matchMedia('(prefers-reduced-motion: reduce)').matches) return showPlay();
+  const order = [...lit.entries()].filter(([, s]) => s.status !== 'skipped').map(([id]) => id);
+  if (!order.length) return showPlay();
+  autoPlay = { id: selAuto.id, order, k: 0, timer: setTimeout(playStep, 350) };
+  showPlay();
+}
+/** The play's state on whatever flow is drawn now: what has not been reached yet waits faded. */
+function showPlay() {
+  const flow = $('steps').querySelector('.autoview .flow'); if (!flow) return;
+  const p = autoPlay?.id === selAuto?.id ? autoPlay : null, done = new Set(p ? p.order.slice(0, p.k) : []);
+  flow.classList.toggle('playing', !!p);
+  for (const el of flow.querySelectorAll('.step[data-id]')) el.classList.toggle('played', done.has(el.dataset.id));
+  const btn = $('steps').querySelector('.playrun'); if (btn) btn.textContent = p ? 'Playing…' : '▶ Play the run';
+}
+function playStep() {
+  const p = autoPlay;
+  if (!p || selAuto?.kind !== 'workflow' || selAuto.id !== p.id) { autoPlay = null; return; }
+  p.k++;
+  if (p.k > p.order.length) { autoPlay = null; return showPlay(); }
+  showPlay();
+  // the dots leave what has run for the step that runs next, along the wires the run crossed
+  const next = p.order[p.k], before = new Set(p.order.slice(0, p.k));
+  if (next) for (const path of $('steps').querySelectorAll('.autoview .flow svg.wires path[data-ran]')) if (path.dataset.to === next && before.has(path.dataset.from)) runDot(path);
+  p.timer = setTimeout(playStep, PLAY_HOP);
+}
+function runDot(path) {
+  const dot = document.createElementNS(SVG_NS, 'circle'), move = document.createElementNS(SVG_NS, 'animateMotion');
+  dot.setAttribute('r', 6); dot.setAttribute('class', 'playdot');
+  for (const [k, v] of Object.entries({ path: path.getAttribute('d'), dur: `${PLAY_HOP - 100}ms`, begin: 'indefinite', fill: 'freeze' })) move.setAttribute(k, v);
+  dot.append(move); path.ownerSVGElement.append(dot); move.beginElement();
+  setTimeout(() => dot.remove(), PLAY_HOP);
 }
 function autoNav() {
   const from = selAuto.from && autos().triggers.find((t) => t.id === selAuto.from);
@@ -5050,17 +5171,18 @@ function renderTrigger(t) {
   wf.append(h('div', { class: 'event-card' }, h('div', { class: 'ic' }, icon('bolt')), h('div', { class: 'named' }, h('h2', {}, head), h('small', {}, `A trigger on the backend: it starts ${startsWords(t)} there, never on the device`))));
   const tm = t.type === 'schedule' ? scheduleTime(t.schedule?.cron) : null;
   const timeIn = tm ? h('input', { type: 'time', class: 'trigtime', value: hhmm(tm), 'aria-label': 'The time it runs' }) : null;
-  const st = view?.status;
+  const st = view?.status, there = g.kind === 'function' ? !!registry()[g.key] : !!autos().workflows.find((w) => w.id === g.name);
   wf.append(h('div', { class: 'fnfacts' },
     h('div', { class: 'trigline' }, switchOf(t), on ? ' On: it starts what it runs when it fires.' : ' Off: it starts nothing until it is turned on.'),
     t.type === 'schedule' ? (tm ? h('div', { class: 'trigline' }, 'Runs at ', timeIn, ' ', h('button', { class: 'quiet tiny trigmove', onclick: () => { const [hh, mm] = (timeIn.value || '').split(':').map(Number); if (Number.isInteger(hh) && Number.isInteger(mm) && (hh !== tm.hour || mm !== tm.minute)) changeTrigger(t.id, { time: { hour: hh, minute: mm } }); } }, 'Move it'), h('span', { style: 'color:var(--dim)' }, ' (the days stay as they are)'))
       : h('div', {}, 'It runs more than once a day (', h('code', {}, t.schedule?.cron ?? ''), '): ask the agent to change when.')) : null,
     h('div', { class: 'agree' }, agreeWords('trigger', t)),
     h('div', { class: 'wfacts' }, h('button', { class: 'tiny quiet danger', 'data-act': 'deltrigger', onclick: (e) => confirmPop(e, `Delete “${head}”?`, `It stops starting ${startsWords(t)}, on the backend and in the project. ${g.kind === 'workflow' ? 'The workflow stays.' : 'The function stays.'}`, 'Delete it', () => changeTrigger(t.id, { remove: true })) }, icon('trash'), 'Delete the trigger')),
-    st ? h('div', { class: 'run' }, `${st.lastFiredAt ? `Last fired ${new Date(st.lastFiredAt).toLocaleString()}` : 'Not fired yet'}${on && st.nextFireAt ? ` · next ${new Date(st.nextFireAt).toLocaleString()}` : ''}${st.fireCount ? ` · ${st.fireCount} time${st.fireCount === 1 ? '' : 's'} in all` : ''}`) : null));
+    st ? h('div', { class: `run ${st.lastResult ? (st.lastResult.ok ? 'ran' : 'refused') : ''}`, title: st.lastFiredAt ? `Last fired ${new Date(st.lastFiredAt).toLocaleString()}` : '' },
+      `${st.lastFiredAt ? `Last fired ${lastRunWords('trigger', t.id)}` : 'Not fired yet'}${on && st.nextFireAt ? ` · next ${new Date(st.nextFireAt).toLocaleString()}` : ''}${st.fireCount ? ` · ${st.fireCount} time${st.fireCount === 1 ? '' : 's'} in all` : ''}`,
+      st.lastFiredAt && there ? h('button', { class: 'quiet tiny openrun', onclick: () => openTriggerRun(t) }, g.kind === 'workflow' ? 'Open that run ▶' : 'Open its last run ↗') : null) : null));
   const headCard = h('div', { class: `step fnstart${on ? '' : ' trigoff'}`, 'data-id': 'trigger', style: `--kind:${FLOW.then}` }, h('div', { class: 'num' }, '1'), h('h3', {}, head, h('span', {}, on ? 'what starts it' : 'off')),
     h('div', { class: 'acts' }), h('div', { class: 'lines' }, ...(t.type === 'db-change' ? [h('span', {}, 'Data type: ', h('code', {}, t.dbChange?.collection ?? '?'))] : t.type === 'schedule' ? [h('span', {}, 'Cron: ', h('code', {}, t.schedule?.cron ?? '?'))] : [h('span', {}, 'Signed with ', h('code', {}, t.webhook?.scheme ?? 'hmac-sha256'))])));
-  const there = g.kind === 'function' ? !!registry()[g.key] : !!autos().workflows.find((w) => w.id === g.name);
   const open = there ? h('button', { class: 'quiet tiny fnopen', onclick: (e) => { e.stopPropagation(); if (g.kind === 'function') openFunction(g.key, { kind: 'auto', auto: { ...selAuto }, title: head }); else openAuto({ kind: 'workflow', id: g.name }, t.id); } }, g.kind === 'function' ? 'Open its steps ↗' : 'Open the workflow ↗') : h('span', { style: 'color:var(--red)' }, `The project has no ${g.kind} called ${g.name}`);
   const targetCard = h('div', { class: 'step', 'data-id': 'target', 'data-target': g.key, style: `--kind:${KIND_COLOUR.bolt}` }, h('div', { class: 'num' }, '2'), h('h3', {}, g.kind === 'workflow' ? autos().workflows.find((w) => w.id === g.name)?.name || g.name : g.name, h('span', {}, g.kind === 'workflow' ? 'a workflow' : 'a cloud function')),
     h('div', { class: 'acts' }), h('div', { class: 'lines' }, open));
@@ -5098,7 +5220,8 @@ function renderAutoWorkflow(w) {
   wf.append(h('div', { class: 'fnfacts' },
     h('div', {}, starts.length ? ['Started by ', ...starts.map((t) => h('button', { class: 'quiet tiny startedby', 'data-trigger': t.id, onclick: () => openAuto({ kind: 'trigger', id: t.id }) }, triggerHead(t, beNow()?.triggers.get(t.id)?.scheduleWords)))] : 'No trigger starts it: the agent (or another workflow) runs it.'),
     h('div', { class: 'agree' }, agreeWords('workflow', w)),
-    h('div', { class: `run ${autoRun?.run ? (failedRun ? 'refused' : 'ran') : ''}` }, autoRun ? autoRun.words ?? runLine(autoRun.run, nameOf) : 'Reading its last run…'),
+    h('div', { class: `run ${autoRun?.run ? (failedRun ? 'refused' : 'ran') : ''}` }, autoRun ? autoRun.words ?? runLine(autoRun.run, nameOf) : 'Reading its last run…',
+      autoRun?.run ? h('button', { class: 'quiet tiny playrun', title: 'Each step lit in the order it ran, a dot along each wire it crossed', onclick: () => playAutoRun() }, '▶ Play the run') : null),
     L.dangling.length ? h('div', { style: 'color:var(--red)' }, `It names ${L.dangling.length === 1 ? 'a step' : 'steps'} it does not have: ${[...new Set(L.dangling.map((d) => d.to))].join(', ')}`) : null,
     // STU-092: changed here, on the backend and in the project together
     h('div', { class: 'wfacts' }, editingUp() ? [
@@ -5112,6 +5235,7 @@ function renderAutoWorkflow(w) {
   const ran = (id) => lit?.has(id) && lit.get(id).status !== 'skipped';
   autoFlow(wf, columns, L.wires.map((x) => ({ ...x, kind: x.kind === 'fail' ? 'fail' : 'then', ran: lit ? ran(x.from) && ran(x.to) : undefined })));
   wf.querySelector('.flowarea').after(h('div', { class: 'flowlegend' }, ...[['then', 'the next step'], ['fail', 'when a step fails']].map(([k, t]) => h('span', {}, h('i', { style: `border-color:${FLOW[k]}` }), t))));
+  if (autoPlay) showPlay();
 }
 /* ---- STU-092: a backend workflow edited in Studio. A click on a step opens its settings on the right, over the backend's
    own step kinds (`GET /admin/workflow-step-kinds`: each kind's params, routes and words); every change is the whole
@@ -7818,6 +7942,7 @@ function switchTab(name) {
   const section = name === 'backend' ? 'workflow' : name;
   for (const s of document.querySelectorAll('main > section.tab')) s.hidden = s.id !== section;
   $('workflow').dataset.mode = name === 'backend' ? 'backend' : 'page';
+  if (name === 'backend' && beNow()) loadAutoBackend(); // P123-GH-TRIGGERSTALE: what it says is asked again on each visit
   $('wfsearch').placeholder = name === 'backend' ? 'Search workflows and functions' : 'Search steps and what they change';
   $('pagepick-l').style.display = $('newpage').style.display = name === 'data' || name === 'styles' || name === 'backend' ? 'none' : '';
   $('widthseg').style.display = name === 'design' ? '' : 'none';
