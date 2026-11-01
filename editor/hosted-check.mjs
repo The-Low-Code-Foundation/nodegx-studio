@@ -103,8 +103,9 @@ try {
   ok(drew, 'Privacy lists the app\'s types, read from the map across origins', drew ? undefined : await ev(`${P}.querySelector('#privmain')?.textContent`));
   if (drew) {
     await click('#privtypes .row[data-type=Task]');
-    const said = await until(`${P}.querySelector('#privmain select[data-rule=read]') && ${P}.querySelector('#privmain').textContent`, 15000);
-    ok(said && /Task/.test(said), 'a type says who can reach it, in the map\'s words, with the rule to change', String(said).slice(0, 160));
+    // Richard, 2026-10-31: Privacy draws the backend manager's Permissions grid (s35), where the map's select stood
+    const said = await until(`${P}.querySelector('#privmain .pgrid input[data-cell="find|everyone"]') && ${P}.querySelector('#privmain').textContent`, 15000);
+    ok(said && /Task/.test(said), 'a type says who can reach it, in the manager\'s grid, with the rule to change', String(said).slice(0, 160));
     await shot('privacy');
   }
 

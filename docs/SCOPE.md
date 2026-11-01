@@ -2154,6 +2154,34 @@ the sentence, never the code. *Both* and *JavaScript* are unchanged.
   [look/stu-098-both-text.png](look/stu-098-both-text.png) (Greenhouse's Room line). What a *more…* phrase inserts that has no word in `sentence.mjs`
   (`.length`, `.toUpperCase()`) is shown as code in the sentence; words for those were not added.
 
+## Richard's Greenhouse notes, second round (2026-10-31) — s35
+
+Richard tested Studio after s27–s34 and sent nine notes in one sitting, then three more on privacy. His words, then
+what happened. Each defect is a `P123-GH-*` row in NodeGX's ledger.
+
+| # | Richard | Now |
+|---|---|---|
+| 1 | *"I still can't edit backend function steps, it says I have to ask the agent"* | **built** STU-099 (P123-GH-FNREADONLY): a function's step opens its settings on the right (a script or expression in a code box, other plain settings as fields); each change is saved, then the functions are put on the development backend (`/api/functions/deploy`, `lib/publish.mjs` `deployFunctionsToDev`). Its wires, and settings that are lists, are not edited |
+| 2 | *"I still don't see the workflows on the design page … it just says 'nothing here that studio can't edit'"* | **fixed** P123-GH-LOGICNOFLOWS: Logic on this page lists the page's workflows first, each opening in Workflow; *Open in Workflow →* |
+| 3 | does the Design preview give hover animations, clicks? | answered: with *Use the app* on, the preview is the running app (hover, press, clicks, workflows); off, a click selects |
+| 4 | *"Rows/Plant row 2 … it's blank because there's no plant data"* | **fixed** P123-GH-ROWBLANK: a row opened on its own shows the type's latest row from App data (or each field's name), said above the element list; nothing written |
+| 5 | the Composer shows `[0]` for *first item*, `slice()` for *items from* | **fixed** P123-GH-PHRASECODE: `sentence.mjs` `phraseReads` reads every phrasebook phrase back as its button's words (`[plants]:first item`, `[plants]:items from # 4`) |
+| 6 | *"'who can reach what' still shows in dark mode with all the funky colours … not coherent"* | **fixed in the map's source** P123-GH-MAPSTYLE (NodeGX P124 `editor/public/app.js`): the light look draws Data model's dotted ground and plain cards, no nebulae or stars. Reaches Studio with the next `@nodegx/backend-map` (Richard's) |
+| 7 | opening a run hides the left list | **fixed** P123-GH-LISTHIDDEN: the Backend tab keeps its list beside whatever it opened |
+| 8 | labels cut off; both side panels expandable, the preview coping | **fixed** P123-GH-LABELCUT: a label above its field; Design's side panels widen by their edge (kept per viewer, double-click resets) |
+| 9 | *"I can see the groups column … when I open a user I can't edit it … privacy is another 'the agent does it' page"* | **fixed** P123-GH-NOGROUPS: Privacy makes and deletes groups and lists their people; a person's panel ticks their groups |
+| 10 | *"we had a privacy rules editor that was pretty visual … Can we not just reuse that?"* | **built**: Privacy draws the backend manager's own Permissions grid from its own model (`vendor/permissions.js`, built from nodegx-backend `admin/app/permissionsModel.ts` + `ruleVocabulary.ts`, unchanged since the vendored commit): list / open / create / change / delete ticked against the app's standard, everyone, signed in, no one and each group; its templates; *Rows belong to whoever made them*. Saved through the manager's route, then that type's entry into `nodegx.security.json` |
+| 11 | *"Maybe we should actually link to the admin panel from Studio 'for advanced users'?? We'd need to provide the credentials"* | **built**: *Backend manager ↗* on a type's Privacy page: `serve.mjs` `/api/backend-admin` answers with a redirect to the backend's `/_admin#token=…&route=…` (the editor's hand-off), so it opens signed in and the credential is never on Studio's page |
+| 12 | *"Can we deal with P127-BKO006-ADMINTERMINAL here?"* | **fixed (NodeGX side, unreleased)**: `get_backend_admin_dashboard` no longer calls its URL the one to send a human to, and answers `forAPerson` (do it yourself, or Studio's Privacy and App data → User). Studio's half is notes 9–11 |
+
+**Also fixed:** P123-STU-NOFNDEPLOY — *Start a backend* now puts the app's cloud functions on it (serve.mjs, after the
+answer). `editor/vocabulary.json` says a function's settings are edited in Studio and names the Backend tab's lists
+(re-pinned in NodeGX's MCP).
+
+**Found:** the data gate's own Privacy and App data calls, with the live sections after them, met the backend's admin
+limit (300 a minute, "Rate limit exceeded for admin requests"); the group section runs last, after a minute's wait.
+Filed P123-GH-ADMINRATE (a person's reach not counted).
+
 ## Rulings open
 
 | id | question | from |

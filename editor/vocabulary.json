@@ -53,12 +53,13 @@
     "insides": ["Static Data", "Component Outputs"]
   },
   "readOnly": {
-    "$comment": "Drawn whole and read only: a cloud function's steps (Workflow, On the backend) and the wiring underneath a page (Design, Logic on this page).",
+    "$comment": "Drawn whole: a cloud function's steps (Backend, Functions: each step's settings and script are edited there and put on the backend; its wires are not) and the wiring underneath a page (Design, Logic on this page: read only).",
     "componentPrefix": "__cloud__/"
   },
   "subTabs": {
     "design": ["Elements on this page", "Logic on this page", "Page data"],
-    "workflow": ["Workflows on this page", "On the backend"],
+    "workflow": ["Workflows on this page"],
+    "backend": ["On its own", "Functions"],
     "data": ["Data types", "Privacy", "App data", "Option sets", "Map"],
     "styles": ["Styles"]
   }

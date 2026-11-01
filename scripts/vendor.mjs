@@ -14,6 +14,8 @@
  *                         prototype's build.sh bundles them
  *   fields.js             the backend manager's words for a field (nodegx-backend admin/app/fieldKinds.ts: Text, Number,
  *                         Yes / No, …, Choice as a declared check), as an ES module for the Data tab (STU-061)
+ *   permissions.js        the backend manager's permissions grid (nodegx-backend admin/app/permissionsModel.ts and
+ *                         ruleVocabulary.ts: who may list, open, create, change and delete, ticked), for Privacy
  *   backend.cjs           the MCP server's provisioning and runtime record, and the backend's policy validator (lib/backend.mjs)
  *   agent.cjs             the NodeGX editor's MCP front door, registration and writer of `.mcp.json` (lib/agent.mjs)
  *   NODEGX.json           the commit, the npm versions it sits beside, and every file's sha-256
@@ -29,7 +31,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { builtinModules } from 'node:module';
 import { join, relative, sep } from 'node:path';
-import { fieldsBundle, kit, nodegxRepo, ORBIT, studioRoot, vendorDir } from '../lib/nodegx.mjs';
+import { fieldsBundle, permissionsBundle, kit, nodegxRepo, ORBIT, studioRoot, vendorDir } from '../lib/nodegx.mjs';
 
 const MANIFEST = join(vendorDir, 'NODEGX.json');
 const BUILTIN = new Set(builtinModules);
@@ -89,6 +91,7 @@ const bundles = {
   'look.js': { entryPoints: [join(repo, 'packages/nodegx-canvas-look/src/index.ts')], bundle: true, format: 'esm', platform: 'browser', logLevel: 'warning' },
   'specs.js': { entryPoints: [join(repo, ORBIT, 'specs-entry.ts')], bundle: true, format: 'esm', platform: 'browser', minify: true, logLevel: 'warning' },
   'fields.js': fieldsBundle(repo),
+  'permissions.js': permissionsBundle(repo),
   'backend.cjs': backend.bundleOptions(repo, null),
   'agent.cjs': agent.bundleOptions(repo, null)
 };

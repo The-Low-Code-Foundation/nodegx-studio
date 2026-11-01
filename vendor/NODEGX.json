@@ -13,13 +13,14 @@
     "@nodegx/mcp": "0.2.8",
     "@nodegx/preview": "0.2.8"
   },
-  "sources": 235,
+  "sources": 237,
   "files": {
     "agent.cjs": "5c246ab8a5d657a1f786702940eef0d790d4e696639b446b7d6dde557e78f68f",
     "backend.cjs": "c8d49228cbe827dc9e2d6693842ca12637ed6596827ae905fd4cf8346354faf9",
     "docs/CANON.md": "b74e0a1d6494e3077073b70d01409ac366499c8abbf416a7c83cf5f0930bca25",
     "fields.js": "86e99b4cf706b4bb9cb5c54c9911762214ddca06a8871164ac956d1fdae3449e",
     "look.js": "0df321ba069438bdb215cc1276249dd997b221cd51940f80c830515c91a82c8c",
+    "permissions.js": "06489b96571be770817ee3701a57241da0174f0228c2aa0dd71fda221287854d",
     "phrasebook/rows.js": "fef66fcff1b2c7e683f39672745c59004431a0c94405ebeb5496dd0d985de560",
     "specs.js": "ee2a7887f55c8287c4dc6b8f515a52713a566d4d4a5d69aadf9f0c3bbd8ab29d",
     "templates/pixel-game/components/_registry.json": "de0875f75e5144a3fa7cccdcadb87c1d12be6b9e589286f3b0d60f3ec18a0139",

@@ -31,6 +31,7 @@
  *   POST /api/live-promote      { allowDestructive } Deploy to live; refused with the plan when it would lose something
  *   POST /api/live-copy         { from: 'development' | 'live', types: [], dryRun } rows from one to the other
  *   GET  /fields.js        STU-061: the backend manager's field kinds (vendor/fields.js, or bundled from NODEGX_REPO)
+ *   GET  /permissions.js   the backend manager's permissions grid model (vendor/permissions.js, or bundled the same way)
  *   GET  /app              P128 S7 (STU-080): Preview, the app alone, full window, drawn again on each change to the project
  *   GET  /api/canon        P128 S5 (STU-083): NodeGX's `docs/CANON.md` as vendored (or the checkout's), which Help draws
  *   GET  /api/agent        STU-005: Claude Code and this folder (`lib/agent.mjs` stateOf): `{ state, serverName, command, … }`
@@ -38,6 +39,8 @@
  *   GET  /api/images       STU-051: every image file in the project folder, `[path]`, for the image popover
  *   POST /api/asset?name=x the request's bytes as an image under `assets/` (the NodeGX editor's projectAssets.ts:
  *                          made unique before the extension, `logo-1.png`), answering `{ path }`
+ *   GET  /api/backend-admin?route=/permissions/X  the backend's own manager, signed in: a redirect to its /_admin#token=…
+ *   POST /api/functions/deploy     STU-099: the app's cloud functions onto its development backend (after a step changed)
  *   POST /api/automations/workflow STU-092: { workflow, remove?, trigger?, client } a backend workflow saved (or removed with
  *                          `remove: id`), and a new trigger for it, on the backend and in `nodegx.automations.json` together
  *   POST /api/automations/trigger  P127 BKO-005: { id, enabled?, time?: { hour, minute }, remove?, client } one trigger turned on or
@@ -57,7 +60,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, s
 import http from 'node:http';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fieldsBundle, kit, nodegxRepo, studioRoot } from '../lib/nodegx.mjs';
+import { fieldsBundle, kit, nodegxRepo, permissionsBundle, studioRoot } from '../lib/nodegx.mjs';
 import * as backends from '../lib/backend.mjs';
 import * as lives from '../lib/live.mjs';
 import * as agent from '../lib/agent.mjs';
@@ -430,6 +433,18 @@ async function fieldsModule() {
   return readFileSync(out);
 }
 
+/** The backend manager's permissions grid model, from vendor/ or bundled once from the checkout (as the field kinds). */
+let permissionsFile = kit.permissions;
+async function permissionsModule() {
+  if (permissionsFile) return readFileSync(permissionsFile);
+  const out = join(studioRoot, '.kit', 'permissions.js');
+  const { buildSync } = await import(join(nodegxRepo, 'node_modules/esbuild/lib/main.js'));
+  mkdirSync(dirname(out), { recursive: true });
+  buildSync({ ...permissionsBundle(nodegxRepo), outfile: out });
+  permissionsFile = out;
+  return readFileSync(out);
+}
+
 let mapNow = null; // { key, handle }: one map per backend and credential
 async function backendMap() {
   if (!(backend.phase === 'running' || backend.phase === 'adopted')) {
@@ -616,6 +631,7 @@ const server = http.createServer(async (req, res) => {
       catch (err) { return json(404, { error: `no phrasebook at ${kit.phrasebook}: ${err.message}` }); }
     }
     if (url.pathname === '/fields.js') return send(200, await fieldsModule(), types['.js']);
+    if (url.pathname === '/permissions.js') return send(200, await permissionsModule(), types['.js']);
     if (url.pathname === '/look.js' || url.pathname === '/specs.js') return send(200, readFileSync(url.pathname === '/look.js' ? kit.look : kit.specs), types['.js']);
     // the app's frame gets Studio's probe first in its head (what it asks the backend, which page it is on): STU-011
     if (url.pathname === '/runtime/index.html') {
@@ -725,6 +741,11 @@ const server = http.createServer(async (req, res) => {
           setBackend(made);
           return made;
         });
+        // P123-STU-NOFNDEPLOY: a new backend runs no function until one is deployed to it, so every workflow that calls
+        // one failed "not found". Put the app's functions on it now, after the answer (it takes seconds; nothing waits)
+        if (isUp(up)) import('../lib/publish.mjs').then(({ deployFunctionsToDev }) => deployFunctionsToDev(projectDir))
+          .then((r) => console.log(`serve: the app's cloud functions on the new backend: ${r.status}${r.reason ? ` (${r.reason})` : ''}`))
+          .catch((e) => console.log(`serve: the app's cloud functions were not put on the new backend: ${e.message}`));
         return json(200, up);
       } catch (err) {
         return json(409, { error: err.message });
@@ -751,6 +772,11 @@ const server = http.createServer(async (req, res) => {
       }
     }
     if (url.pathname === '/api/images') return json(200, projectImages(projectDir));
+    // STU-099: the cloud functions onto the development backend, after a step changed in Studio
+    if (url.pathname === '/api/functions/deploy' && req.method === 'POST') {
+      try { const { deployFunctionsToDev } = await import('../lib/publish.mjs'); return json(200, await deployFunctionsToDev(projectDir)); }
+      catch (e) { return json(200, { status: 'failed', reason: e.message }); }
+    }
     if (url.pathname === '/api/functions') { try { return json(200, await functionTouches()); } catch (e) { return json(200, { functions: [], words: `What each function reads and writes could not be read: ${e.message}` }); } }
     if (url.pathname === '/api/asset' && req.method === 'POST') {
       const name = url.searchParams.get('name') || '';
@@ -783,6 +809,18 @@ const server = http.createServer(async (req, res) => {
       // ask it across origins like every other route here. Set first, so they join whatever it writes.
       for (const [k, v] of Object.entries(CORS)) res.setHeader(k, v);
       return map.handle(req, res, url.pathname.slice('/backend-map'.length));
+    }
+    // Richard, 2026-10-31: the backend's own manager "for advanced users", opened signed in. The manager takes its
+    // credential in the fragment (#token=…&route=…, as the NodeGX editor opens it): a fragment never reaches a server or
+    // its log, and Studio's page never holds the credential (this answers with a redirect). P127-BKO006-ADMINTERMINAL:
+    // without it, its first sign-in needed the credential from a file, which only a terminal reads.
+    if (url.pathname === '/api/backend-admin' && req.method === 'GET') {
+      const endpoint = isUp(backend) ? backend.endpoint : null;
+      const token = endpoint && backend.id ? await backends.adminTokenOf(backend.id) : null;
+      if (!token) return send(409, 'The backend manager opens signed in only for a backend running on this computer. Data → Start a backend.', 'text/plain; charset=utf-8');
+      const route = url.searchParams.get('route');
+      const hand = `#token=${encodeURIComponent(token)}${route && /^\/[^/#]/.test(route) ? `&route=${encodeURIComponent(route)}` : ''}`;
+      return res.writeHead(302, { location: `${endpoint.replace(/\/$/, '')}/_admin${hand}`, 'cache-control': 'no-store' }).end();
     }
     if (url.pathname.startsWith('/api/backend/') || url.pathname.startsWith('/api/live/')) {
       const isLive = url.pathname.startsWith('/api/live/');

@@ -306,6 +306,9 @@ try {
     await asType('String'); await offered();
     await shot('composer-then-menu');
     await clickText('.menu.phrases .item', ':uppercase'); await wait(150);
+    // Richard, 2026-10-31: the Composer view showed `[0]` and `slice()`: a phrase reads back as its button's words
+    const said = await b.evaluate(`document.querySelector('.composer .sentence').textContent`);
+    ok(said.includes(':uppercase') && !/toUpperCase|\(\)/.test(said), 'in the Composer view the phrase reads as its button, ":uppercase", no code', said);
     await b.evaluate(`[...document.querySelectorAll('.composer .seg button')].find(b => b.dataset.m === 'js').click()`); await wait(100);
     const upper = await b.evaluate(`document.querySelector('.composer textarea').value`);
     ok(/^(\w+)\.toUpperCase\(\) \+ " world"\s*$/.test(upper), 'a text\'s :uppercase wraps the chip where it stands: [state].toUpperCase() + " world"', upper);
@@ -1379,7 +1382,15 @@ try {
     if ((await page()) !== 'Pages/Sign in') { const n0 = await shows(); await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Pages/Sign in'; s.dispatchEvent(new Event('change')); })()`); await rebuilt(n0).catch(() => {}); await wait(500); }
     const hashes = () => { const m = {}; (function walk(d, rel) { for (const e of readdirSync(d, { withFileTypes: true })) { if (e.name.startsWith('.')) continue; const p = join(d, e.name), r = rel ? `${rel}/${e.name}` : e.name; if (e.isDirectory()) walk(p, r); else m[r] = createHash('sha1').update(readFileSync(p)).digest('hex'); } })(project, ''); return m; };
     const signNodes = onDisk(SIGN + 'nodes.json').nodes, signWires = onDisk(SIGN + 'connections.json').connections;
-    const logicRows = await b.evaluate(`JSON.stringify([...document.querySelectorAll('#logiclist .row')].map(r => r.dataset.part))`).then(JSON.parse);
+    const logicRows = await b.evaluate(`JSON.stringify([...document.querySelectorAll('#logiclist .row[data-part]')].map(r => r.dataset.part))`).then(JSON.parse);
+    // Richard, 2026-10-31: the page's workflows are in the list too, above the parts, and each opens in the Workflow tab
+    const flowRows = await b.evaluate(`JSON.stringify([...document.querySelectorAll('#logiclist .row[data-flow]')].map(r => ({ flow: r.dataset.flow, text: r.innerText })))`).then(JSON.parse);
+    const firstFlow = await b.evaluate(`(() => { const r = [...document.querySelectorAll('#logiclist .row')]; return r.findIndex((x) => x.dataset.flow) < r.findIndex((x) => x.dataset.part); })()`);
+    ok(flowRows.length >= 2 && flowRows.every((r) => /\nWhen .+\n\d+ steps?$/.test(r.text)) && flowRows.some((r) => /When Sign-in card: Sign in on click/.test(r.text)) && firstFlow, '"Logic on this page" lists the page\'s workflows first, each with what starts it and its steps (the sign-in card\'s Sign in among them)', flowRows);
+    await b.evaluate(`document.querySelector('#logiclist .row[data-flow]').click()`); await wait(400);
+    const flowOpened = await b.evaluate(`({ tab: document.querySelector('#rail [aria-selected=true]')?.dataset.tab, back: document.querySelector('#steps .cardnav .back')?.textContent, steps: [...document.querySelectorAll('#steps .step h3')].length })`);
+    ok(flowOpened.tab === 'workflow' && flowOpened.steps > 0 && /←/.test(flowOpened.back || ''), 'a workflow row opens that workflow in the Workflow tab, with Back to Design', flowOpened);
+    await b.clickSel('[data-tab=design]'); await wait(400);
     // on disk: the User node the template has, the Screen Resolution and the placed Greeting the gate added; not the rule
     // Expression (the Conditional tab's), the sign-in steps, or any element
     ok(JSON.stringify(logicRows) === JSON.stringify(['siUser', 'ruleScreen', 'grWords']), '"Logic on this page" lists the parts Studio does not edit (a User node, a Screen Resolution, a placed logic component), not the rule it reads, the steps or the elements', logicRows);
@@ -1494,6 +1505,22 @@ try {
     const heard = JSON.parse(await b.evaluate(`JSON.stringify(${ctx}.getTraceEvents(${before}).filter(e => e.fromNode === ${JSON.stringify(group?.id)}).map(e => [e.fromPort, e.value]))`));
     const traced = JSON.parse(await b.evaluate(`JSON.stringify(${ctx}.getTraceEvents(${before}).slice(0, 8).map(e => [e.fromNode, e.fromPort, e.toNode, e.toPort].join(' ')))`));
     ok(milk && heard.some(([p, v]) => p === 'itemActionItemId' && v === JSON.stringify(milk)) && heard.some(([p]) => p === 'itemOutputSignal-Click'), 'in the app, a click on the "Buy milk" row sends that note\'s id, then the event', { milk, heard, matches, traced, app: (await appText()).slice(0, 200) });
+    // Richard, 2026-10-31: "Edit plant row" opened a blank page: the row on its own was given no values. Opened on its
+    // own it is shown with the type's latest row in App data, and says so
+    {
+      const latest = (await (await fetch(`http://127.0.0.1:${backendPort}/classes/Note?limit=1&order=-updatedAt`, { headers: { 'X-Parse-Application-Id': 'studio_check' } })).json()).results?.[0];
+      const n2 = await shows();
+      await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = ${JSON.stringify(rowKey)}; s.dispatchEvent(new Event('change')); })()`);
+      await rebuilt(n2).catch(() => {});
+      await b.until(`!document.getElementById('samplenote').hidden && /from App data/.test(document.getElementById('samplenote').textContent)`, 6000).catch(() => {});
+      await wait(1200);
+      const shown = { text: await appText(), note: await b.evaluate(`document.getElementById('samplenote').textContent`) };
+      ok(latest?.title && shown.text.includes(latest.title) && /sample Note from App data/.test(shown.note), 'a repeating group\'s row opened on its own is shown with a Note from App data, and says so', { title: latest?.title, ...shown, text: shown.text.slice(0, 120) });
+      ok(!onDisk(`components/${rowKey}/nodes.json`).nodes.some((n) => JSON.stringify(n.parameters || {}).includes(latest?.title)), 'the sample is not written into the row', rowKey);
+      const n3 = await shows();
+      await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Pages/Sign in'; s.dispatchEvent(new Event('change')); })()`);
+      await rebuilt(n3).catch(() => {}); await wait(800);
+    }
   }
   // STU-090: Bubble's "Type of content" and "Data to send". A new page about one Note; the row click goes to it and sends
   // the clicked row; in the app the page shows that note. The page's type changed, what Sign in sends follows

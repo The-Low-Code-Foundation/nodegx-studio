@@ -239,7 +239,15 @@
   .list { padding: 0 6px 12px; }
 
   /* ---- Design ---- */
-  #design { grid-template-columns: 260px 1fr 360px; }
+  #design { grid-template-columns: var(--lw, 260px) minmax(0, 1fr) var(--rw, 360px); position: relative; }
+  /* Richard, 2026-10-31: both side panels widen by their edge; the page in Fill follows the room left */
+  .resizer { position: absolute; top: 0; bottom: 0; width: 7px; z-index: 6; cursor: col-resize; touch-action: none; }
+  .resizer::after { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 1px; background: transparent; transition: background .12s; }
+  .resizer:hover::after, .resizer.dragging::after { background: var(--accent); width: 2px; left: 2px; }
+  #design > .resizer.l { left: calc(var(--lw, 260px) - 4px); }
+  #design > .resizer.r { right: calc(var(--rw, 360px) - 4px); }
+  body.resizing, body.resizing * { cursor: col-resize !important; user-select: none !important; }
+  body.resizing iframe { pointer-events: none; }
   .palette { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 12px 12px; }
   .palette button { text-align: left; padding: 6px 8px; display: flex; gap: 8px; align-items: center; border-color: var(--line); color: var(--ink-2); }
   .palette button:hover { border-color: var(--accent-line); color: var(--ink); }
@@ -248,7 +256,7 @@
   .tree .row { padding-top: 4px; padding-bottom: 4px; }
   .tree .row svg.i { width: 14px; height: 14px; color: var(--muted); }
   .tree .row[aria-selected=true] svg.i { color: var(--accent-ink); }
-  .props .field { grid-template-columns: 96px 1fr 22px; }
+  .props .field { grid-template-columns: 96px 1fr 22px; } /* labels above: see "Richard, 2026-10-31" below */
   .props .field .bolt { padding: 2px; width: 22px; height: 22px; display: grid; place-items: center; opacity: .25; }
   .props .field:hover .bolt, .props .field .bolt:focus { opacity: 1; }
   .props .field .bolt svg.i { width: 13px; height: 13px; }
@@ -288,7 +296,18 @@
   .sec2 .side { border-top: 1px dashed var(--line); padding-top: 4px; }
   .sec2 .endrow { display: flex; justify-content: flex-end; }
   .props .field .ctl { min-width: 0; }
-  .props .sec2 .field { grid-template-columns: 72px 1fr 22px; }
+  .props .sec2 .field { grid-template-columns: minmax(0, 1fr) 22px; }
+  /* Richard, 2026-10-31: labels were cut off ("Content fo…", "Placehold…"). A label sits on its own line above its field,
+     whole, wrapping if it must; a checkbox keeps its label beside it, after the box */
+  .props .field { grid-template-columns: minmax(0, 1fr) 22px; row-gap: 3px; padding: 4px 0; }
+  .props .field > label { grid-column: 1 / -1; white-space: normal; overflow: visible; line-height: 1.3; color: var(--ink-2); font-size: 11.5px; font-weight: 500; }
+  .props .field > label:empty { display: none; }
+  .props .field .from { grid-column: 1; }
+  .props .field > .badge { grid-column: 1 / -1; justify-self: start; }
+  .props .field.bool { grid-template-columns: auto minmax(0, 1fr) 22px; column-gap: 8px; }
+  .props .field.bool > label { grid-column: 2; grid-row: 1; font-size: 12px; font-weight: 400; }
+  .props .field.bool > input[type=checkbox] { grid-column: 1; grid-row: 1; margin: 0; }
+  .props .field.bool > .bolt { grid-column: 3; grid-row: 1; }
   .len { display: flex; align-items: center; gap: 4px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--panel); padding: 0 6px; min-width: 0; height: 28px; }
   .len input { border: 0; padding: 0; height: 26px; min-width: 0; width: 100%; background: transparent; box-shadow: none; }
   .len input:focus { outline: none; }
@@ -421,6 +440,12 @@
   #workflow.inspecting { grid-template-columns: 280px 1fr 360px; }
   #workflow.card.inspecting { grid-template-columns: 1fr 360px; }
   #wfinspect[hidden] { display: none; }
+  #wfinspect textarea.code { width: 100%; box-sizing: border-box; font-family: var(--mono); font-size: 12px; line-height: 1.45; resize: vertical; tab-size: 2; }
+  .fnfacts .fndeploy { color: var(--dim); }
+  .fnfacts .fndeploy.done { color: #15803d; }
+  .fnfacts .fndeploy.failed { color: var(--danger); }
+  .fnflow .step { cursor: pointer; }
+  .fnflow .step.picked { outline: 2px solid var(--accent); outline-offset: 2px; }
   #wfinspect .head .type { display: flex; align-items: center; gap: 6px; }
   #wfinspect .what { margin: 0; padding: 10px 12px; color: var(--ink-2); font-size: 12.5px; line-height: 1.5; border-bottom: 1px solid var(--line); background: var(--panel-2); }
   #wfinspect .stepkind { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; color: #fff; flex: none; }
@@ -709,6 +734,28 @@
   .mapbar .seg button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
   .mapbar .hint { padding: 0; flex: 1; min-width: 0; }
   /* the data model: a type a card of its fields; a Link a purple wire to the type it points at (dashed: many) */
+  .pgrid table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  .pgrid th, .pgrid td { border-bottom: 1px solid var(--line); padding: 7px 10px; text-align: center; }
+  .pgrid tr > th:first-child { text-align: left; font-weight: 600; white-space: nowrap; }
+  .pgrid tr > th:first-child small { margin-left: 6px; color: var(--muted); font-family: var(--mono); font-weight: 400; font-size: 11px; }
+  .pgrid th { color: var(--ink-2); font-weight: 500; font-size: 12px; }
+  .pgrid th.grp { color: #6d28d9; }
+  .pgrid td small { display: block; color: var(--muted); font-size: 10.5px; }
+  .pgrid td.implied input { opacity: .45; }
+  .pgrid td.note { text-align: left; font-size: 11.5px; }
+  .pgrid .tpls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
+  .pgrid .owns { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0 8px; }
+  .pgrid .owns small { display: block; color: var(--muted); font-weight: 400; }
+  .pgrid .bar { display: flex; gap: 8px; align-items: center; }
+  .pgrid .bar button:disabled { opacity: .45; cursor: default; }
+  [data-groups] .gnew button { white-space: nowrap; flex: none; }
+  [data-groups] .groups { display: grid; gap: 6px; margin: 6px 0 10px; }
+  [data-groups] .grow { border: 1px solid var(--line); border-radius: var(--r); padding: 6px 10px; }
+  [data-groups] .ghead { display: flex; align-items: center; gap: 8px; }
+  [data-groups] .ghead button { margin-left: auto; }
+  [data-groups] .gnew, .f .gnew { display: flex; gap: 6px; align-items: center; margin: 4px 0; }
+  .f .gpick { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .f .gpick label { display: inline-flex; gap: 5px; align-items: center; font-weight: 400; }
   #datamodel { flex: 1; min-height: 0; overflow: auto; background: var(--bg); background-image: radial-gradient(rgba(23,27,34,.13) 1px, transparent 1px); background-size: 22px 22px; }
   .dm { position: relative; padding: 28px 32px 56px; min-height: 100%; box-sizing: border-box; }
   .dm svg.links { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; z-index: 0; } /* behind the cards: a wire crossing a card never hides its fields */
@@ -835,6 +882,12 @@
   #logiclist .row svg { width: 14px; height: 14px; flex: none; color: var(--muted); }
   #logiclist .row .t { margin-left: auto; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
   #logic-title button { margin-left: auto; }
+  #logiclist .lgroup { display: flex; align-items: center; gap: 6px; padding: 8px 8px 2px; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  #logiclist .lgroup button, #logiclist .lgroup .hintx { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 400; white-space: nowrap; }
+  #logiclist .row .two { display: flex; flex-direction: column; min-width: 0; }
+  #logiclist .row .two > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #logiclist .row .two small { color: var(--muted); font-size: 11.5px; }
+  #logiclist .flowrow svg { color: #c2410c; }
   .menu.partcard { min-width: 320px; max-width: 380px; padding: 12px 14px; }
   .partcard .phead { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
   .partcard .phead svg { width: 16px; height: 16px; color: var(--muted); }
@@ -973,6 +1026,7 @@
         <h3 class="sec"><span id="pagedata-title">Page data</span> <button class="tiny primary" id="newpagedata" title="A search the page runs once, named, that any element can read"><svg class="i"><use href="#i-plus"/></svg>New</button></h3>
         <div class="pagedata list" id="pagedata"></div>
         <h3 class="sec" id="elements-title">Elements on this page</h3>
+        <div class="hint" id="samplenote" hidden></div>
         <div class="tree list" id="tree"></div>
         <h3 class="sec" id="logic-title"><span>Logic on this page</span> <button class="tiny quiet" id="wiringbtn" title="The page as it really is: every node and wire, read only">Wiring</button></h3>
         <div class="list" id="logiclist"></div>
@@ -1121,6 +1175,7 @@ import { TYPES, TYPE_WORDS, dictionaryType, applyPhrase } from './phrases.mjs';
 import * as S from './sentence.mjs';
 import { OPERATORS, createEdits, updateEdits, removeEdits, readItems, readFrom, readersOf, itemOfSource, sameAs, signature, describe, lastRun, queriesOnOpen, requestMatches, readPageThing, pageThingEdits, sendsFollow, thingParam, thingName } from './pagedata.mjs';
 import * as F from './fields.js';
+import * as PM from './permissions.js'; // the backend manager's own permissions grid model (vendor/permissions.js)
 import { typesOf, driftOf, projectColumn, declaredRules, cellWords, editText, toWire, searchWhere, rowLabel, pageWords, rowsQuery } from './data.mjs';
 import { fieldReaders, typeReaders, renameField, renameType, appFields } from './rename.mjs';
 import { LANES, buildTimeline, lastRunOf, msText, shotAt, stepValues } from './timeline.mjs';
@@ -1611,6 +1666,36 @@ function firstCopyValues(key, declared) {
   }
   return {};
 }
+/* Richard, 2026-10-31: a repeating group's row opened on its own ("Rows/Plant row 2") drew nothing: the row's values come
+   from the list, and on its own it is given none. A row (its Component Inputs named "One <Type>") is shown with a sample:
+   the type's latest row in App data, or, with none, each text field's name as its words. Each copy in the app still
+   shows its own row; nothing here is written to the project. */
+const sampleRows = new Map(); // type → { row } | null (no row) | 'asking'
+const rowTypeOf = (key) => { try { return store.readComponent(key).files.nodes.nodes.find((n) => n.type === 'Component Inputs')?.label?.match(/^One (.+)$/)?.[1] ?? null; } catch { return null; } };
+const sampleValue = (v) => (v && typeof v === 'object' ? (v.__type === 'Date' ? v.iso : v.__type === 'Pointer' ? v.objectId : v.__type === 'File' ? v.url : v) : v);
+function rowSample(key) {
+  const type = rowTypeOf(key); if (!type) return null;
+  const ports = store.readComponent(key).files.nodes.nodes.find((n) => n.type === 'Component Inputs')?.ports ?? [];
+  if (!sampleRows.has(type)) {
+    sampleRows.set(type, 'asking');
+    api(`/classes/${encodeURIComponent(type)}?limit=1&order=-updatedAt`).then((j) => sampleRows.set(type, j?.results?.[0] ? { row: j.results[0] } : null)).catch(() => sampleRows.set(type, null))
+      .finally(() => { if (pageKey === key && !host) { rebuild(0); renderSampleNote(); } });
+  }
+  const got = sampleRows.get(type);
+  if (got?.row) return { type, row: got.row, values: Object.fromEntries(ports.filter((q) => got.row[q.name] !== undefined).map((q) => [q.name, sampleValue(got.row[q.name])])) };
+  const words = (n) => n.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase());
+  return { type, row: null, values: Object.fromEntries(ports.filter((q) => q.name !== 'id' && !/picture|image|photo|avatar|url/i.test(q.name) && ['string', 'number'].includes(q.type)).map((q) => [q.name, q.type === 'number' ? 3 : words(q.name)])) };
+}
+function renderSampleNote() {
+  const box = $('samplenote'); if (!box) return;
+  const s = !host && !isPage(pageKey) ? rowSample(pageKey) : null;
+  box.hidden = !s;
+  if (!s) return;
+  const named = s.row && (s.row.name ?? s.row.title ?? Object.values(s.row).find((v) => typeof v === 'string' && v.length < 40 && !/^[A-Za-z0-9]{10}$/.test(v)));
+  box.textContent = sampleRows.get(s.type) === 'asking' ? `Asking App data for a ${s.type} to show it with…`
+    : s.row ? `Shown with a sample ${s.type} from App data${named ? `: “${named}”` : ''}. In the app each copy shows its own.`
+      : `App data has no ${s.type} yet, so it is shown with each field's name. In the app each copy shows its own.`;
+}
 /**
  * What the preview is given: the project's files, and while a reusable is open on its own, the canvas page holding one
  * copy of it. A reusable edited on its page (`host`) is shown on that page: the app starts there.
@@ -1626,7 +1711,7 @@ function previewFiles() {
     // a copy takes only what its reusable declares (STU-014-INSTANCEHIDE): an imported reusable's shown/hidden comes from its copy
     const declared = new Set(target.filter((n) => n.type === 'Component Inputs').flatMap((n) => (n.ports || []).map((p) => p.name)));
     // the copy shows what the first placed copy is given (a grouped row's icon and text), else it draws them empty
-    const parameters = { ...firstCopyValues(pageKey, declared), ...Object.fromEntries(['mounted', 'visible'].filter((p) => declared.has(p)).map((p) => [p, true])) };
+    const parameters = { ...(rowSample(pageKey)?.values ?? {}), ...firstCopyValues(pageKey, declared), ...Object.fromEntries(['mounted', 'visible'].filter((p) => declared.has(p)).map((p) => [p, true])) };
     const cid = '00000000-0000-5000-8000-0000000c4a75', at = '2026-10-19T00:00:00.000Z', dir = `components/${CANVAS}/`;
     out[dir + 'component.json'] = JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/component-v2.json', id: cid, name: 'Reusable canvas', path: '/' + CANVAS, type: 'page', created: at, modified: at, modifiedBy: 'nodegx-studio' });
     out[dir + 'nodes.json'] = JSON.stringify({ $schema: 'https://opennoodl.dev/schemas/nodes-v2.json', componentId: cid, version: 1, visualRoots: ['studioCanvasPage'], nodes: [
@@ -1970,6 +2055,7 @@ function renderPagePick() {
   $('pagedata-title').textContent = isPage(pageKey) ? 'Page data' : host ? `Data of ${pageKey.split('/').pop()}` : 'Data';
   $('newpagedata').title = isPage(pageKey) ? 'A search the page runs once, named, that any element can read' : 'A search this reusable makes while a copy of it is shown, named, that any of its elements can read';
   $('elements-title').textContent = isPage(shownKey) ? 'Elements on this page' : 'Elements in this reusable';
+  renderSampleNote();
   $('renamereusable').hidden = !!host || !reus.includes(pageKey);
 }
 $('renamereusable').onclick = (e) => renameReusableMenu(e);
@@ -2001,6 +2087,28 @@ function openComponent(key) {
   rebuild(0);
 }
 $('pagepick').onchange = () => openComponent($('pagepick').value);
+/* Richard, 2026-10-31: "make both menus expandable, responsively sizing the preview to cope". Each side panel of Design
+   widens by dragging its inner edge (a double-click puts it back); the width is this viewer's, kept in localStorage */
+(function sidePanels() {
+  const sec = $('design'), LIM = { l: [200, 520, 260], r: [300, 720, 360] };
+  const saved = (k) => { try { return Number(localStorage.getItem(`ob.panel.${k}`)) || null; } catch { return null; } };
+  const apply = (k, w) => { const [lo, hi] = LIM[k]; const v = Math.round(Math.max(lo, Math.min(hi, Math.min(w, innerWidth / 2.6)))); sec.style.setProperty(k === 'l' ? '--lw' : '--rw', `${v}px`); return v; };
+  for (const k of ['l', 'r']) {
+    if (saved(k)) apply(k, saved(k));
+    const bar = h('div', { class: `resizer ${k}`, role: 'separator', 'aria-orientation': 'vertical', title: 'Drag to widen or narrow the panel · double-click to put it back' });
+    bar.addEventListener('dblclick', () => { apply(k, LIM[k][2]); try { localStorage.removeItem(`ob.panel.${k}`); } catch { /* kept for this visit only */ } setTimeout(draw, 50); });
+    bar.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); bar.setPointerCapture(e.pointerId); bar.classList.add('dragging'); document.body.classList.add('resizing');
+      const box = sec.getBoundingClientRect();
+      let w = null;
+      const move = (ev) => { w = apply(k, k === 'l' ? ev.clientX - box.left : box.right - ev.clientX); };
+      const up = () => { bar.removeEventListener('pointermove', move); bar.classList.remove('dragging'); document.body.classList.remove('resizing'); if (w) try { localStorage.setItem(`ob.panel.${k}`, String(w)); } catch { /* kept for this visit only */ } draw(); };
+      bar.addEventListener('pointermove', move); bar.addEventListener('pointerup', up, { once: true }); bar.addEventListener('pointercancel', up, { once: true });
+    });
+    sec.append(bar);
+  }
+})();
 for (const b of $('widthseg').querySelectorAll('button')) b.onclick = () => { for (const x of $('widthseg').querySelectorAll('button')) x.setAttribute('aria-pressed', x === b); const v = b.dataset.w; $('appwrap').style.width = v.endsWith('%') ? v : v + 'px'; setTimeout(draw, 300); };
 $('appwrap').style.width = '100%';
 $('previewmode').onchange = () => { $('overlay').classList.toggle('preview', $('previewmode').checked); draw(); };
@@ -2242,6 +2350,7 @@ window.addEventListener('keydown', (e) => {
   // STU-083: Help is words over the tab: no key reaches the page under it; Esc closes it
   if (!$('helppanel').hidden) { if (e.key === 'Escape') { e.preventDefault(); closeHelp(); } return; }
   if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !inField) { e.preventDefault(); undo(); return; }
+  if (e.key === 'Escape' && tab === 'backend' && selFn && selFnStep && !inField && !document.querySelector('.menu')) { selFnStep = null; renderFunction(); renderStepPanel(); return; }
   if (e.key === 'Escape' && tab === 'backend' && selFn && fnBack.length && !inField && !document.querySelector('.menu')) { backFromFn(); return; }
   if (e.key === 'Escape' && tab === 'backend' && !selFn && selAutoStep && !inField && !document.querySelector('.menu')) { pickAutoStep(null); return; }
   if (e.key === 'Escape' && tab === 'backend' && !selFn && selAuto?.from && !inField && !document.querySelector('.menu')) { backFromAuto(); return; }
@@ -3414,7 +3523,7 @@ function fieldFor(node, p, value, wire, setter) {
     if (propPending?.key === key) { clearTimeout(propTimer); propPending = null; } else propFlush();
     run();
   };
-  const f = h('div', { class: `field${wire ? ' wired' : ''}`, title: p.description || '' }, h('label', {}, p.displayName || p.name));
+  const f = h('div', { class: `field${wire ? ' wired' : ''}${ty === 'boolean' && !wire ? ' bool' : ''}`, title: p.description || '' }, h('label', {}, p.displayName || p.name));
   const units = p.type?.units;
   const srcNode = wire && byId[wire.fromId];
   const composed = srcNode && isComposed(srcNode) && srcNode.metadata.composedFor.node === node.id && srcNode.metadata.composedFor.port === p.name ? srcNode : null;
@@ -3524,8 +3633,22 @@ function renderLogic() {
   const box = $('logiclist'); if (!box) return;
   box.innerHTML = '';
   const parts = logicOnPage(VOCAB, nodes, { inComponent: pageKey, isVisual: isVisualType }).filter((n) => !isRuleHere(n, pageKey));
-  $('logic-title').firstChild.textContent = parts.length ? `Logic on this page: ${parts.length}` : 'Logic on this page';
-  if (!parts.length) return box.append(h('div', { class: 'hint' }, 'Nothing here that Studio does not edit. The wiring shows every node all the same.'));
+  // Richard, 2026-10-31: "I still don't see the workflows on the design page … or a link to the workflow page". The
+  // page's workflows first, each opening its card in the Workflow tab; then the parts Studio does not edit
+  const flows = events();
+  const n = flows.length + parts.length;
+  $('logic-title').firstChild.textContent = n ? `Logic on this page: ${n}` : 'Logic on this page';
+  if (!n) return box.append(h('div', { class: 'hint' }, 'No workflows here yet. Pick an element, then Interaction on the right, to give it one.'));
+  if (flows.length) {
+    box.append(h('div', { class: 'lgroup' }, h('span', {}, 'Workflows'), h('button', { class: 'tiny quiet', title: 'Every workflow on this page, in the Workflow tab', onclick: () => { cardBack = null; selEvent = null; switchTab('workflow'); } }, 'Open in Workflow →')));
+    for (const ev of flows) {
+      const steps = countSteps(lanesOf(ev) ?? [chain(ev.node, ev.port)]);
+      box.append(h('div', { class: 'row flowrow', 'data-flow': `${ev.node}.${ev.port}`, tabindex: 0, title: `${eventTitle(ev)} · ${eventSummary(ev) || 'no steps yet'}. Click to open it`, onclick: () => openCard(ev), onkeydown: (e) => { if (e.key === 'Enter') openCard(ev); } },
+        icon('bolt'), h('span', { class: 'two' }, h('span', {}, cardName(ev)), h('small', {}, eventTitle(ev))), h('span', { class: 't' }, `${steps} step${steps === 1 ? '' : 's'}`)));
+    }
+  }
+  if (!parts.length) return;
+  if (flows.length) box.append(h('div', { class: 'lgroup' }, h('span', {}, 'Parts Studio does not edit'), h('span', { class: 'hintx' }, 'the Wiring shows them')));
   for (const n of parts) box.append(h('div', { class: 'row', 'data-part': n.id, tabindex: 0, title: 'What it is, and the wiring it sits in', onclick: (e) => partCard(e, n.id), onkeydown: (e) => { if (e.key === 'Enter') partCard(e, n.id); } },
     icon(placedComponent(n.type) ? 'component' : 'code'), h('span', { style: 'overflow:hidden;text-overflow:ellipsis' }, labelOf(n.id)), h('span', { class: 't' }, partType(n))));
 }
@@ -4308,11 +4431,14 @@ function chipText(fromId, port) {
 function composedPreview(expr) {
   const text = expr.parameters?.expression || '';
   const chips = chipsOf(expr);
-  return S.sentenceLine(text, (n) => chips.get(n).text, (n) => chips.has(n)) || '(empty expression)';
+  return S.sentenceLine(text, (n) => chips.get(n).text, (n) => chips.has(n), { reads: READS, typeOf: (n) => chips.has(n) ? chipDictType(chips.get(n)) : null }) || '(empty expression)';
 }
-/** STU-052: the dictionary's phrases by type (serve.mjs /phrasebook.json); empty when the NodeGX checkout has none. */
-let PHRASES = {};
-fetch('/phrasebook.json').then((r) => (r.ok ? r.json() : {})).then((j) => { PHRASES = j; }).catch(() => {});
+/** The dictionary's type of a value picked from a port: the port's type, read as the dictionary's. */
+function chipDictType(src) { const n = byId[src?.node]; return dictionaryType(n && portsOf(n, 'output').find((q) => q.name === src.port)?.type); }
+/** STU-052: the dictionary's phrases by type (serve.mjs /phrasebook.json); empty when the NodeGX checkout has none.
+    READS: the same phrases as templates, so what the more… menu inserts reads back as the words on its button. */
+let PHRASES = {}, READS = [];
+fetch('/phrasebook.json').then((r) => (r.ok ? r.json() : {})).then((j) => { PHRASES = j; READS = S.phraseReads(j); }).catch(() => {});
 // STU-098: the typed values a person adds, each in a box of its kind; the JavaScript is written for them
 const VALUE_KINDS = [['Text', 'text', ''], ['Number', 'number', 0], ['Yes / No', 'yesno', true], ['Date', 'date', '']];
 function openComposer(e, node, p, existing, onPick, { text: given, chips: givenChips, onCompose } = {}) {
@@ -4355,7 +4481,8 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
   const fillSlot = (slot, src) => { const name = nameFor(src); chips.set(name, src); slots.delete(slot); text = text.replace(new RegExp(`\\b${slot}\\b`), name); focus = name; renderBody(); };
   const slotEl = (name, editable) => h('span', { class: 'chip slot', contenteditable: editable ? 'false' : undefined, 'data-name': name, title: `An empty slot: click it to put a ${slots.get(name)} in it`, onclick: (ev) => sourceMenu(ev, node, p, (src) => fillSlot(name, src)) }, `▢ ${slots.get(name)}`);
   /** The dictionary's type of a chip: what the person said it is, else its port's type. */
-  const typeOfChip = (name) => { if (chipTypes.has(name)) return chipTypes.get(name); const src = chips.get(name); const n = byId[src?.node]; return dictionaryType(n && portsOf(n, 'output').find((q) => q.name === src.port)?.type); };
+  const typeOfChip = (name) => (chipTypes.has(name) ? chipTypes.get(name) : chips.has(name) ? chipDictType(chips.get(name)) : null);
+  const readOpts = () => ({ reads: READS, typeOf: typeOfChip });
   /** A phrase as it will read on this chip: the chip is "…", each other value its slot (`!list.includes(…)`, not the phrasebook's `!List1.includes(String1)`). */
   const phraseShape = (ph) => (applyPhrase('it__', 'it__', ph)?.text.replace(/^\((.*)\)$/, '$1').replace(/\bit__\b/g, '\u2026')) ?? ph.insert.code;
   /** What can follow a value of this type, as Bubble's menu offers it: a phrase inserts; a row NodeGX answers otherwise says how. */
@@ -4369,7 +4496,7 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
         const r = applyPhrase(text, focus, ph, new Set([...chips.keys(), ...slots.keys()])); if (!r) return;
         text = r.text; for (const [slot, v] of Object.entries(r.slots)) slots.set(slot, ph.insert.others[v]);
         renderBody();
-      } }, h('span', {}, ph.bubble), h('small', {}, mode === 'chips' ? S.sentenceLine(phraseShape(ph)) : phraseShape(ph))));
+      } }, h('span', {}, ph.bubble), mode === 'chips' ? null : h('small', {}, phraseShape(ph)))); // the Composer view says the button's words, no code
       else {
         const instead = ph.kind === 'node' ? `the ${ph.node} node` : ph.kind === 'function' ? 'a Function node' : 'no NodeGX answer';
         m.append(h('div', { class: 'item off', title: (ph.prose || ph.code || '').replace(/\*\*|`/g, ''), onclick: () => { m.remove(); toast(`${ph.bubble}: ${ph.kind === 'node' ? `the ${ph.node} node does this, not an expression` : ph.kind === 'function' ? 'a Function node does this (its code is in the phrasebook)' : 'NodeGX has no equivalent'}`); } }, h('span', {}, ph.bubble), h('small', {}, instead)));
@@ -4406,9 +4533,10 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
       // ← → move it, Backspace removes the piece before it; a typed value is changed in its box, its JavaScript written
       const boxes = new Map();
       const row =h('div', { class: 'chips sentence', tabindex: '0', role: 'textbox', 'aria-label': `${fieldName}, as a sentence` });
-      const ps = S.pieces(text, (n) => chips.has(n) || slots.has(n));
-      // after a piece: past the brackets it leaves open (after "fern" in contains "fern" is after the bracket)
-      const closes = new Set(ps.filter((q) => q.close).map((q) => q.close.from));
+      const ps = S.pieces(text, (n) => chips.has(n) || slots.has(n), readOpts());
+      // after a piece: past the brackets it leaves open (after "fern" in contains "fern" is after the bracket), and a
+      // phrase's own code after its value (`)` in items until # 2)
+      const closes = new Set(ps.flatMap((q) => [q.close, ...(q.parts || [])].filter(Boolean).map((r) => r.from)));
       const after = (q) => { let at = q.to; for (;;) { const m = /^\s*/.exec(text.slice(at))[0].length; if (!closes.has(at + m)) return at; at += m + 1; } };
       if (caretAt !== null && caretAt > text.length) caretAt = null;
       const at = caretAt ?? text.length;
@@ -4419,7 +4547,11 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
       const write = (q, code) => {
         const end = q.to, d = code.length - (q.to - q.from);
         text = S.splice(text, q.from, q.to, code); q.to += d;
-        for (const o of ps) { if (o !== q && o.from >= end) { o.from += d; o.to += d; } if (o.close && o.close.from >= end) { o.close.from += d; o.close.to += d; } }
+        for (const o of ps) {
+          if (o !== q && o.from >= end) { o.from += d; o.to += d; }
+          for (const r of [o.close, ...(o.parts || [])]) if (r && r.from >= end) { r.from += d; r.to += d; }
+          if (o.whole && o.whole.to >= end) { o.whole.to += d; if (o.whole.from >= end) o.whole.from += d; }
+        }
         if (caretAt !== null && caretAt >= end) caretAt += d;
         check(); drawCode();
       };
@@ -4439,7 +4571,7 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
         const pick = (ev) => { ev.stopPropagation(); place(after(q)); };
         let el;
         if (q.kind === 'name') { el = chips.has(q.name) ? chip(q.name, false) : slotEl(q.name, false); if (chips.has(q.name)) el.addEventListener('click', () => { caretAt = after(q) >= text.trimEnd().length ? null : after(q); }, true); }
-        else if (q.kind === 'word') el = h('span', { class: 'piece' }, h('span', { class: 'word', title: `${q.code.replace(/\($/, '(…)')} in JavaScript · click to add after it`, onclick: pick }, q.word), xBtn(q));
+        else if (q.kind === 'word') el = h('span', { class: `piece${q.phrase ? ' phrase' : ''}` }, h('span', { class: 'word', title: q.phrase ? `${q.phrase}: from the more… menu · click to add after it` : `${q.code.replace(/\($/, '(…)')} in JavaScript · click to add after it`, onclick: pick }, q.word), xBtn(q));
         else if (q.kind === 'code') el = h('span', { class: 'piece' }, h('span', { class: 'code', title: 'JavaScript Studio has no word for · click to add after it', onclick: pick }, q.code), xBtn(q));
         else { const b = box(q); boxes.set(q, b); el = h('span', { class: 'piece', 'data-kind': q.kind }, b, xBtn(q)); }
         el.dataset.p = i;
@@ -4511,7 +4643,7 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
     closeMenu();
     edits(pageKey, list);
     if (onPick) onPick({ node: exprId, port: 'result', text: composedPreview(byId[exprId]) });
-    const said = S.sentenceLine(text, (n) => chips.get(n).text, (n) => chips.has(n));
+    const said = S.sentenceLine(text, (n) => chips.get(n).text, (n) => chips.has(n), readOpts());
     toast(`${fieldName} is now: ${said.length > 80 ? `${said.slice(0, 79)}…` : said}`);
   };
   menu.append(
@@ -4763,6 +4895,8 @@ function renderEvents() {
    look: a column per step from "When this function is called", the answers last, a wire for every value and signal.
    Read only: Design does not open a cloud function, so a change is the agent's. `fnBack`: where it was opened from, for Back (Esc) ---- */
 let selFn = null, fnBack = [], fnTouches = null, fnRun = null;
+let selFnStep = null; // STU-099: the function's step whose settings are open on the right
+let fnDeploy = null; // STU-099: { phase: 'waiting' | 'deploying' | 'done' | 'failed', words }
 const fnNodesOf = (key) => store.readComponent(key).files.nodes.nodes;
 const fnName = (key) => key.slice(CLOUD.length);
 // a function's nodes are not the page's, so portsOf (which reads a port in the page's context) does not know the cloud
@@ -4801,7 +4935,7 @@ function renderFnList() {
 function openFunction(key, from = null) {
   if (!registry()[key]) return toast(`This app has no cloud function called ${fnName(key)}`);
   fnBack = from ? [...fnBack, from] : [];
-  selFn = key; selAuto = null; fnRun = null; fnTouches = null; hideBoltTip(); // read again: the agent may have changed a function since
+  selFn = key; selAuto = null; fnRun = null; fnTouches = null; selFnStep = null; hideBoltTip(); // read again: the agent may have changed a function since
   if (tab !== 'backend') switchTab('backend'); else renderWorkflow();
   readFnRun(key);
 }
@@ -4892,7 +5026,7 @@ function fnCard(n, fconns, fById, col, loose) {
 }
 function renderFunction() {
   const main = $('steps'); main.innerHTML = '';
-  $('workflow').classList.toggle('card', fnBack.length > 0);
+  $('workflow').classList.remove('card'); // Richard, 2026-10-31: the list stays beside a function, however it was opened (Back still goes back)
   const key = selFn, comp = store.readComponent(key).files;
   const fnodes = comp.nodes.nodes, fconns = comp.connections.connections, fById = Object.fromEntries(fnodes.map((n) => [n.id, n]));
   const L = functionLayout(fnodes, fconns, (c) => fnSignal(fById[c.fromId], fById[c.toId], c));
@@ -4908,13 +5042,16 @@ function renderFunction() {
   wf.append(h('div', { class: 'fnfacts' },
     h('div', { class: 'touches' }, fnTouches?.pending ? 'Reading what it reads and writes…' : touched.length ? ['It ', ...touched.map((t) => h('span', { class: 'touch' }, t))] : fnTouches?.words ?? 'It reads and writes no data type itself.'),
     h('div', { class: `run ${fnRun?.cls ?? ''}` }, fnRun?.words ?? 'Reading its last run…'),
-    h('div', { style: 'color:var(--dim)' }, 'Read only: Studio does not change a function’s steps yet. Ask the agent to change them.')));
+    h('div', { class: `fndeploy ${fnDeploy?.phase ?? ''}` }, fnDeploy?.words ?? 'Click a step to change its settings. A change is saved, then put on the development backend.')));
   flowWires = []; drawnForks.clear();
   const flow = h('div', { class: 'flow fnflow' });
   flow.append(document.createElementNS(SVG_NS, 'svg')); flow.firstChild.setAttribute('class', 'wires');
   const cols = h('div', { class: 'fncols' });
   L.columns.forEach((col, i) => cols.append(h('div', { class: 'fncol' }, ...col.map((id) => fnCard(fById[id], fconns, fById, i, L.loose.includes(id))))));
   flow.append(cols);
+  if (selFnStep && !fById[selFnStep]) selFnStep = null;
+  cols.querySelector(`.step[data-id="${CSS.escape(selFnStep ?? '')}"]`)?.classList.add('picked');
+  cols.addEventListener('click', (e) => { const card = e.target.closest('.step[data-id]'); if (!card || e.target.closest('button')) return; selFnStep = card.dataset.id; renderFunction(); renderStepPanel(); });
   const cardOf = (id) => cols.querySelector(`.step[data-id="${CSS.escape(id)}"]`);
   for (const w of L.wires) { const a = cardOf(w.from), b = cardOf(w.to); if (a && b) flowWires.push({ from: a, port: 'out', to: b, kind: w.kind, dashed: false, edge: null }); }
   wf.append(h('div', { class: 'flowarea' }, flow));
@@ -4927,6 +5064,81 @@ function renderFunction() {
   lightFnRun();
 }
 window.__ob.openFunction = openFunction;
+/* ---- STU-099 (Richard, 2026-10-31: "I still can't edit backend function steps, it says I have to ask the agent"): a
+   function's step opens its settings on the right, as a page workflow's does. A script or an expression is code in a
+   box; any other setting a field of its kind. Each change is saved to the function's own files, then the functions go
+   onto the development backend (serve.mjs /api/functions/deploy): a backend runs what was deployed to it, so a change
+   in the files alone would reach nothing the app calls. What it is wired to is drawn, not changed here. ---- */
+const FN_CODE = { functionScript: 'Its script (JavaScript)', expression: 'Its expression (JavaScript)' };
+function fnSettings(n) {
+  const p = n.parameters || {};
+  const known = (n.type === REQUEST || n.type === RESPONSE) ? [] : portsOf(n, 'input').filter((q) => !q.signal && !q.connectionsOnly && !FN_CODE[q.name] && (['string', 'number', 'boolean'].includes(q.type) || Array.isArray(q.enums))); // a list of ports or of uses is the agent's
+  const out = known.map((q) => ({ name: q.name, label: q.label || q.name, type: tname(q.type), enums: q.enums, value: p[q.name] ?? q.default }));
+  // what the node holds and its type's ports do not list (a cloud node Studio's library has no entry for)
+  for (const [k, v] of Object.entries(p)) if (!FN_CODE[k] && !out.some((o) => o.name === k) && !['x', 'y'].includes(k) && ['string', 'number', 'boolean'].includes(typeof v)) out.push({ name: k, label: fnPortLabel(n, 'input', k), type: typeof v, value: v });
+  return out;
+}
+let fnSaveTimer = null, fnDeployTimer = null, fnDeploying = null;
+function fnSet(id, name, value, { later = false } = {}) {
+  const key = selFn;
+  const write = () => {
+    try { edits(key, [{ edit: 'set_parameter', component: key, id, name, value }], { rebuildApp: false, redraw: false }); } catch { return; }
+    fnDeploy = { phase: 'waiting', words: 'Saved to the project. Putting it on the backend…' };
+    if (selFn === key) renderFunction();
+    clearTimeout(fnDeployTimer); fnDeployTimer = setTimeout(deployFns, 1200);
+  };
+  clearTimeout(fnSaveTimer);
+  if (later) fnSaveTimer = setTimeout(write, 700); else write();
+}
+async function deployFns() {
+  if (fnDeploying) { fnDeployTimer = setTimeout(deployFns, 800); return; }
+  fnDeploy = { phase: 'deploying', words: 'Putting the functions on the development backend…' };
+  if (selFn) renderFunction();
+  fnDeploying = fetch('/api/functions/deploy', { method: 'POST' }).then((r) => r.json()).catch((e) => ({ status: 'failed', reason: e.message }));
+  const r = await fnDeploying; fnDeploying = null;
+  const said = r.result?.error?.message ?? r.result?.message ?? r.reason;
+  fnDeploy = r.status === 'deployed' ? { phase: 'done', words: `On the backend at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}: the next call runs the change.` }
+    : r.status === 'none' ? { phase: 'done', words: 'Saved. This app has no function to put on a backend.' }
+      : { phase: 'failed', words: `Saved to the project, but not on the backend yet: ${said || r.status}` };
+  if (selFn) { renderFunction(); readFnRun(selFn); }
+}
+window.__ob.fnDeployState = () => fnDeploy;
+function renderFnPanel(panel) {
+  const comp = selFn && registry()[selFn] ? store.readComponent(selFn).files : null;
+  const n = comp && selFnStep ? comp.nodes.nodes.find((x) => x.id === selFnStep) : null;
+  const on = !!n;
+  $('workflow').classList.toggle('inspecting', on);
+  panel.hidden = !on;
+  const a = document.activeElement, focusAt = on && a && panel.contains(a) && a.matches('input,select,textarea') ? [...panel.querySelectorAll('input,select,textarea')].indexOf(a) : -1;
+  panel.innerHTML = '';
+  if (!on) return;
+  const card = $('steps').querySelector(`.fnview .step[data-id="${CSS.escape(n.id)}"]`);
+  panel.append(h('div', { class: 'head' },
+    h('input', { type: 'text', value: n.label || '', placeholder: `Name this step (${typeName(n.type)})`, title: 'A name for this step, shown on its card', onchange: (e) => { edits(selFn, [{ edit: 'rename', component: selFn, id: n.id, label: e.target.value }], { rebuildApp: false, redraw: false }); renderFunction(); } }),
+    h('button', { class: 'quiet', title: 'Close (Esc)', onclick: () => { selFnStep = null; renderFunction(); renderStepPanel(); } }, icon('x')),
+    h('div', { class: 'type' }, `Step ${card?.querySelector('.num')?.textContent ?? ''} · ${card?.querySelector('h3')?.firstChild?.textContent ?? typeName(n.type)}`)));
+  const what = NODE_SUMMARIES[n.type];
+  if (what) panel.append(h('p', { class: 'what' }, what));
+  const wrap = h('div', { class: 'props' });
+  const p = n.parameters || {};
+  for (const [k, label] of Object.entries(FN_CODE)) {
+    if (typeof p[k] !== 'string') continue;
+    wrap.append(h('div', { class: 'field wide' }, h('label', {}, label), h('textarea', { class: 'code', rows: Math.min(18, Math.max(4, p[k].split('\n').length + 1)), spellcheck: 'false', 'data-param': k, oninput: (e) => fnSet(n.id, k, e.target.value, { later: true }) }, p[k])));
+  }
+  const wiredIn = new Set(comp.connections.connections.filter((c) => c.toId === n.id).map((c) => c.toProperty));
+  for (const f of fnSettings(n)) {
+    const field = h('div', { class: `field${f.type === 'boolean' ? ' bool' : ''}`, 'data-param': f.name }, h('label', { title: f.name }, f.label));
+    if (wiredIn.has(f.name)) field.append(h('div', { class: 'note' }, 'Wired from another step: see its card'));
+    else if (f.type === 'boolean') field.append(h('input', { type: 'checkbox', checked: !!f.value, onchange: (e) => fnSet(n.id, f.name, e.target.checked) }));
+    else if (Array.isArray(f.enums)) field.append(h('select', { onchange: (e) => fnSet(n.id, f.name, e.target.value === '' ? undefined : e.target.value) }, h('option', { value: '' }, '(default)'), ...f.enums.map((o) => h('option', { value: o.value ?? o, selected: (o.value ?? o) === f.value }, o.label ?? o.value ?? o))));
+    else if (f.type === 'number') field.append(h('input', { type: 'number', value: f.value ?? '', oninput: (e) => fnSet(n.id, f.name, e.target.value === '' ? undefined : Number(e.target.value), { later: true }) }));
+    else field.append(h('input', { type: 'text', value: f.value ?? '', oninput: (e) => fnSet(n.id, f.name, e.target.value === '' ? undefined : e.target.value, { later: true }) }));
+    wrap.append(field);
+  }
+  if (!wrap.children.length) wrap.append(h('div', { class: 'note' }, 'Nothing to set on this step: what it does comes from its wires.'));
+  panel.append(wrap);
+  if (focusAt >= 0) panel.querySelectorAll('input,select,textarea')[focusAt]?.focus();
+}
 // STU-084: the wiring view's controls. Read only: nothing here writes the project
 {
   const panel = $('wiringpanel'), canvas = panel.querySelector('.wcanvas');
@@ -5437,6 +5649,7 @@ function autoStepPanel(panel, w, step) {
   panel.append(wrap);
 }
 function renderAutoStepPanel(panel) {
+  if (selFn) return renderFnPanel(panel);
   const w = !selFn && selAuto?.kind === 'workflow' ? autoEntry(selAuto) : null;
   if (selAutoStep && !w?.steps?.some((s) => s.id === selAutoStep)) selAutoStep = null;
   const on = !!w && !!selAutoStep;
@@ -5533,7 +5746,7 @@ function renderBackend() {
 function renderAuto() {
   const entry = autoEntry(selAuto);
   $('steps').innerHTML = '';
-  $('workflow').classList.toggle('card', !!selAuto.from);
+  $('workflow').classList.remove('card'); // the list stays beside a run or a workflow opened from a trigger (Richard, 2026-10-31)
   if (selAuto.kind === 'trigger') renderTrigger(entry); else renderAutoWorkflow(entry);
 }
 window.__ob.openAuto = openAuto;
@@ -6863,40 +7076,121 @@ async function renderPrivacy() {
   }
   if (map.backend.devOpen) main.append(h('div', { class: 'livebar' }, 'On this computer the development database lets the app through whatever these rules say (devOpen), so you can build without signing in. A live database keeps them.'));
   const t = names.includes(selPriv) ? { name: selPriv } : null;
-  if (!t) { main.append(h('div', { class: 'empty' }, 'Pick a type to say who may find, read, add, change and delete its rows.')); renderRoles(main, map); return; }
-  const rule = W.tableRule(map.config, t.name);
-  const cur = { read: W.readRule(rule.permissions), change: W.changeRule(rule.permissions), creatorOwns: rule.creatorOwns };
-  const edit = { ...cur };
-  // P123-S6-CREATOREDITS: changing rows also offers "only the person who made it" (a map from before it has none)
-  const choicesFor = (key) => (key === 'change' && W.changeChoices ? W.changeChoices(roles) : W.audienceChoices(roles));
-  const known = (v, key = 'read') => typeof v === 'string' && choicesFor(key).some((c) => c.value === v);
-  const pick = (key, label) => h('label', { class: 'f', style: 'display:grid;gap:4px;max-width:520px;margin-bottom:12px' }, h('b', {}, label),
-    h('select', { 'data-rule': key, onchange: (e) => { edit[key] = e.target.value; say(); } }, ...(known(cur[key], key) ? [] : [h('option', { value: '' }, `${W.ruleWords(cur[key])} (as it is)`)]), ...choicesFor(key).map((c) => h('option', { value: c.value, selected: cur[key] === c.value }, `${c.words} — ${c.long}`))));
-  const words = h('div', { class: 'note', style: 'margin:8px 0' });
-  const make = h('button', { class: 'primary', 'data-act': 'make', onclick: async () => {
-    make.disabled = true;
-    let r; try { r = await (await fetch('/backend-map/api/table-rule', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ table: t.name, read: edit.read, change: edit.change, creatorOwns: edit.creatorOwns, etag: map.etag, fileStamp: map.fileStamp }) })).json(); } catch (e) { r = { error: e.message }; }
-    if (r.error) { toast(r.error); make.disabled = false; return; }
-    toast(r.words?.[0] || 'Done'); renderPrivacy();
-  } }, 'Make it so');
-  const say = () => {
-    const changed = JSON.stringify(edit) !== JSON.stringify(cur);
-    make.disabled = !changed || !known(edit.read) || !known(edit.change, 'change');
-    words.textContent = known(edit.read) && known(edit.change, 'change') ? `Reading ${t.name}’s rows: ${W.ruleWords(edit.read)}. Adding, changing or deleting them: ${W.ruleWords(edit.change)}.${edit.creatorOwns ? ' And whoever made a row may always read and change that row.' : ''}` : 'Choose both.';
-  };
-  main.append(h('h2', {}, t.name, h('span', { class: 'badge' }, rule.own ? 'its own rule' : 'the app’s standard rule'), h('span', { class: 'acts' }, h('button', { onclick: () => openOnMap(t.name) }, icon('map'), 'See it on the map'))),
-    h('div', { class: 'card' }, pick('read', 'Looking at rows (finding and reading)'), pick('change', 'Adding, changing or deleting rows'),
-      h('label', { class: 'c', style: 'display:flex;gap:8px;align-items:center' }, h('input', { type: 'checkbox', checked: edit.creatorOwns, onchange: (e) => { edit.creatorOwns = e.target.checked; say(); } }), 'Whoever made a row may always read and change that row'),
-      words, h('div', { class: 'bar' }, make, rule.own ? h('button', { class: 'quiet', onclick: async () => { const r = await (await fetch('/backend-map/api/table-rule', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ table: t.name, reset: true, etag: map.etag, fileStamp: map.fileStamp }) })).json(); toast(r.error || 'Back to the app’s standard rule'); renderPrivacy(); } }, 'Back to the app’s standard rule') : null),
-      h('div', { class: 'note' }, `The backend obeys at once, and the same rule is written to nodegx.security.json, so it holds when the backend restarts and goes to live with Deploy to live.`)));
-  say();
+  if (!t) { main.append(h('div', { class: 'empty' }, 'Pick a type to tick who may list, open, add, change and delete its rows.')); renderRoles(main, map); return; }
+  const grid = h('div', { 'data-privacy-grid': '' }); main.append(grid); privacyGrid(grid, t.name, map); // drawn in its place once the backend answers
   const reach = h('div', { class: 'card' }, h('h4', {}, 'Who can reach it now'), h('div', { class: 'note' }, 'Asking the backend…'));
   main.append(reach); whoCanReach(reach, t.name);
   renderRoles(main, map);
 }
+/* Richard, 2026-10-31: "we had a privacy rules editor that was pretty visual, with different groups and you could tick
+   what stuff they could read, edit, etc. Can we not just reuse that?" The backend manager's Permissions grid, in Studio:
+   its own model (vendor/permissions.js, built from nodegx-backend admin/app/permissionsModel.ts: the rows, what a tick
+   does, the templates), saved through the same route the manager uses (PUT /admin/permissions/collections/<type>),
+   then that type's entry written into nodegx.security.json so it holds when the backend restarts and goes to live.
+   *Backend manager ↗* opens the manager itself, already signed in (serve.mjs /api/backend-admin). */
+const PRIV_COLS = [['default', 'App standard', 'What the app’s standard rule says'], ['everyone', 'Everyone', 'Anyone on the internet, signed in or not'], ['signedIn', 'Signed in', 'Anyone with an account who is signed in'], ['noOne', 'No one', 'Nobody directly: only the app’s functions reach it']];
+async function privacyGrid(main, type, map) {
+  let config = {};
+  try { ({ config } = await api('/admin/permissions')); } catch (e) { main.append(h('div', { class: 'card' }, h('p', { class: 'note' }, e.message))); return; }
+  const ops = PM.CLP_OPS;
+  const stored = config.collections?.[type];
+  const own = !!stored && (stored.permissions || stored.creatorOwns !== undefined);
+  const defaults = PM.matrixFrom(config.defaults?.permissions, ops);
+  let matrix = PM.matrixFrom(stored?.permissions, ops), owns = stored?.creatorOwns ?? config.defaults?.creatorOwns ?? false;
+  const start = JSON.stringify([matrix, owns]);
+  const groups = [...new Set([...map.roles.map((r) => r.name), ...PM.rolesNamed(PM.matrixRules(matrix, ops))])];
+  const card = h('div', { class: 'card pgrid', 'data-grid': type });
+  const say = h('span', { class: 'note', 'data-said': '' });
+  const save = h('button', { class: 'primary', 'data-act': 'save-rule', disabled: true, onclick: () => saveRule() }, 'Save');
+  const undo = h('button', { class: 'quiet', 'data-act': 'undo-rule', disabled: true, onclick: () => { [matrix, owns] = JSON.parse(start); draw(); } }, 'Undo changes');
+  const table = h('table', {});
+  const ownsBox = h('input', { type: 'checkbox', 'data-act': 'creator-owns', onchange: (e) => { owns = e.target.checked; draw(); } });
+  const draw = () => {
+    const cols = [...PRIV_COLS.map(([k, w, tip]) => ({ col: k, w, tip })), ...groups.map((g) => ({ col: { role: g }, w: g, tip: `People in the group ${g}`, group: true }))];
+    const also = PM.OP_ROWS.some((row) => matrix[row.op].unknown.length);
+    table.replaceChildren(h('tr', {}, h('th', {}, 'Who can…'), ...cols.map((c) => h('th', { title: c.tip, class: c.group ? 'grp' : '' }, c.w)), also ? h('th', {}) : null),
+      ...PM.OP_ROWS.map((row) => h('tr', { 'data-op': row.op }, h('th', {}, row.word, h('small', {}, row.op)),
+        ...cols.map((c) => {
+          const st = PM.cellState(matrix[row.op], c.col);
+          const key = typeof c.col === 'string' ? c.col : `role:${c.col.role}`;
+          const box = h('input', { type: 'checkbox', checked: st.checked, 'data-cell': `${row.op}|${key}`, title: st.implied ? 'Everyone is ticked, so these are let in too' : `${c.w} may ${row.verb} ${type} rows`, onchange: (e) => { matrix = { ...matrix, [row.op]: PM.toggleCell(matrix[row.op], c.col, e.target.checked) }; draw(); } });
+          const cell = h('td', { class: st.implied ? 'implied' : '' }, box);
+          if (c.col === 'default') cell.append(h('small', {}, PM.audienceWords(defaults[row.op])));
+          return cell;
+        }),
+        matrix[row.op].unknown.length ? h('td', { class: 'note' }, `also: ${matrix[row.op].unknown.map((a) => (a === 'creator' ? 'the person who made the row' : PM.atomWords(a))).join(', ')}`) : null)));
+    ownsBox.checked = owns;
+    const changed = JSON.stringify([matrix, owns]) !== start;
+    save.disabled = !changed; undo.disabled = !changed;
+    say.textContent = changed ? PM.OP_ROWS.map((r) => `${r.word}: ${PM.audienceWords(matrix[r.op], defaults[r.op])}`).join(' · ') : '';
+  };
+  const template = (id) => {
+    const tpl = PM.TEMPLATES.find((x) => x.id === id);
+    let role;
+    if (tpl.needsRole) { role = groups[0]; if (!role) { toast('Make a group first (Groups, below), then pick One group only'); return; } }
+    const e = PM.templateEntry(id, role);
+    matrix = PM.matrixFrom(e.permissions, ops); owns = !!e.creatorOwns; draw();
+    toast(`${tpl.label}: ${tpl.sentence}${role ? ` (the group ${role})` : ''} Save to keep it.`);
+  };
+  async function saveRule() {
+    save.disabled = true;
+    const entry = { permissions: PM.rulesFrom(matrix, ops), creatorOwns: owns };
+    const toDefaults = PM.allInherit(matrix, ops) && owns === (config.defaults?.creatorOwns ?? false);
+    try {
+      if (toDefaults) await api(`/admin/permissions/collections/${encodeURIComponent(type)}`, { method: 'DELETE' });
+      else await api(`/admin/permissions/collections/${encodeURIComponent(type)}`, { method: 'PUT', body: JSON.stringify(entry) });
+    } catch (e) { say.textContent = e.message; save.disabled = false; return; }
+    // the same rule into the app's folder: only this type's entry, the rest of the file as it is
+    try {
+      const file = JSON.parse(files.read('nodegx.security.json') || 'null') ?? (await api('/admin/permissions')).config;
+      const collections = { ...(file.collections || {}) };
+      if (toDefaults) delete collections[type]; else collections[type] = entry;
+      writeJsonFile('nodegx.security.json', { ...file, collections });
+    } catch (e) { toast(`The backend has it; nodegx.security.json was not written: ${e.message}`); }
+    toast(toDefaults ? `${type} follows the app’s standard rule` : `${type}: ${PM.OP_ROWS.map((r) => `${r.verb} ${PM.audienceWords(matrix[r.op], defaults[r.op])}`).join(', ')}`);
+    renderPrivacy();
+  }
+  draw();
+  main.append(h('h2', {}, type, h('span', { class: 'badge' }, own ? 'its own rule' : 'the app’s standard rule'),
+    h('span', { class: 'acts' }, h('button', { onclick: () => openOnMap(type) }, icon('map'), 'See it on the map'),
+      h('button', { class: 'quiet', 'data-act': 'manager', title: 'For advanced users: the backend’s own manager (keys, backups, every function’s rule), opened signed in', onclick: () => window.open(`/api/backend-admin?route=${encodeURIComponent(`/permissions/${type}`)}`, '_blank', 'noopener') }, 'Backend manager ↗'))),
+    card);
+  card.append(h('div', { class: 'tpls' }, h('span', { class: 'note' }, 'Start from…'), ...PM.TEMPLATES.map((x) => h('button', { class: 'tiny', 'data-template': x.id, title: x.sentence, onclick: () => template(x.id) }, x.id === 'role-only' ? 'One group only' : x.label))),
+    h('div', { class: 'twrap' }, table),
+    h('label', { class: 'c owns' }, ownsBox, h('span', {}, h('b', {}, 'Rows belong to whoever made them'), h('small', {}, 'When someone signed in adds a row, only they (and the groups ticked above) can see and change it.'))),
+    h('div', { class: 'bar' }, save, undo, say),
+    h('div', { class: 'note' }, 'The backend obeys at once, and the same rule is written to nodegx.security.json, so it holds when the backend restarts and goes to live with Deploy to live.'));
+}
+/* Richard, 2026-10-31 (P123-GH-NOGROUPS): "when I open a user I can't edit it … privacy is another 'the agent does it'
+   page". A group is made and deleted here, its people listed; a person is put in one from their panel in App data
+   (openPerson) or here. Both through the backend's own routes (/admin/roles), as its admin app's Roles page does. */
+const GROUP_NAME = /^[A-Za-z0-9_-]{1,64}$/; // what a rule's role:<name> takes
 function renderRoles(main, map) {
-  main.append(h('div', { class: 'card' }, h('h4', {}, 'Groups'), map.roles.length ? h('ul', { class: 'reach' }, ...map.roles.map((r) => h('li', {}, h('b', {}, r.name), `: ${r.members} ${r.members === 1 ? 'person' : 'people'}`))) : h('div', { class: 'note' }, 'No groups yet. A group (a role) is a set of people a rule can name, like “admins” or “members”.'),
-    h('div', { class: 'note' }, `${map.people} ${map.people === 1 ? 'person has' : 'people have'} an account on this database.`)));
+  const card = h('div', { class: 'card', 'data-groups': '' }, h('h4', {}, 'Groups'));
+  const say = h('div', { class: 'note' });
+  const name = h('input', { type: 'text', placeholder: 'A new group, like admins', 'data-input': 'group', onkeydown: (e) => { if (e.key === 'Enter') make(); } });
+  const make = async () => {
+    const n = name.value.trim();
+    if (!GROUP_NAME.test(n)) { say.textContent = 'A group’s name is letters, digits, - and _ only, as a rule names it.'; return; }
+    if (map.roles.some((r) => r.name === n)) { say.textContent = `There is a group called ${n} already.`; return; }
+    try { await api('/admin/roles', { method: 'POST', body: JSON.stringify({ name: n }) }); toast(`The group ${n} is made: a rule can name it now, and a person is put in it from their panel in App data`); renderPrivacy(); }
+    catch (e) { say.textContent = e.message; }
+  };
+  const list = h('div', { class: 'groups' });
+  for (const r of map.roles) {
+    const who = h('div', { class: 'note', 'data-members': r.name }, r.members ? 'Reading who is in it…' : 'Nobody in it yet.');
+    list.append(h('div', { class: 'grow', 'data-group': r.name },
+      h('div', { class: 'ghead' }, h('b', {}, r.name), h('span', { class: 'note' }, `${r.members} ${r.members === 1 ? 'person' : 'people'}`),
+        h('button', { class: 'quiet tiny danger', 'data-act': 'delete-group', title: 'Delete this group (the people stay; a rule naming it lets nobody through it)', onclick: async () => {
+          if (!(await askSure(`Delete the group ${r.name}? ${r.members ? `Its ${r.members} ${r.members === 1 ? 'person keeps their account' : 'people keep their accounts'}, outside it.` : ''} A rule that names it lets nobody in through it.`))) return;
+          try { await api(`/admin/roles/${encodeURIComponent(r.name)}`, { method: 'DELETE' }); toast(`The group ${r.name} is deleted`); renderPrivacy(); } catch (e) { toast(e.message); }
+        } }, icon('trash'))), who));
+    if (r.members) api(`/admin/users?limit=50&role=${encodeURIComponent(r.name)}`).then((j) => who.replaceChildren(...(j.users || []).map((u, i) => [i ? ', ' : '', u.email || u.username]).flat())).catch(() => { who.textContent = ''; });
+  }
+  card.append(map.roles.length ? list : h('div', { class: 'note' }, 'No groups yet. A group is a set of people a rule can name, like “admins” or “members”.'),
+    h('div', { class: 'gnew' }, name, h('button', { class: 'primary', 'data-act': 'new-group', onclick: make }, icon('plus'), 'New group')), say,
+    h('div', { class: 'note' }, `${map.people} ${map.people === 1 ? 'person has' : 'people have'} an account on this database. Put someone in a group from their panel: App data → User.`));
+  main.append(card);
 }
 
 /* ---- STU-063: App data — every row of a type, paged, searched, sorted, edited by its kind, exported and imported ---- */
@@ -7027,11 +7321,20 @@ async function openPerson(row, cols) {
   const mine = ++app.opening;
   const ctls = [];
   for (const c of cols) ctls.push([c, await valueControl({ checks: [] }, c, row[c.name])]);
+  // P123-GH-NOGROUPS: the groups they are in, ticked; a new group made here too. Saved with the rest
+  let groups = [];
+  try { groups = ((await envApi('/admin/roles')).roles || []).map((r) => r.name); } catch { /* the backend says no groups */ }
   if (mine !== app.opening) return;
   markOpen(row.objectId);
+  const was = new Set(row.roles || []), now = new Set(was);
+  const ticks = h('div', { class: 'gpick' });
+  const drawTicks = () => ticks.replaceChildren(...[...new Set([...groups, ...now])].sort().map((g) => h('label', {}, h('input', { type: 'checkbox', 'data-group': g, checked: now.has(g), onchange: (e) => { e.target.checked ? now.add(g) : now.delete(g); } }), g)), groups.length || now.size ? '' : h('span', { class: 'note' }, 'No groups yet.'));
+  drawTicks();
+  const newGroup = h('input', { type: 'text', placeholder: 'or a new group', 'data-input': 'new-group', onkeydown: (e) => { if (e.key !== 'Enter') return; e.preventDefault(); const g = e.target.value.trim(); if (!GROUP_NAME.test(g)) { why.textContent = 'A group’s name is letters, digits, - and _ only.'; return; } now.add(g); e.target.value = ''; drawTicks(); } });
+  const groupBox = h('div', { class: 'f', 'data-field': 'groups' }, 'groups', ticks, h('div', { class: 'gnew' }, newGroup));
   const why = h('span', { class: 'why' });
   const cancel = closeDrawer;
-  openDrawer(`${row.email || row.username} (${env})`, [...ctls.map(([c, ctl]) => h('label', { class: 'f', 'data-field': c.name }, c.name, ctl)), recordFacts(row)], [why, h('button', { class: 'quiet', 'data-act': 'cancel', onclick: cancel }, 'Cancel'), h('button', { class: 'primary', 'data-act': 'save', onclick: async () => {
+  openDrawer(`${row.email || row.username} (${env})`, [...ctls.map(([c, ctl]) => h('label', { class: 'f', 'data-field': c.name }, c.name, ctl)), groupBox, recordFacts(row)], [why, h('button', { class: 'quiet', 'data-act': 'cancel', onclick: cancel }, 'Cancel'), h('button', { class: 'primary', 'data-act': 'save', onclick: async () => {
     const body = {}, properties = {};
     for (const [c, ctl] of ctls) {
       if (ctl.value === editText(c, row[c.name])) continue;
@@ -7042,8 +7345,17 @@ async function openPerson(row, cols) {
       if (account) body[c.name] = w.value; else properties[c.name] = w.value;
     }
     if (Object.keys(properties).length) body.properties = properties;
-    if (!Object.keys(body).length) { cancel(); toast('Nothing changed'); return; }
-    try { await envApi(`/admin/users/${encodeURIComponent(row.objectId)}`, { method: 'PUT', body: JSON.stringify(body) }); cancel(); toast('Saved'); renderAppData(); }
+    const join = [...now].filter((g) => !was.has(g)), leave = [...was].filter((g) => !now.has(g));
+    if (!Object.keys(body).length && !join.length && !leave.length) { cancel(); toast('Nothing changed'); return; }
+    try {
+      if (Object.keys(body).length) await envApi(`/admin/users/${encodeURIComponent(row.objectId)}`, { method: 'PUT', body: JSON.stringify(body) });
+      for (const g of join) {
+        if (!groups.includes(g)) await envApi('/admin/roles', { method: 'POST', body: JSON.stringify({ name: g }) });
+        await envApi(`/admin/roles/${encodeURIComponent(g)}/users`, { method: 'POST', body: JSON.stringify({ userId: row.objectId }) });
+      }
+      for (const g of leave) await envApi(`/admin/roles/${encodeURIComponent(g)}/users/${encodeURIComponent(row.objectId)}`, { method: 'DELETE' });
+      cancel(); toast(join.length || leave.length ? `Saved${join.length ? ` · now in ${join.join(', ')}` : ''}${leave.length ? ` · out of ${leave.join(', ')}` : ''}` : 'Saved'); renderAppData();
+    }
     catch (e) { why.textContent = e.message; }
   } }, 'Save')]);
 }

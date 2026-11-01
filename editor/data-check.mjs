@@ -345,14 +345,22 @@ try {
   await ev(`document.querySelector('[data-sub=privacy]').click()`);
   await until(`!!document.querySelector('#privtypes .row[data-type=Note]')`, 15000);
   await ev(`document.querySelector('#privtypes .row[data-type=Note]').click()`);
-  await until(`!!document.querySelector('#privmain select[data-rule=read]')`, 15000); await settle();
-  await ev(`(() => { for (const [k, v] of [['read', 'public'], ['change', 'nobody']]) { const s = document.querySelector('#privmain select[data-rule=' + k + ']'); s.value = v; s.dispatchEvent(new Event('change')); } })()`);
-  await ev(`document.querySelector('#privmain [data-act=make]').click()`); await wait(1500);
+  // Richard, 2026-10-31: the backend manager's Permissions grid, reused: a tick per action and audience
+  await until(`!!document.querySelector('#privmain .pgrid input[data-cell="find|everyone"]')`, 15000); await settle();
+  const grid = await ev(`({ rows: [...document.querySelectorAll('#privmain .pgrid tr[data-op]')].map(r => r.dataset.op), heads: [...document.querySelectorAll('#privmain .pgrid tr:first-child th')].map(t => t.textContent), save: document.querySelector('#privmain [data-act=save-rule]').disabled })`);
+  ok(JSON.stringify(grid.rows) === '["find","get","create","update","delete"]' && ['App standard', 'Everyone', 'Signed in', 'No one'].every((w) => grid.heads.includes(w)) && grid.save, 'Privacy draws the manager\'s grid: list, open, create, change, delete against the app\'s standard, everyone, signed in and no one; Save waits for a change', grid);
+  // the manager itself, opened signed in: a redirect whose fragment carries the credential and the page
+  const toManager = await fetch(`${url}api/backend-admin?route=${encodeURIComponent('/permissions/Note')}`, { redirect: 'manual' });
+  const where = toManager.headers.get('location') || '';
+  ok(toManager.status === 302 && where.startsWith(`${pj().metadata.cloudservices.endpoint}/_admin#token=`) && where.endsWith('&route=%2Fpermissions%2FNote'), 'Backend manager ↗ opens the backend\'s own /_admin signed in, on Note\'s permissions (the credential in the fragment only)', { status: toManager.status, where: where.replace(/token=[^&]+/, 'token=…') });
+  await ev(`(() => { for (const op of ['find', 'get']) document.querySelector('#privmain .pgrid input[data-cell="' + op + '|everyone"]').click(); })()`); await wait(100);
+  await ev(`(() => { for (const op of ['create', 'update', 'delete']) document.querySelector('#privmain .pgrid input[data-cell="' + op + '|noOne"]').click(); })()`); await wait(100);
+  await ev(`document.querySelector('#privmain [data-act=save-rule]').click()`); await wait(1500);
   const sec = readJson(join(project, 'nodegx.security.json'));
   const anonFind = await dev.post('/admin/permissions/check', { principal: { kind: 'anonymous' }, collection: 'Note', op: 'find' });
   const anonAdd = await dev.post('/admin/permissions/check', { principal: { kind: 'anonymous' }, collection: 'Note', op: 'create' });
   const anonAfter = (await dev.anonymous('GET', '/classes/Note')).status;
-  ok(anonBefore >= 400 && anonAfter === 200 && anonFind.allowed && !anonAdd.allowed && sec.collections?.Note?.permissions?.find === 'public' && sec.collections.Note.permissions.create === 'nobody', 'Make it so: someone not signed in was refused Note\'s rows and now gets them, nobody may add one, and nodegx.security.json says the same', { anonBefore, anonAfter, anonAdd: anonAdd.reason, file: sec.collections?.Note });
+  ok(anonBefore >= 400 && anonAfter === 200 && anonFind.allowed && !anonAdd.allowed && sec.collections?.Note?.permissions?.find === 'public' && sec.collections.Note.permissions.create === 'nobody', 'Ticked and saved: someone not signed in was refused Note\'s rows and now gets them, nobody may add one, and nodegx.security.json says the same', { anonBefore, anonAfter, anonAdd: anonAdd.reason, file: sec.collections?.Note });
   await shot('4-privacy');
 
   console.log('check: STU-062 a rename follows the app (the todo app\'s Task)');
@@ -543,6 +551,38 @@ try {
   await ev(`document.querySelector('#drawer [data-act=deploy-go]').click()`);
   await until(`(document.querySelector('#drawer h3')?.textContent || '') === 'Deployed to live'`, 10000);
   ok(reqPlan.includes("Memo's state made required") && (await live.table('Memo')).columns.find((c) => c.name === 'state')?.required === true, 'once that row has one, Deploy to live makes it required on live', reqPlan.slice(0, 200));
+  // last: the backend allows 300 admin requests a minute, and this section's (Privacy redrawn, each group's people)
+  // spent that budget for the live sections when it ran before them ("Rate limit exceeded for admin requests")
+  // P123-GH-NOGROUPS (Richard, 2026-10-31: "I can see the groups column in the user table, but when I open a user I
+  // can't edit it"): a group made in Privacy, a person put in it and taken out from their panel, the group deleted
+  console.log('check: groups, made and given people in Studio');
+  await wait(61000); // the live sections spent the minute's admin budget: Privacy drawn now would say the limit, not the groups
+  await ev(`document.querySelector('#envbar [data-env=development]')?.click()`); await settle(); // the people are development's
+  const inGroup = async (g) => ((await dev.get(`/admin/users?limit=50&role=${g}`)).users || []).map((u) => u.email);
+  await ev(`document.querySelector('[data-sub=privacy]').click()`);
+  await until(`!!document.querySelector('[data-groups] input[data-input=group]')`, 8000);
+  await ev(`(() => { const i = document.querySelector('[data-groups] input[data-input=group]'); i.value = 'editors'; i.dispatchEvent(new Event('input')); })()`);
+  await ev(`document.querySelector('[data-groups] [data-act=new-group]').click()`);
+  await until(`!!document.querySelector('[data-groups] [data-group=editors]')`, 8000);
+  ok(((await dev.get('/admin/roles')).roles || []).some((r) => r.name === 'editors'), 'Privacy\'s New group makes the group on the backend, and lists it', (await dev.get('/admin/roles')).roles);
+  await ev(`document.querySelector('[data-sub=app]').click()`); await settle();
+  await ev(`document.querySelector('#apptypes .row[data-type=_User]').click()`); await until(`!!document.querySelector('#appmain tr[data-row]')`); await settle();
+  const openVisitor = async () => { await ev(`[...document.querySelectorAll('#appmain tr[data-row]')].find(tr => tr.textContent.includes(${JSON.stringify(visitor)})).querySelector('td[data-field=email]').click()`); await until(`!!document.querySelector('#drawer:not([hidden]) [data-field=groups] input[data-group=editors]')`, 8000); };
+  await openVisitor();
+  await ev(`document.querySelector('#drawer [data-field=groups] input[data-group=editors]').click()`);
+  await ev(`document.querySelector('#drawer [data-act=save]').click()`); await until(`document.getElementById('drawer').hidden`, 6000); await settle();
+  const cellNow = await ev(`[...document.querySelectorAll('#appmain tr[data-row]')].find(tr => tr.textContent.includes(${JSON.stringify(visitor)}))?.textContent`);
+  ok(JSON.stringify(await inGroup('editors')) === JSON.stringify([visitor]) && /editors/.test(cellNow), 'ticked in their panel and saved: the person is in editors on the backend, and the table says so', { members: await inGroup('editors'), cellNow });
+  await openVisitor();
+  ok(await ev(`document.querySelector('#drawer [data-field=groups] input[data-group=editors]').checked`), 'opened again, their panel shows them in it');
+  await ev(`document.querySelector('#drawer [data-field=groups] input[data-group=editors]').click()`);
+  await ev(`document.querySelector('#drawer [data-act=save]').click()`); await until(`document.getElementById('drawer').hidden`, 6000); await settle();
+  ok((await inGroup('editors')).length === 0, 'unticked and saved: out of it on the backend', await inGroup('editors'));
+  await ev(`document.querySelector('[data-sub=privacy]').click()`);
+  await until(`!!document.querySelector('[data-groups] [data-group=editors] [data-act=delete-group]')`, 8000);
+  await ev(`document.querySelector('[data-groups] [data-group=editors] [data-act=delete-group]').click()`); await yes(); await wait(1500);
+  ok(!((await dev.get('/admin/roles')).roles || []).some((r) => r.name === 'editors'), 'Delete takes the group off the backend', (await dev.get('/admin/roles')).roles);
+
 } catch (err) {
   ok(false, `the gate stopped: ${err.stack || err.message}`);
 } finally {

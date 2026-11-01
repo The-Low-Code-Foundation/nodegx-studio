@@ -4,7 +4,9 @@
  *
  *   node editor/sentence-check.mjs      PASS n/n and exit 0, or the failing lines and exit 1
  */
-import { pieces, sentenceLine, removePiece, splice, literal, INSERTS, WORDS, MEANS, teach, codeSegments } from './sentence.mjs';
+import { createRequire } from 'node:module';
+import { pieces, sentenceLine, removePiece, splice, literal, INSERTS, WORDS, MEANS, teach, codeSegments, phraseReads } from './sentence.mjs';
+import { TYPES, phrasesFor, applyPhrase } from './phrases.mjs';
 
 const results = [];
 const ok = (cond, what, detail) => { results.push(!!cond); console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${what}${!cond && detail !== undefined ? ' — ' + String(detail).slice(0, 300) : ''}`); };
@@ -60,6 +62,42 @@ ok(Object.keys(WORDS).filter((k) => !MEANS[k]).length === 0, 'every operator Stu
 ok(teach(pieces('room === "x"', isName)[1]) === '“is” is === in the code: true when both sides are the same.', 'pointing at "is" says it is === and what that does', teach(pieces('room === "x"', isName)[1]));
 ok(teach(pieces('room', isName)[0], chip) === "[Plant's room] is the name room in the code: the app hands the value to the expression under that name.", 'pointing at a chip says the name it has in the code', teach(pieces('room', isName)[0], chip));
 ok(/true and false .* false/.test(teach(pieces('false', isName)[0])), 'a yes / no says it is true / false in the code');
+
+console.log("check: a phrase from more… reads back as the words on its button (Richard, 2026-10-31: [0], slice())");
+{
+  const { rows } = createRequire(import.meta.url)('../vendor/phrasebook/rows.js');
+  const byType = Object.fromEntries(TYPES.map((t) => [t, phrasesFor(rows, t)]));
+  const reads = phraseReads(byType);
+  const leaks = [], lost = [], back = [];
+  for (const t of TYPES) for (const ph of byType[t]) {
+    if (!ph.insert || ph.type !== t) continue;
+    const r = applyPhrase('plants', 'plants', ph), known = new Set(['plants', ...Object.keys(r.slots)]);
+    const ps = pieces(r.text, (n) => known.has(n), { reads, typeOf: (n) => (n === 'plants' ? t : null) });
+    // what is left as code: only a record's field a phrase names (`name` in contains (a record)), never a bracket or a dot
+    const code = ps.filter((q) => q.kind === 'code' && !/^[A-Za-z_$][\w$]*$|^[()]$/.test(q.code)) // a bracket that groups stays.map((q) => q.code);
+    if (code.length) leaks.push(`${ph.bubble}: ${r.text} → ${code.join(' ')}`);
+    const reading = reads.some((x) => x.bubble === ph.bubble && x.type === t);
+    if (reading && !ps.some((q) => q.phrase === ph.bubble)) lost.push(`${ph.bubble}: ${sentenceLine(r.text, (n) => n, (n) => known.has(n), { reads, typeOf: () => t })}`);
+    const seg = codeSegments(r.text, ps);
+    if (seg.map((x) => x.text).join('') !== r.text || seg.some((x) => x.piece === null && !/^\s*$/.test(x.text))) back.push(ph.bubble);
+  }
+  ok(reads.length >= 50, `the phrasebook's phrases are templates (${reads.length})`, reads.length);
+  ok(!leaks.length, 'no phrase leaves a bracket, a dot or a method in the sentence', leaks);
+  ok(!lost.length, "each phrase reads back as its own button's words, its value's type deciding between phrases written alike", lost);
+  ok(!back.length, 'every character of a phrase belongs to a piece in the teaching view', back);
+  const isN = (n) => n === 'plants' || n === 'size';
+  const line = (x, ty = 'List') => sentenceLine(x, (n) => n, isN, { reads, typeOf: () => ty });
+  ok(line('plants[0]') === '[plants]:first item', '[0] on a list is :first item', line('plants[0]'));
+  ok(line('plants.slice(4)') === '[plants]:items from # 4', '.slice(4) on a list is :items from # 4, the 4 in a number box', line('plants.slice(4)'));
+  ok(line('plants.slice(0, 5)', 'String') === '[plants]:truncated to 5', '.slice(0, 5) on a text is :truncated to 5', line('plants.slice(0, 5)', 'String'));
+  ok(line('plants[0].toUpperCase()') === '[plants]:first item:uppercase', 'a phrase on a phrase: the first item, uppercased', line('plants[0].toUpperCase()'));
+  ok(line('plants[3]') === '[plants]:item # 3', 'an index that is not 0 is :item #', line('plants[3]'));
+  const ps = pieces('plants.slice(0, 2) === size', isN, { reads, typeOf: () => 'List' });
+  const ph = ps.find((q) => q.phrase);
+  ok(removePiece('plants.slice(0, 2) === size', ph) === 'plants === size', 'removing a phrase leaves the value it followed', removePiece('plants.slice(0, 2) === size', ph));
+  ok(/^“:items until #” is \.slice\(0,\) in the code/.test(teach(ph)), 'pointing at a phrase says its code and that it is Bubble\'s', teach(ph));
+  ok(sentenceLine('plants[0]', (n) => n, isN) === '[plants] [ 0 ]', 'control: without the phrasebook the same code is read as code (what Richard saw)', sentenceLine('plants[0]', (n) => n, isN));
+}
 
 const passed = results.filter(Boolean).length;
 console.log(`${passed === results.length ? 'PASS' : 'FAIL'} ${passed}/${results.length}`);

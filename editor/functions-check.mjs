@@ -169,6 +169,23 @@ try {
       `it opens as a drawn graph: ${s?.cards} cards, ${s?.wires.length} wires, its signals and its values told apart`, s && { cards: s.cards, nodes: f.nodes.length, wires: s.wires, conns: f.conns.length });
     await shot('agent-made');
   }
+
+  // 5. STU-099 (Richard, 2026-10-31: "I still can't edit backend function steps"): a step's settings open on the right;
+  // a script changed there is written to the function's files, then put on the backend, which here there is none of
+  console.log('check: a function step changed in Studio (STU-099)');
+  await b.evaluate(`document.querySelector('#fnlist .row[data-fn="__cloud__/course"]').click()`); await wait(500);
+  const scriptCard = await b.evaluate(`[...document.querySelectorAll('#steps .fnflow .step[data-id]')].find((c) => /A script of/.test(c.textContent))?.dataset.id`);
+  await b.evaluate(`document.querySelector('#steps .fnflow .step[data-id="${scriptCard}"] h3').click()`); await wait(400);
+  const panel = await b.evaluate(`({ shown: !document.getElementById('wfinspect').hidden, list: !!document.getElementById('fnlist').offsetParent, code: document.querySelector('#wfinspect textarea.code')?.value ?? null, picked: document.querySelector('#steps .fnflow .step.picked')?.dataset.id })`);
+  const before = filesOf('__cloud__/course').nodes.find((n) => n.id === scriptCard)?.parameters?.functionScript;
+  ok(panel.shown && panel.list && panel.picked === scriptCard && panel.code === before, 'a click on the script step opens its script on the right, the step marked and the list still beside it', { ...panel, code: panel.code?.slice(0, 60) });
+  await b.evaluate(`(() => { const t = document.querySelector('#wfinspect textarea.code'); t.value += '\\n// changed in Studio'; t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  await b.until(`['done', 'failed'].includes(window.__ob.fnDeployState()?.phase)`, 30000).catch(() => {});
+  const after = filesOf('__cloud__/course').nodes.find((n) => n.id === scriptCard)?.parameters?.functionScript;
+  const said = await b.evaluate(`document.querySelector('#steps .fnfacts .fndeploy')?.textContent`);
+  ok(after === before + '\n// changed in Studio', 'the change is written to the function\'s own files', after?.slice(-40));
+  ok(/not on the backend yet: The app has cloud functions but no backend/.test(said), 'with no backend it says the change is saved and not on a backend, not that it is live', said);
+  ok(!(await b.evaluate(`/Read only/.test(document.querySelector('#steps .fnfacts').textContent)`)), 'the function no longer says it is read only');
 } catch (e) {
   ok(false, `the check ran to its end: ${e.message}`);
 } finally {

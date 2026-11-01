@@ -206,6 +206,8 @@ try {
     ok(/Last fired (just now|\d+ seconds ago): it failed/.test(v?.facts) && /1 time in all/.test(v?.facts), 'the trigger\'s card: when it last fired, how it went, how often', v?.facts);
     await ev(`document.querySelector('#steps .openrun')?.click()`);
     ok(await b.until(`!!document.querySelector('#steps .autoview[data-workflow="triage"] .flow.playing')`, 8000).catch(() => false), 'its Open that run opens the workflow, playing');
+    // Richard, 2026-10-31: "why … does it hide the left menu with all the functions? Seems unnecessary"
+    ok(await ev(`!!document.getElementById('autolist').offsetParent && !!document.getElementById('fnlist').offsetParent && !!document.querySelector('#steps .cardnav .back')`), 'the list of workflows and functions stays beside the run it opened, and Back is still there');
     await b.until(`!document.querySelector('#steps .flow.playing')`, 8000).catch(() => {});
   }
 
