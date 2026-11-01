@@ -65,7 +65,7 @@
   "dependencies": {
     "@nodegx/backend-kit": "0.1.0",
     "@nodegx/backend-map": "0.1.7",
-    "@nodegx/mcp": "0.2.8",
+    "@nodegx/mcp": "0.2.9",
     "@nodegx/preview": "0.2.8"
   },
   "devDependencies": {

@@ -1,16 +1,16 @@
 {
   "nodegx": {
     "repository": "https://github.com/The-Low-Code-Foundation/NodeGX",
-    "commit": "ccc14822a8bcf5457706147f998bfe0dbb3661cd",
-    "committed": "2026-11-01T23:30:47+01:00",
-    "subject": "feat(p123 fnrunvalues): a cloud function's run records each acting node's values, capped and redacted"
+    "commit": "13b6fa32d59c51686823f383b2ece0f8f35b59c9",
+    "committed": "2026-11-02T00:36:59+01:00",
+    "subject": "docs(p125 surfacesunsaid): the round re-run on a dist with CCN-009/010 + PREVIEWCUT: the surfaces said, no limit invented"
   },
-  "built": "2026-11-01T22:31:06.630Z",
+  "built": "2026-11-01T23:37:19.648Z",
   "esbuild": "0.25.12",
   "npm": {
     "@nodegx/backend-kit": "0.1.0",
     "@nodegx/backend-map": "0.1.7",
-    "@nodegx/mcp": "0.2.8",
+    "@nodegx/mcp": "0.2.9",
     "@nodegx/preview": "0.2.8"
   },
   "sources": 239,
