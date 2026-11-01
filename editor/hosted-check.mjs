@@ -171,6 +171,19 @@ try {
     const agrees = lit && want.size > 0 && onGraph.every((c) => (want.get(c.id) === 'error') === c.refused && (want.has(c.id) && want.get(c.id) !== 'error' && want.get(c.id) !== 'skipped') === c.ran)
       && [...want.keys()].every((id) => onGraph.some((c) => c.id === id));
     ok(agrees, 'called by someone signed in, the steps it ran are lit: each node the backend recorded wears "ran" ("refused" where it failed), and no other', { call: signedIn.status, said: signedInText.slice(0, 80), recorded: [...want], lit: lit && lit.filter((c) => c.ran || c.refused).map((c) => `${c.id}:${c.ran ? 'ran' : 'refused'}`) });
+    // P123-STU-FNRUNVALUES: a step that ran, opened, says what went in and came out in that run, exactly as the backend's
+    // record holds it: its input ports when this backend records values (NodeGX ccc14822a on), else that it does not
+    const ranStep = (record?.steps ?? []).find((s) => s.status !== 'error' && s.status !== 'skipped' && onGraph.some((c) => c.id === s.nodeId));
+    if (ranStep) {
+      await click(`#steps .fnview .fnflow .step[data-id="${ranStep.nodeId}"]`);
+      const box = await until(`(() => { const b = ${P}.querySelector('.rundata'); return b ? { head: b.querySelector('.sechead')?.textContent, in: b.querySelector('.rdin')?.textContent ?? null, out: b.querySelector('.rdout')?.textContent ?? null } : false; })()`, 8000);
+      const keys = Object.keys(ranStep.inputData ?? {});
+      const outs = Object.keys(ranStep.outputData?.outputs ?? {});
+      const inOk = keys.length ? keys.every((k) => box?.in?.includes(JSON.stringify(k))) : box?.in === '(not recorded by this backend)';
+      const outOk = outs.length ? outs.every((k) => box?.out?.includes(JSON.stringify(k))) : /^\((no values: only its signal|not recorded by this backend)\)$/.test(box?.out ?? '');
+      ok(box && box.head === 'In the last run' && inOk && outOk, 'a step that ran, opened, says what went in and came out in that run, as the backend recorded it (or that this backend records no values)', { node: ranStep.nodeId, recordedIn: keys, recordedOut: outs, box });
+      await ev(`${P}.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`); await wait(200);
+    } else ok(false, 'a step that ran, opened, says what went in and came out (no step ran in the record)', record?.steps);
     await shot('bko-004-hosted-function-ran');
 
     // the map's "Open its steps" (published with @nodegx/backend-map 0.1.3): its frame posts the function, Studio opens

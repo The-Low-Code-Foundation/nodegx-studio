@@ -43,6 +43,7 @@ __export(stdin_exports, {
   heartbeatIsFresh: () => heartbeatIsFresh,
   installExitHooks: () => installExitHooks,
   isOwnedBySelf: () => isOwnedBySelf,
+  judgeProjectFolder: () => judgeProjectFolder,
   listBackendConfigs: () => listBackendConfigs,
   listRuntimeRecords: () => listRuntimeRecords,
   ownedBackendIds: () => ownedBackendIds,
@@ -66,10 +67,10 @@ __export(stdin_exports, {
 module.exports = __toCommonJS(stdin_exports);
 
 // packages/noodl-mcp/src/backend/provision.ts
-var import_child_process2 = require("child_process");
-var fs3 = __toESM(require("fs"));
+var import_child_process3 = require("child_process");
+var fs5 = __toESM(require("fs"));
 var net = __toESM(require("net"));
-var path3 = __toESM(require("path"));
+var path4 = __toESM(require("path"));
 
 // packages/noodl-mcp/src/errors.ts
 var ToolError = class extends Error {
@@ -177,30 +178,121 @@ var BackendClient = class {
   }
 };
 
-// packages/noodl-mcp/src/backend/runtimeRecord.ts
-var import_child_process = require("child_process");
+// packages/noodl-mcp/src/backend/projectIdentity.ts
+var crypto = __toESM(require("crypto"));
 var fs2 = __toESM(require("fs"));
 var path2 = __toESM(require("path"));
+var PROJECT_FILE = "nodegx.project.json";
+function mintProjectId() {
+  return crypto.randomUUID();
+}
+function projectFilePath(projectDir) {
+  return path2.join(projectDir, PROJECT_FILE);
+}
+function readProjectId(projectDir) {
+  try {
+    const parsed = JSON.parse(fs2.readFileSync(projectFilePath(projectDir), "utf-8"));
+    const id = parsed?.id;
+    return typeof id === "string" && id.trim() ? id : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function ensureProjectId(projectDir) {
+  const file = projectFilePath(projectDir);
+  let raw;
+  try {
+    raw = fs2.readFileSync(file, "utf-8");
+  } catch {
+    return {
+      outcome: "unavailable",
+      reason: `there is no readable ${PROJECT_FILE} in ${projectDir}, so this project has no identity to bind a backend to`
+    };
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {
+      outcome: "unavailable",
+      reason: `${PROJECT_FILE} is not valid JSON, so no project id could be read or written`
+    };
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { outcome: "unavailable", reason: `${PROJECT_FILE} is not a JSON object` };
+  }
+  const existing = parsed.id;
+  if (typeof existing === "string" && existing.trim()) {
+    return { id: existing, outcome: "present" };
+  }
+  const id = mintProjectId();
+  try {
+    writeJsonAtomic(file, withIdAfterName(parsed, id));
+  } catch (error) {
+    return {
+      // The id is still returned: it is correct for *this* call, and a provision
+      // that stamps it onto the backend is better than one that stamps nothing.
+      // The outcome says it did not persist, so the caller can say so too.
+      id,
+      outcome: "unavailable",
+      reason: `${PROJECT_FILE} could not be written (${error instanceof Error ? error.message : String(error)}), so this project will not be able to prove it owns the backend next time`
+    };
+  }
+  return { id, outcome: "minted" };
+}
+function replaceProjectId(projectDir, newId = mintProjectId()) {
+  const file = projectFilePath(projectDir);
+  const parsed = JSON.parse(fs2.readFileSync(file, "utf-8"));
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error(`${PROJECT_FILE} is not a JSON object`);
+  const hadId = "id" in parsed;
+  if (hadId) parsed.id = newId;
+  writeJsonAtomic(file, hadId ? parsed : withIdAfterName(parsed, newId));
+  return newId;
+}
+function withIdAfterName(project, id) {
+  const out = {};
+  let inserted = false;
+  for (const [key, value] of Object.entries(project)) {
+    if (key === "id") continue;
+    out[key] = value;
+    if (key === "name" && !inserted) {
+      out.id = id;
+      inserted = true;
+    }
+  }
+  if (!inserted) out.id = id;
+  return out;
+}
+function writeJsonAtomic(file, data) {
+  const tmp = `${file}.tmp-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+  fs2.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
+  fs2.renameSync(tmp, file);
+}
+
+// packages/noodl-mcp/src/backend/runtimeRecord.ts
+var import_child_process = require("child_process");
+var fs3 = __toESM(require("fs"));
+var path3 = __toESM(require("path"));
 var RUNTIME_FILE = "runtime.json";
 var HEARTBEAT_STALE_MS = 6e4;
 var HEARTBEAT_INTERVAL_MS = 1e4;
 function recordPath(root, backendId) {
-  return path2.join(root, backendId, RUNTIME_FILE);
+  return path3.join(root, backendId, RUNTIME_FILE);
 }
 function writeRuntimeRecord(record, root = backendsRoot()) {
   const file = recordPath(root, record.backendId);
-  fs2.mkdirSync(path2.dirname(file), { recursive: true });
+  fs3.mkdirSync(path3.dirname(file), { recursive: true });
   const tmp = `${file}.tmp-${process.pid}`;
-  fs2.writeFileSync(tmp, JSON.stringify(record, null, 2) + "\n", { mode: 384 });
-  fs2.renameSync(tmp, file);
+  fs3.writeFileSync(tmp, JSON.stringify(record, null, 2) + "\n", { mode: 384 });
+  fs3.renameSync(tmp, file);
   try {
-    fs2.chmodSync(file, 384);
+    fs3.chmodSync(file, 384);
   } catch {
   }
 }
 function readRuntimeRecord(backendId, root = backendsRoot()) {
   try {
-    const parsed = JSON.parse(fs2.readFileSync(recordPath(root, backendId), "utf-8"));
+    const parsed = JSON.parse(fs3.readFileSync(recordPath(root, backendId), "utf-8"));
     if (!parsed || typeof parsed !== "object") return null;
     if (typeof parsed.backendId !== "string" || typeof parsed.pid !== "number") return null;
     return parsed;
@@ -211,7 +303,7 @@ function readRuntimeRecord(backendId, root = backendsRoot()) {
 function listRuntimeRecords(root = backendsRoot()) {
   let entries;
   try {
-    entries = fs2.readdirSync(root);
+    entries = fs3.readdirSync(root);
   } catch {
     return [];
   }
@@ -224,7 +316,7 @@ function listRuntimeRecords(root = backendsRoot()) {
 }
 function deleteRuntimeRecord(backendId, root = backendsRoot()) {
   try {
-    fs2.rmSync(recordPath(root, backendId), { force: true });
+    fs3.rmSync(recordPath(root, backendId), { force: true });
   } catch {
   }
 }
@@ -377,6 +469,45 @@ async function reapOrphanedBackends(options = {}) {
   return rows;
 }
 
+// packages/noodl-mcp/src/scriptRuntime.ts
+var import_child_process2 = require("child_process");
+var import_fs = __toESM(require("fs"));
+var facts = () => ({ env: process.env, execPath: process.execPath, electron: process.versions.electron });
+var probes = /* @__PURE__ */ new Map();
+function runsScripts(bin, env) {
+  let ok = probes.get(bin);
+  if (ok === void 0) {
+    const r = (0, import_child_process2.spawnSync)(bin, ["-e", "process.exit(0)"], {
+      env: { ...env, ELECTRON_RUN_AS_NODE: "1" },
+      stdio: "ignore",
+      timeout: 1e4
+    });
+    ok = r.status === 0;
+    probes.set(bin, ok);
+  }
+  return ok;
+}
+function executable(bin) {
+  if (!import_fs.default.existsSync(bin)) return null;
+  try {
+    import_fs.default.accessSync(bin, import_fs.default.constants.X_OK);
+  } catch {
+    try {
+      import_fs.default.chmodSync(bin, 493);
+    } catch {
+      return null;
+    }
+  }
+  return bin;
+}
+var HELPER_NODE_MESSAGE = "This NodeGX server is running on its host's built-in Node, which cannot start the programs NodeGX needs (Studio, the preview, the local backend). Install the latest NodeGX extension from https://nodegx.io/start: it carries its own Node.";
+function scriptRuntime(f = facts()) {
+  const bundled = f.env.NODEGX_NODE ? executable(f.env.NODEGX_NODE) : null;
+  if (bundled) return bundled;
+  if (!f.electron || runsScripts(f.execPath, f.env)) return f.execPath;
+  throw new Error(HELPER_NODE_MESSAGE);
+}
+
 // packages/noodl-mcp/src/backend/provision.ts
 var READY_PREFIX = "NODEGX_BACKEND_READY ";
 var READY_TIMEOUT_MS = 3e4;
@@ -389,7 +520,7 @@ function resolveServiceEntry() {
   const probed = [];
   const push = (p) => {
     probed.push(p);
-    return fs3.existsSync(p) ? p : null;
+    return fs5.existsSync(p) ? p : null;
   };
   if (process.env.NODEGX_BACKEND_ENTRY) {
     const found = push(process.env.NODEGX_BACKEND_ENTRY);
@@ -397,14 +528,14 @@ function resolveServiceEntry() {
   }
   const candidates = [
     // Monorepo sibling, from src/backend/ and from dist/.
-    path3.resolve(__dirname, "..", "..", "..", "nodegx-backend", "dist", "cli.js"),
-    path3.resolve(__dirname, "..", "..", "nodegx-backend", "dist", "cli.js"),
+    path4.resolve(__dirname, "..", "..", "..", "nodegx-backend", "dist", "cli.js"),
+    path4.resolve(__dirname, "..", "..", "nodegx-backend", "dist", "cli.js"),
     // An installed copy.
-    path3.resolve(__dirname, "..", "..", "node_modules", "nodegx-backend", "dist", "cli.js"),
+    path4.resolve(__dirname, "..", "..", "node_modules", "nodegx-backend", "dist", "cli.js"),
     // P112 OWN-015 — the npm install: `prepack` copies the service bundle into this package's own
     // `dist/backend/cli.js` (`build-backend-copy.mjs`), so `npx @nodegx/mcp` can start a backend with nothing else
     // installed. Bundled, `__dirname` is `dist/`. (The candidate above names a package that has never existed on npm.)
-    path3.resolve(__dirname, "backend", "cli.js")
+    path4.resolve(__dirname, "backend", "cli.js")
   ];
   for (const candidate of candidates) {
     const found = push(candidate);
@@ -435,20 +566,20 @@ async function allocatePort(root = backendsRoot()) {
 }
 function safeReaddir(dir) {
   try {
-    return fs3.readdirSync(dir);
+    return fs5.readdirSync(dir);
   } catch {
     return [];
   }
 }
 function configPath(root, id) {
-  return path3.join(root, id, "config.json");
+  return path4.join(root, id, "config.json");
 }
 function listBackendConfigs(root = backendsRoot()) {
   return safeReaddir(root).map((id) => readBackendConfig(id, root)).filter((c) => !!c);
 }
 function readBackendConfig(id, root = backendsRoot()) {
   try {
-    return JSON.parse(fs3.readFileSync(configPath(root, id), "utf-8"));
+    return JSON.parse(fs5.readFileSync(configPath(root, id), "utf-8"));
   } catch {
     return null;
   }
@@ -457,6 +588,49 @@ function findReusableBackend(existing, name, projectId) {
   if (!projectId) return void 0;
   const wanted = name.trim().toLowerCase();
   return existing.find((b) => b.name.trim().toLowerCase() === wanted && (b.projectIds ?? []).includes(projectId));
+}
+function sameFolder(a, b) {
+  const real = (p) => {
+    try {
+      return fs5.realpathSync.native(p);
+    } catch {
+      return path4.resolve(p);
+    }
+  };
+  return real(a) === real(b);
+}
+function judgeProjectFolder(backend, projectId, projectDir, root = backendsRoot()) {
+  let recordedDir = backend.projectDirs?.[projectId];
+  let source = "config";
+  if (!recordedDir) {
+    recordedDir = readRuntimeRecord(backend.id, root)?.owner?.projectDir;
+    source = "runtime";
+  }
+  if (!recordedDir) return { verdict: "unrecorded" };
+  if (sameFolder(recordedDir, projectDir)) return { verdict: "same-folder", recordedDir, source };
+  if (!fs5.existsSync(recordedDir) || readProjectId(recordedDir) !== projectId) return { verdict: "moved", recordedDir, source };
+  if (source === "runtime" && boundBackendId(projectDir) === backend.id) return { verdict: "unrecorded", recordedDir, source };
+  return { verdict: "copy", recordedDir, source };
+}
+function boundBackendId(projectDir) {
+  try {
+    const project = JSON.parse(fs5.readFileSync(path4.join(projectDir, PROJECT_FILE), "utf-8"));
+    const id = project?.metadata?.cloudservices?.instanceId;
+    return typeof id === "string" && id ? id : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function recordProjectDir(backendId, projectId, projectDir, root) {
+  const config = readBackendConfig(backendId, root);
+  if (!config) return;
+  const dir = path4.resolve(projectDir);
+  if (config.projectDirs?.[projectId] === dir) return;
+  config.projectDirs = { ...config.projectDirs ?? {}, [projectId]: dir };
+  try {
+    fs5.writeFileSync(configPath(root, backendId), JSON.stringify(config, null, 2));
+  } catch {
+  }
 }
 function explainReuse(existing, name, projectId, identity = {}) {
   const wanted = name.trim().toLowerCase();
@@ -525,20 +699,21 @@ function censusBackends(existing) {
     };
   });
 }
-async function createBackendDir(name, projectId, root = backendsRoot()) {
+async function createBackendDir(name, projectId, root = backendsRoot(), projectDir) {
   const id = generateBackendId();
-  const dir = path3.join(root, id);
-  fs3.mkdirSync(path3.join(dir, "data"), { recursive: true });
-  fs3.mkdirSync(path3.join(dir, "workflows"), { recursive: true });
+  const dir = path4.join(root, id);
+  fs5.mkdirSync(path4.join(dir, "data"), { recursive: true });
+  fs5.mkdirSync(path4.join(dir, "workflows"), { recursive: true });
   const config = {
     id,
     name,
     createdAt: (/* @__PURE__ */ new Date()).toISOString(),
     port: await allocatePort(root),
-    projectIds: projectId ? [projectId] : []
+    projectIds: projectId ? [projectId] : [],
+    ...projectId && projectDir ? { projectDirs: { [projectId]: path4.resolve(projectDir) } } : {}
   };
-  fs3.writeFileSync(configPath(root, id), JSON.stringify(config, null, 2));
-  fs3.writeFileSync(path3.join(dir, "schema.json"), JSON.stringify({ tables: [] }, null, 2));
+  fs5.writeFileSync(configPath(root, id), JSON.stringify(config, null, 2));
+  fs5.writeFileSync(path4.join(dir, "schema.json"), JSON.stringify({ tables: [] }, null, 2));
   return config;
 }
 var owned = /* @__PURE__ */ new Map();
@@ -554,7 +729,7 @@ async function startBackend(config, options = {}) {
       "The nodegx-backend service bundle was not found, so no backend can be started. Installed from npm, it ships inside @nodegx/mcp from version 0.2.0 on; an older version has none, so run npx -y @nodegx/mcp@latest. In a source checkout, build it with `npm run build` in packages/nodegx-backend, or set NODEGX_BACKEND_ENTRY. Probed:\n  " + probed.join("\n  ")
     );
   }
-  const dataDir = path3.join(root, config.id);
+  const dataDir = path4.join(root, config.id);
   const args = [
     entry,
     "serve",
@@ -574,7 +749,7 @@ async function startBackend(config, options = {}) {
   ];
   if (options.projectDir) args.push("--project-dir", options.projectDir);
   args.push("--enforce-rules");
-  const child = (0, import_child_process2.spawn)(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"], detached: false });
+  const child = (0, import_child_process3.spawn)(scriptRuntime(), args, { stdio: ["ignore", "pipe", "pipe"], detached: false });
   const logRing = [];
   const appendLog = (stream, chunk) => {
     for (const line of chunk.toString().split("\n")) {
@@ -776,13 +951,44 @@ async function provisionBackend(request) {
   await reapOrphanedBackends({ root });
   const warnings = [];
   const configs = listBackendConfigs(root);
-  const reusable = findReusableBackend(configs, name, request.projectId);
-  const explanation = explainReuse(configs, name, request.projectId, request.identity ?? {});
+  let projectId = request.projectId;
+  let reusable = findReusableBackend(configs, name, projectId);
+  let copyOf;
+  let folder = { verdict: "unrecorded" };
+  if (reusable && projectId && request.projectDir) {
+    const backend = configs.find((c) => c.id === reusable.id) ?? { id: reusable.id };
+    folder = judgeProjectFolder(backend, projectId, request.projectDir, root);
+    if (folder.verdict === "copy") {
+      let freshId;
+      try {
+        freshId = replaceProjectId(request.projectDir, mintProjectId());
+      } catch (error) {
+        throw new ToolError(
+          "conflict",
+          `This folder is a copy of ${folder.recordedDir}, whose app owns backend "${reusable.name}" (${reusable.id}), so it may not use that backend \u2014 but it could not be given an id of its own (${PROJECT_FILE}: ${error instanceof Error ? error.message : String(error)}). Nothing was created or started.`
+        );
+      }
+      const note = `This folder is a copy of ${folder.recordedDir}. It got its own backend, so it cannot change that app's data: backend "${reusable.name}" (${reusable.id}) belongs to the other folder and was not used. This copy was given a project id of its own in ${PROJECT_FILE} (was ${projectId}, now ${freshId}).`;
+      copyOf = {
+        projectDir: folder.recordedDir,
+        backendId: reusable.id,
+        backendName: reusable.name,
+        previousProjectId: projectId,
+        note
+      };
+      projectId = freshId;
+      reusable = void 0;
+    }
+  }
+  const explanation = copyOf ? { verdict: "copy-of-another-folder", note: copyOf.note, namesakes: [copyOf.backendId] } : explainReuse(configs, name, projectId, request.identity ?? {});
   let started;
   let reused = false;
   let adopted = false;
   if (reusable) {
     reused = true;
+    if (folder.verdict === "moved" && folder.source === "config" && projectId && request.projectDir) {
+      recordProjectDir(reusable.id, projectId, request.projectDir, root);
+    }
     const record = readRuntimeRecord(reusable.id, root);
     if (record && processIsAlive(record.pid) && verifyIsOurBackend(record) === "verified") {
       adopted = true;
@@ -800,17 +1006,17 @@ async function provisionBackend(request) {
       started = await startBackend(config, { root, projectDir: request.projectDir });
     }
   } else {
-    const config = await createBackendDir(name, request.projectId, root);
+    const config = await createBackendDir(name, projectId, root, request.projectDir);
     installExitHooks(root);
     started = await startBackend(config, { root, projectDir: request.projectDir });
   }
   if (request.projectDir) {
-    const projectPolicy = path3.join(request.projectDir, "nodegx.security.json");
-    const backendPolicy = path3.join(root, started.backendId, "security.json");
-    if (fs3.existsSync(projectPolicy) && fs3.existsSync(backendPolicy)) {
+    const projectPolicy = path4.join(request.projectDir, "nodegx.security.json");
+    const backendPolicy = path4.join(root, started.backendId, "security.json");
+    if (fs5.existsSync(projectPolicy) && fs5.existsSync(backendPolicy)) {
       const same = (p) => {
         try {
-          return JSON.stringify(JSON.parse(fs3.readFileSync(p, "utf-8")));
+          return JSON.stringify(JSON.parse(fs5.readFileSync(p, "utf-8")));
         } catch {
           return null;
         }
@@ -818,7 +1024,7 @@ async function provisionBackend(request) {
       const fromProject = same(projectPolicy);
       if (fromProject !== null && fromProject !== same(backendPolicy)) {
         warnings.push(
-          `This project ships a security policy (nodegx.security.json) but backend "${started.name}" is running a different one, and an existing security.json is never overwritten. The backend's policy is what is enforced. Compare ${projectPolicy} with ${backendPolicy} and copy it across deliberately if the project's is the one you want.`
+          `This project ships a security policy (nodegx.security.json) but backend "${started.name}" is running a different one, and an existing security.json is never overwritten. The backend's policy is what is enforced. Compare ${projectPolicy} with ${backendPolicy}; to bring the project's across, set each differing rule with set_collection_permissions or set_function_permissions, which write the backend and the file together.`
         );
       }
     }
@@ -828,8 +1034,8 @@ async function provisionBackend(request) {
     id: started.backendId,
     name: started.name,
     port: started.port,
-    dir: path3.join(root, started.backendId),
-    adminToken: readAdminToken(path3.join(root, started.backendId))
+    dir: path4.join(root, started.backendId),
+    adminToken: readAdminToken(path4.join(root, started.backendId))
   });
   for (const collection of request.collections) {
     try {
@@ -850,6 +1056,25 @@ async function provisionBackend(request) {
       );
     }
   }
+  const ruled = request.collections.filter((c) => c.checks?.length && created.includes(c.name));
+  if (ruled.length) {
+    let tables = [];
+    try {
+      tables = (await client.request("GET", "/admin/schema")).json?.tables ?? [];
+    } catch {
+    }
+    for (const collection of ruled) {
+      const fields = new Set(collection.checks.map((rule) => rule.field));
+      const kept = (tables.find((t) => t.name === collection.name)?.checks ?? []).filter((c) => c.declared && c.rule && !fields.has(String(c.rule.field))).map((c) => c.rule);
+      try {
+        await client.request("POST", "/admin/schema", { action: "setChecks", table: collection.name, checks: [...kept, ...collection.checks] });
+      } catch (error) {
+        warnings.push(
+          `"${collection.name}"'s rules for its values were not set (${error instanceof Error ? error.message : String(error)}), so it takes any value until they are.`
+        );
+      }
+    }
+  }
   let enforced = null;
   try {
     const { json } = await client.request("GET", "/admin/permissions");
@@ -867,6 +1092,8 @@ async function provisionBackend(request) {
     reused,
     adopted,
     enforced,
+    projectId,
+    ...copyOf ? { copyOf } : {},
     collections: created,
     // A reuse that could not happen is a fact about this provision, so it rides
     // out with the warnings rather than only in a field a caller may not read.
@@ -877,83 +1104,10 @@ async function provisionBackend(request) {
 }
 function readAdminToken(dir) {
   try {
-    return JSON.parse(fs3.readFileSync(path3.join(dir, "secrets.json"), "utf-8")).adminToken || null;
+    return JSON.parse(fs5.readFileSync(path4.join(dir, "secrets.json"), "utf-8")).adminToken || null;
   } catch {
     return null;
   }
-}
-
-// packages/noodl-mcp/src/backend/projectIdentity.ts
-var crypto = __toESM(require("crypto"));
-var fs4 = __toESM(require("fs"));
-var path4 = __toESM(require("path"));
-var PROJECT_FILE = "nodegx.project.json";
-function mintProjectId() {
-  return crypto.randomUUID();
-}
-function projectFilePath(projectDir) {
-  return path4.join(projectDir, PROJECT_FILE);
-}
-function ensureProjectId(projectDir) {
-  const file = projectFilePath(projectDir);
-  let raw;
-  try {
-    raw = fs4.readFileSync(file, "utf-8");
-  } catch {
-    return {
-      outcome: "unavailable",
-      reason: `there is no readable ${PROJECT_FILE} in ${projectDir}, so this project has no identity to bind a backend to`
-    };
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return {
-      outcome: "unavailable",
-      reason: `${PROJECT_FILE} is not valid JSON, so no project id could be read or written`
-    };
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { outcome: "unavailable", reason: `${PROJECT_FILE} is not a JSON object` };
-  }
-  const existing = parsed.id;
-  if (typeof existing === "string" && existing.trim()) {
-    return { id: existing, outcome: "present" };
-  }
-  const id = mintProjectId();
-  try {
-    writeJsonAtomic(file, withIdAfterName(parsed, id));
-  } catch (error) {
-    return {
-      // The id is still returned: it is correct for *this* call, and a provision
-      // that stamps it onto the backend is better than one that stamps nothing.
-      // The outcome says it did not persist, so the caller can say so too.
-      id,
-      outcome: "unavailable",
-      reason: `${PROJECT_FILE} could not be written (${error instanceof Error ? error.message : String(error)}), so this project will not be able to prove it owns the backend next time`
-    };
-  }
-  return { id, outcome: "minted" };
-}
-function withIdAfterName(project, id) {
-  const out = {};
-  let inserted = false;
-  for (const [key, value] of Object.entries(project)) {
-    if (key === "id") continue;
-    out[key] = value;
-    if (key === "name" && !inserted) {
-      out.id = id;
-      inserted = true;
-    }
-  }
-  if (!inserted) out.id = id;
-  return out;
-}
-function writeJsonAtomic(file, data) {
-  const tmp = `${file}.tmp-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
-  fs4.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
-  fs4.renameSync(tmp, file);
 }
 
 // packages/nodegx-backend-contract/src/backends.ts
@@ -2873,6 +3027,7 @@ function validateSecurityConfig(raw) {
   heartbeatIsFresh,
   installExitHooks,
   isOwnedBySelf,
+  judgeProjectFolder,
   listBackendConfigs,
   listRuntimeRecords,
   ownedBackendIds,

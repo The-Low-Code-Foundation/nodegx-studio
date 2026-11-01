@@ -2536,7 +2536,7 @@ function makeRepeat(parent, it, type) {
   const compId = uuid(), at = new Date().toISOString(), S = 'https://opennoodl.dev/schemas';
   const px = (v) => ({ value: v, unit: 'px' });
   const nodes = [
-    { id: 'rowIn', type: 'Component Inputs', label: `One ${type}`, ports: [{ name: 'id', plug: 'output', type: 'string' }, ...fields.map((c) => ({ name: c.name, plug: 'output', type: portOf(c) }))], x: 420, y: 80 },
+    { id: 'rowIn', type: 'Component Inputs', label: `One ${type}`, ports: [{ name: 'id', plug: 'output', type: 'string' }, ...fields.map((c) => ({ name: c.name, plug: 'output', type: portOf(c) })), ...BUILT_IN_DATES.map((name) => ({ name, plug: 'output', type: 'string' }))], x: 420, y: 80 },
     { id: 'rowOut', type: 'Component Outputs', label: 'What a row says', ports: [{ name: 'Click', plug: 'input', type: 'signal' }], x: 420, y: 260 },
     { id: 'rowBox', type: 'Group', label: `${type} row`, parameters: { flexDirection: photo ? 'row' : 'column', ...(photo ? { alignItems: 'center', columnGap: px(12) } : { rowGap: px(4) }), sizeMode: 'contentHeight', width: { value: 100, unit: '%' }, paddingTop: px(12), paddingBottom: px(12), paddingLeft: px(14), paddingRight: px(14), borderBottomStyle: 'solid', borderBottomWidth: px(1), borderBottomColor: '#e3e6eb' }, children: photo ? ['rowPhoto', 'rowWords'] : shown.map((c) => `rowText-${c.name}`) },
     ...(photo ? [
@@ -3896,9 +3896,10 @@ function valueSources(forNode, forPort) {
   }
   if (pageThing) {
     const t = pageThing.type;
-    groups.push([thingName(t), [...fieldsOf(t).flatMap((f) => { const e = { node: pageThing.recordId, port: 'prop-' + f, text: `${thingName(t)}'s ${f}`, sub: `the ${t} it was opened with`, kind: 'data' }; const set = fieldSet(t, f); return set ? [e, ...throughSources({ node: e.node, port: e.port }, set, e.text, e.sub)] : [e]; }),
+    groups.push([thingName(t), [...withBuiltInDates(fieldsOf(t)).flatMap((f) => { const e = { node: pageThing.recordId, port: 'prop-' + f, text: `${thingName(t)}'s ${f}`, sub: `the ${t} it was opened with`, kind: 'data' }; const set = fieldSet(t, f); return set ? [e, ...throughSources({ node: e.node, port: e.port }, set, e.text, e.sub)] : [e]; }),
       { node: pageThing.recordId, port: 'id', text: `${thingName(t)}'s id`, sub: 'text', kind: 'data' }]]);
   }
+  groups.push(['Current user', currentUserSources()]);
   const data = pageDataSources();
   if (data.length) groups.push(['Page data', data]);
   const states = statesOf().filter((n) => n.id !== forNode?.id).map((n) => ({ node: n.id, port: statePort(n), text: `${labelOf(n.metadata.customState.of)}'s ${stateName(n)}`, sub: n.metadata.customState.type, kind: 'state' }));
@@ -3946,6 +3947,22 @@ function optionSetInstance(setKey) {
   const [id] = edits(pageKey, [{ edit: 'add_node', component: pageKey, type: '/' + setKey, label: setKey.split('/').pop(), x: 1000, y: 100 + logicN * 70 }], { redraw: false });
   return id;
 }
+/** P123-GH-NOCURRENTUSER: Bubble's "Current User" in ⚡ and in a branch's condition: whether someone is signed in, their
+    email and id, and the User type's own fields, read from one User node on the page (placed on the first pick). */
+const USER_NODE = 'net.noodl.user.User';
+const USER_NOT_OFFERED = new Set(['password', 'authData', 'emailVerified', 'email', 'username', 'createdAt', 'updatedAt', 'roles']);
+function currentUserSources() {
+  const e = (port, text, sub) => ({ userPort: port, text, sub, kind: 'user' });
+  return [e('authenticated', 'Current user is signed in', 'yes or no'), e('email', 'Current user\'s email', 'text'), e('id', 'Current user\'s id', 'text'),
+    ...fieldsOf(USER_TYPE).filter((f) => !USER_NOT_OFFERED.has(f)).map((f) => e('prop-' + f, `Current user's ${f}`, 'their own field'))];
+}
+/** The page's User node, or the edit that places one: given with the wire in one gesture, so one Undo takes both off. */
+function currentUserRead() {
+  const found = nodes.find((n) => n.type === USER_NODE);
+  if (found) return { id: found.id, edits: [] };
+  const id = uuid(), logicN = nodes.filter((n) => !isVisualType(n.type)).length;
+  return { id, edits: [{ edit: 'add_node', component: pageKey, id, type: USER_NODE, label: 'Current user', x: 1000, y: 100 + logicN * 70, metadata: { currentUser: true } }] };
+}
 function sourceMenu(e, node, p, onPick, initial = '') {
   closeMenu(onPick ? '.menu:not(.composer)' : '.menu');
   const menu = popover(e);
@@ -3954,6 +3971,12 @@ function sourceMenu(e, node, p, onPick, initial = '') {
   const pick = (src) => {
     closeMenu(onPick ? '.menu:not(.composer)' : '.menu');
     if (src.setKey) src = { ...src, node: optionSetInstance(src.setKey), port: 'items' };
+    if (src.userPort) {
+      const u = currentUserRead();
+      if (onPick) { if (u.edits.length) edits(pageKey, u.edits, { redraw: false }); return onPick({ node: u.id, port: src.userPort, text: src.text }); }
+      edits(pageKey, [...u.edits, { edit: 'connect', component: pageKey, from: { node: u.id, port: src.userPort }, to: { node: node.id, port: p.name } }, ...stepOnly(node, p.name)]);
+      return toast(`${p.displayName || p.name} now comes from ${src.text}`);
+    }
     if (src.through) {
       const r = readThrough(src.through);
       if (onPick) { if (r.edits.length) edits(pageKey, r.edits, { redraw: false }); return onPick({ node: r.node, port: r.port, text: r.text }); }
@@ -3981,7 +4004,7 @@ function sourceMenu(e, node, p, onPick, initial = '') {
       const shown = items.filter((it) => !q2 || it.text.toLowerCase().includes(q2));
       if (!shown.length) continue;
       list.append(h('div', { class: 'h' }, title));
-      for (const it of shown) list.append(h('div', { class: 'item', onclick: () => pick(it) }, icon(it.kind === 'state' ? 'state' : it.kind === 'opt' ? 'list' : it.kind === 'data' ? 'db' : it.kind === 'el' ? glyphOf(byId[it.node].type) : 'code'), it.text, h('small', {}, it.sub)));
+      for (const it of shown) list.append(h('div', { class: 'item', onclick: () => pick(it) }, icon(it.kind === 'state' ? 'state' : it.kind === 'opt' ? 'list' : it.kind === 'data' ? 'db' : it.kind === 'user' ? 'user' : it.kind === 'el' ? glyphOf(byId[it.node].type) : 'code'), it.text, h('small', {}, it.sub)));
     }
     if (!list.children.length) list.append(h('div', { class: 'hint' }, 'Nothing on this page matches.'));
   };
@@ -4067,6 +4090,11 @@ const isPageDataNode = (n) => !!(n?.metadata?.pageData || n?.metadata?.pageDataR
 const itemById = (id) => pageItems.find((i) => i.id === id);
 /** Every data type the app knows: declared, in backend/schema.json, named by its own nodes, or on the running backend. */
 const typeNames = () => [...new Set([...collections().map((c) => c.name), ...schemaTables().map((t) => t.table), ...appCollections().keys(), ...liveTables.map((t) => t.name)])].filter(Boolean).sort();
+/** P123-GH-NOCREATEDAT: every record has when it was made and last changed (the Record draws prop-createdAt and
+    prop-updatedAt for any type since NodeGX f3eee23d9), offered wherever ⚡ reads a record's fields. Not in `fieldsOf`
+    itself: a new page shows its type's first field, and that is never a date. */
+const BUILT_IN_DATES = ['createdAt', 'updatedAt'];
+const withBuiltInDates = (fields) => [...new Set([...fields, ...BUILT_IN_DATES])];
 function fieldsOf(type) {
   const out = new Set();
   const colName = (c) => (typeof c === 'string' ? c : c?.name);
@@ -4083,7 +4111,7 @@ function pageDataSources() {
   for (const it of pageItems) {
     if (it.unsupported) continue;
     if (it.first) {
-      for (const f of [...new Set([...(it.fields || []), ...fieldsOf(it.collection)])]) {
+      for (const f of withBuiltInDates([...(it.fields || []), ...fieldsOf(it.collection)])) {
         out.push({ item: it.id, what: f, text: `${it.name}'s ${f}`, sub: `the first ${it.collection}`, kind: 'data' });
         const set = fieldSet(it.collection, f);
         if (set) out.push(...throughSources({ item: it.id, what: f }, set, `${it.name}'s ${f}`, `the first ${it.collection}`));
@@ -4353,7 +4381,7 @@ function renderItem(right) {
   const later = (fn) => propLater(`pagedata|${it.id}|name`, fn, 400);
   const fieldList = `fields-${slug(it.collection || 'none')}`;
   for (const old of document.querySelectorAll(`datalist[id^="fields-"]`)) old.remove();
-  document.body.append(h('datalist', { id: fieldList }, ...fieldsOf(it.collection).map((f) => h('option', { value: f }))));
+  document.body.append(h('datalist', { id: fieldList }, ...withBuiltInDates(fieldsOf(it.collection)).map((f) => h('option', { value: f }))));
   right.append(h('div', { class: 'head' },
     h('input', { type: 'text', value: it.name, 'aria-label': 'Name', oninput: (e) => { const v = e.target.value.trim(); if (v) later(() => save(() => ({ name: v }), { redraw: false })); } }),
     h('button', { class: 'quiet danger', title: 'Delete this page data', onclick: () => { const readers = readersOf(it, nodes, conns).length; edits(pageKey, removeEdits(it, { component: pageKey })); selItem = null; renderPageData(); renderProps(); toast(`Removed ${it.name}${readers ? ` — ${readers} element${readers === 1 ? '' : 's'} no longer read it` : ''}`); } }, icon('trash')),
@@ -4659,7 +4687,7 @@ function openComposer(e, node, p, existing, onPick, { text: given, chips: givenC
 /* ================= Workflow: events and their steps, read from the wires; a Condition splits the chain ================= */
 let selEvent = null; // { node, port }
 const draftEvents = [];
-const isHelperNode = (n) => n.metadata?.customState || isComposed(n) || n.type.startsWith('/Option sets/') || isPageDataNode(n) || n.metadata?.optionRead;
+const isHelperNode = (n) => n.metadata?.customState || isComposed(n) || n.type.startsWith('/Option sets/') || isPageDataNode(n) || n.metadata?.optionRead || n.metadata?.currentUser;
 function events() {
   const list = [];
   const seen = new Set();
@@ -5120,6 +5148,19 @@ function renderFnPanel(panel) {
   const what = NODE_SUMMARIES[n.type];
   if (what) panel.append(h('p', { class: 'what' }, what));
   const wrap = h('div', { class: 'props' });
+  // P123-STU-FNRUNVALUES: what this step was given and gave in the function's last run, as the backend recorded it
+  // (its input ports, and its output ports beside the outcome); a backend from before NodeGX ccc14822a records neither
+  if (fnRun?.steps) {
+    const ran = fnRun.steps.get(n.id), outs = ran?.output?.outputs;
+    const box = h('div', { class: 'rundata' }, h('div', { class: 'sechead' }, 'In the last run'));
+    if (!ran) box.append(h('div', { class: 'hint' }, 'Not reached: this step did not act in the last run.'));
+    else {
+      box.append(h('div', { class: ran.status === 'error' ? 'warn' : 'ok' }, ran.status === 'error' ? `✗ Failed here${ran.error ? `: ${ran.error}` : ''}` : `✓ Ran${ran.durationMs != null ? ` in ${ran.durationMs} ms` : ''}`));
+      box.append(h('div', { class: 'rdlabel' }, 'What went in'), h('pre', { class: 'rdin' }, ran.input && Object.keys(ran.input).length ? prettyJson(ran.input) : '(not recorded by this backend)'));
+      if (ran.status !== 'error') box.append(h('div', { class: 'rdlabel' }, 'What came out'), h('pre', { class: 'rdout' }, outs && Object.keys(outs).length ? prettyJson(outs) : ran.output ? '(no values: only its signal)' : '(not recorded by this backend)'));
+    }
+    wrap.append(box);
+  }
   const p = n.parameters || {};
   for (const [k, label] of Object.entries(FN_CODE)) {
     if (typeof p[k] !== 'string') continue;
@@ -6835,7 +6876,8 @@ async function saveField(t, col, d, records, why, picked = new Set()) {
       if (rules.length && !(await onBackend('Its rules were not set', () => schemaAct({ action: 'setChecks', table: t.name, checks: F.mergeRules(checks, name, rules) })))) return;
       if (d.unique) await onBackend('It was added, but not made unique', () => schemaAct({ action: 'setIndexes', table: t.name, indexes: [...(live?.indexes || []).filter((i) => i.declared !== false).map(({ fields, unique }) => ({ fields, ...(unique ? { unique } : {}) })), { fields: [name], unique: true }] }));
     }
-    editProject((list) => { const c = list.find((x) => x.name === t.name); c.columns ??= []; c.columns.push(projectColumn({ ...column, fillExisting: undefined })); if (rules.length) c.checks = F.mergeRules(declaredRules(c.checks).map((rule) => ({ rule, declared: true })), name, rules); });
+    const comps = allComponents();
+    if (!editProjectFollowing(rowsGainField(comps, t.name, { name, type: column.type }), comps, (list) => { const c = list.find((x) => x.name === t.name); c.columns ??= []; c.columns.push(projectColumn({ ...column, fillExisting: undefined })); if (rules.length) c.checks = F.mergeRules(declaredRules(c.checks).map((rule) => ({ rule, declared: true })), name, rules); })) return;
   } else {
     const from = F.kindById(F.kindOf(col, checks).id), to = F.kindById(d.kind);
     if (up && name !== col.name) {
@@ -6871,6 +6913,23 @@ async function saveField(t, col, d, records, why, picked = new Set()) {
     if (follow.count) toast(`${col.name} is now ${name}: ${follow.count} place${follow.count === 1 ? '' : 's'} in the app follow${follow.count === 1 ? 's' : ''}`);
   }
   closeDrawer(); renderData();
+}
+/** P123-GH-ROWFROZEN: a repeating group's row (`Rows/…`, its Component Inputs "One <Type>") is made with one input per
+    field the type had then; a field added later gets its input on every such row, so the row can show it (⚡ on a Text in
+    the row). Nothing else in the row changes. */
+function rowsGainField(comps, type, col) {
+  const changed = new Map();
+  const portType = col.type === 'Number' ? 'number' : col.type === 'Boolean' ? 'boolean' : 'string';
+  for (const c of comps) {
+    if (!c.key.startsWith('Rows/')) continue;
+    const nodes = c.files.nodes.nodes;
+    const at = nodes.findIndex((n) => n.type === 'Component Inputs' && n.label === `One ${type}`);
+    if (at < 0 || (nodes[at].ports || []).some((q) => q.name === col.name)) continue;
+    const out = nodes.slice();
+    out[at] = { ...nodes[at], ports: [...(nodes[at].ports || []), { name: col.name, plug: 'output', type: portType }] };
+    changed.set(c.key, { ...c.files, nodes: { ...c.files.nodes, nodes: out } });
+  }
+  return changed;
 }
 async function deleteField(t, col) {
   const records = await rowCount(t.name);

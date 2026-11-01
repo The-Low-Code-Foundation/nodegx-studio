@@ -1605,6 +1605,51 @@ try {
     ok(offered.some((t) => t.startsWith("This page's Note")) && wired.length === 1 && card === "Refresh page dataThis page's Note", "Refresh page data offers This page's Note: the click is wired to its Record's Fetch, and the step says what it refreshes", { offered, wired, card });
     await b.clickSel('[data-tab=design]'); await wait(300); await clickText('#right .ptabs button', 'Visual'); await wait(200);
   }
+  // P123-GH-NOCURRENTUSER (Greenhouse): "the current user is signed in" took JavaScript. ⚡ offers a Current user group, and a pick
+  // places one User node on the page (marked as Studio's) and wires the value from it
+  console.log('check: Current user in ⚡ (P123-GH-NOCURRENTUSER)');
+  {
+    const NOTE = 'components/Pages/Note/';
+    const n0 = await shows();
+    await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Pages/Note'; s.dispatchEvent(new Event('change')); })()`);
+    await rebuilt(n0).catch(() => {}); await wait(800);
+    await b.clickSel('[data-tab=design]'); await wait(300);
+    const usersBefore = onDisk(NOTE + 'nodes.json').nodes.filter((n) => n.type === 'net.noodl.user.User').length;
+    const text = onDisk(NOTE + 'nodes.json').nodes.find((n) => n.type === 'Text');
+    await select(text.id);
+    await clickText('#right .ptabs button', 'Visual').catch(() => {}); await wait(200);
+    const fields = await b.evaluate(`[...document.querySelectorAll('#right .field')].map(f => f.querySelector('label')?.textContent)`);
+    await b.evaluate(`[...document.querySelectorAll('#right .field')][${fields.indexOf('Text')}].querySelector('.bolt').click()`); await wait(300);
+    const menu = await b.evaluate(`(() => { const hs = [...document.querySelectorAll('.menu .h')].map(e => e.textContent); return { heads: hs, items: [...document.querySelectorAll('.menu .item')].map(e => e.textContent) }; })()`);
+    ok(menu.items.some((t) => /'s createdAt/.test(t)) && menu.items.some((t) => /'s updatedAt/.test(t)), "P123-GH-NOCREATEDAT: ⚡ offers the page's Note's createdAt and updatedAt", menu.items.filter((t) => /createdAt|updatedAt/.test(t)));
+    ok(menu.heads.includes('Current user') && menu.items.some((t) => t.startsWith('Current user is signed in')) && menu.items.some((t) => t.startsWith("Current user's email")),
+      '⚡ has a Current user group: is signed in, their email', { heads: menu.heads, items: menu.items.filter((t) => /Current user/.test(t)) });
+    await menuItem("Current user's email");
+    const read = () => { const ns = onDisk(NOTE + 'nodes.json').nodes, u = ns.filter((n) => n.type === 'net.noodl.user.User'); return { u, wire: u[0] && onDisk(NOTE + 'connections.json').connections.some((c) => c.fromId === u[0].id && c.fromProperty === 'email' && c.toId === text.id && c.toProperty === 'text') }; };
+    let got = read();
+    for (let i = 0; i < 40 && !got.wire; i++) { await wait(100); got = read(); }
+    ok(usersBefore === 0 && got.u.length === 1 && got.u[0].metadata?.currentUser === true && got.wire, "picking Current user's email places one User node on the page, Studio's own, and wires its email to the Text", { usersBefore, users: got.u.map((n) => ({ id: n.id, metadata: n.metadata })), wire: got.wire });
+    const logic = await b.evaluate(`[...document.querySelectorAll('#logiclist .row')].map(r => r.dataset.part)`);
+    ok(!logic.includes(got.u[0]?.id), 'the User node it placed is a value Studio chips, not "Logic on this page"', logic);
+    await b.clickSel('#undo'); await wait(800);
+    ok(read().u.length === 0, 'Undo takes the User node and the wire back off');
+  }
+  // P123-GH-ROWFROZEN (Greenhouse): a field added to a type reached no row made before it. Now every Rows/<Type> row of the type gets its input
+  console.log('check: a new field reaches the rows made before it (P123-GH-ROWFROZEN)');
+  {
+    const rowKeys = Object.keys(onDisk('components/_registry.json').components).filter((k) => k.startsWith('Rows/Note row'));
+    await b.clickSel('[data-tab=data]'); await wait(300);
+    await b.clickSel('#data .subtabs button[data-sub=types]').catch(() => {}); await wait(200);
+    await b.evaluate(`document.querySelector('#types .row[data-type=Note]').click()`); await wait(500);
+    await clickText('#datamain .bar button', 'New field'); await b.until(`!!document.querySelector('#drawer:not([hidden]) [data-input=name]')`, 4000);
+    await b.evaluate(`(() => { const i = document.querySelector('#drawer [data-input=name]'); i.value = 'mood'; i.dispatchEvent(new Event('input')); [...document.querySelectorAll('#drawer .dfoot button')].pop().click(); })()`);
+    const inputs = () => rowKeys.map((k) => (onDisk(`components/${k}/nodes.json`).nodes.find((n) => n.type === 'Component Inputs' && n.label === 'One Note')?.ports || []).map((p) => p.name));
+    for (let i = 0; i < 40 && !inputs().every((ps) => ps.includes('mood')); i++) await wait(100);
+    const now = inputs();
+    ok(rowKeys.length >= 1 && now.every((ps) => ps.includes('mood') && ps.includes('title') && ps.includes('createdAt')) && onDisk('nodegx.project.json').metadata.dbCollections.find((c) => c.name === 'Note').columns.some((c) => c.name === 'mood'),
+      'a field added to Note is written into the type and becomes an input on every Note row made before it (which carry createdAt too, P123-GH-NOCREATEDAT)', { rowKeys, now });
+    await b.clickSel('[data-tab=design]'); await wait(300);
+  }
   // P128 S5 (STU-083): Help draws NodeGX's canon from vendor/, its headings and its links as the canon has them
   console.log('check: Help, the canon drawn in Studio (STU-083)');
   {

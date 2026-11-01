@@ -40,7 +40,8 @@
       { "kind": "state", "words": "a custom state", "metadata": ["customState"] },
       { "kind": "optionSet", "words": "an option set", "typePrefix": "/Option sets/" },
       { "kind": "composed", "words": "a value composed in Studio", "type": "Expression", "metadata": ["composedFor", "rule"] },
-      { "kind": "pageData", "words": "page data", "metadata": ["pageData", "pageDataRecord", "pageDataShown", "pageDataAsk"] }
+      { "kind": "pageData", "words": "page data", "metadata": ["pageData", "pageDataRecord", "pageDataShown", "pageDataAsk"] },
+      { "kind": "currentUser", "words": "the current user", "type": "net.noodl.user.User", "metadata": ["currentUser"] }
     ]
   },
   "interface": {

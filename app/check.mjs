@@ -31,6 +31,18 @@ const electron = packaged ?? createRequire(import.meta.url)('electron');
 const appArgs = packaged ? [] : [studioRoot];
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const freePort = () => new Promise((ok) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => ok(p)); }); });
+// NodeGX P123-STU008-APPCHECKPUBLISH (2026-11-02): with the Mac's screen locked, every window is occluded: Electron
+// draws no frames (the preview times out) and a CDP press reaches no element, while scripts still run. 3b's Publish
+// press then does nothing. That is this machine's state, not Studio's, so the gate says it by name and stops
+if (process.platform === 'darwin' && !process.env.STUDIO_CHECK_LOCKED_OK) {
+  let locked = false;
+  try { locked = /"?IOConsoleLocked"?\s*=\s*Yes|<key>IOConsoleLocked<\/key>\s*<true\/>/.test(execFileSync('ioreg', ['-n', 'Root', '-d1', '-a'], { encoding: 'utf8' })); } catch { /* no ioreg: carry on */ }
+  if (locked) {
+    console.log('  FAIL the screen is locked (IOConsoleLocked): a locked Mac gives Electron no frames and no input, so this gate cannot drive the window. Unlock it and run check:app again');
+    console.log('check:app: FAIL 0/1 (screen locked)');
+    process.exit(1);
+  }
+}
 const results = [];
 const ok = (cond, what, detail) => { results.push(!!cond); console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${what}${detail !== undefined ? ' — ' + JSON.stringify(detail).slice(0, 260) : ''}`); };
 const countFiles = (dir) => readdirSync(dir, { recursive: true }).filter((f) => !f.endsWith('.DS_Store') && statSync(join(dir, f)).isFile()).length;
@@ -229,10 +241,23 @@ try {
     ok(await b.evaluate(`!document.querySelector('#publishbtn').hidden`), 'the header has Publish in the desktop app');
     // P123-STU008-APPCHECKPUBLISH: when no answer comes, say whether this page is still the one that pressed it
     await b.evaluate(`window.__pressedHere = true`);
-    await b.clickSel('#publishbtn');
+    // 2026-11-01: busy false, samePage true, no problems: the press never reached publishApp. The header re-fits its fold
+    // (setupHeaderFold) when a pill's text changes, so a point measured before that is not the button after it. Press
+    // only where the button itself is the top element, and keep what the press landed on
+    const atBtn = `(() => { const e = document.querySelector('#publishbtn'); if (!e || e.hidden) return false; const r = e.getBoundingClientRect(); if (!r.width) return false; const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); const top = document.elementFromPoint(x, y); return top && (top === e || e.contains(top)) ? { x, y } : false; })()`;
+    await b.evaluate(`(() => { window.__pressLog = []; for (const t of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) document.addEventListener(t, (e) => window.__pressLog.push(t + ':' + (e.target.id || e.target.className || e.target.tagName) + (e.defaultPrevented ? ':prevented' : '')), true); })()`);
+    const point = await b.until(atBtn, 15000);
+    if (point) await b.click(point.x, point.y); else await b.clickSel('#publishbtn');
+    const landed = point && await b.evaluate(`(() => { const t = document.elementFromPoint(${point?.x ?? 0}, ${point?.y ?? 0}); return t ? (t.id || t.className || t.tagName) : null; })()`);
     const busy = await b.until(`document.querySelector('#publishbtn').textContent === 'Publishing…' || window.__ob.published`, 5000);
     const pub = await b.until(`window.__ob.published`, 120000);
-    const why = pub ? undefined : { busy: !!busy, samePage: await b.evaluate(`window.__pressedHere === true`), problems: b.problems.slice(-5) };
+    const why = pub ? undefined : { busy: !!busy, samePage: await b.evaluate(`window.__pressedHere === true`), point, landed, wired: await b.evaluate(`({ onclick: !!document.querySelector('#publishbtn').onclick, studio: !!window.studio?.publish, disabled: document.querySelector('#publishbtn').disabled, obPublish: typeof window.__ob.publish, text: document.querySelector('#publishbtn').textContent, status: document.getElementById('status')?.textContent })`).catch((e) => String(e)), header: await b.evaluate(`[...document.querySelectorAll('header button, header .pill')].filter((e) => !e.hidden).map((e) => e.id || e.textContent.trim()).slice(0, 12)`).catch(() => null), pressLog: await b.evaluate(`window.__pressLog`).catch(() => null), problems: b.problems.slice(-5) };
+    if (why) {
+      // the same publish called directly: does it answer when the press is taken out of it?
+      await b.evaluate(`window.__ob.publish().then((r) => { window.__direct = r ?? { returned: null }; }, (e) => { window.__direct = { threw: String(e) }; })`);
+      why.direct = await b.until(`window.__direct`, 60000);
+      console.log('    why (in full):', JSON.stringify(why));
+    }
     ok(busy && pub?.site === site && existsSync(join(site, 'index.html')) && existsSync(join(site, '.nodegx-publish.json')), 'clicking it publishes the open app to the folder chosen', { site: pub?.site, error: pub?.error, why });
     ok(pub?.asked?.[0] === 'This app’s backend runs on this computer' && pub.said?.some((l) => l.includes('on this computer only')), 'before writing, it says the backend is this computer\'s; after, where the site is and what it talks to', pub?.said);
     ok(pub?.said?.some((l) => l.includes('(such as /sign-in)') && l.includes('index.html')), 'and that a page\'s own address needs the server to answer it with index.html', pub?.said);
