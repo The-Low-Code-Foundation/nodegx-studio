@@ -47,6 +47,10 @@
  *                          off, or a daily schedule moved, on the backend and in `nodegx.automations.json` together
  *                          (BKO-001's rule: the backend first, then the file; the backend put back if the file fails).
  *                          Answers `{ file, text, backend }`: the file's new text and what the backend stored
+ *   GET  /api/automations/samples  P132 BWF-002: `{ samples: { workflowId: sample }, warned: [workflowId] }`, this computer's
+ *   POST /api/automations/sample   { workflow, sample?, warned? } kept in `.nodegx/workflow-samples.json` (gitignored)
+ *   POST /api/automations/test     { workflow, stopAfter?, env? } the workflow run on its sample on the development backend
+ *                          (refused on live, in words): `{ run, record }`, the record with each step's in and out
  *
  * STU-004: a project bound to a local backend (`lib/backend.mjs`) has it started when this server starts — or adopted
  * when the NodeGX editor or Claude Code already runs it — and stopped when this server stops (SIGTERM / SIGINT; the
@@ -67,7 +71,7 @@ import * as agent from '../lib/agent.mjs';
 import { createRequire } from 'node:module';
 import { TYPES, phrasesFor } from './phrases.mjs';
 import { CLOUD, scriptTableNames } from './fngraph.mjs';
-import { AUTOMATIONS_FILE, atTime, readAutomations } from './automations.mjs';
+import { AUTOMATIONS_FILE, atTime, readAutomations, sampleRun, testRefusal } from './automations.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const flag = (name) => {
@@ -424,6 +428,41 @@ async function saveWorkflow({ workflow, remove, trigger }) {
   // P132 BWF-001: a webhook made here is said with the URL it answers on and its key, which the backend shows only now
   const hook = madeTrigger?.type === 'webhook' && backend.endpoint ? { url: `${backend.endpoint}/hooks/${encodeURIComponent(backend.id)}/${madeTrigger.webhook.slug}`, scheme: madeTrigger.webhook.scheme, secret: hookSecret } : undefined;
   return { file: rel, text, workflow: stored, trigger: madeTrigger && { id: madeTrigger.id }, hook, warnings: put?.warnings ?? [] };
+}
+/**
+ * P132 BWF-002: each workflow's test sample, and which workflows have said "this runs for real" once. Kept on this
+ * computer under `.nodegx/` (the NodeGX editor's own folder, skipped by the store and the watcher), never in git: a
+ * sample can be a person's row. `.nodegx/` is added to the project's `.gitignore` on the first write, as the editor
+ * adds it (nodegxSidecar.ts ensureIgnored): appended, never rewritten.
+ */
+const SAMPLES_FILE = '.nodegx/workflow-samples.json';
+function samplesOf() {
+  try { const j = JSON.parse(readFileSync(join(projectDir, SAMPLES_FILE), 'utf8')); return { samples: j.samples ?? {}, warned: j.warned ?? [] }; }
+  catch { return { samples: {}, warned: [] }; }
+}
+function keepSample({ workflow, sample, warned }) {
+  if (!workflow || typeof workflow !== 'string') throw new Error('Say which workflow the sample is for.');
+  const now = samplesOf();
+  if (sample !== undefined) { if (sample === null) delete now.samples[workflow]; else now.samples[workflow] = sample; }
+  if (warned && !now.warned.includes(workflow)) now.warned.push(workflow);
+  mkdirSync(join(projectDir, '.nodegx'), { recursive: true });
+  writeFileSync(join(projectDir, SAMPLES_FILE), JSON.stringify({ version: 1, ...now }, null, 2) + '\n');
+  const ignore = join(projectDir, '.gitignore');
+  const current = existsSync(ignore) ? readFileSync(ignore, 'utf8') : '';
+  if (!current.split(/\r?\n/).some((l) => l.trim() === '.nodegx/' || l.trim() === '.nodegx')) writeFileSync(ignore, `${current}${current && !current.endsWith('\n') ? '\n' : ''}.nodegx/\n`);
+  return now;
+}
+/** P132 BWF-002: the workflow run on its sample (up to a step), on the development backend, never on live; answers the run and its record. */
+async function testWorkflow({ workflow, stopAfter, env }) {
+  const refused = testRefusal({ env, dev: backends.bindingOf(projectDir), live: backends.liveBindingOf(projectDir), name: backend.name });
+  if (refused) throw new Error(refused);
+  const be = await adminOf('development').catch((e) => { throw new Error(`${e.message} A test runs on the development backend, so start it first (Data).`); });
+  // a backend older than tests ignores `stopAfter` and runs every step for real: asked first, refused before anything runs
+  const catalog = await be.get('/admin/workflow-step-kinds').catch(() => null);
+  if (!catalog?.testRuns) throw new Error('This backend is older than tests: it would run every step for real, never stop where asked, and not mark the run a test. Nothing was run. Tests come with the next NodeGX release.');
+  const { run } = await be.post(`/admin/workflow-defs/${encodeURIComponent(workflow)}/run`, sampleRun(samplesOf().samples[workflow], stopAfter));
+  const record = run.executionId ? await be.get(`/executions/${encodeURIComponent(run.executionId)}`).catch(() => null) : null;
+  return { run, record };
 }
 /** STU-097: each node type's line from NodeGX's enriched catalog (`{ States: 'Named state machine: …' }`), read once; none: {}. */
 let summaries = null;
@@ -782,6 +821,15 @@ const server = http.createServer(async (req, res) => {
       } catch (err) {
         return json(409, { error: err.message });
       }
+    }
+    if (url.pathname === '/api/automations/samples' && req.method === 'GET') return json(200, samplesOf());
+    if (url.pathname === '/api/automations/sample' && req.method === 'POST') {
+      try { return json(200, keepSample(JSON.parse((await readBody(req)).toString('utf8') || '{}'))); }
+      catch (err) { return json(400, { error: err.message }); }
+    }
+    if (url.pathname === '/api/automations/test' && req.method === 'POST') {
+      try { return json(200, await testWorkflow(JSON.parse((await readBody(req)).toString('utf8') || '{}'))); }
+      catch (err) { return json(409, { error: err.message }); }
     }
     if (url.pathname === '/api/images') return json(200, projectImages(projectDir));
     // STU-099: the cloud functions onto the development backend, after a step changed in Studio

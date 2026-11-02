@@ -472,6 +472,18 @@
   #workflow[data-mode=backend] .wfpage, #workflow:not([data-mode=backend]) .wfback { display: none; }
   .wfacts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
   #wfinspect .rundata pre { margin: 4px 0 8px; padding: 8px; max-height: 220px; overflow: auto; font-size: 11.5px; line-height: 1.45; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; white-space: pre-wrap; word-break: break-word; }
+  .autoview .testrow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); }
+  #wfinspect .vtree { list-style: none; margin: 2px 0 6px; padding: 0 0 0 12px; font-size: 11.5px; line-height: 1.5; font-family: var(--mono); }
+  #wfinspect .rdin > .vtree, #wfinspect .rdout > .vtree { padding-left: 0; max-height: 260px; overflow: auto; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+  #wfinspect .vtree summary { cursor: pointer; }
+  #wfinspect .vtree .tv { word-break: break-word; }
+  #wfinspect .vtree .dim, #wfinspect .vtree .tv.dim { color: var(--muted); }
+  .menu.sample label { display: block; margin: 8px 0 3px; font-size: 12px; font-weight: 600; }
+  .menu.sample select, .menu.sample textarea { width: 100%; box-sizing: border-box; }
+  .menu.sample .samplerows { max-height: 160px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 4px; }
+  .menu.sample label.samplerow { display: flex; gap: 6px; align-items: center; font-weight: 400; margin: 0; padding: 3px 4px; cursor: pointer; }
+  .menu.sample textarea.json { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
+  .menu.sample textarea.json.bad { border-color: var(--red); }
   #wfinspect .rundata .rdlabel { font-size: 12px; font-weight: 600; color: var(--ink-2); }
   #wfinspect .rundata .ok { color: var(--green); font-size: 12px; padding: 4px 0; }
   #wfinspect .rvctl { display: grid; grid-template-columns: auto 1fr; gap: 4px; }
@@ -1186,7 +1198,7 @@ import { fieldReaders, typeReaders, renameField, renameType, appFields } from '.
 import { LANES, buildTimeline, lastRunOf, msText, shotAt, stepValues } from './timeline.mjs';
 import { runOver, lastActivity, watchSignals, runtimeTimers, runTimers } from './runwatch.mjs';
 import { CLOUD, REQUEST, RESPONSE, functionList, functionLayout, helperKey, requestAsks, responseWords, touchesWords } from './fngraph.mjs';
-import { ALWAYS_WORDS, AUTOMATIONS_FILE, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, moveStep, newStepId, nextOntoRoute, readAutomations, runLine, scheduleTime, stepsOfRun, targetOf, triggerHead, stepPorts, valueForm, workflowLayout } from './automations.mjs';
+import { ALWAYS_WORDS, AUTOMATIONS_FILE, CHANGE_WORDS, SAMPLE_KINDS, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, moveStep, newStepId, nextOntoRoute, readAutomations, runLine, sampleFor, sampleWords, scheduleTime, stepsOfRun, targetOf, triggerHead, stepPorts, valueForm, workflowLayout } from './automations.mjs';
 import { logicOnPage, placedComponent, studioEdits, wiringLayout, wiringSvg } from './wiring.mjs';
 import { look as canvasLook, nodeScheme, wireColors } from './look.js';
 // STU-084: what Studio draws and edits, as data (the element types, the action menu, the value sources), one file the
@@ -5229,6 +5241,7 @@ addEventListener('message', (e) => {
    a trigger on or off, a daily schedule's time; each goes to the backend and the file together (serve.mjs setTrigger).
    `selAuto`: { kind: 'trigger' | 'workflow', id, from } — `from`, the trigger a workflow was opened from, for Back ---- */
 let selAuto = null, autoBe = null, autoText, autoRun = null;
+let autoSamples = null; // P132 BWF-002: this computer's test samples, `{ samples, warned }` (serve.mjs `.nodegx/workflow-samples.json`)
 const autos = () => readAutomations(files.read(AUTOMATIONS_FILE));
 const autoEntry = (a) => (a.kind === 'trigger' ? autos().triggers : autos().workflows).find((x) => x.id === a.id);
 const beNow = () => (autoBe && !autoBe.pending ? autoBe : null);
@@ -5334,7 +5347,7 @@ function openAuto(target, from = null, opts = {}) {
   selAuto = { kind: target.kind, id: target.id, from, play: !!opts.play }; selFn = null; fnBack = []; autoRun = null; selAutoStep = null; autoPlay = null; hideBoltTip();
   if (beNow()) loadAutoBackend(); // P123-GH-TRIGGERSTALE: a card says what the backend says now, not when the list was first read
   if (tab !== 'backend') switchTab('backend'); else renderWorkflow();
-  if (target.kind === 'workflow') readAutoRun(target.id);
+  if (target.kind === 'workflow') { readAutoRun(target.id); if (!autoSamples) loadSamples(); }
 }
 const backFromAuto = () => { selAuto = selAuto?.from ? { kind: 'trigger', id: selAuto.from, from: null } : null; autoRun = null; renderWorkflow(); };
 async function changeTrigger(id, change, words = null) {
@@ -5357,6 +5370,84 @@ async function readAutoRun(id) {
   autoRun = { run, words };
   renderWorkflow();
   if (selAuto.play && run) { selAuto.play = false; playAutoRun(); }
+}
+/* ---- P132 BWF-002: a workflow tested on a sample. The sample stands for what starts it (a row of a table and the change,
+   a call's body, a schedule's fire, or nothing) and is kept on this computer (serve.mjs, never in git). *Test the workflow*
+   and a step's *Test up to this step* run it on the development backend through serve.mjs, which refuses live in words;
+   the test's record is then the run every step is lit from, with what went in and came out. ---- */
+async function loadSamples() {
+  try { autoSamples = await (await fetch('/api/automations/samples')).json(); } catch { autoSamples = { samples: {}, warned: [] }; }
+  if (selAuto?.kind === 'workflow') renderWorkflow();
+}
+const startsOf = (id) => autos().triggers.filter((t) => targetOf(t).kind === 'workflow' && targetOf(t).name === id);
+const sampleOf = (w) => autoSamples?.samples?.[w.id] ?? null;
+async function keepSample(w, change) {
+  const r = await fetch('/api/automations/sample', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: w.id, ...change }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { toast(j.error ?? `The sample was not kept (${r.status})`); return false; }
+  autoSamples = j; return true;
+}
+async function testAuto(w, stopAfter = null) {
+  if (!sampleOf(w)) return toast('Choose a sample first: what the test starts with.');
+  if (!autoSamples.warned.includes(w.id)) {
+    if (!(await askSure('This runs on your development backend: rows it makes are real.', { yes: 'Run the test', danger: false }))) return;
+    if (!(await keepSample(w, { warned: true }))) return;
+  }
+  const label = $('steps').querySelector('.autoview .fnfacts .run'); if (label) { label.textContent = '● Testing…'; label.className = 'run'; }
+  const r = await fetch('/api/automations/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: w.id, ...(stopAfter ? { stopAfter } : {}) }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { toast(j.error ?? `The test did not run (${r.status})`); return readAutoRun(w.id); }
+  if (selAuto?.kind !== 'workflow' || selAuto.id !== w.id) return;
+  autoRun = { run: j.record, words: j.record ? null : `Tested: ${j.run?.status ?? 'no answer'} (the backend kept no record of it)` };
+  renderWorkflow();
+}
+/** The sample, chosen: what starts the workflow, and for a table, a row of it (its newest twenty) or one typed. */
+async function editSample(e, w) {
+  closeMenu();
+  const was = sampleOf(w) ?? sampleFor(startsOf(w.id));
+  const s = { ...was, body: was.body ?? {} };
+  const menu = h('div', { class: 'menu ask sample', role: 'dialog', 'aria-label': 'The test’s sample', style: `left:${Math.max(8, Math.min(e.clientX - 160, innerWidth - 400))}px;top:${Math.max(8, Math.min(e.clientY + 8, innerHeight - 460))}px;width:380px` });
+  const body = h('div', { class: 'samplebody' });
+  const json = (v, oninput) => { const t = h('textarea', { class: 'json', rows: 6, 'data-input': 'samplebody', spellcheck: 'false' }); t.value = prettyJson(v ?? {}); t.oninput = () => { try { const x = JSON.parse(t.value || '{}'); t.classList.remove('bad'); oninput(x); } catch { t.classList.add('bad'); } }; return t; };
+  const fill = async () => {
+    body.innerHTML = '';
+    if (s.kind === 'db-change') {
+      const schema = await api('/admin/schema').then((j) => (j.tables ?? []).filter((t) => !t.name.startsWith('_'))).catch(() => []);
+      const tables = schema.map((t) => t.name), cols = () => schema.find((t) => t.name === s.table)?.columns ?? [];
+      const sampleRowLabel = (row) => rowLabel(row, cols()); // as App data names the row
+      if (s.table && !tables.includes(s.table)) tables.unshift(s.table);
+      if (!s.table && tables[0]) s.table = tables[0];
+      body.append(h('label', {}, 'Table'), h('select', { 'data-input': 'sampletable', onchange: (ev) => { s.table = ev.target.value; s.rowId = null; s.label = null; s.body = {}; fill(); } }, ...tables.map((t) => h('option', { value: t, selected: t === s.table }, t))),
+        h('label', {}, 'What happened to the row'), h('select', { 'data-input': 'sampleaction', onchange: (ev) => { s.action = ev.target.value; } }, ...Object.entries(CHANGE_WORDS).map(([a, words]) => h('option', { value: a, selected: a === s.action }, `It was ${words}`))));
+      const rows = s.table ? await api(`/classes/${encodeURIComponent(s.table)}?limit=20&order=-updatedAt`).then((j) => j.results ?? []).catch(() => []) : [];
+      const list = h('div', { class: 'samplerows' });
+      if (!rows.length) list.append(h('div', { class: 'hint' }, s.table ? `No ${s.table} rows on the development backend: type one below.` : 'No tables yet.'));
+      for (const row of rows) list.append(h('label', { class: 'samplerow' }, h('input', { type: 'radio', name: 'samplerow', 'data-row': row.objectId, checked: row.objectId === s.rowId, onchange: () => { s.rowId = row.objectId; s.label = sampleRowLabel(row); s.body = row; typed.value = prettyJson(row); } }), sampleRowLabel(row)));
+      const typed = json(s.body, (x) => { s.body = x; s.rowId = x.objectId ?? null; s.label = x.objectId ? sampleRowLabel(x) : null; });
+      body.append(h('label', {}, 'The row'), list, h('details', {}, h('summary', {}, 'Or type the row'), typed));
+    } else {
+      body.append(h('label', {}, s.kind === 'webhook' ? 'What the call sends (its body)' : s.kind === 'schedule' ? 'What the schedule sends (its payload; most send nothing)' : 'What the run is given'), json(s.body, (x) => { s.body = x; }));
+    }
+  };
+  const kind = h('select', { 'data-input': 'samplekind', onchange: (ev) => { s.kind = ev.target.value; s.body = {}; s.rowId = null; s.label = null; fill(); } }, ...Object.entries(SAMPLE_KINDS).map(([k, words]) => h('option', { value: k, selected: k === s.kind }, words)));
+  const keep = h('button', { class: 'primary', 'data-act': 'keepsample', onclick: async () => { if (await keepSample(w, { sample: s })) { closeMenu(); renderWorkflow(); } } }, 'Keep this sample');
+  menu.append(h('label', {}, 'What starts it in the test'), kind, body, h('div', { class: 'hint' }, 'Kept on this computer only, never in the project: a row can be a person’s.'), h('div', { class: 'acts' }, h('button', { class: 'quiet', onclick: () => closeMenu() }, 'Cancel'), keep));
+  document.body.append(menu);
+  dismissOnOutside(menu);
+  await fill();
+}
+/** A value as a tree: a field a line, an object or a list folded under its name (open at the top). `path` is each line's `data-path`, for BWF-003's picker. */
+function valueTree(v, path = '', depth = 0) {
+  if (v === null || typeof v !== 'object') return h('span', { class: 'tv' }, v === undefined ? '(nothing)' : JSON.stringify(v));
+  const entries = Array.isArray(v) ? v.map((x, i) => [i, x]) : Object.entries(v);
+  if (!entries.length) return h('span', { class: 'tv dim' }, Array.isArray(v) ? 'an empty list' : 'nothing in it');
+  return h('ul', { class: 'vtree' }, ...entries.map(([k, x]) => {
+    const at = path ? `${path}.${k}` : String(k);
+    const n = x && typeof x === 'object' ? (Array.isArray(x) ? x.length : Object.keys(x).length) : -1;
+    return n > 0
+      ? h('li', { 'data-path': at }, h('details', { open: depth < 1 }, h('summary', {}, h('b', {}, String(k)), h('span', { class: 'dim' }, Array.isArray(x) ? ` ${n} item${n === 1 ? '' : 's'}` : ` ${n} field${n === 1 ? '' : 's'}`)), valueTree(x, at, depth + 1)))
+      : h('li', { 'data-path': at }, h('b', {}, String(k)), ' ', valueTree(x, at, depth + 1));
+  }));
 }
 /* ---- STU-093: a run, played. Its steps light one after another in the order they ran, a dot travelling each wire it
    crossed between them (the Map's particles), then it stays lit as before. Kept in `autoPlay`, so a redraw mid-play (the
@@ -5469,7 +5560,7 @@ function autoStepCard(step, n, lit, wfLabel) {
     const s = lit.get(step.id);
     if (!s) { cls += ' litnot'; lines.push(h('span', { class: 'lit' }, 'Not reached in the last run')); }
     else if (s.status === 'error') { cls += ' litfail'; lines.push(h('span', { class: 'lit' }, `✗ Failed here${s.error ? `: ${s.error}` : ''}${s.durationMs != null ? ` · ${s.durationMs} ms` : ''}`)); }
-    else if (s.status === 'skipped') { cls += ' litnot'; lines.push(h('span', { class: 'lit' }, 'Skipped in the last run')); }
+    else if (s.status === 'skipped') { cls += ' litnot'; lines.push(h('span', { class: 'lit' }, `Not reached in the ${autoRun?.run?.metadata?.test ? 'test' : 'last run'}`)); }
     else { cls += ' litok'; lines.push(h('span', { class: 'lit' }, `✓ Ran${s.durationMs != null ? ` in ${s.durationMs} ms` : ''}`)); }
   }
   if (selAutoStep === step.id) cls += ' picked';
@@ -5492,6 +5583,10 @@ function renderAutoWorkflow(w) {
     h('div', { class: 'agree' }, agreeWords('workflow', w)),
     h('div', { class: `run ${autoRun?.run ? (failedRun ? 'refused' : 'ran') : ''}` }, autoRun ? autoRun.words ?? runLine(autoRun.run, nameOf) : 'Reading its last run…',
       autoRun?.run ? h('button', { class: 'quiet tiny playrun', title: 'Each step lit in the order it ran, a dot along each wire it crossed', onclick: () => playAutoRun() }, '▶ Play the run') : null),
+    // P132 BWF-002: the sample it is tested on, and the test
+    h('div', { class: 'testrow' }, h('span', { class: 'samplewords' }, autoSamples ? sampleWords(sampleOf(w)) : 'Reading the sample…'),
+      h('button', { class: 'quiet tiny', 'data-act': 'sample', disabled: !editingUp(), onclick: (e) => editSample(e, w) }, sampleOf(w) ? 'Change the sample' : 'Choose a sample'),
+      h('button', { class: 'tiny', 'data-act': 'test', disabled: !editingUp() || !sampleOf(w), title: sampleOf(w) ? 'Run it on the sample, on your development backend' : 'Choose a sample first', onclick: () => testAuto(w) }, '▶ Test the workflow')),
     ...(autoWarnings.get(w.id) ?? []).map((t) => h('div', { class: 'warn', 'data-warning': '', style: 'color:var(--warn)' }, '⚠ ', t)),
     L.dangling.length ? h('div', { style: 'color:var(--red)' }, `It names ${L.dangling.length === 1 ? 'a step' : 'steps'} it does not have: ${[...new Set(L.dangling.map((d) => d.to))].join(', ')}`) : null,
     // STU-092: changed here, on the backend and in the project together
@@ -5665,16 +5760,19 @@ function autoStepPanel(panel, w, step) {
   // the run: what this step was given and what it gave, as the backend recorded that run
   const ran = autoRun?.run ? stepsOfRun(autoRun.run).get(step.id) : null;
   if (autoRun?.run) {
-    const box = h('div', { class: 'rundata' }, h('div', { class: 'sechead' }, 'In the last run'));
-    if (!ran) box.append(h('div', { class: 'hint' }, 'Not reached: the run ended, or went another way, before this step.'));
+    const test = !!autoRun.run.metadata?.test, stopped = autoRun.run.metadata?.stoppedAfter;
+    const box = h('div', { class: 'rundata' }, h('div', { class: 'sechead' }, test ? 'In the test' : 'In the last run'));
+    if (!ran || ran.status === 'skipped') box.append(h('div', { class: 'hint', 'data-reached': 'no' }, stopped ? 'Not reached: the test stopped before this step.' : 'Not reached: the run ended, or went another way, before this step.'));
     else {
-      box.append(h('div', { class: ran.status === 'error' ? 'warn' : 'ok' }, ran.status === 'error' ? `✗ Failed here${ran.error ? `: ${ran.error}` : ''}` : ran.status === 'skipped' ? 'Skipped' : `✓ Ran${ran.durationMs != null ? ` in ${ran.durationMs} ms` : ''}`));
-      box.append(h('div', { class: 'rdlabel' }, 'What went in'), h('pre', { class: 'rdin' }, ran.input === undefined ? '(not recorded)' : prettyJson(ran.input)));
-      if (ran.status !== 'error') box.append(h('div', { class: 'rdlabel' }, 'What came out'), h('pre', { class: 'rdout' }, ran.output === undefined ? '(nothing)' : prettyJson(ran.output)));
+      box.append(h('div', { class: ran.status === 'error' ? 'warn' : 'ok' }, ran.status === 'error' ? `✗ Failed here${ran.error ? `: ${ran.error}` : ''}` : `✓ Ran${ran.durationMs != null ? ` in ${ran.durationMs} ms` : ''}`));
+      // P132 BWF-002: a tree, a field a line (BWF-003 makes a line something to pick)
+      box.append(h('div', { class: 'rdlabel' }, 'What went in'), h('div', { class: 'rdin' }, ran.input === undefined ? '(not recorded)' : valueTree(ran.input)));
+      if (ran.status !== 'error') box.append(h('div', { class: 'rdlabel' }, 'What came out'), h('div', { class: 'rdout' }, ran.output === undefined ? '(nothing)' : valueTree(ran.output)));
     }
     wrap.append(box);
   }
   if (up) {
+    wrap.append(h('div', { class: 'after' }, h('button', { 'data-act': 'testupto', disabled: !sampleOf(w), title: sampleOf(w) ? `This step and the steps before it, on ${sampleWords(sampleOf(w)).replace(/^Sample: /, 'the sample: ')}` : 'Choose a sample first (above the steps)', onclick: () => testAuto(w, step.id) }, '▶ Test up to this step')));
     wrap.append(h('div', { class: 'sechead' }, 'Settings'));
     if (spec?.invokesFunction) {
       const fns = callableFns(); if (step.ref && !fns.includes(step.ref)) fns.unshift(step.ref);

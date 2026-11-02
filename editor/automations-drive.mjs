@@ -19,7 +19,7 @@
  *   node editor/automations-drive.mjs            PASS n/n and exit 0, or the failing lines and exit 1
  *   node editor/automations-drive.mjs --shots    also writes the phase's look/bko-005-*.png
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
@@ -256,10 +256,11 @@ try {
   await ev(`document.querySelector('#steps .autoview .step[data-id="pause"]').click()`);
   await b.until(`!document.getElementById('wfinspect').hidden && !!document.querySelector('#wfinspect .rdin')`, 5000);
   {
-    const p = await ev(`({ type: document.querySelector('#wfinspect .type')?.innerText, into: document.querySelector('#wfinspect .rdin')?.textContent, out: document.querySelector('#wfinspect .rdout')?.textContent })`);
-    let into = null; try { into = JSON.parse(p.into); } catch { /* said below */ }
-    ok(/Step 1 · Wait/.test(p.type) && into?.duration === 10 && into?.unit === 'milliseconds' && into?.body?.title === 'Water the plants', 'a step clicked shows what went in, as the backend recorded the run: its settings and the row that started it', p);
-    ok(typeof p.out === 'string' && p.out !== '(nothing)' && p.out.trim().startsWith('{'), 'and what came out', p.out);
+    // P132 BWF-002: a tree, a field a line; each line's value read by its path
+    const leaves = (sel) => `Object.fromEntries([...document.querySelectorAll('${sel} li[data-path]')].filter((l) => !l.querySelector('ul')).map((l) => [l.dataset.path, l.querySelector(':scope > .tv')?.textContent]))`;
+    const p = await ev(`({ type: document.querySelector('#wfinspect .type')?.innerText, into: ${leaves('#wfinspect .rdin')}, out: ${leaves('#wfinspect .rdout')} })`);
+    ok(/Step 1 · Wait/.test(p.type) && p.into?.duration === '10' && p.into?.unit === '"milliseconds"' && p.into?.['body.title'] === '"Water the plants"', 'a step clicked shows what went in, as the backend recorded the run: its settings and the row that started it', p);
+    ok(Object.keys(p.out ?? {}).length > 0, 'and what came out', p.out);
   }
   await ev(`document.querySelector('#steps .autoview .step[data-id="notify"]').click()`);
   await b.until(`/Failed here/.test(document.querySelector('#wfinspect .rundata')?.innerText ?? '')`, 5000).catch(() => {});
@@ -401,6 +402,76 @@ try {
   ok(fileNow().triggers.find((x) => x.id === dailyId)?.schedule?.cron === '0 10 * * 1-5' && (await backendTrigger())?.schedule?.cron === '0 10 * * 1-5', 'its days changed in its settings: Monday to Friday at 10:00, in the file and on the backend', fileNow().triggers.find((x) => x.id === dailyId)?.schedule);
   await shot('p132-trigger-panel');
 
+  // P132 BWF-002: a two-step workflow a Task row starts, tested on a picked Task row, then up to its first step
+  console.log('check: P132 BWF-002, a workflow tested on a sample');
+  {
+    const steps = [
+      { id: 'read', name: 'Read the task', kind: 'transform', params: { output: { task: { $path: 'body.title' }, action: { $path: 'trigger.action' } } }, next: ['say'] },
+      { id: 'say', name: 'Say it', kind: 'transform', params: { output: { line: { $path: 'upstream.read.task' } } } }];
+    const r = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: { id: 'watered', name: 'When a task is made', entry: 'read', steps }, trigger: { type: 'db-change', name: 'A task made', dbChange: { collection: 'Task', actions: ['create'] } } }) });
+    ok(r.ok, 'a two-step workflow a new Task starts, written as Studio writes one', r.ok || (await r.json()).error);
+    await b.until(`!!document.querySelector('#autolist .row[data-workflow="watered"]')`, 8000).catch(() => {});
+    await ev(`document.querySelector('#autolist .row[data-workflow="watered"]').click()`);
+    await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'watered' && /No sample yet/.test(document.querySelector('#steps .testrow')?.innerText ?? '')`, 8000).catch(() => {});
+    ok(await ev(`/No sample yet/.test(document.querySelector('#steps .testrow')?.innerText ?? '') && document.querySelector('#steps [data-act="test"]').disabled`), 'no sample yet: said, and Test waits for one', await ev(`document.querySelector('#steps .testrow')?.innerText`));
+    await b.clickSel('#steps [data-act="sample"]');
+    await b.until(`!!document.querySelector('.menu.sample [data-row]')`, 8000).catch(() => {});
+    ok(await ev(`(() => { const m = document.querySelector('.menu.sample'); return m?.querySelector('[data-input=samplekind]').value === 'db-change' && m.querySelector('[data-input=sampletable]').value === 'Task' && m.querySelector('[data-input=sampleaction]').value === 'create' && /Water the plants/.test(m.querySelector('.samplerows').innerText); })()`), 'the sample starts as what starts it: a Task made, its rows offered by name', await ev(`document.querySelector('.menu.sample')?.innerText`));
+    await ev(`document.querySelector('.menu.sample [data-row]').click()`);
+    await ev(`document.querySelector('.menu.sample [data-act=keepsample]').click()`);
+    await b.until(`/Sample: Task Water the plants, made/.test(document.querySelector('#steps .testrow')?.innerText ?? '')`, 8000).catch(() => {});
+    ok(await ev(`/Sample: Task Water the plants, made/.test(document.querySelector('#steps .testrow')?.innerText ?? '')`), 'the sample named in the panel: "Sample: Task Water the plants, made"', await ev(`document.querySelector('#steps .testrow')?.innerText`));
+    const kept = JSON.parse(readFileSync(join(project, '.nodegx', 'workflow-samples.json'), 'utf8'));
+    ok(kept.samples.watered?.rowId === row.objectId && kept.samples.watered.body.title === 'Water the plants', 'kept beside the project, the row and all', kept);
+    spawnSync('git', ['init', '-q'], { cwd: project });
+    const ignored = spawnSync('git', ['check-ignore', '-q', '.nodegx/workflow-samples.json'], { cwd: project }).status;
+    ok(ignored === 0 && /^\.nodegx\/$/m.test(readFileSync(join(project, '.gitignore'), 'utf8')), 'and in no file git tracks: `git check-ignore` says ignored (.nodegx/ added to .gitignore)', ignored);
+    // the first test says it runs for real; then both steps lit, each with what went in and came out
+    const testRuns = (await be('/admin/workflow-step-kinds')).testRuns === true;
+    await b.clickSel('#steps [data-act="test"]');
+    await b.until(`/rows it makes are real/.test(document.querySelector('.surescrim')?.innerText ?? '')`, 5000).catch(() => {});
+    ok(await ev(`/This runs on your development backend: rows it makes are real/.test(document.querySelector('.surescrim')?.innerText ?? '')`), 'the first test says it runs for real, on the development backend');
+    await ev(`document.querySelector('.surescrim [data-act=yes]').click()`);
+    if (!testRuns) {
+      // the kit's backend predates NodeGX 511e41d5d: refused before anything runs, rather than every step run for real
+      await b.until(`/older than tests/.test(document.body.innerText)`, 8000).catch(() => {});
+      ok(await ev(`/older than tests: it would run every step for real/.test(document.body.innerText)`) && !(await be('/admin/workflow-defs')).lastRuns?.watered, 'a backend older than tests refuses the test in words, and nothing ran');
+      console.log('  (AC1 and AC2 not graded: this backend has no tests yet. Run with NODEGX_REPO at NodeGX 511e41d5d or later, or after a release carrying it)');
+    } else {
+      await b.until(`/Tested/.test(document.querySelector('#steps .fnfacts .run')?.innerText ?? '')`, 10000).catch(() => {});
+      const v = await view();
+      const card = (id) => v?.cards.find((c) => c.id === id);
+      const last = (await be('/admin/workflow-defs')).lastRuns?.watered;
+      const rec = last ? await be(`/executions/${encodeURIComponent(last.id)}`) : null;
+      const recStep = (id) => rec?.steps?.find((x) => x.nodeId === id);
+      ok(/litok/.test(card('read')?.cls) && /litok/.test(card('say')?.cls) && /^● Tested .* · finished/m.test(v?.facts), 'AC1: tested, both steps lit', v && { facts: v.facts, cards: v.cards.map((c) => c.cls) });
+      ok(rec?.metadata?.test === true && rec.triggerType === 'db_change' && recStep('read')?.outputData?.task === 'Water the plants' && recStep('read')?.outputData?.action === 'create' && recStep('say')?.outputData?.line === 'Water the plants', 'AC1: in the backend\'s history it is a test, started as a Task made, the row read', rec && { meta: rec.metadata, trigger: rec.triggerType, steps: rec.steps?.map((x) => [x.nodeId, x.outputData]) });
+      await b.clickSel('#steps .autoview .step[data-id="read"] h3');
+      await b.until(`!!document.querySelector('#wfinspect .rundata .vtree')`, 5000).catch(() => {});
+      const box = await ev(`(() => { const b = document.querySelector('#wfinspect .rundata'); return b && { head: b.querySelector('.sechead')?.textContent, in: [...b.querySelectorAll('.rdin li[data-path]')].map((l) => l.dataset.path), out: b.querySelector('.rdout')?.innerText }; })()`);
+      ok(box?.head === 'In the test' && box.in.includes('body.title') && box.in.includes('trigger.action') && /task\s+"Water the plants"/.test(box.out) && /action\s+"create"/.test(box.out), 'AC1: its panel shows what went in and what came out, as a tree a field a line', box);
+      // AC2: up to this step: step 2 not reached, the record says where it stopped
+      await b.clickSel('#wfinspect [data-act="testupto"]');
+      await b.until(`/stopped after step 1, Read the task/.test(document.querySelector('#steps .fnfacts .run')?.innerText ?? '')`, 10000).catch(() => {});
+      const v2 = await view();
+      const last2 = (await be('/admin/workflow-defs')).lastRuns?.watered;
+      const rec2 = last2 ? await be(`/executions/${encodeURIComponent(last2.id)}`) : null;
+      ok(!(await ev(`!!document.querySelector('.surescrim')`)) && /stopped after step 1, Read the task/.test(v2?.facts), 'AC2: Test up to this step, asked once already: "stopped after step 1, Read the task"', v2?.facts);
+      ok(/litok/.test(v2?.cards.find((c) => c.id === 'read')?.cls) && /Not reached in the test/.test(v2?.cards.find((c) => c.id === 'say')?.text), 'AC2: step 2 is shown not reached', v2?.cards.map((c) => c.text));
+      ok(rec2?.metadata?.stoppedAfter === 'read' && rec2.status === 'success' && rec2.steps?.find((x) => x.nodeId === 'say')?.status === 'skipped', 'AC2: the record says it stopped after step 1, not that it failed', rec2 && { meta: rec2.metadata, status: rec2.status });
+    }
+    // AC3: the sample is the page's to read again, not to hold
+    await b.goto(url);
+    await b.waitTitle((t) => t.startsWith('ready'), 90000);
+    await b.clickSel('#rail [data-tab=backend]');
+    await b.until(`!!document.querySelector('#autolist .row[data-workflow="watered"]')`, 8000).catch(() => {});
+    await ev(`document.querySelector('#autolist .row[data-workflow="watered"]').click()`);
+    ok(await b.until(`/Sample: Task Water the plants, made/.test(document.querySelector('#steps .testrow')?.innerText ?? '')`, 8000), 'AC3: Studio opened again, the sample is still there');
+    // AC4: never on live
+    const live = await fetch(url + 'api/automations/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: 'watered', env: 'live' }) });
+    ok(live.status === 409 && /never on live/.test((await live.json()).error), 'AC4: a test against live is refused in words');
+    await shot('p132-bwf002');
+  }
   // a trigger the file does not have is refused, and nothing changes
   const refused = await fetch(url + 'api/automations/trigger', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: 'nobody', enabled: false }) });
   ok(refused.status === 409 && /no trigger "nobody"/.test((await refused.json()).error), 'a trigger the project\'s file lacks is refused');

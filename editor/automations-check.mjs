@@ -6,7 +6,7 @@
  *
  *   node editor/automations-check.mjs    PASS n/n and exit 0, or the failing lines and exit 1
  */
-import { ALWAYS_WORDS, addStepAfter, agrees, atTime, canMove, deleteStep, insertBetween, moveStep, nextOntoRoute, stepPorts, newStepId, readAutomations, runLine, scheduleTime, stepsOfRun, stepWires, targetOf, triggerHead, valueForm, workflowLayout } from './automations.mjs';
+import { ALWAYS_WORDS, addStepAfter, sampleFor, sampleRun, sampleWords, testRefusal, agrees, atTime, canMove, deleteStep, insertBetween, moveStep, nextOntoRoute, stepPorts, newStepId, readAutomations, runLine, scheduleTime, stepsOfRun, stepWires, targetOf, triggerHead, valueForm, workflowLayout } from './automations.mjs';
 
 const results = [];
 const ok = (cond, what, detail) => { results.push(!!cond); if (!cond || process.argv.includes('-v')) console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${what}${detail !== undefined ? ' — ' + JSON.stringify(detail).slice(0, 300) : ''}`); };
@@ -127,6 +127,24 @@ ok(stepPorts({ id: 'a', kind: 'wait' })[0].tos.length === 0, 'a step with nothin
 const fixed = nextOntoRoute({ id: 'w', entry: 'branch', steps: [tt] }, 'branch', 'onfalse');
 ok(JSON.stringify(fixed.steps[0].routes) === '{"ontrue":["c3"],"onfalse":["c2"]}' && !('next' in fixed.steps[0]) && tt.next[0] === 'c2', 'the next put on No: the If decides again; the given workflow untouched');
 ok(valueForm({ $path: 'body.plant' }).from === 'body.plant' && valueForm('Kitchen').typed === 'Kitchen' && valueForm({ $path: 'a', x: 1 }).typed, 'a value read from the run, and a typed one');
+
+// P132 BWF-002: a workflow tested on a sample
+{
+  const rowSample = { kind: 'db-change', table: 'Watering', action: 'create', rowId: 'w1', label: 'Monstera', body: { objectId: 'w1', plant: 'Monstera' } };
+  ok(sampleWords(rowSample) === 'Sample: Watering Monstera, made', 'a picked row in the panel\'s words: "Sample: Watering Monstera, made"', sampleWords(rowSample));
+  ok(sampleWords({ kind: 'webhook', body: { order: 7 } }) === 'Sample: a call from outside, with 1 value' && sampleWords(null) === 'No sample yet', 'a call\'s body, and none yet');
+  const env = sampleRun(rowSample, 'read');
+  ok(JSON.stringify(env) === JSON.stringify({ payload: rowSample.body, as: { type: 'db-change', collection: 'Watering', action: 'create', recordId: 'w1' }, test: true, stopAfter: 'read' }), 'a row sample is the run route\'s envelope: the row as the payload, the change as `as`, up to the step', env);
+  ok(sampleRun({ kind: 'manual', body: {} }).as.type === 'manual' && !('stopAfter' in sampleRun({ kind: 'manual', body: {} })), 'a run asked for: no trigger shape, no stop');
+  ok(JSON.stringify(sampleFor([rows])) === JSON.stringify({ kind: 'db-change', table: 'Task', action: 'create', body: {} }) && sampleFor([]).kind === 'manual', 'a first sample follows what starts the workflow: its table and change', sampleFor([rows]));
+  ok(/never on live/.test(testRefusal({ env: 'live' }) ?? ''), 'a test asked of live is refused in words');
+  ok(/development backend is its live one/.test(testRefusal({ dev: { endpoint: 'http://127.0.0.1:8625/' }, live: { endpoint: 'http://127.0.0.1:8625' } }) ?? '') && /live one/.test(testRefusal({ dev: { endpoint: 'a' }, live: {}, name: 'Greenhouse live backend' }) ?? ''), 'a development binding that is the live backend is refused too');
+  ok(testRefusal({ dev: { endpoint: 'http://127.0.0.1:8625' }, live: { endpoint: 'http://127.0.0.1:8626' }, name: 'Greenhouse backend' }) === null, 'development, beside its own live backend: a test runs');
+  const t0 = Date.parse('2026-11-02T20:00:00Z');
+  const tested = { status: 'success', startedAt: t0, durationMs: 4, metadata: { test: true, stoppedAfter: 'read' }, steps: [{ nodeId: 'read', status: 'success', stepIndex: 0 }, { nodeId: 'say', status: 'skipped', stepIndex: 1 }] };
+  ok(/^● Tested .* · stopped after step 1, Read the row · 4 ms$/.test(runLine(tested, (id) => (id === 'read' ? 'Read the row' : id))), 'a test up to a step says so: "Tested … stopped after step 1, Read the row"', runLine(tested, (id) => (id === 'read' ? 'Read the row' : id)));
+  ok(/^● Last run .* · finished/.test(runLine({ ...tested, metadata: {} })), 'a run that was not a test is still "Last run"');
+}
 
 const passed = results.filter(Boolean).length;
 console.log(`${passed === results.length ? 'PASS' : 'FAIL'} ${passed}/${results.length}`);

@@ -151,11 +151,13 @@ export function runLine(record, nameOf = (id) => id) {
   const when = new Date(record.startedAt).toLocaleString();
   const ms = record.durationMs != null ? ` · ${record.durationMs} ms` : '';
   if (record.status === 'running') return `● Running since ${when}`;
-  if (record.status === 'success') return `● Last run ${when} · finished${ms}`;
+  // P132 BWF-002: a test on a sample says so, and where it was asked to stop
+  const what = record.metadata?.test ? 'Tested' : 'Last run', stopped = record.metadata?.stoppedAfter;
   const steps = stepsOfRun(record);
+  if (record.status === 'success') return stopped ? `● ${what} ${when} · stopped after step ${(steps.get(stopped)?.index ?? 0) + 1}, ${nameOf(stopped)}${ms}` : `● ${what} ${when} · finished${ms}`;
   const failed = [...steps.entries()].filter(([, s]) => s.status === 'error').sort((a, b) => a[1].index - b[1].index)[0];
   const where = failed ? ` at step ${failed[1].index + 1}, ${nameOf(failed[0])}` : '';
-  return `● Last run ${when} · failed${where}${record.errorMessage || failed?.[1].error ? `: ${failed?.[1].error || record.errorMessage}` : ''}${ms}`;
+  return `● ${what} ${when} · failed${where}${record.errorMessage || failed?.[1].error ? `: ${failed?.[1].error || record.errorMessage}` : ''}${ms}`;
 }
 
 /* ---- STU-092: a backend workflow edited in Studio. Pure: each takes a workflow and answers a new one (the input is not
@@ -303,3 +305,49 @@ export function nextOntoRoute(wf, id, route) {
 
 /** A param's value as Studio's control shows it: `{ from: path }` for a value read from the run, else `{ typed: value }`. */
 export const valueForm = (v) => (v && typeof v === 'object' && !Array.isArray(v) && typeof v.$path === 'string' && Object.keys(v).length === 1 ? { from: v.$path } : { typed: v });
+
+/* ---- P132 BWF-002: a workflow tested on a sample. A sample stands for what starts the workflow: a row change, a
+   webhook's call, a schedule's fire, or nothing (a run asked for). It is kept per machine (serve.mjs's
+   `.nodegx/workflow-samples.json`, never in git: it can hold a person's row), and sent as the run route's envelope
+   (nodegx-backend `POST /admin/workflow-defs/:id/run`: `payload`, `as`, `stopAfter`), so the test starts the way the
+   trigger would. ---- */
+export const SAMPLE_KINDS = { 'db-change': 'A change to a table', webhook: 'A call from outside', schedule: 'A time', manual: 'Nothing: a run asked for' };
+export const CHANGE_WORDS = { create: 'made', update: 'changed', delete: 'deleted' };
+/** The sample a workflow starts with when it has none: the kind of the first trigger that starts it, its table and change. */
+export function sampleFor(triggers = []) {
+  const t = triggers[0];
+  if (t?.type === 'db-change') return { kind: 'db-change', table: t.dbChange?.collection ?? '', action: t.dbChange?.actions?.[0] ?? 'create', body: {} };
+  if (t?.type === 'webhook') return { kind: 'webhook', body: {} };
+  if (t?.type === 'schedule') return { kind: 'schedule', body: t.schedule?.payload ?? {} };
+  return { kind: 'manual', body: {} };
+}
+/** The run route's envelope for a test on `sample`, up to `stopAfter` when given. */
+export function sampleRun(sample, stopAfter) {
+  const s = sample ?? { kind: 'manual', body: {} };
+  const as = s.kind === 'db-change' ? { type: 'db-change', collection: s.table, action: s.action || 'create', ...(s.rowId ? { recordId: s.rowId } : {}) }
+    : s.kind === 'webhook' || s.kind === 'schedule' ? { type: s.kind } : { type: 'manual' };
+  return { payload: s.body ?? {}, as, test: true, ...(stopAfter ? { stopAfter } : {}) };
+}
+/** The sample in the panel's words: "Sample: Watering Monstera, made". */
+export function sampleWords(sample) {
+  if (!sample) return 'No sample yet';
+  if (sample.kind === 'db-change') {
+    const row = sample.rowId ? `${sample.table} ${sample.label || sample.rowId}` : `a ${sample.table || 'row'} you typed`;
+    return `Sample: ${row}, ${CHANGE_WORDS[sample.action] ?? sample.action}`;
+  }
+  const n = Object.keys(sample.body ?? {}).length;
+  const with_ = n ? `, with ${n} value${n === 1 ? '' : 's'}` : ', with nothing in it';
+  return sample.kind === 'webhook' ? `Sample: a call from outside${with_}` : sample.kind === 'schedule' ? `Sample: the schedule's fire${with_}` : `Sample: a run asked for${with_}`;
+}
+/**
+ * Why a test may not run here, in words, or null. A test is a real run: a step that writes really writes. So it runs on
+ * the development backend only, and never on one that is the app's live backend under another name.
+ * `dev` / `live`: the project's two bindings (`{ endpoint, instanceId }`); `name`: the development backend's own name.
+ */
+export function testRefusal({ env, dev, live, name } = {}) {
+  const LIVE = 'A test runs on your development backend only, never on live: the rows it makes would be real ones your app’s people see.';
+  if (env === 'live') return LIVE;
+  const same = (a, b) => !!a && !!b && String(a).replace(/\/$/, '') === String(b).replace(/\/$/, '');
+  if (same(dev?.endpoint, live?.endpoint) || same(dev?.instanceId, live?.instanceId) || / live backend$/i.test(name ?? '')) return `This project’s development backend is its live one. ${LIVE}`;
+  return null;
+}
