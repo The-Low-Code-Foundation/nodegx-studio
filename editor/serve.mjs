@@ -308,13 +308,14 @@ async function adminOf(which) {
   return lives.admin({ endpoint: state.endpoint, token, appId: binding.appId ?? binding.instanceId });
 }
 /**
- * P127 BKO-005: one trigger turned on or off, or its daily time moved, the way BKO-001 writes one: the backend first
+ * P127 BKO-005: one trigger turned on or off, or its daily time moved (P132 BWF-001: or its whole cron, its days, or
+ * the table and changes it watches), the way BKO-001 writes one: the backend first
  * (it checks the change and answers with what it stored), then the project's file, the entry patched by id and nothing
  * else in it touched. If the file cannot be written the backend is put back: both, or neither. The project's file is
  * the truth (R1), so a trigger the file lacks is refused; a backend that is not running here is refused too, so the
  * two never part.
  */
-async function setTrigger({ id, enabled, time, remove }) {
+async function setTrigger({ id, enabled, time, cron: newCron, dbChange, remove }) {
   const rel = AUTOMATIONS_FILE, file = join(projectDir, rel);
   const before = diskText(rel);
   const autos = readAutomations(before);
@@ -322,11 +323,17 @@ async function setTrigger({ id, enabled, time, remove }) {
   const at = autos.triggers.findIndex((t) => t.id === id);
   if (at < 0) throw new Error(`The project's ${rel} has no trigger "${id}". Ask the agent to keep it in the project first.`);
   const entry = autos.triggers[at];
-  let cron;
+  let cron, watch;
   if (time) {
     if (entry.type !== 'schedule' || !entry.schedule?.cron) throw new Error(`"${id}" is not a schedule, so it has no time to move.`);
     cron = atTime(entry.schedule.cron, time.hour, time.minute);
-  } else if (typeof enabled !== 'boolean' && !remove) throw new Error('Say what to change: enabled (on or off), time, or remove.');
+  } else if (typeof newCron === 'string') {
+    if (entry.type !== 'schedule') throw new Error(`"${id}" is not a schedule, so it has no time to change.`);
+    cron = newCron.trim();
+  } else if (dbChange) {
+    if (entry.type !== 'db-change') throw new Error(`"${id}" does not watch a table.`);
+    watch = { collection: String(dbChange.collection ?? ''), actions: Array.isArray(dbChange.actions) ? dbChange.actions : [] };
+  } else if (typeof enabled !== 'boolean' && !remove) throw new Error('Say what to change: enabled (on or off), time, cron, dbChange, or remove.');
   const be = await adminOf('development').catch((e) => { throw new Error(`${e.message} The trigger is changed on the backend and in the project together, so start the backend first.`); });
   const path = `/admin/triggers/${encodeURIComponent(id)}`;
   const was = (await be.get(path)).trigger;
@@ -344,11 +351,13 @@ async function setTrigger({ id, enabled, time, remove }) {
     }
     return { file: rel, text, backend: null };
   }
-  const stored = cron
-    ? (await be.put(path, { ...was, schedule: { ...was.schedule, cron } })).trigger
+  const { secret, createdAt, updatedAt, status, ...writable } = was; // what a PUT takes back (the backend refuses its own decorations)
+  const stored = cron ? (await be.put(path, { ...writable, schedule: { ...was.schedule, cron } })).trigger
+    : watch ? (await be.put(path, { ...writable, dbChange: watch })).trigger
     : (await be.post(`${path}/enabled`, { enabled })).trigger;
   const json = JSON.parse(before);
-  json.triggers[at] = cron ? { ...json.triggers[at], schedule: { ...json.triggers[at].schedule, cron: stored.schedule.cron } } : { ...json.triggers[at], enabled: stored.enabled };
+  json.triggers[at] = cron ? { ...json.triggers[at], schedule: { ...json.triggers[at].schedule, cron: stored.schedule.cron } }
+    : watch ? { ...json.triggers[at], dbChange: stored.dbChange } : { ...json.triggers[at], enabled: stored.enabled };
   const text = JSON.stringify(json, null, 2) + (before.endsWith('\n') ? '\n' : '');
   try {
     known.set(rel, text); // before the write, so the watcher's echo of it matches
@@ -357,7 +366,7 @@ async function setTrigger({ id, enabled, time, remove }) {
   } catch (e) {
     known.set(rel, before);
     let undone = true;
-    try { if (cron) await be.put(path, was); else await be.post(`${path}/enabled`, { enabled: was.enabled }); } catch { undone = false; }
+    try { if (cron || watch) await be.put(path, writable); else await be.post(`${path}/enabled`, { enabled: was.enabled }); } catch { undone = false; }
     throw new Error(`The backend took the change but ${rel} could not be written (${e.message}), ${undone ? 'so the backend was put back as it was. Nothing changed.' : 'and putting the backend back failed too: the backend now has a change the project does not.'}`);
   }
   return { file: rel, text, backend: stored };
@@ -765,9 +774,9 @@ const server = http.createServer(async (req, res) => {
       }
     }
     if (url.pathname === '/api/automations/trigger' && req.method === 'POST') {
-      const { id, enabled, time, remove, client } = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const { id, enabled, time, cron, dbChange, remove, client } = JSON.parse((await readBody(req)).toString('utf8') || '{}');
       try {
-        const done = await setTrigger({ id, enabled, time, remove });
+        const done = await setTrigger({ id, enabled, time, cron, dbChange, remove });
         tell({ changed: { [done.file]: done.text }, removed: [] }, client); // another Studio window on the project
         return json(200, done);
       } catch (err) {

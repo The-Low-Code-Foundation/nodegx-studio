@@ -5337,13 +5337,13 @@ function openAuto(target, from = null, opts = {}) {
   if (target.kind === 'workflow') readAutoRun(target.id);
 }
 const backFromAuto = () => { selAuto = selAuto?.from ? { kind: 'trigger', id: selAuto.from, from: null } : null; autoRun = null; renderWorkflow(); };
-async function changeTrigger(id, change) {
+async function changeTrigger(id, change, words = null) {
   const r = await fetch('/api/automations/trigger', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, ...change, client: windowId }) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) return toast(j.error ?? `Nothing was changed (${r.status})`);
   files.write(j.file, j.text); persisted[j.file] = j.text; autoText = j.text; autoBe = null;
   if (change.remove) { selAuto = null; return toast('Trigger deleted, on the backend and in the project'), renderWorkflow(); }
-  toast(change.time ? `It runs at ${hhmm(change.time)} now, on the backend and in the project` : `Turned ${change.enabled ? 'on' : 'off'}, on the backend and in the project`);
+  toast(words ?? (change.time ? `It runs at ${hhmm(change.time)} now, on the backend and in the project` : `Turned ${change.enabled ? 'on' : 'off'}, on the backend and in the project`));
   renderWorkflow();
 }
 /** The workflow's newest run (the backend's `lastRuns`), with its steps (`/executions/:id`). */
@@ -5447,10 +5447,13 @@ function renderTrigger(t) {
     st ? h('div', { class: `run ${st.lastResult ? (st.lastResult.ok ? 'ran' : 'refused') : ''}`, title: st.lastFiredAt ? `Last fired ${new Date(st.lastFiredAt).toLocaleString()}` : '' },
       `${st.lastFiredAt ? `Last fired ${lastRunWords('trigger', t.id)}` : 'Not fired yet'}${on && st.nextFireAt ? ` · next ${new Date(st.nextFireAt).toLocaleString()}` : ''}${st.fireCount ? ` · ${st.fireCount} time${st.fireCount === 1 ? '' : 's'} in all` : ''}`,
       st.lastFiredAt && there ? h('button', { class: 'quiet tiny openrun', onclick: () => openTriggerRun(t) }, g.kind === 'workflow' ? 'Open that run ▶' : 'Open its last run ↗') : null) : null));
-  const headCard = h('div', { class: `step fnstart${on ? '' : ' trigoff'}`, 'data-id': 'trigger', style: `--kind:${FLOW.then}` }, h('div', { class: 'num' }, '1'), h('h3', {}, head, h('span', {}, on ? 'what starts it' : 'off')),
+  // P132-STEPPANEL: both cards answer a click, as a workflow's steps do: what starts it opens its settings on the right,
+  // what it starts opens (Richard clicked The morning check here and nothing came up: only the small link opened it)
+  const openTarget = () => { if (!there) return; if (g.kind === 'function') openFunction(g.key, { kind: 'auto', auto: { ...selAuto }, title: head }); else openAuto({ kind: 'workflow', id: g.name }, t.id); };
+  const headCard = h('div', { class: `step fnstart${on ? '' : ' trigoff'}${selAutoStep === 'trigger' ? ' picked' : ''}`, 'data-id': 'trigger', title: 'What starts it: its settings', onclick: () => pickAutoStep('trigger'), style: `--kind:${FLOW.then}` }, h('div', { class: 'num' }, '1'), h('h3', {}, head, h('span', {}, on ? 'what starts it' : 'off')),
     h('div', { class: 'acts' }), h('div', { class: 'lines' }, ...(t.type === 'db-change' ? [h('span', {}, 'Data type: ', h('code', {}, t.dbChange?.collection ?? '?'))] : t.type === 'schedule' ? [h('span', {}, 'Cron: ', h('code', {}, t.schedule?.cron ?? '?'))] : [h('span', {}, 'At ', h('code', { 'data-hook-url': '' }, hookUrl(t.webhook?.slug ?? '?'))), h('span', {}, t.webhook?.scheme === 'token' ? 'A caller sends its key' : `Signed with ${t.webhook?.scheme ?? 'hmac-sha256'}`)])));
-  const open = there ? h('button', { class: 'quiet tiny fnopen', onclick: (e) => { e.stopPropagation(); if (g.kind === 'function') openFunction(g.key, { kind: 'auto', auto: { ...selAuto }, title: head }); else openAuto({ kind: 'workflow', id: g.name }, t.id); } }, g.kind === 'function' ? 'Open its steps ↗' : 'Open the workflow ↗') : h('span', { style: 'color:var(--red)' }, `The project has no ${g.kind} called ${g.name}`);
-  const targetCard = h('div', { class: 'step', 'data-id': 'target', 'data-target': g.key, style: `--kind:${KIND_COLOUR.bolt}` }, h('div', { class: 'num' }, '2'), h('h3', {}, g.kind === 'workflow' ? autos().workflows.find((w) => w.id === g.name)?.name || g.name : g.name, h('span', {}, g.kind === 'workflow' ? 'a workflow' : 'a cloud function')),
+  const open = there ? h('button', { class: 'quiet tiny fnopen', onclick: (e) => { e.stopPropagation(); openTarget(); } }, g.kind === 'function' ? 'Open its steps ↗' : 'Open the workflow ↗') : h('span', { style: 'color:var(--red)' }, `The project has no ${g.kind} called ${g.name}`);
+  const targetCard = h('div', { class: 'step', 'data-id': 'target', 'data-target': g.key, title: g.kind === 'function' ? 'Open its steps' : 'Open the workflow: its steps and their settings', onclick: openTarget, style: `--kind:${KIND_COLOUR.bolt}` }, h('div', { class: 'num' }, '2'), h('h3', {}, g.kind === 'workflow' ? autos().workflows.find((w) => w.id === g.name)?.name || g.name : g.name, h('span', {}, g.kind === 'workflow' ? 'a workflow' : 'a cloud function')),
     h('div', { class: 'acts' }), h('div', { class: 'lines' }, open));
   autoFlow(wf, [[headCard], [targetCard]], [{ from: 'trigger', to: 'target', kind: on ? 'then' : 'dead' }]);
 }
@@ -5725,6 +5728,13 @@ function autoStepPanel(panel, w, step) {
 }
 function renderAutoStepPanel(panel) {
   if (selFn) return renderFnPanel(panel);
+  if (selAuto?.kind === 'trigger') {
+    const t = autoEntry(selAuto), on = !!t && selAutoStep === 'trigger';
+    $('workflow').classList.toggle('inspecting', on);
+    panel.hidden = !on; panel.innerHTML = '';
+    if (on) triggerPanel(panel, t);
+    return;
+  }
   const w = !selFn && selAuto?.kind === 'workflow' ? autoEntry(selAuto) : null;
   if (selAutoStep && !w?.steps?.some((s) => s.id === selAutoStep)) selAutoStep = null;
   const on = !!w && !!selAutoStep;
@@ -5735,6 +5745,46 @@ function renderAutoStepPanel(panel) {
   if (!on) return;
   autoStepPanel(panel, w, w.steps.find((s) => s.id === selAutoStep));
   if (focusAt >= 0) panel.querySelectorAll('input,select,textarea')[focusAt]?.focus();
+}
+/** P132 BWF-001: what starts a workflow, its settings on the right: on or off; a time and its days, the table and the
+    changes it watches, or a webhook's address; what it starts; delete. Each change on the backend and in the project. */
+function triggerPanel(panel, t) {
+  const be = beNow(), head = triggerHead(t, be?.triggers.get(t.id)?.scheduleWords), g = targetOf(t);
+  panel.append(h('div', { class: 'head' }, h('b', {}, head), h('button', { class: 'quiet', title: 'Close (Esc)', onclick: () => pickAutoStep(null) }, icon('x')),
+    h('div', { class: 'type' }, h('span', { class: 'stepkind', style: `background:${FLOW.then}` }, icon('bolt')), 'What starts the workflow')));
+  panel.append(h('p', { class: 'what' }, `When it fires, the backend runs ${startsWords(t)}. ${t.type === 'webhook' ? 'Anyone with its address and key can fire it.' : 'Nobody has to be signed in: it runs as the app.'}`));
+  const wrap = h('div', { class: 'props' });
+  wrap.append(h('div', { class: 'field' }, h('label', {}, 'On'), h('div', {}, switchOf(t))));
+  if (t.type === 'schedule') {
+    const tm = scheduleTime(t.schedule?.cron), dow = String(t.schedule?.cron ?? '').trim().split(/\s+/)[4];
+    if (tm && DAYS.some(([v]) => v === dow)) {
+      const time = h('input', { type: 'time', value: hhmm(tm), 'aria-label': 'The time it runs' });
+      const days = h('select', { 'aria-label': 'Which days' }, ...DAYS.map(([v, words]) => h('option', { value: v, selected: v === dow }, words)));
+      const save = () => { const [hh, mm] = (time.value || '').split(':').map(Number); if (!Number.isInteger(hh) || !Number.isInteger(mm)) return; const cron = `${mm} ${hh} * * ${days.value}`; if (cron !== t.schedule.cron) changeTrigger(t.id, { cron }, `It runs ${days.selectedOptions[0].textContent.toLowerCase()} at ${hhmm({ hour: hh, minute: mm })} now${BOTH}`); };
+      time.addEventListener('change', save); days.addEventListener('change', save);
+      wrap.append(h('div', { class: 'field' }, h('label', {}, 'At'), time), h('div', { class: 'field' }, h('label', {}, 'On'), days));
+    } else wrap.append(h('div', { class: 'hint' }, 'It runs on a schedule Studio has no words for yet (', h('code', {}, t.schedule?.cron ?? '?'), '): ask the agent to change when.'));
+  } else if (t.type === 'db-change') {
+    const acts = new Set(t.dbChange?.actions ?? []);
+    const table = h('select', { 'aria-label': 'Which table' }, ...[...new Set([t.dbChange?.collection, ...typeNames()].filter(Boolean))].map((n) => h('option', { value: n, selected: n === t.dbChange?.collection }, n)));
+    const boxes = [['create', 'is created'], ['update', 'is changed'], ['delete', 'is deleted']].map(([a, words]) => h('label', { style: 'display:flex;gap:6px;align-items:center' }, h('input', { type: 'checkbox', value: a, checked: acts.has(a), style: 'width:auto' }), words));
+    const save = () => {
+      const actions = boxes.map((l) => l.firstChild).filter((x) => x.checked).map((x) => x.value);
+      if (!actions.length) { toast('Tick at least one change, or turn it off'); return renderStepPanel(); }
+      changeTrigger(t.id, { dbChange: { collection: table.value, actions } }, `It watches ${table.value} now${BOTH}`);
+    };
+    table.addEventListener('change', save); for (const l of boxes) l.firstChild.addEventListener('change', save);
+    wrap.append(h('div', { class: 'field' }, h('label', {}, 'When a'), table), h('div', { class: 'field' }, h('label', {}, ''), h('div', {}, ...boxes)));
+  } else if (t.type === 'webhook') {
+    wrap.append(h('div', { class: 'field wide' }, h('label', {}, 'It answers a POST at'), h('code', { 'data-hook-url': '', style: 'word-break:break-all' }, hookUrl(t.webhook?.slug ?? '?'))),
+      h('div', { class: 'hint' }, t.webhook?.scheme === 'token' ? 'A caller sends its key in X-Webhook-Token. The key was shown once, when it was made.' : `A caller signs its call (${t.webhook?.scheme ?? 'hmac-sha256'}).`));
+  }
+  wrap.append(h('div', { class: 'sechead' }, 'Then'), h('div', { class: 'thenline' }, `It runs ${startsWords(t)}.`));
+  const after = h('div', { class: 'after' });
+  if (g.kind === 'workflow' ? autos().workflows.some((w) => w.id === g.name) : !!registry()[g.key]) after.append(h('button', { class: 'primary', onclick: () => (g.kind === 'function' ? openFunction(g.key, { kind: 'auto', auto: { ...selAuto }, title: head }) : openAuto({ kind: 'workflow', id: g.name }, t.id)) }, g.kind === 'function' ? 'Open its steps ↗' : 'Open the workflow ↗'));
+  after.append(h('button', { class: 'quiet danger', onclick: (e) => confirmPop(e, `Delete “${head}”?`, `It stops starting ${startsWords(t)}, on the backend and in the project. ${g.kind === 'workflow' ? 'The workflow stays.' : 'The function stays.'}`, 'Delete it', () => changeTrigger(t.id, { remove: true })) }, icon('trash'), 'Delete the trigger'));
+  wrap.append(after);
+  panel.append(wrap);
 }
 /** New workflow: its name, what starts it (a change to a table, a time, a call from outside, or nothing: run by the agent or
     another workflow) and its first step, any step the backend has. Made on the backend and in the project together,

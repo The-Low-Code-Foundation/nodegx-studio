@@ -374,6 +374,32 @@ try {
     await ev(`document.querySelector('.menu.hookmade .foot button')?.click()`);
   }
   await shot('p132-bwf001');
+  // P132-STEPPANEL, measured with Richard (2026-11-02): on a trigger's page he clicked the workflow it starts and nothing
+  // came up; neither card answered a click, only a small link did. Both cards answer now, and what starts it has settings
+  console.log('check: P132-STEPPANEL, a trigger\'s cards');
+  const rowsT = () => fileNow().triggers.find((x) => x.id === rowsId);
+  await ev(`document.querySelector('#autolist .row[data-trigger="${rowsId}"]').click()`);
+  await b.until(`document.querySelector('#steps .autoview')?.dataset.trigger === ${JSON.stringify(rowsId)}`, 8000).catch(() => {});
+  await b.clickSel('#steps .autoview .step[data-id="target"] h3');
+  ok(await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'triage'`, 5000), 'a click on the workflow a trigger starts opens that workflow');
+  await ev(`document.querySelector('#autolist .row[data-trigger="${rowsId}"]').click()`);
+  await b.until(`document.querySelector('#steps .autoview')?.dataset.trigger === ${JSON.stringify(rowsId)}`, 8000).catch(() => {});
+  await b.clickSel('#steps .autoview .step[data-id="trigger"] h3');
+  ok(await b.until(`!document.getElementById('wfinspect').hidden && /What starts the workflow/.test(document.getElementById('wfinspect').innerText) && document.getElementById('wfinspect').getBoundingClientRect().right <= innerWidth + 1`, 5000), 'a click on what starts it opens its settings on the right, on screen', await ev(`document.getElementById('wfinspect').innerText.slice(0, 200)`));
+  await ev(`(() => { const x = document.querySelector('#wfinspect input[type=checkbox][value="update"]'); x.checked = true; x.dispatchEvent(new Event('change')); })()`);
+  await b.until(`/It watches Task now/.test(document.body.innerText)`, 8000).catch(() => {});
+  await wait(300);
+  ok(JSON.stringify(rowsT()?.dbChange?.actions) === '["create","update"]' && JSON.stringify((await be(`/admin/triggers/${encodeURIComponent(rowsId)}`)).trigger?.dbChange?.actions) === '["create","update"]', 'a change ticked in its settings: watched in the file and on the backend', rowsT()?.dbChange);
+  ok(await b.until(`!document.getElementById('wfinspect').hidden && document.querySelector('#steps .autoview h2')?.textContent === 'When a Task is created or changed'`, 5000), 'the panel stays open, and the trigger is named by what it now watches', await ev(`document.querySelector('#steps .autoview h2')?.textContent`));
+  await ev(`document.querySelector('#autolist .row[data-trigger="${dailyId}"]').click()`);
+  await b.until(`document.querySelector('#steps .autoview')?.dataset.trigger === ${JSON.stringify(dailyId)}`, 8000).catch(() => {});
+  await b.clickSel('#steps .autoview .step[data-id="trigger"] h3');
+  await b.until(`!!document.querySelector('#wfinspect select[aria-label="Which days"]')`, 5000).catch(() => {});
+  await ev(`(() => { const d = document.querySelector('#wfinspect select[aria-label="Which days"]'); d.value = '1-5'; d.dispatchEvent(new Event('change')); })()`);
+  await b.until(`/monday to friday/.test(document.body.innerText)`, 8000).catch(() => {});
+  await wait(300);
+  ok(fileNow().triggers.find((x) => x.id === dailyId)?.schedule?.cron === '0 10 * * 1-5' && (await backendTrigger())?.schedule?.cron === '0 10 * * 1-5', 'its days changed in its settings: Monday to Friday at 10:00, in the file and on the backend', fileNow().triggers.find((x) => x.id === dailyId)?.schedule);
+  await shot('p132-trigger-panel');
 
   // a trigger the file does not have is refused, and nothing changes
   const refused = await fetch(url + 'api/automations/trigger', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: 'nobody', enabled: false }) });
