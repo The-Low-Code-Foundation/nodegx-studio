@@ -181,12 +181,19 @@ export function newStepId(wf, kind) {
  * step is the workflow's first, the old first after it.
  */
 const ENDS = new Set(['return', 'stop']);
+/** What came after goes on after `fresh`: down its first side when it leads on by routes (a branch), else its next. A
+    branch is never given a `next`: the engine follows `next` whatever the If says (P132-BRANCHNEXT). */
+function leadOn(fresh, list) {
+  if (!list.length) return;
+  if (fresh.routes) { const r = Object.keys(fresh.routes)[0] ?? 'ontrue'; fresh.routes[r] = [...list]; } else fresh.next = [...list];
+}
 export function addStepAfter(wf, afterId, where, step) {
   const out = clone(wf);
   if ((out.steps ?? []).some((s) => s.id === step.id)) throw new Error(`The workflow already has a step called ${step.id}`);
   const fresh = { ...clone(step) };
   if (afterId == null) {
-    if (out.entry) fresh.next = [out.entry];
+    if (out.entry && ENDS.has(fresh.kind)) throw new Error(`A ${fresh.kind === 'return' ? 'Return' : 'Stop'} ends the workflow, so it goes at the end of a line of steps, not at the start.`);
+    if (out.entry) leadOn(fresh, [out.entry]);
     out.steps = [fresh, ...(out.steps ?? [])]; out.entry = fresh.id;
     return out;
   }
@@ -196,8 +203,26 @@ export function addStepAfter(wf, afterId, where, step) {
   const list = listAt(after, where);
   if (ENDS.has(fresh.kind) && list.length) throw new Error(`A ${fresh.kind === 'return' ? 'Return' : 'Stop'} ends the workflow, so it goes at the end of a line of steps, not in the middle.`);
   // a step that leads on by routes (a branch) carries on down its first side what came after
-  if (list.length) { if (fresh.routes) { const r = Object.keys(fresh.routes)[0] ?? 'ontrue'; fresh.routes[r] = [...list]; } else fresh.next = [...list]; }
+  leadOn(fresh, list);
   list.splice(0, list.length, fresh.id);
+  out.steps.push(fresh);
+  return out;
+}
+
+/**
+ * P132 BWF-001: `step` put on the one wire from `fromId` (on `where`) to `toId`, the "+" on that wire: the wire goes
+ * to the new step and the new step on to `toId`. The other wires on that list are left where they go.
+ */
+export function insertBetween(wf, fromId, where, toId, step) {
+  const out = clone(wf);
+  if ((out.steps ?? []).some((s) => s.id === step.id)) throw new Error(`The workflow already has a step called ${step.id}`);
+  const from = out.steps.find((s) => s.id === fromId);
+  const list = from ? listAt(from, where) : [];
+  if (!list.includes(toId)) throw new Error(`No wire from ${fromId} to ${toId}`);
+  const fresh = { ...clone(step) };
+  if (ENDS.has(fresh.kind)) throw new Error(`A ${fresh.kind === 'return' ? 'Return' : 'Stop'} ends the workflow, so it goes at the end of a line of steps, not in the middle.`);
+  leadOn(fresh, [toId]);
+  list[list.indexOf(toId)] = fresh.id;
   out.steps.push(fresh);
   return out;
 }
@@ -248,6 +273,31 @@ export function moveStep(wf, id, dir) {
   const after = b.next ?? [];
   b.next = [a.id];
   if (after.length) a.next = [...after]; else delete a.next;
+  return out;
+}
+
+/* ---- P132 BWF-001: where a step leads on, drawn. Each way on is a port on the card's right edge, named in words: a
+   branch's Yes and No, a switch's cases and Anything else, a list's none and some; then a plain `next`, which on a step
+   that branches is "Always, as well" (the engine follows it whatever the route: P132-BRANCHNEXT); then the error route. ---- */
+export const ROUTE_WORDS = { ontrue: 'Yes', onfalse: 'No', empty: 'If there are none', nonempty: 'If there are some', done: 'When the time comes', skipped: 'If it was already past', default: 'Anything else', onError: 'If it fails' };
+export const ALWAYS_WORDS = 'Always, as well';
+const FAILISH = /^(fail|failed|error|onerror)$/i;
+/** `routeNames`: the kind's own routes (the catalog's, a switch's case labels); routes the step carries are added. */
+export function stepPorts(step, routeNames = []) {
+  const routes = [...new Set([...routeNames, ...Object.keys(step.routes ?? {})])];
+  const ports = routes.map((r) => ({ where: r, label: ROUTE_WORDS[r] ?? r, kind: r === 'ontrue' ? 'yes' : r === 'onfalse' ? 'no' : FAILISH.test(r) ? 'fail' : 'route', tos: step.routes?.[r] ?? [] }));
+  if ((step.next ?? []).length || !routes.length) ports.push({ where: 'next', label: routes.length ? ALWAYS_WORDS : '', kind: routes.length ? 'always' : 'then', tos: step.next ?? [] });
+  if ((step.onError ?? []).length) ports.push({ where: 'onError', label: ROUTE_WORDS.onError, kind: 'fail', tos: step.onError });
+  return ports;
+}
+/** A step's plain `next` moved onto one of its routes: what an agent or an older Studio left on a branch, put on a side. */
+export function nextOntoRoute(wf, id, route) {
+  const out = clone(wf);
+  const s = out.steps.find((x) => x.id === id);
+  if (!s || !(s.next ?? []).length) throw new Error(`Step ${id} has no plain next to move`);
+  const list = listAt(s, route);
+  for (const to of s.next) if (!list.includes(to)) list.push(to);
+  delete s.next;
   return out;
 }
 

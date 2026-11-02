@@ -6,7 +6,7 @@
  *
  *   node editor/automations-check.mjs    PASS n/n and exit 0, or the failing lines and exit 1
  */
-import { addStepAfter, agrees, atTime, canMove, deleteStep, moveStep, newStepId, readAutomations, runLine, scheduleTime, stepsOfRun, stepWires, targetOf, triggerHead, valueForm, workflowLayout } from './automations.mjs';
+import { ALWAYS_WORDS, addStepAfter, agrees, atTime, canMove, deleteStep, insertBetween, moveStep, nextOntoRoute, stepPorts, newStepId, readAutomations, runLine, scheduleTime, stepsOfRun, stepWires, targetOf, triggerHead, valueForm, workflowLayout } from './automations.mjs';
 
 const results = [];
 const ok = (cond, what, detail) => { results.push(!!cond); if (!cond || process.argv.includes('-v')) console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${what}${detail !== undefined ? ' — ' + JSON.stringify(detail).slice(0, 300) : ''}`); };
@@ -99,6 +99,33 @@ ok(order(moveStep(line, 'b', -1)) === 'b a c' && moveStep(line, 'b', -1).entry =
 ok(order(moveStep(line, 'b', 1)) === 'a c b', 'moved later', order(moveStep(line, 'b', 1)));
 ok(canMove(line, 'a').earlier === false && canMove(line, 'a').later === true && canMove(routed, 'x').earlier === false, 'what can move: not before the first, not out of a branch');
 ok(throws(() => moveStep(routed, 'x', -1)), 'a move out of a branch is refused');
+// P132-BRANCHNEXT: no edit gives a step that branches a plain next beside its routes (the engine runs next whatever the If says)
+const both = (wf) => wf.steps.filter((s) => Object.keys(s.routes ?? {}).length && (s.next ?? []).length).map((s) => s.id);
+const ifStep = (id = 'if2') => ({ id, kind: 'branch', routes: { ontrue: [] } });
+const atStart = addStepAfter(line, null, 'next', ifStep('if'));
+ok(!both(atStart).length && atStart.steps.find((s) => s.id === 'if').routes.ontrue[0] === 'a' && atStart.entry === 'if', 'a branch added at the start carries on down its Yes, never a next', atStart.steps[0]);
+ok(throws(() => addStepAfter(line, null, 'next', { id: 'r', kind: 'return' })), 'a Return is not put at the start of steps');
+const edits = [atStart, br, addStepAfter(br, 'if', 'onfalse', { id: 'n', kind: 'wait' }), addStepAfter(br, 'if', 'ontrue', { id: 'n', kind: 'wait' }), addStepAfter(routed, 'if', 'onfalse', ifStep()),
+  deleteStep(addStepAfter(br, 'if', 'onfalse', { id: 'n', kind: 'wait' }), 'n'), insertBetween(routed, 'if', 'ontrue', 'x', ifStep()), insertBetween(line, 'a', 'next', 'b', ifStep())];
+for (const m of ['x', 'y', 'z']) if (canMove(routed, m).earlier) edits.push(moveStep(routed, m, -1)); else if (canMove(routed, m).later) edits.push(moveStep(routed, m, 1));
+ok(edits.every((wf) => !both(wf).length), 'every add, insert, move and delete around a branch leaves it without a next', edits.map(both));
+// P132 BWF-001 AC4: the + on a wire puts the step on that wire only
+const fan = { id: 'w', entry: 'a', steps: [{ id: 'a', kind: 'wait', next: ['b', 'c'] }, { id: 'b', kind: 'return' }, { id: 'c', kind: 'return' }] };
+const ins = insertBetween(fan, 'a', 'next', 'c', { id: 'n', kind: 'wait' });
+ok(JSON.stringify(ins.steps.find((s) => s.id === 'a').next) === '["b","n"]' && ins.steps.find((s) => s.id === 'n').next[0] === 'c', 'a step put on the wire a → c: a goes to b and to it, it goes to c', ins.steps);
+const onYes = insertBetween(routed, 'if', 'ontrue', 'x', { id: 'n', kind: 'wait' });
+ok(onYes.steps.find((s) => s.id === 'if').routes.ontrue[0] === 'n' && onYes.steps.find((s) => s.id === 'n').next[0] === 'x' && onYes.steps.find((s) => s.id === 'if').routes.onfalse[0] === 'y', 'a step put on the Yes wire stays on Yes; No is untouched');
+ok(throws(() => insertBetween(line, 'a', 'next', 'c', { id: 'n', kind: 'wait' })) && throws(() => insertBetween(line, 'a', 'next', 'b', { id: 'r', kind: 'return' })) && JSON.stringify(line) === frozen, 'no wire there, or a Return in the middle: refused, the workflow untouched');
+// P132 BWF-001 AC3: a step's ways on, each a port in words
+const tt = { id: 'branch', kind: 'branch', routes: { ontrue: ['c3'] }, next: ['c2'] }; // TriggerTest's, as Richard's Studio left it
+const ttp = stepPorts(tt, ['ontrue', 'onfalse']);
+ok(ttp.map((p) => `${p.label}:${p.tos.join('+') || '-'}`).join(' ') === `Yes:c3 No:- ${ALWAYS_WORDS}:c2`, "TriggerTest's If: Yes, an open No, and its next said as Always, as well", ttp);
+const sw = stepPorts({ id: 's', kind: 'switch', routes: { small: ['a'], default: ['b'] } }, ['default', 'small', 'medium', 'large']);
+ok(sw.length === 4 && sw.map((p) => p.label).join() === 'Anything else,small,medium,large' && sw.every((p) => p.where !== 'next'), 'a switch with three cases: four ports, each named, no plain next', sw.map((p) => p.label));
+ok(stepPorts({ id: 'a', kind: 'wait', next: ['b'], onError: ['f'] }).map((p) => `${p.where}/${p.kind}/${p.label}`).join() === 'next/then/,onError/fail/If it fails', 'a plain step: one port on, and its error route in words');
+ok(stepPorts({ id: 'a', kind: 'wait' })[0].tos.length === 0, 'a step with nothing after it has an open port');
+const fixed = nextOntoRoute({ id: 'w', entry: 'branch', steps: [tt] }, 'branch', 'onfalse');
+ok(JSON.stringify(fixed.steps[0].routes) === '{"ontrue":["c3"],"onfalse":["c2"]}' && !('next' in fixed.steps[0]) && tt.next[0] === 'c2', 'the next put on No: the If decides again; the given workflow untouched');
 ok(valueForm({ $path: 'body.plant' }).from === 'body.plant' && valueForm('Kitchen').typed === 'Kitchen' && valueForm({ $path: 'a', x: 1 }).typed, 'a value read from the run, and a typed one');
 
 const passed = results.filter(Boolean).length;

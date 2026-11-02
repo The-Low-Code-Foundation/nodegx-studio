@@ -384,10 +384,11 @@ async function saveWorkflow({ workflow, remove, trigger }) {
     if (autos.triggers.some((t) => t.target?.kind === 'workflow' && t.target?.name === id)) throw new Error('A trigger still starts it: delete the trigger first, or it would start nothing.');
     if (was) await be.del(path);
   }
-  const stored = remove ? null : projectWorkflow((await be.put(path, workflow)).workflow);
-  let madeTrigger = null;
+  const put = remove ? null : await be.put(path, workflow);
+  const stored = put ? projectWorkflow(put.workflow) : null;
+  let madeTrigger = null, hookSecret = null;
   if (trigger) {
-    try { madeTrigger = (await be.post('/admin/triggers', { ...trigger, target: { kind: 'workflow', name: id } })).trigger; }
+    try { const made = await be.post('/admin/triggers', { ...trigger, target: { kind: 'workflow', name: id } }); madeTrigger = made.trigger; hookSecret = made.secret ?? null; }
     catch (e) { if (!was) await be.del(path).catch(() => {}); else await be.put(path, was).catch(() => {}); throw e; }
   }
   const json = before == null ? { version: 1, workflows: [], triggers: [] } : JSON.parse(before);
@@ -411,7 +412,9 @@ async function saveWorkflow({ workflow, remove, trigger }) {
     } catch { undone = false; }
     throw new Error(`The backend took the change but ${rel} could not be written (${e.message}), ${undone ? 'so the backend was put back as it was. Nothing changed.' : 'and putting the backend back failed too: the backend now has a change the project does not.'}`);
   }
-  return { file: rel, text, workflow: stored, trigger: madeTrigger && { id: madeTrigger.id } };
+  // P132 BWF-001: a webhook made here is said with the URL it answers on and its key, which the backend shows only now
+  const hook = madeTrigger?.type === 'webhook' && backend.endpoint ? { url: `${backend.endpoint}/hooks/${encodeURIComponent(backend.id)}/${madeTrigger.webhook.slug}`, scheme: madeTrigger.webhook.scheme, secret: hookSecret } : undefined;
+  return { file: rel, text, workflow: stored, trigger: madeTrigger && { id: madeTrigger.id }, hook, warnings: put?.warnings ?? [] };
 }
 /** STU-097: each node type's line from NodeGX's enriched catalog (`{ States: 'Named state machine: …' }`), read once; none: {}. */
 let summaries = null;

@@ -308,6 +308,73 @@ try {
   }
   await shot('stu-092');
 
+  // P132 BWF-001: what Richard met. Each Starts-on choice shows its own fields only (P132-STARTSONFORM: the rows were
+  // `hidden` and drawn all the same, and the gate above only ever set values); a branch never given a plain next
+  // (P132-BRANCHNEXT); its Yes and No drawn as named ports; a "+" on a wire and on an open No; a webhook made here answers
+  console.log('check: P132 BWF-001, what Richard met');
+  await b.clickSel('#newauto'); await wait(300);
+  {
+    const shown = {};
+    for (const v of ['db-change', 'schedule', 'webhook', '']) {
+      await ev(`(() => { const s = document.querySelector('.menu.newauto select[aria-label="What starts it"]'); s.value = ${JSON.stringify(v)}; s.dispatchEvent(new Event('change')); })()`);
+      shown[v || 'nothing'] = await ev(`[...document.querySelectorAll('.menu.newauto .field[data-starts]')].filter((f) => f.getClientRects().length).map((f) => f.dataset.starts).join()`);
+    }
+    ok(JSON.stringify(shown) === '{"db-change":"db-change","schedule":"schedule","webhook":"webhook","nothing":""}', 'New workflow: each Starts-on choice shows its own fields and no other\'s, on screen', shown);
+    await ev(`[...document.querySelectorAll('.menu.newauto .foot button')].find((x) => x.textContent === 'Cancel').click()`);
+  }
+  const triage = () => fileNow().workflows.find((w) => w.id === 'triage');
+  const stepOf = (w, id) => w?.steps.find((x) => x.id === id);
+  await ev(`document.querySelector('#autolist .row[data-workflow="triage"]').click()`);
+  await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'triage' && !!document.querySelector('#steps .wfacts [data-act=addfirst]')`, 8000);
+  await ev(`document.querySelector('#steps .wfacts [data-act=addfirst]').click()`); await wait(300);
+  await ev(`document.querySelector('.menu .item[data-kind="branch"]').click()`);
+  await b.until(`!!document.querySelector('#steps .autoview .step[data-id="branch"]')`, 8000).catch(() => {});
+  await wait(400);
+  ok(JSON.stringify(stepOf(triage(), 'branch')?.routes) === '{"ontrue":["pause"]}' && !('next' in (stepOf(triage(), 'branch') ?? {})) && JSON.stringify(stepOf(await beWf(), 'branch')?.routes) === '{"ontrue":["pause"]}', 'an If added at the start carries on down its Yes, with no plain next, in the file and on the backend', stepOf(triage(), 'branch'));
+  ok(await ev(`(() => { const words = [...document.querySelectorAll('#steps svg.wires text.portword')].map((t) => t.textContent); return words.includes('Yes') && words.includes('No'); })()`) && await ev(`!!document.querySelector('#steps svg.wires path[data-open="onfalse"][data-from="branch"]') && !!document.querySelector('#steps .wireplus button[data-open="onfalse"][data-from="branch"]')`), 'the If draws Yes on its wire and an open No with a "+" on it', await ev(`[...document.querySelectorAll('#steps svg.wires text.portword')].map((t) => t.textContent)`));
+  await ev(`document.querySelector('#steps .wireplus button[data-from="branch"][data-to="pause"]').click()`); await wait(300);
+  await ev(`document.querySelector('.menu .item[data-kind="wait"]').click()`);
+  await b.until(`!!document.querySelector('#steps .autoview .step[data-id="wait"]')`, 8000).catch(() => {});
+  await wait(300);
+  ok(JSON.stringify(stepOf(triage(), 'branch')?.routes) === '{"ontrue":["wait"]}' && JSON.stringify(stepOf(triage(), 'wait')?.next) === '["pause"]' && JSON.stringify(stepOf(await beWf(), 'wait')?.next) === '["pause"]', 'a step put with the "+" on the Yes wire lands between the If and the step after it, in the file and on the backend', [stepOf(triage(), 'branch'), stepOf(triage(), 'wait')]);
+  await ev(`document.querySelector('#steps .wireplus button[data-open="onfalse"][data-from="branch"]').click()`); await wait(300);
+  await ev(`document.querySelector('.menu .item[data-kind="stop"]').click()`);
+  await b.until(`!!document.querySelector('#steps .autoview .step[data-id="stop"]')`, 8000).catch(() => {});
+  await wait(300);
+  ok(JSON.stringify(stepOf(triage(), 'branch')?.routes) === '{"ontrue":["wait"],"onfalse":["stop"]}', 'the "+" on the open No adds on No', stepOf(triage(), 'branch'));
+  // an agent's (or an older Studio's) branch with a plain next: drawn and said, and put on a side in a click
+  {
+    const legacy = { ...triage(), steps: triage().steps.map((x) => (x.id === 'branch' ? { ...x, routes: { ontrue: ['wait'] }, next: ['stop'] } : x)) };
+    const r = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: legacy }) });
+    const j = await r.json();
+    ok(r.ok && JSON.stringify(stepOf(triage(), 'branch')?.next) === '["stop"]', 'a branch carrying a plain next, written as an agent writes it', j.error);
+    await b.until(`(() => { const t = [...document.querySelectorAll('#steps svg.wires text.portword')].map((x) => x.textContent); return t.includes('Always'); })()`, 8000).catch(() => {});
+    ok(await ev(`[...document.querySelectorAll('#steps svg.wires text.portword')].map((x) => x.textContent).includes('Always') && !!document.querySelector('#steps svg.wires path[data-kind="always"][data-from="branch"][data-to="stop"]')`), 'its next is drawn as its own wire, named Always, never as the No');
+    await ev(`document.querySelector('#steps .autoview .step[data-id="branch"]').click()`);
+    await b.until(`!!document.querySelector('#wfinspect [data-always]')`, 5000).catch(() => {});
+    ok(await ev(`/Always, as well: stop/.test(document.querySelector('#wfinspect [data-always]')?.innerText ?? '') && /runs whatever this step decides/.test(document.getElementById('wfinspect').innerText)`), 'the panel says it: it runs whatever the If decides', await ev(`document.getElementById('wfinspect').innerText.slice(0, 400)`));
+    await ev(`document.querySelector('#wfinspect [data-act="onto-onfalse"]').click()`);
+    await b.until(`!document.querySelector('#wfinspect [data-always]')`, 8000).catch(() => {});
+    await wait(300);
+    ok(JSON.stringify(stepOf(triage(), 'branch')?.routes) === '{"ontrue":["wait"],"onfalse":["stop"]}' && !('next' in stepOf(triage(), 'branch')) && !('next' in stepOf(await beWf(), 'branch')), 'put on No: the If decides again, in the file and on the backend', stepOf(triage(), 'branch'));
+  }
+  // a webhook made in Studio answers at the address it shows, with the key it shows once; the file never holds the key
+  await b.clickSel('#newauto'); await wait(300);
+  await ev(`(() => { const m = document.querySelector('.menu.newauto'); const set = (sel, v, t) => { const el = m.querySelector(sel); el.value = v; el.dispatchEvent(new Event(t)); }; set('select[aria-label="What starts it"]', 'webhook', 'change'); set('input[aria-label="Workflow name"]', 'New order', 'input'); set('select[aria-label="The function it runs first"]', 'kind:transform', 'change'); })()`);
+  await ev(`[...document.querySelectorAll('.menu.newauto .foot button')].find((x) => x.textContent === 'Create').click()`);
+  await b.until(`!!document.querySelector('.menu.hookmade [data-hook-secret]')`, 10000).catch(() => {});
+  {
+    const hook = await ev(`({ url: document.querySelector('.hookmade [data-hook-url]')?.textContent, key: document.querySelector('.hookmade [data-hook-secret]')?.textContent })`);
+    const t = fileNow().triggers.find((x) => x.target?.name === 'new-order');
+    ok(t?.type === 'webhook' && t.webhook.slug === 'new-order' && !JSON.stringify(fileNow()).includes(hook.key ?? '§') && fileNow().workflows.find((w) => w.id === 'new-order')?.steps[0]?.kind === 'transform', 'a webhook workflow, its first step any kind (a Transform), in the file with no key', t);
+    const yes = hook.url && await fetch(hook.url, { method: 'POST', headers: { 'content-type': 'application/json', 'x-webhook-token': hook.key }, body: '{"order":7}' });
+    const no = hook.url && await fetch(hook.url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    const ran = yes && await yes.json().catch(() => ({}));
+    ok(yes?.status === 200 && ran.status === 'success' && no?.status === 401, 'a POST at the address it shows, with its key, runs the workflow; without the key it is refused', [hook.url, yes?.status, ran, no?.status]);
+    await ev(`document.querySelector('.menu.hookmade .foot button')?.click()`);
+  }
+  await shot('p132-bwf001');
+
   // a trigger the file does not have is refused, and nothing changes
   const refused = await fetch(url + 'api/automations/trigger', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: 'nobody', enabled: false }) });
   ok(refused.status === 409 && /no trigger "nobody"/.test((await refused.json()).error), 'a trigger the project\'s file lacks is refused');
