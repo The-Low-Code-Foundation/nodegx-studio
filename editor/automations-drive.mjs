@@ -747,6 +747,19 @@ try {
       }
     }
   }
+  // P132-STUDIOPRIVACYDROP: a workflow set to obey the privacy rules (R5) says so in the file, not only on the backend,
+  // or a backend made from the file (a copy, a deploy) runs it as the system again
+  console.log('check: P132-STUDIOPRIVACYDROP, a workflow that obeys the privacy rules keeps it in the file');
+  {
+    const r = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: { ...triage(), ignorePrivacyRules: false } }) });
+    const j = await r.json();
+    const stored = await beWf();
+    if (!r.ok || !('ignorePrivacyRules' in stored)) {
+      console.log(`  (not graded: this backend has no per-workflow privacy switch yet (${j.error ?? 'it stored none'}). Run with NODEGX_REPO at a NodeGX carrying BWF-005, its dist rebuilt, or after a release carrying it)`);
+    } else {
+      ok(stored.ignorePrivacyRules === false && triage().ignorePrivacyRules === false, 'saved with Ignore privacy rules off: off on the backend and in nodegx.automations.json', { backend: stored.ignorePrivacyRules, file: triage().ignorePrivacyRules });
+    }
+  }
   // a trigger the file does not have is refused, and nothing changes
   const refused = await fetch(url + 'api/automations/trigger', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: 'nobody', enabled: false }) });
   ok(refused.status === 409 && /no trigger "nobody"/.test((await refused.json()).error), 'a trigger the project\'s file lacks is refused');

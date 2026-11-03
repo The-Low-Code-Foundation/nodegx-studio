@@ -375,8 +375,12 @@ async function setTrigger({ id, enabled, time, cron: newCron, dbChange, remove }
   }
   return { file: rel, text, backend: stored };
 }
-/** The project's shape of a workflow the backend stored (the MCP's `projectWorkflow`, nodegx-backend automations/shape.ts): no timestamps, no version. */
-const projectWorkflow = (w) => Object.fromEntries(Object.entries({ id: w.id, name: w.name, entry: w.entry, concurrency: w.concurrency ?? 1, timeoutMs: w.timeoutMs, stepTimeoutMs: w.stepTimeoutMs, steps: w.steps }).filter(([, v]) => v !== undefined));
+/**
+ * The project's shape of a workflow the backend stored (the MCP's `projectWorkflow`, nodegx-backend automations/shape.ts): no
+ * timestamps, no version. The same fields as shape.ts, by name: a field missing here is dropped from the file on every save
+ * (P132-STUDIOPRIVACYDROP: `ignorePrivacyRules`, so a backend made from the file ran the workflow as the system again).
+ */
+const projectWorkflow = (w) => Object.fromEntries(Object.entries({ id: w.id, name: w.name, entry: w.entry, concurrency: w.concurrency ?? 1, timeoutMs: w.timeoutMs, stepTimeoutMs: w.stepTimeoutMs, ignorePrivacyRules: w.ignorePrivacyRules, steps: w.steps }).filter(([, v]) => v !== undefined));
 /**
  * STU-092: a backend workflow written from Studio, as the MCP's `update_backend_workflow` / `delete_backend_workflow` do
  * and as setTrigger does: the backend first (it validates, and answers with what it stored: `PUT` creates or replaces),
@@ -410,7 +414,7 @@ async function saveWorkflow({ workflow, remove, trigger }) {
   if (remove) { if (at >= 0) json.workflows.splice(at, 1); }
   else if (at >= 0) json.workflows[at] = stored; else json.workflows.push(stored);
   // the project's shape of a trigger (the MCP's `projectTrigger`): what decides what runs and when, never its secret
-  if (madeTrigger) json.triggers.push(Object.fromEntries(['id', 'type', 'name', 'enabled', 'target', 'schedule', 'webhook', 'dbChange'].filter((k) => madeTrigger[k] !== undefined).map((k) => [k, madeTrigger[k]])));
+  if (madeTrigger) json.triggers.push(Object.fromEntries(['id', 'type', 'name', 'enabled', 'target', 'responseMode', 'responseTimeoutMs', 'schedule', 'webhook', 'dbChange'].filter((k) => madeTrigger[k] !== undefined).map((k) => [k, madeTrigger[k]])));
   const text = JSON.stringify(json, null, 2) + (before == null || before.endsWith('\n') ? '\n' : '');
   try {
     known.set(rel, text); // before the write, so the watcher's echo of it matches
