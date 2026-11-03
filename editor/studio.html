@@ -5679,7 +5679,8 @@ function renderAutoWorkflow(w) {
 let selAutoStep = null;
 const kindSpec = (kind) => beNow()?.kinds.get(kind);
 const callableFns = () => functionList(Object.keys(registry()), fnNodesOf).filter((f) => f.endpoint).map((f) => fnName(f.key));
-const KIND_GLYPH = (kind, spec) => (spec?.invokesFunction ? 'bolt' : kind === 'branch' || kind === 'switch' ? 'branch' : kind === 'wait' || kind === 'wait-until' ? 'repeat' : 'code');
+const RECORD_KINDS = new Set(['create-record', 'update-record', 'delete-record', 'find-records']);
+const KIND_GLYPH = (kind, spec) => (spec?.invokesFunction ? 'bolt' : RECORD_KINDS.has(kind) ? 'db' : kind === 'branch' || kind === 'switch' ? 'branch' : kind === 'wait' || kind === 'wait-until' ? 'repeat' : 'code');
 const editingUp = () => { const be = beNow(); return !!be && !be.words && be.kinds.size > 0; };
 /** The kind's own routes (the catalog's, a switch's case labels): its ports, named, even with nothing on them yet. */
 const routeNamesOf = (step) => { const spec = kindSpec(step.kind); return spec?.routes?.length ? [...spec.routes.filter((r) => !r.dynamic).map((r) => r.name), ...(step.kind === 'switch' ? (step.params?.cases ?? []).map((c) => c.label).filter(Boolean) : [])] : []; };
@@ -5718,6 +5719,14 @@ function newAutoStep(w, kind) {
   const first = { branch: { condition: { left: { $path: 'previous.result' }, op: 'truthy' } }, switch: { value: { $path: 'previous.result' }, cases: [{ label: 'first', equals: '' }] }, transform: { output: { result: { $path: 'previous.result' } } },
     validate: { rules: [{ path: 'body.id', message: 'It arrived without an id.' }] }, filter: { condition: { left: { $path: 'item' }, op: 'truthy' } }, wait: { duration: 1, unit: 'minutes' }, 'wait-until': { target: { $path: 'body.at' } }, split: { size: 10 } }[kind];
   Object.assign(params, first);
+  // P132 BWF-005: a record step starts on the table the workflow starts from (else the app's first), the row that started it
+  if (RECORD_KINDS.has(kind)) {
+    const from = startsOf(w.id).find((t) => t.type === 'db-change')?.dbChange?.collection, table = from ?? tableNames()[0];
+    if (!table) throw new Error('This app has no table yet for it to act on.');
+    params.table = table;
+    if (kind === 'update-record' || kind === 'delete-record') params.record = from ? { $path: 'body' } : '';
+    if (kind === 'create-record' || kind === 'update-record') params.fields = {};
+  }
   if (Object.keys(params).length) step.params = params;
   if (kind === 'branch') step.routes = { ontrue: [] };
   if (kind === 'switch') step.routes = { first: [] }; // P132-BRANCHNEXT: what comes after goes on its first case, never a plain next
@@ -5879,8 +5888,10 @@ const colNames = (cols) => (cols || []).map((x) => (typeof x === 'string' ? x : 
 const declaredCols = (table) => colNames(collections().find((x) => x.name === table)?.columns);
 const tableColumns = (table) => (declaredCols(table).length ? declaredCols(table) : autoTables.get(table) ?? null);
 /** The backend's columns, asked only when a workflow a table starts is opened and the project declares none for it. */
-function loadAutoTables(id) {
-  const want = startsOf(id).filter((t) => t.type === 'db-change').map((t) => t.dbChange?.collection).filter((n) => n && !declaredCols(n).length && !autoTables.has(n));
+function loadAutoTables(id, also = []) {
+  const steps = beNow()?.workflows.get(id)?.steps ?? [];
+  const named = [...also, ...startsOf(id).filter((t) => t.type === 'db-change').map((t) => t.dbChange?.collection), ...steps.filter((s) => RECORD_KINDS.has(s.kind)).map((s) => s.params?.table)];
+  const want = named.filter((n) => typeof n === 'string' && n && !declaredCols(n).length && !autoTables.has(n));
   if (!want.length) return;
   api('/admin/schema').then((sc) => {
     for (const t of sc.tables ?? []) if (want.includes(t.name)) autoTables.set(t.name, colNames(t.columns));
@@ -5951,6 +5962,42 @@ function condField(label, value, set, w, item = false) {
   if (op && !op.unary) wrap.append(runValueField('That', c.right, (v) => set({ ...c, right: v ?? '' }), { w, item }));
   return wrap;
 }
+/* ---- P132 BWF-005: a record step's settings, from the table's columns: which table, a value box per field, conditions in
+   words ("room · is · kitchen"). Generated from the catalog's `control` and the table, never per table. ---- */
+const tableNames = () => [...new Set([...collections().map((c) => c.name), ...autoTables.keys()])].filter((n) => n && !n.startsWith('_'));
+function tableField(label, value, set, description) {
+  const names = tableNames(); if (typeof value === 'string' && value && !names.includes(value)) names.unshift(value);
+  return h('div', { class: 'field', title: description }, h('label', {}, label), h('select', { 'aria-label': 'Which table', 'data-input': 'table', onchange: (e) => set(e.target.value || undefined) },
+    !value ? h('option', { value: '' }, 'Choose a table') : null, ...names.map((n) => h('option', { value: n, selected: n === value }, n))));
+}
+function recordFieldsField(label, value, set, table, w) {
+  const cols = typeof table === 'string' ? tableColumns(table) : null, now = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  if (!cols) return jsonField(label, value, set, 'The fields to set, as { "field": value } (this table\'s fields show once the backend answers)');
+  const wrap = h('div', { class: 'recfields', 'data-table': table }, h('div', { class: 'sechead' }, label), h('div', { class: 'hint' }, 'A field left empty is left as it is.'));
+  for (const name of [...new Set([...cols, ...Object.keys(now)])]) {
+    wrap.append(runValueField(name, now[name], (v) => { const next = { ...now }; if (v === undefined) delete next[name]; else next[name] = v; set(next); }, { w, description: `${table}'s ${name}` }));
+  }
+  return wrap;
+}
+function recordCondsField(label, value, set, table, allowed, w) {
+  const ops = (beNow()?.ops ?? []).filter((o) => !allowed || allowed.includes(o.name)), rows = Array.isArray(value) ? value : [];
+  if (!ops.length) return jsonField(label, value, set, 'A list of { field, op, value }');
+  const cols = (typeof table === 'string' && tableColumns(table)) || [];
+  const put = (i, c) => set(rows.map((r, j) => (j === i ? c : r)));
+  const wrap = h('div', { class: 'condwords reccond' }, h('div', { class: 'sechead' }, label));
+  if (!rows.length) wrap.append(h('div', { class: 'hint' }, 'No conditions: every record, up to the limit.'));
+  rows.forEach((c, i) => {
+    const op = ops.find((o) => o.name === c.op), fields = [...new Set([...cols, 'objectId', 'createdAt', 'updatedAt', ...(c.field ? [c.field] : [])])];
+    wrap.append(h('div', { class: 'field', 'data-cond': i }, h('label', {}, i ? 'and' : 'Where'), h('div', { class: 'ctl' },
+      h('select', { 'aria-label': 'Which field', onchange: (e) => put(i, { ...c, field: e.target.value }) }, ...fields.map((n) => h('option', { value: n, selected: n === c.field }, n))),
+      h('select', { 'aria-label': 'How it compares', onchange: (e) => { const o = ops.find((x) => x.name === e.target.value), next = { ...c, op: o.name }; if (o.unary) delete next.value; else if (!('value' in next)) next.value = ''; put(i, next); } },
+        ...ops.map((o) => h('option', { value: o.name, selected: o.name === c.op }, o.label))),
+      h('button', { class: 'quiet', title: 'Remove this condition', onclick: () => set(rows.filter((_, j) => j !== i)) }, icon('trash')))));
+    if (op && !op.unary) wrap.append(runValueField('', c.value, (v) => put(i, { ...c, value: v ?? '' }), { w }));
+  });
+  wrap.append(h('button', { 'data-act': 'addcond', onclick: () => set([...rows, { field: cols[0] ?? 'objectId', op: 'eq', value: '' }]) }, icon('plus'), 'Add a condition'));
+  return wrap;
+}
 /** A param the catalog gives no display name, in words: maxAttempts → "Max attempts". */
 const paramWords = (name) => { const w = name.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]/g, ' ').toLowerCase(); return w.charAt(0).toUpperCase() + w.slice(1).replace(/\bms\b/, '(ms)'); };
 const prettyJson = (v) => { const t = JSON.stringify(v, null, 2); return t === undefined ? '(nothing)' : t; };
@@ -6000,7 +6047,10 @@ function autoStepPanel(panel, w, step) {
       if (p.name === 'ref') continue;
       const label = p.displayName || paramWords(p.name), v = params[p.name], into = p.group ? more : wrap;
       if (p.group) moreN++;
-      if (p.type === 'condition') into.append(condField(label, v, setParam(p.name), w, own.some((x) => x.name === 'itemKey')));
+      if (p.control === 'table') into.append(tableField(label, v, (t) => { setParam(p.name)(t); loadAutoTables(w.id, [t]); }, p.description));
+      else if (p.control === 'record-fields') into.append(recordFieldsField(label, v, setParam(p.name), params.table, w));
+      else if (p.control === 'record-conditions') into.append(recordCondsField(label, v, setParam(p.name), params.table, p.enums, w));
+      else if (p.type === 'condition') into.append(condField(label, v, setParam(p.name), w, own.some((x) => x.name === 'itemKey')));
       else if (p.raw || p.type === 'object' || p.type === 'array') into.append(jsonField(label, v, setParam(p.name), p.description));
       else into.append(runValueField(label, v, setParam(p.name), { type: p.type, enums: p.enums, w, description: `${p.description}${p.default !== undefined ? ` (when left empty: ${JSON.stringify(p.default)})` : ''}` }));
     }

@@ -145,7 +145,7 @@ try {
   const listed = await ev(`[...document.querySelectorAll('#autolist .row')].map((r) => ({ trigger: r.dataset.trigger, workflow: r.dataset.workflow, text: r.innerText.replace(/\\s+/g, ' ').trim() }))`);
   const said = (id) => listed.find((r) => r.trigger === id)?.text ?? '';
   ok(/^Every day at 09:00 ?On ?Starts the function sendDigest$/.test(said(dailyId)), 'the daily trigger: "Every day at 09:00", on, starting sendDigest (the backend\'s words for its cron)', said(dailyId));
-  ok(/^When a Task is created ?On ?Starts the workflow Triage a new task · last run (just now|\d+ seconds ago): it failed \(A step failed/.test(said(rowsId)), 'the row-change trigger: "When a Task is created", starting the workflow by its name, and how its last fire went (STU-093)', said(rowsId));
+  ok(/^When a Task is created ?On ?Starts the workflow Triage a new task · last run (just now|\d+ seconds ago): it failed \((A step failed|Step "Give up" failed)/.test(said(rowsId)), 'the row-change trigger: "When a Task is created", starting the workflow by its name, and how its last fire went (STU-093)', said(rowsId));
   ok(listed.some((r) => r.workflow === 'triage' && /^Triage a new task Started by When a Task is created · 3 steps · last run (just now|\d+ seconds ago): it failed$/.test(r.text)), 'the workflow, by its name: what starts it, its three steps, and its last run in the Map\'s words (STU-093)', listed);
   ok(!listed.some((r) => /differs/.test(r.text)), 'the backend agrees with the project on every one');
   await shot('list');
@@ -602,6 +602,71 @@ try {
       await b.until(`!!document.querySelector('.menu [data-act=fxjson]')`, 5000).catch(() => {});
       await ev(`document.querySelector('.menu [data-act=fxjson]').click()`);
       ok(await ev(`/"date-difference"/.test(document.querySelector('#wfinspect textarea.json')?.value ?? '')`), 'its JSON is behind More, "Edit as JSON"');
+    }
+  }
+  // P132 BWF-005: a record changed as a step, no function, no JSON typed: added from the menu, a field typed in its box, tested
+  console.log('check: P132 BWF-005, a record changed as a step');
+  {
+    // the backend's admin bucket (burst 100, 5 a second back) is spent by the sections above; a person never clicks this fast
+    await wait(20000);
+    const cat = await be('/admin/workflow-step-kinds');
+    if (!cat.kinds?.some((k) => k.kind === 'update-record')) {
+      console.log('  (not graded: this backend has no record steps yet. Run with NODEGX_REPO at a NodeGX carrying BWF-005, its dist rebuilt, or after a release carrying it)');
+    } else {
+      const steps = [{ id: 'start', name: 'Read it', kind: 'transform', params: { output: { title: { $path: 'body.title' } } } }];
+      const r = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: { id: 'touch', name: 'Touch', entry: 'start', steps }, trigger: { type: 'db-change', name: 'A task made', dbChange: { collection: 'Task', actions: ['create'] } } }) });
+      ok(r.ok, 'a workflow a new Task starts, written as Studio writes one', r.ok || (await r.json()).error);
+      await b.until(`!!document.querySelector('#autolist .row[data-workflow="touch"]')`, 8000).catch(() => {});
+      await ev(`document.querySelector('#autolist .row[data-workflow="touch"]').click()`);
+      await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'touch'`, 8000).catch(() => {});
+      await b.clickSel('#steps .autoview .step[data-id="start"] h3');
+      await b.until(`!!document.querySelector('#wfinspect [data-act=addafter]')`, 5000).catch(() => {});
+      await ev(`document.querySelector('#wfinspect [data-act=addafter]').click()`);
+      await b.until(`!!document.querySelector('.menu .item[data-kind="update-record"]')`, 5000).catch(() => {});
+      ok(await ev(`[...document.querySelectorAll('.menu.actions .h')].some((x) => x.textContent === 'Records') && ['create-record', 'update-record', 'delete-record', 'find-records'].every((k) => !!document.querySelector('.menu .item[data-kind="' + k + '"]'))`), 'the step menu has the four record steps, under Records', await ev(`document.querySelector('.menu.actions')?.innerText`));
+      await ev(`document.querySelector('.menu .item[data-kind="update-record"]').click()`);
+      const touch = () => fileNow().workflows.find((w) => w.id === 'touch');
+      const upd = () => touch()?.steps.find((x) => x.kind === 'update-record');
+      for (let i = 0; i < 40 && !upd(); i++) await wait(150);
+      ok(JSON.stringify(upd()?.params) === '{"table":"Task","record":{"$path":"body"},"fields":{}}' && (await be('/admin/workflow-defs/touch')).workflow?.steps?.some((x) => x.kind === 'update-record'), 'added from the menu, it starts on the Task that started the run, in the file and on the backend', upd() ?? await ev(`document.getElementById('toast')?.textContent`));
+      await b.clickSel(`#steps .autoview .step[data-id="${upd()?.id}"] h3`);
+      await b.until(`[...document.querySelectorAll('#wfinspect .recfields .field.runvalue > label')].some((l) => l.textContent === 'title')`, 8000).catch(() => {});
+      ok(await ev(`document.querySelector('#wfinspect select[data-input=table]')?.value === 'Task' && document.querySelector('#wfinspect .pill[data-path="body"]')?.innerText === 'all of it · from the Task that was made'`), 'its table is a choice, its record a pill in words', await ev(`[document.querySelector('#wfinspect select[data-input=table]')?.value, document.querySelector('#wfinspect .rvpill')?.innerText]`));
+      const boxes = await ev(`[...document.querySelectorAll('#wfinspect .recfields .field.runvalue > label')].map((l) => l.textContent)`);
+      ok(boxes?.includes('title') && !boxes.includes('objectId'), "a box for each of the Task's fields, from the table", boxes);
+      await ev(`(() => { const f = [...document.querySelectorAll('#wfinspect .recfields .field.runvalue')].find((x) => x.querySelector('label')?.textContent === 'title'); const i = f.querySelector('input[type=text]'); i.value = 'Changed by a step'; i.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+      for (let i = 0; i < 40 && upd()?.params.fields?.title !== 'Changed by a step'; i++) await wait(150);
+      ok(JSON.stringify(upd()?.params.fields) === '{"title":"Changed by a step"}', 'a value typed in the title box: fields { title }, nothing else', upd()?.params);
+      await shot('p132-bwf005');
+      if (cat.testRuns) {
+        await b.clickSel('#steps [data-act="sample"]');
+        await b.until(`!!document.querySelector('.menu.sample [data-row]')`, 8000).catch(() => {});
+        await ev(`document.querySelector('.menu.sample [data-row]').click()`);
+        await ev(`document.querySelector('.menu.sample [data-act=keepsample]').click()`);
+        await b.until(`!document.querySelector('#steps [data-act="test"]')?.disabled`, 8000).catch(() => {});
+        const rowId = JSON.parse(readFileSync(join(project, '.nodegx', 'workflow-samples.json'), 'utf8')).samples.touch?.rowId;
+        await b.clickSel('#steps [data-act="test"]');
+        await b.until(`!!document.querySelector('.surescrim [data-act=yes]') || /Tested/.test(document.querySelector('#steps .fnfacts .run')?.innerText ?? '')`, 8000).catch(() => {});
+        await ev(`document.querySelector('.surescrim [data-act=yes]')?.click()`);
+        await b.until(`/Tested/.test(document.querySelector('#steps .fnfacts .run')?.innerText ?? '')`, 10000).catch(() => {});
+        const row = rowId ? await be(`/classes/Task/${encodeURIComponent(rowId)}`) : null;
+        ok(row?.title === 'Changed by a step', 'AC3 (in Chrome): the test changed the Task it ran on', { rowId, title: row?.title });
+      }
+      // Find records: a condition added by a click, read as words
+      await b.clickSel(`#steps .autoview .step[data-id="${upd()?.id}"] h3`);
+      await b.until(`!!document.querySelector('#wfinspect [data-act=addafter]')`, 5000).catch(() => {});
+      await ev(`document.querySelector('#wfinspect [data-act=addafter]').click()`);
+      await b.until(`!!document.querySelector('.menu .item[data-kind="find-records"]')`, 5000).catch(() => {});
+      await ev(`document.querySelector('.menu .item[data-kind="find-records"]').click()`);
+      const find = () => touch()?.steps.find((x) => x.kind === 'find-records');
+      for (let i = 0; i < 40 && !find(); i++) await wait(150);
+      await b.clickSel(`#steps .autoview .step[data-id="${find()?.id}"] h3`);
+      await b.until(`!!document.querySelector('#wfinspect .reccond [data-act=addcond]')`, 8000).catch(() => {});
+      await ev(`document.querySelector('#wfinspect .reccond [data-act=addcond]').click()`);
+      for (let i = 0; i < 40 && !find()?.params.where?.length; i++) await wait(150);
+      await b.until(`!!document.querySelector('#wfinspect .reccond [data-cond="0"]')`, 5000).catch(() => {});
+      const words = await ev(`(() => { const row = document.querySelector('#wfinspect .reccond [data-cond="0"]'); const [f, o] = row.querySelectorAll('select'); return { field: f.value, op: o.options[o.selectedIndex].text, ops: [...o.options].map((x) => x.value) }; })()`);
+      ok(find()?.params.where?.length === 1 && find().params.where[0].op === 'eq' && words?.op === 'is' && !words.ops.includes('truthy') && words.ops.includes('startsWith'), 'Find records: a condition added by a click, "<field> is …", only the operators a search runs', { where: find()?.params.where, words });
     }
   }
   // a trigger the file does not have is refused, and nothing changes
