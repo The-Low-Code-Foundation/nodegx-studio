@@ -562,6 +562,9 @@ try {
       await b.until(`!!document.querySelector('.menu.formulas .item[data-fn="date-difference"]')`, 5000).catch(() => {});
       const menu = await ev(`(() => { const m = document.querySelector('.menu.formulas'); return m && { heads: [...m.querySelectorAll('.h')].map((x) => x.textContent), items: m.querySelectorAll('.item').length, between: m.querySelector('.item[data-fn="date-difference"]')?.innerText }; })()`);
       ok(menu?.heads.join() === 'Text,Numbers,Yes or no,Dates,Lists' && menu.items === cat.formulaLanguage.formulas.length && /^Time between/.test(menu.between), "the menu is the backend's list, in groups, by its words", menu);
+      // P132-FXMENUWORDS (Richard's screenshot, 2026-11-03): "Text with valuesJoin text…" — each name sat against its words
+      const rows = await ev(`[...document.querySelectorAll('.menu.formulas .item')].map((it) => { const w = it.querySelector('.words'), s = w?.querySelector('small'), name = document.createRange(); name.selectNodeContents(w); name.setEndBefore(s); const n = name.getBoundingClientRect(), d = s.getBoundingClientRect(), m = it.closest('.menu').getBoundingClientRect(); return { fn: it.dataset.fn, below: d.top >= n.bottom - 1, inside: d.right <= m.right + 1 }; })`);
+      ok(rows?.length && rows.every((r) => r.below && r.inside), 'each formula reads its name, then on the line under it what it does, inside the menu', rows?.filter((r) => !r.below || !r.inside).slice(0, 5));
       await ev(`document.querySelector('.menu.formulas .item[data-fn="date-difference"]').click()`);
       for (let i = 0; i < 40 && thirsty()?.steps[0].params.value?.$fn !== 'date-difference'; i++) await wait(150);
       ok(JSON.stringify(thirsty()?.steps[0].params.value) === '{"$fn":"date-difference","args":[{"$fn":"now"},{"$fn":"now"},"days"]}' && (await be('/admin/workflow-defs/thirsty')).workflow?.steps?.[0]?.params?.value?.$fn === 'date-difference', 'picked: saved at once with values the backend takes (its dates Now, its unit days), in the file and on the backend', thirsty()?.steps[0]);
@@ -669,6 +672,44 @@ try {
       await b.until(`!!document.querySelector('#wfinspect .reccond [data-cond="0"]')`, 5000).catch(() => {});
       const words = await ev(`(() => { const row = document.querySelector('#wfinspect .reccond [data-cond="0"]'); const [f, o] = row.querySelectorAll('select'); return { field: f.value, op: o.options[o.selectedIndex].text, ops: [...o.options].map((x) => x.value) }; })()`);
       ok(find()?.params.where?.length === 1 && find().params.where[0].op === 'eq' && words?.op === 'is' && !words.ops.includes('truthy') && words.ops.includes('startsWith'), 'Find records: a condition added by a click, "<field> is …", only the operators a search runs', { where: find()?.params.where, words });
+    }
+  }
+  // P132-RECORDSTEPREFUSED + P132-TYPEDISTEXT (Richard's re-walk, 2026-11-03): in a workflow no table change starts, a
+  // record step is added at all (it was refused: "needs a record"), and a yes/no or number field takes a tick or a number
+  console.log('check: P132-RECORDSTEPREFUSED and P132-TYPEDISTEXT, a record step with no table behind the run');
+  {
+    await wait(20000); // the admin bucket (see BWF-005's section)
+    const cat = await be('/admin/workflow-step-kinds');
+    if (!cat.kinds?.some((k) => k.kind === 'delete-record')) {
+      console.log('  (not graded: this backend has no record steps yet; see BWF-005\'s section)');
+    } else {
+      // a table the project does not declare, so its columns and their types come from the backend's schema
+      await be('/classes/Chore', { method: 'POST', body: JSON.stringify({ name: 'Sweep', done: false, minutes: 5 }) });
+      const steps = [{ id: 'start', name: 'Read it', kind: 'transform', params: { output: { id: { $path: 'body.id' } } }, next: ['chg'] },
+        { id: 'chg', name: 'Mark it', kind: 'update-record', params: { table: 'Chore', record: { $path: 'body.id' }, fields: {} } }];
+      const r = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: { id: 'tidy', name: 'Tidy', entry: 'start', steps } }) });
+      ok(r.ok, 'a workflow nothing in a table starts (the agent or a call runs it)', r.ok || (await r.json()).error);
+      await b.until(`!!document.querySelector('#autolist .row[data-workflow="tidy"]')`, 8000).catch(() => {});
+      await ev(`document.querySelector('#autolist .row[data-workflow="tidy"]').click()`);
+      await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'tidy'`, 8000).catch(() => {});
+      const tidy = () => fileNow().workflows.find((w) => w.id === 'tidy');
+      let last = 'chg';
+      for (const kind of ['delete-record', 'update-record']) {
+        await b.clickSel(`#steps .autoview .step[data-id="${last}"] h3`);
+        await b.until(`!!document.querySelector('#wfinspect [data-act=addafter]')`, 5000).catch(() => {});
+        await ev(`document.querySelector('#wfinspect [data-act=addafter]').click()`);
+        await b.until(`!!document.querySelector('.menu .item[data-kind="${kind}"]')`, 5000).catch(() => {});
+        await ev(`document.querySelector('.menu .item[data-kind="${kind}"]').click()`);
+        const added = () => tidy()?.steps.find((x) => x.kind === kind && x.id !== 'chg');
+        for (let i = 0; i < 40 && !added(); i++) await wait(150);
+        ok(JSON.stringify(added()?.params?.record) === '{"$path":"body.id"}', `${kind} from the menu: added, not refused; its record starts as the id in what started the run`, added() ?? await ev(`document.getElementById('toast')?.textContent`));
+        last = added()?.id ?? last;
+      }
+      await b.clickSel('#steps .autoview .step[data-id="chg"] h3');
+      await b.until(`[...document.querySelectorAll('#wfinspect .recfields .field.runvalue > label')].some((l) => l.textContent === 'done')`, 10000).catch(() => {});
+      const ctl = await ev(`Object.fromEntries([...document.querySelectorAll('#wfinspect .recfields .field.runvalue')].map((f) => [f.querySelector('label')?.textContent, f.querySelector('.rvctl input, .rvctl select:not(.rvmode), .rvctl textarea')?.type]))`);
+      const chore = ctl?.done ? null : { made: (await be('/admin/schema')).tables?.find((t) => t.name === 'Chore')?.columns, panel: await ev(`document.querySelector('#wfinspect')?.innerText.slice(0, 300)`) };
+      ok(ctl?.done === 'checkbox' && ctl?.minutes === 'number' && ctl?.name === 'text', 'Typed: a yes/no field is a tick, a number field a number box, a text field text', { ctl, chore });
     }
   }
   // P132 BWF-006: Call an API from a pasted curl line: the key goes to Secrets and never the file, a test shows the answer

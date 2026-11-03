@@ -52,6 +52,14 @@ const D = workflowLayout(diamond);
 ok(JSON.stringify(D.columns) === '[["a"],["b"],["c"],["d"],["lost"]]', 'a step two paths reach sits after the longer one; an unreached step is loose, last', D.columns);
 ok(D.loose.length === 1 && D.wires.filter((w) => w.kind === 'route').map((w) => w.label).join() === 'ontrue,onfalse', "a branch's routes keep their names");
 ok(D.wires.every((w) => D.columns.findIndex((c) => c.includes(w.from)) < D.columns.findIndex((c) => c.includes(w.to))), 'every wire runs left to right');
+// P132-BRANCHROWSCROSS (Richard's re-walk, 2026-11-03): a second step on each side, the No side's added first, stays on No's row
+const crossed = { entry: 'if', steps: [
+  { id: 'if', kind: 'branch', routes: { ontrue: ['y1'], onfalse: ['n1'] } },
+  { id: 'n1', kind: 'wait', next: ['n2'] }, { id: 'y1', kind: 'wait', next: ['y2'] }, { id: 'n2', kind: 'wait' }, { id: 'y2', kind: 'wait' }] };
+const X = workflowLayout(crossed, (s) => (s.kind === 'branch' ? ['ontrue', 'onfalse'] : []));
+ok(JSON.stringify(X.columns) === '[["if"],["y1","n1"],["y2","n2"]]', 'Yes above No in every column, whatever order the steps sit in the file', X.columns);
+const noFirst = { entry: 'if', steps: [{ id: 'if', kind: 'branch', routes: { onfalse: ['n1'], ontrue: ['y1'] } }, { id: 'n1', kind: 'wait' }, { id: 'y1', kind: 'wait' }] };
+ok(JSON.stringify(workflowLayout(noFirst, () => ['ontrue', 'onfalse']).columns[1]) === '["y1","n1"]', 'a branch whose No was written first still draws Yes on top');
 ok(workflowLayout({ entry: 'x', steps: [{ id: 'x', next: ['ghost'] }] }).dangling.length === 1, 'a wire to a step that is not there is said as dangling');
 ok(stepWires({ id: 's', routes: { failed: ['t'] } })[0].kind === 'fail', 'a route named "failed" is a failure');
 ok(workflowLayout({ entry: 'a', steps: [{ id: 'a', next: ['b'] }, { id: 'b', next: ['a'] }] }).columns.flat().length === 2, 'a loop back to the entry does not hang or lose a step');

@@ -717,6 +717,10 @@
   .menu.actions .item .words { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-weight: 500; }
   .menu.actions .item small { margin-left: 0; white-space: normal; color: var(--muted); font-weight: 400; font-size: 11.5px; line-height: 1.35; }
   .menu.actions .item.dev .words { font-weight: 400; }
+  /* P132-FXMENUWORDS: the formula menu's rows stack the name over what it does, as the action menu's do */
+  .menu.formulas .item { align-items: flex-start; }
+  .menu.formulas .item .words { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-weight: 500; }
+  .menu.formulas .item small { margin-left: 0; white-space: normal; color: var(--muted); font-weight: 400; font-size: 11.5px; line-height: 1.35; }
   .menu.actions .item.dev { align-items: center; padding: 4px 8px; }
   .menu.actions .item.dev .ic { width: 20px; height: 20px; opacity: .7; }
   .menu.events .h.more { cursor: pointer; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 10px; text-transform: none; letter-spacing: 0; font-size: 12px; }
@@ -5633,7 +5637,7 @@ function autoStepCard(step, n, lit, wfLabel) {
     h('div', { class: 'num' }, String(n)), h('h3', {}, title, sub ? h('span', {}, sub) : null), h('div', { class: 'acts' }), h('div', { class: 'lines' }, ...lines));
 }
 function renderAutoWorkflow(w) {
-  const L = workflowLayout(w), byStep = Object.fromEntries((w.steps ?? []).map((s) => [s.id, s]));
+  const L = workflowLayout(w, routeNamesOf), byStep = Object.fromEntries((w.steps ?? []).map((s) => [s.id, s]));
   const lit = autoRun?.run ? stepsOfRun(autoRun.run) : null, label = w.name || w.id;
   const wf = h('div', { class: 'wf fnview autoview', 'data-workflow': w.id });
   wf.append(autoNav());
@@ -5735,7 +5739,9 @@ function newAutoStep(w, kind) {
     const from = startsOf(w.id).find((t) => t.type === 'db-change')?.dbChange?.collection, table = from ?? tableNames()[0];
     if (!table) throw new Error('This app has no table yet for it to act on.');
     params.table = table;
-    if (kind === 'update-record' || kind === 'delete-record') params.record = from ? { $path: 'body' } : '';
+    // P132-RECORDSTEPREFUSED: with no table change behind it, the record is the id in what started the run (a webhook's
+    // or a caller's body), a pill the person changes; '' was refused by the backend, so the step could not be added at all
+    if (kind === 'update-record' || kind === 'delete-record') params.record = { $path: from ? 'body' : 'body.id' };
     if (kind === 'create-record' || kind === 'update-record') params.fields = {};
   }
   if (Object.keys(params).length) step.params = params;
@@ -5899,14 +5905,23 @@ let autoTables = new Map();
 const colNames = (cols) => (cols || []).map((x) => (typeof x === 'string' ? x : x?.name)).filter((n) => n && !['objectId', 'createdAt', 'updatedAt', 'ACL'].includes(n));
 const declaredCols = (table) => colNames(collections().find((x) => x.name === table)?.columns);
 const tableColumns = (table) => (declaredCols(table).length ? declaredCols(table) : autoTables.get(table) ?? null);
+/* P132-TYPEDISTEXT: a field's column type, from the project's declaration or the backend's schema, as the control a
+   Typed value takes (a tick for a Boolean, a number box for a Number); a type it cannot say is text, as before */
+const autoColTypes = new Map(); // table → Map(field → the backend's column type)
+const COL_CONTROL = { Boolean: 'boolean', Number: 'number', String: 'string' };
+function colControl(table, field) {
+  const declared = (collections().find((x) => x.name === table)?.columns ?? []).find((c) => c && typeof c === 'object' && c.name === field)?.type;
+  return COL_CONTROL[declared ?? autoColTypes.get(table)?.get(field)];
+}
 /** The backend's columns, asked only when a workflow a table starts is opened and the project declares none for it. */
 function loadAutoTables(id, also = []) {
-  const steps = beNow()?.workflows.get(id)?.steps ?? [];
+  // the project's file first (the truth, and there before the backend's copy is read again), then the backend's
+  const steps = (autos().workflows?.find((x) => x.id === id) ?? beNow()?.workflows.get(id))?.steps ?? [];
   const named = [...also, ...startsOf(id).filter((t) => t.type === 'db-change').map((t) => t.dbChange?.collection), ...steps.filter((s) => RECORD_KINDS.has(s.kind)).map((s) => s.params?.table)];
   const want = named.filter((n) => typeof n === 'string' && n && !declaredCols(n).length && !autoTables.has(n));
   if (!want.length) return;
   api('/admin/schema').then((sc) => {
-    for (const t of sc.tables ?? []) if (want.includes(t.name)) autoTables.set(t.name, colNames(t.columns));
+    for (const t of sc.tables ?? []) if (want.includes(t.name)) { autoTables.set(t.name, colNames(t.columns)); autoColTypes.set(t.name, new Map((t.columns ?? []).filter((c) => c?.name).map((c) => [c.name, c.type]))); }
     if (selAuto?.kind === 'workflow' && selAuto.id === id) renderWorkflow();
   }).catch(() => {});
 }
@@ -5984,10 +5999,10 @@ function tableField(label, value, set, description) {
 }
 function recordFieldsField(label, value, set, table, w) {
   const cols = typeof table === 'string' ? tableColumns(table) : null, now = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-  if (!cols) return jsonField(label, value, set, 'The fields to set, as { "field": value } (this table\'s fields show once the backend answers)');
+  if (!cols) { if (w?.id && typeof table === 'string') loadAutoTables(w.id, [table]); return jsonField(label, value, set, 'The fields to set, as { "field": value } (this table\'s fields show once the backend answers)'); }
   const wrap = h('div', { class: 'recfields', 'data-table': table }, h('div', { class: 'sechead' }, label), h('div', { class: 'hint' }, 'A field left empty is left as it is.'));
   for (const name of [...new Set([...cols, ...Object.keys(now)])]) {
-    wrap.append(runValueField(name, now[name], (v) => { const next = { ...now }; if (v === undefined) delete next[name]; else next[name] = v; set(next); }, { w, description: `${table}'s ${name}` }));
+    wrap.append(runValueField(name, now[name], (v) => { const next = { ...now }; if (v === undefined) delete next[name]; else next[name] = v; set(next); }, { w, type: colControl(table, name), description: `${table}'s ${name}` }));
   }
   return wrap;
 }
@@ -6005,7 +6020,7 @@ function recordCondsField(label, value, set, table, allowed, w) {
       h('select', { 'aria-label': 'How it compares', onchange: (e) => { const o = ops.find((x) => x.name === e.target.value), next = { ...c, op: o.name }; if (o.unary) delete next.value; else if (!('value' in next)) next.value = ''; put(i, next); } },
         ...ops.map((o) => h('option', { value: o.name, selected: o.name === c.op }, o.label))),
       h('button', { class: 'quiet', title: 'Remove this condition', onclick: () => set(rows.filter((_, j) => j !== i)) }, icon('trash')))));
-    if (op && !op.unary) wrap.append(runValueField('', c.value, (v) => put(i, { ...c, value: v ?? '' }), { w }));
+    if (op && !op.unary) wrap.append(runValueField('', c.value, (v) => put(i, { ...c, value: v ?? '' }), { w, type: c.field ? colControl(table, c.field) : undefined }));
   });
   wrap.append(h('button', { 'data-act': 'addcond', onclick: () => set([...rows, { field: cols[0] ?? 'objectId', op: 'eq', value: '' }]) }, icon('plus'), 'Add a condition'));
   return wrap;

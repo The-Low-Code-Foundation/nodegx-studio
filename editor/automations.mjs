@@ -95,8 +95,11 @@ export function stepWires(step) {
  * A workflow's steps in columns, left to right: the entry first, every other step one column after the furthest step
  * that leads to it (so a step two paths reach sits after both). A step no path from the entry reaches is `loose`, in a
  * last column of its own. A wire to an id the workflow lacks is `dangling`, said rather than drawn.
+ * Within a column a step sits in the order of what leads to it: its nearest parent's row, then the port it leaves by in
+ * the order the card draws them (`stepPorts`, so Yes above No), never the order the steps sit in the file
+ * (P132-BRANCHROWSCROSS: a step added on No before one on Yes drew the No side on top, its wires crossing).
  */
-export function workflowLayout(wf) {
+export function workflowLayout(wf, routeNamesOf = () => []) {
   const steps = wf.steps ?? [];
   const byId = new Map(steps.map((s) => [s.id, s]));
   const all = steps.flatMap(stepWires);
@@ -117,6 +120,26 @@ export function workflowLayout(wf) {
   }
   const columns = [];
   for (const s of steps) if (depth.has(s.id)) (columns[depth.get(s.id)] ??= []).push(s.id);
+  const row = new Map(), fileAt = new Map(steps.map((s, i) => [s.id, i]));
+  const portAt = (from, to) => {
+    const ports = stepPorts(byId.get(from), routeNamesOf(byId.get(from)));
+    const p = ports.findIndex((x) => x.tos.includes(to));
+    return p < 0 ? ports.length : p * 1000 + ports[p].tos.indexOf(to);
+  };
+  columns.forEach((col, d) => {
+    if (!col) return;
+    if (d > 0) {
+      const key = (id) => {
+        const parents = wires.filter((w) => w.to === id && row.has(w.from) && depth.get(w.from) < d);
+        const near = parents.sort((a, b) => depth.get(b.from) - depth.get(a.from) || row.get(a.from) - row.get(b.from))[0];
+        return near ? [row.get(near.from), portAt(near.from, id)] : [Infinity, 0];
+      };
+      const keys = new Map(col.map((id) => [id, key(id)]));
+      // the nearest parent's row decides; a step whose parent sits in an earlier column keeps its parent's row too
+      col.sort((a, b) => keys.get(a)[0] - keys.get(b)[0] || keys.get(a)[1] - keys.get(b)[1] || fileAt.get(a) - fileAt.get(b));
+    }
+    col.forEach((id, i) => row.set(id, i));
+  });
   const loose = steps.filter((s) => !depth.has(s.id)).map((s) => s.id);
   const packed = columns.filter(Boolean);
   if (loose.length) packed.push(loose);
