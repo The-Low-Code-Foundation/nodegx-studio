@@ -485,9 +485,27 @@
   .menu.sample textarea.json { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
   .menu.sample textarea.json.bad { border-color: var(--red); }
   #wfinspect .rundata .rdlabel { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+  #wfinspect .rundata summary.rdlabel { cursor: pointer; }
   #wfinspect .rundata .ok { color: var(--green); font-size: 12px; padding: 4px 0; }
   #wfinspect .rvctl { display: grid; grid-template-columns: auto 1fr; gap: 4px; }
   #wfinspect .rvctl .rvmode { width: auto; font-size: 11.5px; }
+  /* P132 BWF-003: a value from what came before, a pill in words; what a step can read, a field a line to drag or pick */
+  #wfinspect .rvpill { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .rvpill .pill { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft, var(--panel-2)); border: 1px solid var(--line-2); color: var(--ink); cursor: pointer; }
+  .rvpill .pill.missing { border-color: var(--red); color: var(--red); }
+  .menu.picker > .linkish { margin-top: 6px; font-size: 11.5px; }
+  #wfinspect .field.runvalue.dropping { outline: 2px dashed var(--accent); outline-offset: 2px; border-radius: 6px; }
+  .reads > summary { cursor: pointer; }
+  .reads .readsrc, .menu.picker .readsrc { margin: 4px 0; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; background: var(--panel-2); }
+  .readsrc > summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+  .readsrc .norun { margin-left: 6px; font-weight: 400; font-size: 11px; color: var(--muted); }
+  .readsrc .vtree, .menu.picker .vtree { list-style: none; margin: 2px 0 4px; padding: 0 0 0 12px; font-size: 11.5px; line-height: 1.6; font-family: var(--mono); }
+  .pickfield { cursor: grab; font-weight: 600; padding: 0 4px; border-radius: 4px; }
+  .pickfield:hover { background: var(--accent-soft, var(--line)); }
+  .menu.picker .pickfield { cursor: pointer; }
+  .readsrc .tv { color: var(--muted); word-break: break-word; }
+  .menu.picker { max-height: 420px; overflow: auto; padding: 8px; }
+  .menu.picker .hint, .readsrc .hint { font-size: 11.5px; }
   #wfinspect .field.wide { grid-template-columns: 1fr; }
   #wfinspect textarea.json { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
   #wfinspect textarea.json.bad { border-color: var(--red); }
@@ -1198,7 +1216,7 @@ import { fieldReaders, typeReaders, renameField, renameType, appFields } from '.
 import { LANES, buildTimeline, lastRunOf, msText, shotAt, stepValues } from './timeline.mjs';
 import { runOver, lastActivity, watchSignals, runtimeTimers, runTimers } from './runwatch.mjs';
 import { CLOUD, REQUEST, RESPONSE, functionList, functionLayout, helperKey, requestAsks, responseWords, touchesWords } from './fngraph.mjs';
-import { ALWAYS_WORDS, AUTOMATIONS_FILE, CHANGE_WORDS, SAMPLE_KINDS, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, moveStep, newStepId, nextOntoRoute, readAutomations, runLine, sampleFor, sampleWords, scheduleTime, stepsOfRun, targetOf, triggerHead, stepPorts, valueForm, workflowLayout } from './automations.mjs';
+import { ALWAYS_WORDS, AUTOMATIONS_FILE, CHANGE_WORDS, SAMPLE_KINDS, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, itemSources, moveStep, newStepId, nextOntoRoute, pathWords, readAutomations, readSources, runLine, sampleFor, sampleWords, scheduleTime, stepsOfRun, targetOf, triggerHead, stepPorts, upstreamOf, valueForm, workflowLayout } from './automations.mjs';
 import { logicOnPage, placedComponent, studioEdits, wiringLayout, wiringSvg } from './wiring.mjs';
 import { look as canvasLook, nodeScheme, wireColors } from './look.js';
 // STU-084: what Studio draws and edits, as data (the element types, the action menu, the value sources), one file the
@@ -1782,13 +1800,14 @@ function pageShownByApp() {
   }
   return undefined;
 }
-function followApp(component) {
+function followApp(component, redirect = true) {
   if (!isPage(pageKey)) return;
   const fromRouter = component?.replace(/^\//, '');
   const shown = fromRouter !== undefined ? (isPage(fromRouter) ? fromRouter : undefined) : pageShownByApp();
   if (shown && shown !== pageKey) {
-    const asked = pageKey; pageKey = shown; sel = null; readGraph(); renderPagePick();
-    toast(`The app's own logic went from ${asked.replace(/^Pages\//, '')} to ${shown.replace(/^Pages\//, '')} (a redirect wired on that page), so that is the page shown.`);
+    const asked = pageKey; pageKey = shown; sel = null; selEvent = null; selItem = null; treeRoot = null; readGraph(); renderPagePick();
+    const [from, to] = [asked, shown].map((k) => k.replace(/^Pages\//, ''));
+    toast(redirect ? `The app's own logic went from ${from} to ${to} (a redirect wired on that page), so that is the page shown.` : `The app went from ${from} to ${to}, so Design and Workflow show ${to} now.`);
   }
 }
 let nodes = [], conns = [], byId = {}, visualIds = [], depthOf = {}, legacyName = '';
@@ -2082,9 +2101,11 @@ $('renamereusable').onclick = (e) => renameReusableMenu(e);
  * Router, not the address bar: the runtime strips its base URL ("/runtime/") off a path it reads and never adds it to
  * one it writes (P123-STU015-BASEURL), and following the address switched Design to the wrong page mid-gate.
  */
+function appRouter() {
+  try { return preview.frame?.contentWindow?.Noodl?.Navigation?._noodlRuntime?.context?.rootComponent?.nodeScope?.getNodesWithTypeRecursive('Router')?.[0]; } catch { return undefined; /* not started */ }
+}
 async function followSoon() {
-  let router;
-  try { router = preview.frame?.contentWindow?.Noodl?.Navigation?._noodlRuntime?.context?.rootComponent?.nodeScope?.getNodesWithTypeRecursive('Router')?.[0]; } catch { /* not started */ }
+  const router = appRouter();
   if (!router) return;
   const current = () => router._internal?.currentPage?.component;
   let last = current(), since = Date.now();
@@ -2096,6 +2117,24 @@ async function followSoon() {
   followApp(current());
   if (pageKey !== was) { mapElements(); renderAll(); }
 }
+/**
+ * P123-STU-NAVNOTFOLLOWED (Richard, Watering Can, 2026-11-03): followSoon watches only the 3 s after a build, so a page the
+ * app opened later (Use the app's "+ Add a plant", a sign-in that goes on to Home) was drawn under the page Studio had
+ * picked: Workflow listed that page's workflows (none, on Sign in) and, with Use the app off, no click found an element.
+ * Design follows every page change of the Router. A new Router (a rebuild) is not a change: followSoon has that one.
+ */
+let routerSeen = { router: null, page: undefined };
+const followAlways = () => setInterval(() => {
+  if (rebuilding) return;
+  const router = appRouter(); if (!router) return;
+  const now = router._internal?.currentPage?.component;
+  if (router !== routerSeen.router) { routerSeen = { router, page: now }; return; }
+  if (now === undefined || now === routerSeen.page) return;
+  routerSeen.page = now;
+  const was = pageKey;
+  followApp(now, false);
+  if (pageKey !== was) { mapElements(); renderAll(); }
+}, 250);
 /** Design (and Workflow) on another page or reusable: the app is rebuilt starting there (`previewFiles`). */
 function openComponent(key) {
   if (!registry()[key]) return;
@@ -3076,13 +3115,13 @@ function renderBubblePanel(right, node) {
 
   // Style: the style it wears (a variant of its type), as Bubble's style chip
   if (!node.type.startsWith('/') && node.type !== 'Page') {
-    const mine = variantsFor(node.type);
+    const mine = variantsFor(node.type).filter((v) => v.name !== undefined), dflt = defaultStyleOf(node.type);
     const overridden = variant && Object.keys(inherit).some((k) => params[k] !== undefined);
     // a node's own value wins over its variant's, so wearing a style means dropping the element's own values for what the style sets (Bubble: a styled element has no overrides)
-    const s = h('select', { onchange: (e) => { const v = mine.find((x) => x.name === e.target.value); edits(pageKey, [{ edit: 'set_variant', component: pageKey, id: node.id, variant: e.target.value || undefined }, ...Object.keys(v?.parameters || {}).filter((k) => params[k] !== undefined).map((k) => ({ edit: 'set_parameter', component: pageKey, id: node.id, name: k, value: undefined }))], { redraw: true }); toast(e.target.value ? `${labelOf(node.id)} now wears ${e.target.value}` : `${labelOf(node.id)} wears no style`); } }, h('option', { value: '' }, '(no style)'));
+    const s = h('select', { onchange: (e) => { const v = mine.find((x) => x.name === e.target.value) ?? (e.target.value ? undefined : dflt); edits(pageKey, [{ edit: 'set_variant', component: pageKey, id: node.id, variant: e.target.value || undefined }, ...Object.keys(v?.parameters || {}).filter((k) => params[k] !== undefined).map((k) => ({ edit: 'set_parameter', component: pageKey, id: node.id, name: k, value: undefined }))], { redraw: true }); toast(e.target.value ? `${labelOf(node.id)} now wears ${e.target.value}` : dflt ? `${labelOf(node.id)} wears ${styleName(dflt)}` : `${labelOf(node.id)} wears no style`); } }, h('option', { value: '' }, dflt ? `(${styleName(dflt)})` : '(no style)'));
     for (const v of mine) s.append(h('option', { value: v.name, selected: node.variant === v.name }, v.name));
     add(section('Style', [h('div', { class: 'field' }, h('label', {}, 'Style'), s, overridden ? h('span', { class: 'badge', title: 'This element sets some of what its style sets' }, 'Overridden') : null),
-      h('div', { class: 'field' }, h('label', {}), h('div', { style: 'display:flex;gap:6px' }, h('button', { class: 'tiny', title: 'Save this element\'s properties as a style every element of this type can wear', onclick: (e) => saveAsStyle(node, e) }, icon('styles'), 'Save as a style'), node.variant ? h('button', { class: 'tiny', onclick: () => { tab = 'styles'; selStyle = { typename: node.type, name: node.variant }; switchTab('styles'); } }, 'Edit style') : null))]));
+      h('div', { class: 'field' }, h('label', {}), h('div', { style: 'display:flex;gap:6px' }, h('button', { class: 'tiny', title: 'Save this element\'s properties as a style every element of this type can wear', onclick: (e) => saveAsStyle(node, e) }, icon('styles'), 'Save as a style'), node.variant || dflt ? h('button', { class: 'tiny', onclick: () => { tab = 'styles'; selStyle = { typename: node.type, name: node.variant }; switchTab('styles'); } }, 'Edit style') : null))]));
   }
 
   // Text: the font, its weight and size, the alignment, bold / italic, the colour; the rest behind ⋯
@@ -3261,14 +3300,14 @@ function renderPropsInto(right) {
   if (isVisualType(node.type) && !node.type.startsWith('/') && node.type !== 'Page') return renderBubblePanel(right, node);
   const wrap = h('div', { class: 'props' });
   // the style it wears (a variant of its type), as Bubble's style dropdown at the top of the element
-  const mine = variantsFor(node.type);
+  const mine = variantsFor(node.type).filter((v) => v.name !== undefined), dflt = defaultStyleOf(node.type);
   if (!node.type.startsWith('/') && node.type !== 'Page') {
     const det = h('details', { class: 'group', open: true }, h('summary', {}, 'Style'));
     // a node's own value wins over its variant's, so wearing a style means dropping the element's own values for what the style sets (Bubble: a styled element has no overrides)
-    const s = h('select', { onchange: (e) => { const v = mine.find((x) => x.name === e.target.value); edits(pageKey, [{ edit: 'set_variant', component: pageKey, id: sel, variant: e.target.value || undefined }, ...Object.keys(v?.parameters || {}).filter((k) => params[k] !== undefined).map((k) => ({ edit: 'set_parameter', component: pageKey, id: sel, name: k, value: undefined }))], { redraw: true }); toast(e.target.value ? `${labelOf(sel)} now wears ${e.target.value}` : `${labelOf(sel)} wears no style`); } }, h('option', { value: '' }, '(no style)'));
+    const s = h('select', { onchange: (e) => { const v = mine.find((x) => x.name === e.target.value) ?? (e.target.value ? undefined : dflt); edits(pageKey, [{ edit: 'set_variant', component: pageKey, id: sel, variant: e.target.value || undefined }, ...Object.keys(v?.parameters || {}).filter((k) => params[k] !== undefined).map((k) => ({ edit: 'set_parameter', component: pageKey, id: sel, name: k, value: undefined }))], { redraw: true }); toast(e.target.value ? `${labelOf(sel)} now wears ${e.target.value}` : dflt ? `${labelOf(sel)} wears ${styleName(dflt)}` : `${labelOf(sel)} wears no style`); } }, h('option', { value: '' }, dflt ? `(${styleName(dflt)})` : '(no style)'));
     for (const v of mine) s.append(h('option', { value: v.name, selected: node.variant === v.name }, v.name));
     det.append(h('div', { class: 'field' }, h('label', {}, 'Style'), s));
-    det.append(h('div', { class: 'field' }, h('label', {}), h('div', { style: 'display:flex;gap:6px' }, h('button', { class: 'tiny', title: 'Save this element\'s properties as a style every element of this type can wear', onclick: (e) => saveAsStyle(node, e) }, icon('styles'), 'Save as a style'), node.variant ? h('button', { class: 'tiny', onclick: () => { tab = 'styles'; selStyle = { typename: node.type, name: node.variant }; switchTab('styles'); } }, 'Edit style') : null)));
+    det.append(h('div', { class: 'field' }, h('label', {}), h('div', { style: 'display:flex;gap:6px' }, h('button', { class: 'tiny', title: 'Save this element\'s properties as a style every element of this type can wear', onclick: (e) => saveAsStyle(node, e) }, icon('styles'), 'Save as a style'), node.variant || dflt ? h('button', { class: 'tiny', onclick: () => { tab = 'styles'; selStyle = { typename: node.type, name: node.variant }; switchTab('styles'); } }, 'Edit style') : null)));
     wrap.append(det);
   }
   const wiredIn = Object.fromEntries(conns.filter((c) => c.toId === sel).map((c) => [c.toProperty, c]));
@@ -3470,7 +3509,7 @@ function conditionalTab(node, { add, section, row, variant }) {
     const rows = [];
     for (const [k, v] of Object.entries(own[st] || {})) rows.push(row(pname(k), ruleValueField(node, P[k] || { name: k }, literal(v), (js) => { const nv = valueOf(js); if (nv.code === undefined) write([{ edit: 'set_state_parameter', component: pageKey, id: node.id, state: st, name: k, value: nv.value }]); }),
       h('button', { class: 'quiet tiny', title: `Stop changing ${pname(k)} while ${STATE_WORDS[st] || st}`, onclick: () => write([{ edit: 'set_state_parameter', component: pageKey, id: node.id, state: st, name: k, value: undefined }]) }, icon('x'))));
-    for (const [k, v] of Object.entries(styled[st] || {})) if (!(k in (own[st] || {}))) rows.push(h('div', { class: 'field inherited', title: `From the style ${node.variant}` }, h('label', {}, pname(k)), h('div', { class: 'ctl' }, h('span', { class: 'rulecode' }, typeof v === 'object' ? showLen(v) : String(v)), h('span', { class: 'u' }, ` from ${node.variant}`)), h('span')));
+    for (const [k, v] of Object.entries(styled[st] || {})) if (!(k in (own[st] || {}))) rows.push(h('div', { class: 'field inherited', title: `From the style ${styleName(variant)}` }, h('label', {}, pname(k)), h('div', { class: 'ctl' }, h('span', { class: 'rulecode' }, typeof v === 'object' ? showLen(v) : String(v)), h('span', { class: 'u' }, ` from ${styleName(variant)}`)), h('span')));
     if (states.some((s) => s.name === st) && statePorts.length) rows.push(h('div', { class: 'ruleacts' }, h('button', { class: 'tiny', 'data-look': st, onclick: (e) => addLook(e, st) }, icon('plus'), 'Another property')));
     add(section(`When ${STATE_WORDS[st] || st}`, rows));
   }
@@ -5347,7 +5386,7 @@ function openAuto(target, from = null, opts = {}) {
   selAuto = { kind: target.kind, id: target.id, from, play: !!opts.play }; selFn = null; fnBack = []; autoRun = null; selAutoStep = null; autoPlay = null; hideBoltTip();
   if (beNow()) loadAutoBackend(); // P123-GH-TRIGGERSTALE: a card says what the backend says now, not when the list was first read
   if (tab !== 'backend') switchTab('backend'); else renderWorkflow();
-  if (target.kind === 'workflow') { readAutoRun(target.id); if (!autoSamples) loadSamples(); }
+  if (target.kind === 'workflow') { readAutoRun(target.id); if (!autoSamples) loadSamples(); loadAutoTables(target.id); }
 }
 const backFromAuto = () => { selAuto = selAuto?.from ? { kind: 'trigger', id: selAuto.from, from: null } : null; autoRun = null; renderWorkflow(); };
 async function changeTrigger(id, change, words = null) {
@@ -5662,7 +5701,7 @@ function newAutoStep(w, kind) {
   for (const p of spec?.params ?? []) if (p.required && p.name !== 'ref' && p.default !== undefined) params[p.name] = structuredClone(p.default);
   // what a kind cannot be stored without, in its simplest working form; changed in the panel
   const first = { branch: { condition: { left: { $path: 'previous.result' }, op: 'truthy' } }, switch: { value: { $path: 'previous.result' }, cases: [{ label: 'first', equals: '' }] }, transform: { output: { result: { $path: 'previous.result' } } },
-    validate: { rules: [{ path: 'body.id', message: 'It arrived without an id.' }] }, wait: { duration: 1, unit: 'minutes' }, 'wait-until': { target: { $path: 'body.at' } }, split: { size: 10 } }[kind];
+    validate: { rules: [{ path: 'body.id', message: 'It arrived without an id.' }] }, filter: { condition: { left: { $path: 'item' }, op: 'truthy' } }, wait: { duration: 1, unit: 'minutes' }, 'wait-until': { target: { $path: 'body.at' } }, split: { size: 10 } }[kind];
   Object.assign(params, first);
   if (Object.keys(params).length) step.params = params;
   if (kind === 'branch') step.routes = { ontrue: [] };
@@ -5696,16 +5735,30 @@ function autoStepMenu(e, w, afterId, where, toId = null) {
   menu.append(h('div', { class: 'search' }, icon('search'), search), list); document.body.append(menu); search.focus();
   dismissOnOutside(menu);
 }
-/** A value a step is given: typed, or read from the run (`{ $path }`: the caller's body, the step before, a named earlier one). */
-function runValueField(label, value, set, { type = 'any', enums = null, w = null, description = '' } = {}) {
+/** A value a step is given: typed, or read from the run (`{ $path }`), picked from what came before (P132 BWF-003): a
+    field dragged onto it from *What it can read*, or chosen from the menu *From the run* opens; shown as a pill in words.
+    `item`: the step goes through a list, and this setting is read once per item (a filter's condition). */
+function runValueField(label, value, set, { type = 'any', enums = null, w = null, description = '', item = false } = {}) {
   const form = valueForm(value);
-  const f = h('div', { class: 'field runvalue', title: description }, h('label', {}, label));
-  const paths = ['body.', 'previous.result', 'trigger.', ...(w?.steps ?? []).filter((s) => s.id !== selAutoStep).map((s) => `upstream.${s.id}.`)];
-  const dl = `rv-${Math.random().toString(36).slice(2, 8)}`;
-  const mode = h('select', { class: 'rvmode', 'aria-label': `How ${label} is given`, onchange: (e) => set(e.target.value === 'from' ? { $path: form.from ?? 'previous.result' } : undefined) },
-    h('option', { value: 'typed', selected: !('from' in form) }, 'Typed'), h('option', { value: 'from', selected: 'from' in form }, 'From the run'));
+  const f = h('div', { class: 'field runvalue', title: description,
+    ondragover: (e) => { if (!e.dataTransfer.types.includes(PATH_MIME)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; f.classList.add('dropping'); },
+    ondragleave: () => f.classList.remove('dropping'),
+    ondrop: (e) => { f.classList.remove('dropping'); const p = e.dataTransfer.getData(PATH_MIME); if (!p) return; e.preventDefault(); set({ $path: p }); } }, h('label', {}, label));
   let box;
-  if ('from' in form) box = h('input', { type: 'text', value: form.from, list: dl, placeholder: 'body.plant, previous.result…', onchange: (e) => set(e.target.value.trim() ? { $path: e.target.value.trim() } : undefined) });
+  const asPath = () => { // the path by hand, only when asked (the menu's last line)
+    const dl = `rv-${Math.random().toString(36).slice(2, 8)}`;
+    const paths = ['body.', 'trigger.', ...(w && selAutoStep ? upstreamOf(w, selAutoStep).map((s) => `upstream.${s.id}.`) : [])];
+    const input = h('input', { type: 'text', value: form.from ?? '', list: dl, 'data-input': 'aspath', placeholder: 'body.plant, upstream.check.result…', onchange: (e) => set(e.target.value.trim() ? { $path: e.target.value.trim() } : undefined) });
+    box.replaceWith(h('div', {}, input, h('datalist', { id: dl }, ...paths.map((x) => h('option', { value: x }))))); input.focus();
+  };
+  const pick = (anchor) => pickMenu(anchor, w, item, (p) => set({ $path: p }), asPath);
+  const mode = h('select', { class: 'rvmode', 'aria-label': `How ${label} is given`, onchange: (e) => { if (e.target.value === 'from') { e.target.value = 'typed'; pick(e.target); } else set(undefined); } },
+    h('option', { value: 'typed', selected: !('from' in form) }, 'Typed'), h('option', { value: 'from', selected: 'from' in form }, 'From the run'));
+  if ('from' in form) {
+    const step = w?.steps?.find((s) => s.id === selAutoStep), p = step ? step.params ?? {} : {};
+    const words = pathWords(form.from, w ?? {}, w ? startsOf(w.id) : [], { item: item ? (p.itemKey ?? 'item') : '\0', index: item ? (p.indexKey ?? 'index') : '\0', kindName: (k) => kindSpec(k)?.displayName ?? k });
+    box = h('div', { class: 'rvpill' }, h('button', { class: `pill${words.missing ? ' missing' : ''}`, 'data-path': form.from, title: `${words.name} · from ${words.from} (${form.from}): pick another value`, onclick: (e) => pick(e.currentTarget) }, h('b', {}, words.name), ` · from ${words.from}`));
+  }
   else if (type === 'boolean') box = h('input', { type: 'checkbox', style: 'width:auto;justify-self:start', checked: !!form.typed, onchange: (e) => set(e.target.checked) });
   else if (type === 'enum' && enums) box = h('select', { onchange: (e) => set(e.target.value === '' ? undefined : e.target.value) }, h('option', { value: '' }, '(default)'), ...enums.map((o) => h('option', { value: o, selected: form.typed === o }, o)));
   else box = h('input', { type: type === 'number' ? 'number' : 'text', value: form.typed == null ? '' : typeof form.typed === 'object' ? JSON.stringify(form.typed) : String(form.typed), onchange: (e) => {
@@ -5715,8 +5768,69 @@ function runValueField(label, value, set, { type = 'any', enums = null, w = null
     if (type === 'string') return set(t);
     try { return set(/^(-?\d+(\.\d+)?|true|false|null|[[{].*)$/s.test(t.trim()) ? JSON.parse(t) : t); } catch { return set(t); } // "any": a number, a yes/no or a list read as one
   } });
-  f.append(h('div', { class: 'ctl rvctl' }, mode, box, h('datalist', { id: dl }, ...paths.map((p) => h('option', { value: p })))));
+  f.append(h('div', { class: 'ctl rvctl' }, mode, box));
   return f;
+}
+/* ---- P132 BWF-003: what a step can read (automations.mjs `readSources`): what started it, how, and each step upstream of
+   it, from the run lit on the canvas, else the test's sample, else the shape (the trigger's table, the catalog's words for
+   the kind, a function's Response), said "no run yet". A field a line: dragged onto a setting, or clicked in the menu a
+   setting's *From the run* opens, it writes `{ $path }` there. ---- */
+const PATH_MIME = 'text/x-nodegx-path';
+/** A table's columns: the project's, else the backend's (a template like the todo list declares none: its rows say them). */
+let autoTables = new Map();
+const colNames = (cols) => (cols || []).map((x) => (typeof x === 'string' ? x : x?.name)).filter((n) => n && !['objectId', 'createdAt', 'updatedAt', 'ACL'].includes(n));
+const declaredCols = (table) => colNames(collections().find((x) => x.name === table)?.columns);
+const tableColumns = (table) => (declaredCols(table).length ? declaredCols(table) : autoTables.get(table) ?? null);
+/** The backend's columns, asked only when a workflow a table starts is opened and the project declares none for it. */
+function loadAutoTables(id) {
+  const want = startsOf(id).filter((t) => t.type === 'db-change').map((t) => t.dbChange?.collection).filter((n) => n && !declaredCols(n).length && !autoTables.has(n));
+  if (!want.length) return;
+  api('/admin/schema').then((sc) => {
+    for (const t of sc.tables ?? []) if (want.includes(t.name)) autoTables.set(t.name, colNames(t.columns));
+    if (selAuto?.kind === 'workflow' && selAuto.id === id) renderWorkflow();
+  }).catch(() => {});
+}
+/** What a function step's function answers: the names its Responses send (a refusal's aside), or null when it is not read. */
+const fnAnswers = (step) => { try { const res = fnNodesOf(CLOUD + step.ref).filter((n) => n.type === RESPONSE).map((n) => responseWords(n)).filter((r) => !r.refusal); return res.length ? [...new Set(res.flatMap((r) => r.sends))] : null; } catch { return null; } };
+function readsFor(w, stepId, item = false) {
+  const have = { run: autoRun?.run ? stepsOfRun(autoRun.run) : null, sample: sampleOf(w), starts: startsOf(w.id), columns: tableColumns, kind: kindSpec, answers: fnAnswers };
+  const out = readSources(w, stepId, have), step = w.steps.find((s) => s.id === stepId);
+  return item && step ? [...itemSources(w, step, out), ...out] : out;
+}
+const FROM_TAG = { shape: 'no run yet', sample: 'from the sample' };
+/** A source's fields as a tree, each a `.pickfield` carrying its path: draggable, and a pick when `pick` is given. */
+function readTree(v, path, pick, real, depth = 0) {
+  const entries = Array.isArray(v) ? v.slice(0, 3).map((x, i) => [i, x]) : Object.entries(v);
+  if (!entries.length) return h('div', { class: 'hint' }, Array.isArray(v) ? 'An empty list.' : 'Nothing in it.');
+  return h('ul', { class: 'vtree' }, ...entries.map(([k, x]) => {
+    const at = `${path}.${k}`, n = x && typeof x === 'object' ? Object.keys(x).length : 0;
+    const field = pickField(at, Array.isArray(v) ? `#${k + 1}` : String(k), pick);
+    const shown = n ? h('span', { class: 'tv' }, Array.isArray(x) ? ` ${n} item${n === 1 ? '' : 's'}` : ` ${n} field${n === 1 ? '' : 's'}`) : real ? h('span', { class: 'tv' }, ` ${x === undefined ? '(nothing)' : JSON.stringify(x)}`) : null;
+    return n ? h('li', {}, h('details', { open: depth < 1 && x.__type !== 'Pointer' }, h('summary', {}, field, shown), readTree(x, at, pick, real, depth + 1))) : h('li', {}, field, shown); // a pointer is used whole: its parts folded
+  }));
+}
+function pickField(path, words, pick) {
+  return h('span', { class: 'pickfield', draggable: 'true', 'data-path': path, title: pick ? `Use ${path}` : `Drag onto a setting: ${path}`,
+    ondragstart: (e) => { e.stopPropagation(); e.dataTransfer.setData(PATH_MIME, path); e.dataTransfer.setData('text/plain', path); e.dataTransfer.effectAllowed = 'copy'; },
+    onclick: pick ? (e) => { e.preventDefault(); e.stopPropagation(); pick(path); } : null }, words);
+}
+function readBlock(src, pick = null, open = true) {
+  const cap = src.words.charAt(0).toUpperCase() + src.words.slice(1), real = src.from !== 'shape';
+  const head = [pickField(src.root, cap, pick), FROM_TAG[src.from] ? h('span', { class: 'norun' }, FROM_TAG[src.from]) : null];
+  if (src.leaf) return h('div', { class: 'readsrc', 'data-root': src.root, 'data-from': src.from }, ...head);
+  const body = src.value && typeof src.value === 'object' && Object.keys(src.value).length ? readTree(src.value, src.root, pick, real) : h('div', { class: 'hint' }, src.note ?? (real ? 'Nothing in it.' : 'Its fields show once the workflow is tested.'));
+  return h('details', { class: 'readsrc', open, 'data-root': src.root, 'data-from': src.from }, h('summary', {}, ...head), body);
+}
+/** The menu a setting's *From the run* (or its pill) opens: what this step can read, a click picks. */
+function pickMenu(anchor, w, item, done, asPath) {
+  closeMenu();
+  if (!w || !selAutoStep) return;
+  const r = anchor.getBoundingClientRect();
+  const menu = h('div', { class: 'menu picker', role: 'dialog', 'aria-label': 'A value from what came before', style: `left:${Math.max(8, Math.min(r.left, innerWidth - 348))}px;top:${Math.max(8, Math.min(r.bottom + 4, innerHeight - 430))}px;width:340px` });
+  menu.append(h('div', { class: 'hint' }, 'A value from what came before'), ...readsFor(w, selAutoStep, item).map((src) => readBlock(src, (p) => { closeMenu(); done(p); }, src.root !== 'trigger')),
+    h('button', { class: 'linkish', 'data-act': 'aspath', title: 'Write where the value is read from by hand', onclick: () => { closeMenu(); asPath(); } }, 'Edit as path'));
+  document.body.append(menu);
+  dismissOnOutside(menu);
 }
 /** A value the backend keeps as written (a list of rules, a transform's output): its JSON, checked before it is sent. */
 function jsonField(label, value, set, description = '') {
@@ -5728,16 +5842,16 @@ function jsonField(label, value, set, description = '') {
   return h('div', { class: 'field wide', title: description }, h('label', {}, label), ta);
 }
 /** A branch's condition in words: a value, how it compares, another value. A condition of several parts (all / any / not) is its JSON. */
-function condField(label, value, set, w) {
+function condField(label, value, set, w, item = false) {
   const ops = beNow()?.ops ?? [];
   const c = value && typeof value === 'object' && 'op' in value ? value : null;
   if (!c || !ops.length) return jsonField(label, value, set, 'A condition of several parts: { all: [...] }, { any: [...] } or { not: … }');
   const op = ops.find((o) => o.name === c.op);
   const wrap = h('div', { class: 'condwords' }, h('div', { class: 'sechead' }, label));
-  wrap.append(runValueField('This', c.left, (v) => set({ ...c, left: v }), { w }));
+  wrap.append(runValueField('This', c.left, (v) => set({ ...c, left: v }), { w, item }));
   wrap.append(h('div', { class: 'field' }, h('label', {}, ''), h('select', { 'aria-label': 'How it compares', onchange: (e) => { const o = ops.find((x) => x.name === e.target.value); const next = { ...c, op: o.name }; if (o.unary) delete next.right; else if (!('right' in next)) next.right = ''; set(next); } },
     ...ops.map((o) => h('option', { value: o.name, selected: o.name === c.op }, o.label)))));
-  if (op && !op.unary) wrap.append(runValueField('That', c.right, (v) => set({ ...c, right: v ?? '' }), { w }));
+  if (op && !op.unary) wrap.append(runValueField('That', c.right, (v) => set({ ...c, right: v ?? '' }), { w, item }));
   return wrap;
 }
 /** A param the catalog gives no display name, in words: maxAttempts → "Max attempts". */
@@ -5766,13 +5880,17 @@ function autoStepPanel(panel, w, step) {
     else {
       box.append(h('div', { class: ran.status === 'error' ? 'warn' : 'ok' }, ran.status === 'error' ? `✗ Failed here${ran.error ? `: ${ran.error}` : ''}` : `✓ Ran${ran.durationMs != null ? ` in ${ran.durationMs} ms` : ''}`));
       // P132 BWF-002: a tree, a field a line (BWF-003 makes a line something to pick)
-      box.append(h('div', { class: 'rdlabel' }, 'What went in'), h('div', { class: 'rdin' }, ran.input === undefined ? '(not recorded)' : valueTree(ran.input)));
+      // folded: *What it can read* below says the same, without the backend's deprecated copy of the payload (BWF-003)
+      box.append(h('details', { class: 'rdinfold' }, h('summary', { class: 'rdlabel' }, 'What went in'), h('div', { class: 'rdin' }, ran.input === undefined ? '(not recorded)' : valueTree(ran.input))));
       if (ran.status !== 'error') box.append(h('div', { class: 'rdlabel' }, 'What came out'), h('div', { class: 'rdout' }, ran.output === undefined ? '(nothing)' : valueTree(ran.output)));
     }
     wrap.append(box);
   }
   if (up) {
     wrap.append(h('div', { class: 'after' }, h('button', { 'data-act': 'testupto', disabled: !sampleOf(w), title: sampleOf(w) ? `This step and the steps before it, on ${sampleWords(sampleOf(w)).replace(/^Sample: /, 'the sample: ')}` : 'Choose a sample first (above the steps)', onclick: () => testAuto(w, step.id) }, '▶ Test up to this step')));
+    // P132 BWF-003: what it can read, a field a line to drag onto a setting below
+    wrap.append(h('details', { class: 'reads', open: true }, h('summary', { class: 'sechead' }, 'What it can read'),
+      h('div', { class: 'hint' }, 'Drag a value onto a setting, or choose “From the run” in the setting.'), ...readsFor(w, step.id).map((src) => readBlock(src, null, src.root !== 'trigger'))));
     wrap.append(h('div', { class: 'sechead' }, 'Settings'));
     if (spec?.invokesFunction) {
       const fns = callableFns(); if (step.ref && !fns.includes(step.ref)) fns.unshift(step.ref);
@@ -5785,7 +5903,7 @@ function autoStepPanel(panel, w, step) {
       if (p.name === 'ref') continue;
       const label = p.displayName || paramWords(p.name), v = params[p.name], into = p.group ? more : wrap;
       if (p.group) moreN++;
-      if (p.type === 'condition') into.append(condField(label, v, setParam(p.name), w));
+      if (p.type === 'condition') into.append(condField(label, v, setParam(p.name), w, own.some((x) => x.name === 'itemKey')));
       else if (p.raw || p.type === 'object' || p.type === 'array') into.append(jsonField(label, v, setParam(p.name), p.description));
       else into.append(runValueField(label, v, setParam(p.name), { type: p.type, enums: p.enums, w, description: `${p.description}${p.default !== undefined ? ` (when left empty: ${JSON.stringify(p.default)})` : ''}` }));
     }
@@ -8006,6 +8124,13 @@ let selStyle = null; // { typename, name }
 const stylesFile = () => store.readStyles() || { version: 2 };
 const writeStyles = (s) => writeJsonFile('nodegx.styles.json', s);
 const variantsFor = (typename) => (stylesFile().variants || []).filter((v) => v.typename === typename);
+/**
+ * P123-STU-UNNAMEDSTYLE (Richard, Watering Can, 2026-11-03: "they don't have labels"): a variant with no name is its type's
+ * default. The runtime matches `v.name === node.variant`, so it dresses every element of the type that names no style, a
+ * new one too. Mistral wrote one for Button, Text Input and Dropdown; Studio drew each with a blank name.
+ */
+const styleName = (v) => v.name ?? `Default ${typeName(v.typename)}`;
+const defaultStyleOf = (typename) => variantsFor(typename).find((v) => v.name === undefined);
 const NOT_STYLE = new Set(['text', 'label', 'placeholder', 'source', 'value', 'checked', 'items', 'sizeMode', 'width', 'height', 'marginTop', 'marginBottom', 'marginLeft', 'marginRight', 'position', 'flexDirection', 'alignX', 'alignY', 'urlPath', 'title']);
 async function saveAsStyle(node, at) {
   const name = await askName(at, `Name of the style for every ${typeName(node.type)} (e.g. Primary, Outline, Danger)`, { go: 'Save' });
@@ -8056,7 +8181,7 @@ function styleCanvasFiles(v) {
     const col = `scCol${i}`, el = `scEl${i}`, cap = `scCap${i}`;
     nodes[0].children.push(col);
     nodes.push({ id: col, type: 'Group', label: words, parent: 'scRoot', parameters: { sizeMode: 'contentSize', flexDirection: 'column', alignItems: 'center', rowGap: len(8) }, children: [el, cap] },
-      { id: el, type: v.typename, label: `${v.name}${state ? ` · ${state}` : ''}`, parent: col, variant: v.name, parameters: { ...(STYLE_SAMPLE[v.typename] || {}), ...roomFor(v), ...own }, ...(v.typename === 'Group' ? { children: [`${el}t`] } : {}) },
+      { id: el, type: v.typename, label: `${styleName(v)}${state ? ` · ${state}` : ''}`, parent: col, variant: v.name, parameters: { ...(STYLE_SAMPLE[v.typename] || {}), ...roomFor(v), ...own }, ...(v.typename === 'Group' ? { children: [`${el}t`] } : {}) },
       ...(v.typename === 'Group' ? [{ id: `${el}t`, type: 'Text', label: 'A line', parent: el, parameters: { text: 'A line of text in this group', sizeMode: 'contentHeight', width: { value: 100, unit: '%' } } }] : []),
       { id: cap, type: 'Text', label: words, parent: col, parameters: { ...caption, text: words } });
   });
@@ -8090,7 +8215,7 @@ async function drawStyle(v) {
   const s = await p.update(styleCanvasFiles(v));
   if (mine !== styleDrawn) return;
   styleHolder.dataset.drawn = s.status;
-  styleHolder.title = s.status === 'ok' ? `${v.name}, drawn by the app's runtime` : `Not drawn: ${s.report?.diagnostics?.find((d) => d.severity === 'error')?.message || s.message || s.status}`;
+  styleHolder.title = s.status === 'ok' ? `${styleName(v)}, drawn by the app's runtime` : `Not drawn: ${s.report?.diagnostics?.find((d) => d.severity === 'error')?.message || s.message || s.status}`;
 }
 function renderStyles() {
   const list = $('stylelist'); list.innerHTML = '';
@@ -8100,14 +8225,15 @@ function renderStyles() {
   if (!all.length) list.append(h('div', { class: 'hint' }, 'No styles yet. Select an element in Design and "Save as a style", or make one here.'));
   for (const [t, vs] of byType) {
     list.append(h('div', { class: 'grp' }, typeName(t)));
-    for (const v of vs) list.append(h('div', { class: 'row', 'aria-selected': selStyle && selStyle.typename === t && selStyle.name === v.name, onclick: () => { selStyle = { typename: t, name: v.name }; renderStyles(); } }, icon(glyphOf(t)), v.name, h('span', { class: 't' }, `${Object.keys(v.parameters || {}).length}`)));
+    for (const v of vs) list.append(h('div', { class: 'row', 'aria-selected': selStyle && selStyle.typename === t && selStyle.name === v.name, onclick: () => { selStyle = { typename: t, name: v.name }; renderStyles(); } }, icon(glyphOf(t)), styleName(v), h('span', { class: 't' }, `${Object.keys(v.parameters || {}).length}`)));
   }
   const main = $('stylemain'); main.innerHTML = '';
   const props = $('styleprops'); props.innerHTML = '';
   const v = selStyle && all.find((x) => x.typename === selStyle.typename && x.name === selStyle.name);
   if (!v) { main.append(h('div', { class: 'empty' }, 'Pick a style. A style is a set of properties every element of one type can wear; here it is a variant in nodegx.styles.json.')); props.append(h('div', { class: 'empty' }, 'The style\'s properties appear here.')); return; }
   const wearers = []; for (const k of Object.keys(registry())) { try { for (const n of store.readComponent(k).files.nodes.nodes) if (n.variant === v.name && n.type === v.typename) wearers.push({ key: k, id: n.id, label: n.label || typeName(n.type) }); } catch { /* skip */ } }
-  main.append(h('div', { style: 'color:var(--muted);font-size:12px;margin-bottom:4px' }, typeName(v.typename)), h('h2', {}, v.name));
+  main.append(h('div', { style: 'color:var(--muted);font-size:12px;margin-bottom:4px' }, typeName(v.typename)), h('h2', {}, styleName(v)));
+  if (v.name === undefined) main.append(h('div', { class: 'note', 'data-default-style': '' }, `Every ${typeName(v.typename)} that wears no other style wears this one, and so does every new one.`));
   // STU-096: the element wearing the style, drawn by the runtime; what it sets listed under it
   const stage = h('div', { class: 'swatch-stage' }, styleHolder);
   const params = v.parameters || {};
@@ -8120,9 +8246,10 @@ function renderStyles() {
   const card = h('div', { class: 'card' }, h('h4', {}, `Elements wearing it · ${wearers.length}`));
   if (!wearers.length) card.append(h('div', { class: 'note' }, 'None yet. Select an element in Design and pick this style at the top of its properties.'));
   for (const w of wearers.slice(0, 40)) card.append(h('div', { class: 'row', onclick: () => { if (registry()[w.key]?.type === 'page') { pageKey = w.key; readGraph(); } sel = w.id; switchTab('design'); rebuild(0); } }, icon(glyphOf(v.typename)), w.label, h('span', { class: 't' }, w.key)));
-  main.append(card, h('div', { class: 'bar' }, h('button', { class: 'quiet danger', onclick: async () => { if (!(await askSure(`Delete the style ${v.name}? The ${wearers.length} element(s) wearing it fall back to their own properties.`))) return; const s = stylesFile(); s.variants = s.variants.filter((x) => !(x.typename === v.typename && x.name === v.name)); /* P128-S4-STYLEDELETE: the file is read afresh, so `x !== v` kept every style */ writeStyles(s); selStyle = null; renderStyles(); } }, icon('trash'), 'Delete style')));
+  main.append(card, h('div', { class: 'bar' }, h('button', { class: 'quiet danger', onclick: async () => { if (!(await askSure(`Delete the style ${styleName(v)}? The ${wearers.length} element(s) wearing it fall back to their own properties.`))) return; const s = stylesFile(); s.variants = s.variants.filter((x) => !(x.typename === v.typename && x.name === v.name)); /* P128-S4-STYLEDELETE: the file is read afresh, so `x !== v` kept every style */ writeStyles(s); selStyle = null; renderStyles(); } }, icon('trash'), 'Delete style')));
   // the style's properties, edited with the same fields as an element's
-  props.append(h('div', { class: 'head' }, h('input', { type: 'text', value: v.name, onchange: (e) => { const name = e.target.value.trim(); if (!name) return; const s = stylesFile(); const me = s.variants.find((x) => x.typename === v.typename && x.name === v.name); me.name = name; writeStyles(s); for (const w of wearers) edits(w.key, [{ edit: 'set_variant', component: w.key, id: w.id, variant: name }], { redraw: false }); selStyle.name = name; renderStyles(); } }), h('span'), h('div', { class: 'type' }, `a style of ${typeName(v.typename)}`)));
+  // the default's name is the type's: naming it would turn "every Button" into a style only its present wearers keep
+  props.append(h('div', { class: 'head' }, v.name === undefined ? h('input', { type: 'text', value: styleName(v), readonly: true, title: `Every ${typeName(v.typename)} that wears no other style wears this one` }) : h('input', { type: 'text', value: v.name, onchange: (e) => { const name = e.target.value.trim(); if (!name) return; const s = stylesFile(); const me = s.variants.find((x) => x.typename === v.typename && x.name === v.name); me.name = name; writeStyles(s); for (const w of wearers) edits(w.key, [{ edit: 'set_variant', component: w.key, id: w.id, variant: name }], { redraw: false }); selStyle.name = name; renderStyles(); } }), h('span'), h('div', { class: 'type' }, `a style of ${typeName(v.typename)}`)));
   const wrap = h('div', { class: 'props' });
   const fake = { id: undefined, type: v.typename, parameters: params };
   const setter = (name) => (value) => { const s = stylesFile(); const me = s.variants.find((x) => x.typename === v.typename && x.name === v.name); me.parameters ??= {}; if (value === undefined) delete me.parameters[name]; else me.parameters[name] = value; writeStyles(s); drawStyle(me); };
@@ -8621,6 +8748,7 @@ if (first.status === 'ok') {
   status(`The app is not shown: ${d ? d.message.slice(0, 160) : first.message || first.status}`, 'bad');
 }
 renderAll();
+followAlways();
 // from here on, a file changed outside Studio is taken in and drawn (STU-002)
 new EventSource(`/api/events?client=${windowId}`).onmessage = (e) => { const m = JSON.parse(e.data); if (m.backend || m.live) { if (m.backend) takeBackend(m.backend); if (m.live) takeLive(m.live); } else takeOutside(m); };
 $('backendpill').onclick = () => { if (!backendUp() && backendState.phase !== 'remote') dataSub = 'app'; switchTab('data'); }; // no backend yet: App data, where one is started

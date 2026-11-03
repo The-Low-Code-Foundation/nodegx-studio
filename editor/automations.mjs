@@ -351,3 +351,112 @@ export function testRefusal({ env, dev, live, name } = {}) {
   if (same(dev?.endpoint, live?.endpoint) || same(dev?.instanceId, live?.instanceId) || / live backend$/i.test(name ?? '')) return `This project’s development backend is its live one. ${LIVE}`;
   return null;
 }
+
+/* ---- P132 BWF-003: a value picked from what came before. A step reads what started it (`body`), how (`trigger`), and
+   `upstream.<id>` of every step with a path to it over next, routes and onError: the backend's own rule (nodegx-backend
+   WorkflowEngine `ancestorsOf`, the NodeGX editor's workflowScope.ts), so a value picked here is one a write accepts.
+   Each source's fields are the newest run's, else the test's sample, else the shape: the catalog's words for the kind,
+   a function's Response, the trigger's table. ---- */
+
+/** The steps that can have run before `id`, in the file's order (never `id` itself). */
+export function upstreamOf(wf, id) {
+  const into = new Map();
+  for (const s of wf.steps ?? []) for (const w of stepWires(s)) { if (!into.has(w.to)) into.set(w.to, []); into.get(w.to).push(s.id); }
+  const seen = new Set(), stack = [...(into.get(id) ?? [])];
+  while (stack.length) { const x = stack.pop(); if (x === id || seen.has(x)) continue; seen.add(x); stack.push(...(into.get(x) ?? [])); }
+  return (wf.steps ?? []).filter((s) => seen.has(s.id));
+}
+/** The names a catalog `output` gives, from its first `{ … }` ("`{ result: boolean, isfalse: boolean }` — …"); [] when it names none. */
+export function shapeFields(prose) {
+  const m = /`\{([^`]*)\}`/.exec(String(prose ?? ''));
+  if (!m) return [];
+  const out = []; let depth = 0, part = '';
+  for (const ch of `${m[1]},`) {
+    if ('{[('.includes(ch)) depth++; else if ('}])'.includes(ch)) depth--;
+    if (ch !== ',' || depth > 0) { part += ch; continue; }
+    const name = /^\s*([A-Za-z_$][\w$]*)\s*(:|$)/.exec(part)?.[1];
+    if (name) out.push(name);
+    part = '';
+  }
+  return out;
+}
+const blank = (names) => Object.fromEntries(names.map((n) => [n, null]));
+const dig = (v, path) => path.reduce((x, k) => (x != null && typeof x === 'object' ? x[k] : undefined), v);
+/** What started the workflow, in words: "the Watering that was made", "the call that started it". */
+export function startWords(starts = []) {
+  const t = starts[0];
+  if (t?.type === 'db-change') return `the ${t.dbChange?.collection ?? 'row'} that was ${(t.dbChange?.actions ?? ['create']).map((a) => CHANGE_WORDS[a] ?? a).join(' or ')}`;
+  if (t?.type === 'webhook') return 'the call that started it';
+  if (t?.type === 'schedule') return 'the schedule that started it';
+  return 'what it was given';
+}
+/**
+ * What step `stepId` can read, a source each: `{ root, words, from: 'run' | 'sample' | 'shape', value, note? }`. A shape's
+ * value holds its field names, each null. `have`:
+ *   run         stepsOfRun(record) of the run lit, or null      sample     the workflow's test sample, or null
+ *   starts      the triggers that start it                       columns(table)   a table's column names, or null
+ *   kind(kind)  the catalog's entry                              answers(step)    what a function step's function answers (its Response's names), or null
+ */
+export function readSources(wf, stepId, { run = null, sample = null, starts = [], columns = () => null, kind = () => null, answers = () => null } = {}) {
+  const ran = [...(run?.values() ?? [])].find((r) => r.input && typeof r.input === 'object' && 'body' in r.input);
+  const t = starts[0], out = [];
+  // what started it
+  const row = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'ACL')) : v); // who may read a row is not a value to use
+  if (ran) out.push({ root: 'body', words: startWords(starts), from: 'run', value: row(ran.input.body) });
+  else if (sample && Object.keys(sample.body ?? {}).length) out.push({ root: 'body', words: startWords(starts), from: 'sample', value: row(sample.body) });
+  else if (t?.type === 'db-change') {
+    const cols = columns(t.dbChange?.collection) ?? [];
+    out.push({ root: 'body', words: startWords(starts), from: 'shape', value: blank(['objectId', ...cols, 'createdAt', 'updatedAt']) });
+  } else out.push({ root: 'body', words: startWords(starts), from: 'shape', value: {}, note: t?.type === 'schedule' ? 'A schedule sends nothing unless it is given a payload.' : 'Its fields show once the test has a sample.' });
+  const how = { type: null, firedAt: null, ...(t?.type === 'db-change' ? { collection: null, action: null, recordId: null } : t?.type === 'webhook' ? { slug: null } : t?.type === 'schedule' ? { cron: null } : {}) };
+  out.push(ran?.input.trigger && typeof ran.input.trigger === 'object' ? { root: 'trigger', words: 'how it started', from: 'run', value: ran.input.trigger } : { root: 'trigger', words: 'how it started', from: 'shape', value: how });
+  // each step upstream of it
+  for (const s of upstreamOf(wf, stepId)) {
+    const r = run?.get(s.id), words = s.name || kind(s.kind)?.displayName || s.id;
+    if (r && r.output !== undefined && r.status !== 'error' && r.status !== 'skipped') { out.push({ root: `upstream.${s.id}`, words, from: 'run', value: r.output, step: s.id }); continue; }
+    const fn = s.kind === 'call-function' ? answers(s) : null;
+    const own = s.kind === 'transform' && s.params?.output && typeof s.params.output === 'object' && !Array.isArray(s.params.output) ? Object.keys(s.params.output) : null;
+    const value = fn ? { result: blank(fn) } : own ? blank(own) : blank(shapeFields(kind(s.kind)?.output));
+    out.push({ root: `upstream.${s.id}`, words, from: 'shape', value, step: s.id });
+  }
+  return out;
+}
+/**
+ * Inside a step that goes through a list (a filter, a For Each's filter), what its condition reads per item: the item,
+ * its fields from the list's first item in `sources` (readSources'), and its position. `step.params.items` names the list.
+ */
+export function itemSources(wf, step, sources) {
+  const p = step.params ?? {}, key = typeof p.itemKey === 'string' ? p.itemKey : 'item', at = typeof p.indexKey === 'string' ? p.indexKey : 'index';
+  const form = valueForm(p.items === undefined ? { $path: 'previous.items' } : p.items);
+  let list, src = null;
+  if ('typed' in form) list = form.typed;
+  else {
+    const [root, ...rest] = form.from.split('.');
+    const before = root === 'previous' ? (wf.steps ?? []).filter((s) => stepWires(s).some((w) => w.to === step.id)) : [];
+    const named = root === 'previous' ? (before.length === 1 ? `upstream.${before[0].id}` : null) : root === 'upstream' ? `upstream.${rest.shift()}` : root;
+    src = sources.find((s) => s.root === named) ?? null;
+    list = src && dig(src.value, rest);
+  }
+  const from = src ? src.from : 'run', first = Array.isArray(list) ? list[0] : undefined;
+  const item = first === undefined
+    ? { root: key, words: 'this item', from: 'shape', value: {}, note: from === 'shape' || !Array.isArray(list) ? 'Its fields show once the workflow is tested.' : 'The list was empty in the test.' }
+    : { root: key, words: 'this item', from, value: first };
+  return [item, { root: at, words: 'its position', from: item.from, value: 0, leaf: true }];
+}
+/** A value read from the run in words, for its pill: `{ name, from }`, "plant · from the Watering that was made". */
+export function pathWords(path, wf, starts = [], { item = 'item', index = 'index', kindName = (k) => k } = {}) {
+  const [root, ...rest] = String(path).split('.');
+  const seg = (xs, whole = 'all of it') => (xs.length ? xs.map((x) => (/^\d+$/.test(x) ? `#${Number(x) + 1}` : x)).join(' › ') : whole);
+  if (root === 'body') return { name: seg(rest), from: startWords(starts) };
+  if (root === 'trigger') return { name: seg(rest), from: 'how it started' };
+  if (root === 'previous') return { name: seg(rest), from: 'the step before' };
+  if (root === 'upstream') {
+    const s = (wf.steps ?? []).find((x) => x.id === rest[0]);
+    let r = rest.slice(1);
+    if (s?.kind === 'call-function' && r[0] === 'result' && r.length > 1) r = r.slice(1); // a function answers { result: { … } }: its names are what a person knows
+    return s ? { name: seg(r), from: s.name || kindName(s.kind) } : { name: seg(r), from: `a step that is not there (${rest[0] ?? ''})`, missing: true };
+  }
+  if (root === item) return { name: seg(rest, 'this item'), from: 'the list' };
+  if (root === index && !rest.length) return { name: 'its position', from: 'the list' };
+  return { name: seg([root, ...rest]), from: 'the run' };
+}

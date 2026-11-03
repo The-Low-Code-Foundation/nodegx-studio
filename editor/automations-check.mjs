@@ -6,7 +6,7 @@
  *
  *   node editor/automations-check.mjs    PASS n/n and exit 0, or the failing lines and exit 1
  */
-import { ALWAYS_WORDS, addStepAfter, sampleFor, sampleRun, sampleWords, testRefusal, agrees, atTime, canMove, deleteStep, insertBetween, moveStep, nextOntoRoute, stepPorts, newStepId, readAutomations, runLine, scheduleTime, stepsOfRun, stepWires, targetOf, triggerHead, valueForm, workflowLayout } from './automations.mjs';
+import { ALWAYS_WORDS, itemSources, pathWords, readSources, shapeFields, startWords, upstreamOf, addStepAfter, sampleFor, sampleRun, sampleWords, testRefusal, agrees, atTime, canMove, deleteStep, insertBetween, moveStep, nextOntoRoute, stepPorts, newStepId, readAutomations, runLine, scheduleTime, stepsOfRun, stepWires, targetOf, triggerHead, valueForm, workflowLayout } from './automations.mjs';
 
 const results = [];
 const ok = (cond, what, detail) => { results.push(!!cond); if (!cond || process.argv.includes('-v')) console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${what}${detail !== undefined ? ' — ' + JSON.stringify(detail).slice(0, 300) : ''}`); };
@@ -144,6 +144,48 @@ ok(valueForm({ $path: 'body.plant' }).from === 'body.plant' && valueForm('Kitche
   const tested = { status: 'success', startedAt: t0, durationMs: 4, metadata: { test: true, stoppedAfter: 'read' }, steps: [{ nodeId: 'read', status: 'success', stepIndex: 0 }, { nodeId: 'say', status: 'skipped', stepIndex: 1 }] };
   ok(/^● Tested .* · stopped after step 1, Read the row · 4 ms$/.test(runLine(tested, (id) => (id === 'read' ? 'Read the row' : id))), 'a test up to a step says so: "Tested … stopped after step 1, Read the row"', runLine(tested, (id) => (id === 'read' ? 'Read the row' : id)));
   ok(/^● Last run .* · finished/.test(runLine({ ...tested, metadata: {} })), 'a run that was not a test is still "Last run"');
+}
+
+// P132 BWF-003: what a step can read
+{
+  // AC2: a diamond, A → B, A → C, B and C → D (the gate before it: an If whose two sides meet again)
+  const dia = { id: 'd', entry: 'A', steps: [{ id: 'A', kind: 'branch', routes: { ontrue: ['B'], onfalse: ['C'] } }, { id: 'B', kind: 'wait', next: ['D'] }, { id: 'C', kind: 'wait', next: ['D'], onError: ['E'] }, { id: 'D', kind: 'merge' }, { id: 'E', kind: 'stop' }] };
+  const up = (id) => upstreamOf(dia, id).map((s) => s.id).join();
+  ok(up('D') === 'A,B,C' && up('B') === 'A' && up('C') === 'A' && up('A') === '', 'a diamond: D reads A, B and C; B does not read C; the entry reads no step', ['D', 'B', 'C', 'A'].map(up));
+  ok(up('E') === 'A,C', 'a step on an error route reads the step that failed and what was before it', up('E'));
+  ok(upstreamOf({ entry: 'a', steps: [{ id: 'a', next: ['b'] }, { id: 'b', next: ['a'] }] }, 'a').map((s) => s.id).join() === 'b', 'a loop does not hang');
+  // the catalog's words for what a kind gives (nodegx-backend steps/kinds.ts `output`)
+  ok(shapeFields('`{ result: boolean, isfalse: boolean }` — mirrors the client Condition node output port names.').join() === 'result,isfalse', 'an If gives result and isfalse');
+  ok(shapeFields('`{ results: unknown[], count, skipped, errors: [{index,message}], failed: number }`.').join() === 'results,count,skipped,errors,failed', 'a For Each: a list of objects inside is one field, not five');
+  ok(shapeFields('`{ matched: string | null, value: unknown }`.').join() === 'matched,value' && shapeFields('The object you described, and nothing else').length === 0, "a switch's two, and words with no shape in them: none");
+  // AC3: no run, no sample: the table's columns, said as a shape
+  const ww = { id: 'when-watered', entry: 'check', steps: [{ id: 'check', name: 'The watering names its plant', kind: 'validate', next: ['mark'] }, { id: 'mark', name: 'Mark the plant watered', kind: 'call-function', ref: 'Cloud Functions/Mark watered', params: { plant: { $path: 'body.plant' } } }] };
+  const watered = [{ id: 't', type: 'db-change', dbChange: { collection: 'Watering', actions: ['create'] }, target: { kind: 'workflow', name: 'when-watered' } }];
+  const cat = { validate: { displayName: 'Validate', output: '`{ ok: true, checked: number }` when every rule held.' } };
+  const have = { starts: watered, columns: (t) => (t === 'Watering' ? ['plant', 'note', 'at'] : null), kind: (k) => cat[k], answers: (s) => (s.ref === 'Cloud Functions/Mark watered' ? ['changed'] : null) };
+  const first = readSources(ww, 'check', have);
+  ok(first.map((x) => x.root).join() === 'body,trigger' && first[0].from === 'shape' && Object.keys(first[0].value).join() === 'objectId,plant,note,at,createdAt,updatedAt', "the first step, no run yet: what started it is the Watering table's columns", first[0]);
+  ok(first[0].words === 'the Watering that was made' && startWords([]) === 'what it was given', 'what started it, in words');
+  const second = readSources(ww, 'mark', have);
+  ok(second[2]?.root === 'upstream.check' && second[2].from === 'shape' && Object.keys(second[2].value).join() === 'ok,checked' && second[2].words === 'The watering names its plant', "the step after it: the step before, its catalog shape, under its own name", second[2]);
+  // a run: its values win
+  const run = stepsOfRun({ steps: [{ nodeId: 'check', stepIndex: 0, status: 'success', inputData: { action: 'create', body: { objectId: 'w1', ACL: { '*': { read: true } }, plant: { objectId: 'p1' } }, trigger: { type: 'db_change', collection: 'Watering' } }, outputData: { ok: true, checked: 2 } }] });
+  const ran = readSources(ww, 'mark', { ...have, run });
+  ok(ran[0].from === 'run' && ran[0].value.plant.objectId === 'p1' && !('action' in ran[0].value) && !('ACL' in ran[0].value) && ran[1].value.collection === 'Watering' && ran[2].value.checked === 2, "a run's own values: the row under body (never the deprecated top-level copy, nor its ACL), the trigger, the step's output", ran);
+  const sampled = readSources(ww, 'check', { ...have, sample: { kind: 'db-change', body: { objectId: 'w9', plant: 'x' } } });
+  ok(sampled[0].from === 'sample' && sampled[0].value.objectId === 'w9', 'tested on nothing yet, a sample: its row');
+  ok(JSON.stringify(readSources({ steps: [{ id: 'a', kind: 'call-function', ref: 'Cloud Functions/Mark watered', next: ['b'] }, { id: 'b', kind: 'return' }] }, 'b', have)[2].value) === '{"result":{"changed":null}}', "a function step's shape: what its Response answers, under result");
+  // AC4: inside a filter, the item from the list's sample
+  const list = { id: 'l', entry: 'get', steps: [{ id: 'get', kind: 'call-function', ref: 'F', next: ['keep'] }, { id: 'keep', kind: 'filter', params: { items: { $path: 'upstream.get.result.plants' }, itemKey: 'plant', condition: { left: { $path: 'plant.thirsty' }, op: 'truthy' } } }] };
+  const lrun = stepsOfRun({ steps: [{ nodeId: 'get', stepIndex: 0, status: 'success', inputData: { body: {} }, outputData: { result: { plants: [{ name: 'Monstera', thirsty: true }, { name: 'Fern' }] } } }] });
+  const items = itemSources(list, list.steps[1], readSources(list, 'keep', { run: lrun }));
+  ok(items[0].root === 'plant' && items[0].from === 'run' && items[0].value.name === 'Monstera' && items[1].root === 'index' && items[1].leaf, "a filter's item, under its itemKey, from the list's first item in the run; its position", items);
+  const before = itemSources({ ...list, steps: [list.steps[0], { ...list.steps[1], params: {} }] }, { id: 'keep', kind: 'filter' }, readSources(list, 'keep', {}));
+  ok(before[0].root === 'item' && before[0].from === 'shape' && /tested/.test(before[0].note), 'no run: the item is offered, its fields said to come with a test', before[0]);
+  // a value read from the run, in words (its pill)
+  ok(JSON.stringify(pathWords('body.plant', ww, watered)) === '{"name":"plant","from":"the Watering that was made"}', '"plant · from the Watering that was made"');
+  ok(pathWords('upstream.mark.result.changed', ww).name === 'changed' && pathWords('upstream.mark.result.changed', ww).from === 'Mark the plant watered', "a function's answer by its own name, from the step's name");
+  ok(pathWords('upstream.gone.x', ww).missing && pathWords('previous.result', ww).from === 'the step before' && pathWords('plant.name', ww, [], { item: 'plant' }).from === 'the list' && pathWords('body.items.0.name', ww).name === 'items › #1 › name', 'a step that is not there, the step before, an item, a place in a list');
 }
 
 const passed = results.filter(Boolean).length;

@@ -2182,6 +2182,14 @@ answer). `editor/vocabulary.json` says a function's settings are edited in Studi
 limit (300 a minute, "Rate limit exceeded for admin requests"); the group section runs last, after a minute's wait.
 Filed P123-GH-ADMINRATE (a person's reach not counted).
 
+## Richard's Greenhouse notes, third round (2026-11-02) — backend workflows → NodeGX P132
+
+Richard tested the Backend tab on Greenhouse and could not open a step, add one after the first, see a branch's Yes /
+No, or make a Starts-on form follow its choice; most steps needed code or JSON. He asked for "something akin to Bubble's
+backend workflows, or in my dreams something like n8n", visually editable in both editors. Scoped as NodeGX
+`dev-docs/tasks/phase-132-a-backend-workflow-you-can-build-by-hand/` (BWF-001..009, his four rulings in its README);
+the Studio work of those tasks is written there, not as STU ids. Rows: `node scripts/bugs.js --from P132 --all`.
+
 ## Rulings open
 
 | id | question | from |

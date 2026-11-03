@@ -26,6 +26,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { browser } from './cdp.mjs';
+import { shapeFields } from './automations.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const shots = process.argv.includes('--shots');
@@ -471,6 +472,67 @@ try {
     const live = await fetch(url + 'api/automations/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: 'watered', env: 'live' }) });
     ok(live.status === 409 && /never on live/.test((await live.json()).error), 'AC4: a test against live is refused in words');
     await shot('p132-bwf002');
+  }
+  // P132 BWF-003: a value picked from what came before. A new workflow a Task starts, never run: an If, then a Wait
+  console.log('check: P132 BWF-003, a value picked from what came before');
+  {
+    const kinds = (await be('/admin/workflow-step-kinds')).kinds ?? [];
+    const silent = kinds.filter((k) => !['call-function', 'transform'].includes(k.kind) && !shapeFields(k.output).length).map((k) => k.kind);
+    ok(kinds.length > 10 && !silent.length, "every kind's output in the catalog names its fields (a function's come from its Response, a transform's from its own object)", silent);
+    const steps = [{ id: 'first', name: 'Is it there', kind: 'branch', params: { condition: { left: '', op: 'truthy' } }, routes: { ontrue: ['second'] } }, { id: 'second', kind: 'wait', params: { duration: 1 } }];
+    const r = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: { id: 'picked', name: 'Picked', entry: 'first', steps }, trigger: { type: 'db-change', name: 'A task made', dbChange: { collection: 'Task', actions: ['create'] } } }) });
+    ok(r.ok, 'an If then a Wait a new Task starts, written as Studio writes one', r.ok || (await r.json()).error);
+    await b.until(`!!document.querySelector('#autolist .row[data-workflow="picked"]')`, 8000).catch(() => {});
+    await ev(`document.querySelector('#autolist .row[data-workflow="picked"]').click()`);
+    await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'picked'`, 8000).catch(() => {});
+    await b.clickSel('#steps .autoview .step[data-id="first"] h3');
+    await b.until(`!!document.querySelector('#wfinspect .reads .readsrc')`, 8000).catch(() => {});
+    const reads = () => ev(`[...document.querySelectorAll('#wfinspect .reads .readsrc')].map((x) => ({ root: x.dataset.root, from: x.dataset.from, words: x.querySelector('summary, .pickfield')?.innerText, paths: [...x.querySelectorAll('.vtree .pickfield')].map((f) => f.dataset.path) }))`);
+    const first = await reads();
+    const body = first?.find((x) => x.root === 'body');
+    ok(body?.from === 'shape' && /no run yet/.test(body.words) && body.paths.includes('body.title') && body.paths.includes('body.objectId'), "AC3: no run, the first step reads the Task table's columns, said \"no run yet\"", first);
+    ok(first?.map((x) => x.root).join() === 'body,trigger', 'the first step reads what started it and how, and no step', first?.map((x) => x.root));
+    // AC1 (in Chrome): a field dragged onto the If's "This"
+    await ev(`(() => { const dt = new DataTransfer(); const from = document.querySelector('#wfinspect .reads .pickfield[data-path="body.title"]'); const to = document.querySelector('#wfinspect .condwords .field.runvalue'); from.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt })); to.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt })); to.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); })()`);
+    const pickedWf = () => fileNow().workflows.find((w) => w.id === 'picked');
+    for (let i = 0; i < 40 && JSON.stringify(pickedWf()?.steps[0].params.condition.left) !== '{"$path":"body.title"}'; i++) await wait(150);
+    await b.until(`!!document.querySelector('#wfinspect .condwords .pill[data-path="body.title"]')`, 5000).catch(() => {});
+    ok(JSON.stringify(pickedWf()?.steps[0].params.condition.left) === '{"$path":"body.title"}' && JSON.stringify((await be('/admin/workflow-defs/picked')).workflow?.steps?.[0]?.params?.condition?.left) === '{"$path":"body.title"}', 'AC1: the Task\'s title dragged onto This: {"$path":"body.title"}, in the file and on the backend', pickedWf()?.steps[0]);
+    ok(await ev(`document.querySelector('#wfinspect .condwords .pill[data-path="body.title"]')?.innerText === 'title · from the Task that was made'`), 'AC1: the panel says it in words: "title · from the Task that was made"', await ev(`document.querySelector('#wfinspect .condwords .rvpill')?.innerText`));
+    // AC2 (in Chrome): the Wait reads the If, its shape from the catalog; picked from its menu
+    await b.clickSel('#steps .autoview .step[data-id="second"] h3');
+    await b.until(`[...document.querySelectorAll('#wfinspect .reads .readsrc')].some((x) => x.dataset.root === 'upstream.first')`, 8000).catch(() => {});
+    const second = await reads();
+    const up = second?.find((x) => x.root === 'upstream.first');
+    ok(second?.map((x) => x.root).join() === 'body,trigger,upstream.first' && up?.from === 'shape' && JSON.stringify(up.paths) === '["upstream.first.result","upstream.first.isfalse"]' && /^Is it there/.test(up.words), 'AC2: the step after reads the If by its name, its result and isfalse from the catalog, no run yet', second);
+    await ev(`(() => { const sel = document.querySelector('#wfinspect .field.runvalue .rvmode'); sel.value = 'from'; sel.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await b.until(`!!document.querySelector('.menu.picker .pickfield[data-path="upstream.first.result"]')`, 5000).catch(() => {});
+    ok(await ev(`[...document.querySelectorAll('.menu.picker .readsrc')].map((x) => x.dataset.root).join() === 'body,trigger,upstream.first'`), '"From the run" opens a menu of what it can read', await ev(`document.querySelector('.menu.picker')?.innerText`));
+    await ev(`document.querySelector('.menu.picker .pickfield[data-path="upstream.first.result"]').click()`);
+    for (let i = 0; i < 40 && JSON.stringify(pickedWf()?.steps[1].params.duration) !== '{"$path":"upstream.first.result"}'; i++) await wait(150);
+    await b.until(`!!document.querySelector('#wfinspect .pill[data-path="upstream.first.result"]')`, 5000).catch(() => {});
+    ok(JSON.stringify(pickedWf()?.steps[1].params.duration) === '{"$path":"upstream.first.result"}' && !(await ev(`!!document.querySelector('.menu.picker')`)), 'a click in the menu writes {"$path":"upstream.first.result"}, and the menu closes', pickedWf()?.steps[1]);
+    ok(await ev(`document.querySelector('#wfinspect .pill[data-path="upstream.first.result"]')?.innerText === 'result · from Is it there'`), 'its pill: "result · from Is it there"', await ev(`document.querySelector('#wfinspect .rvpill')?.innerText`));
+    await shot('p132-bwf003');
+    await ev(`document.querySelector('#wfinspect .pill[data-path="upstream.first.result"]').click()`);
+    await b.until(`!!document.querySelector('.menu.picker [data-act=aspath]')`, 5000).catch(() => {});
+    await ev(`document.querySelector('.menu.picker [data-act=aspath]').click()`);
+    ok(await ev(`document.querySelector('#wfinspect input[data-input=aspath]')?.value === 'upstream.first.result' && !document.querySelector('.menu.picker')`), 'the path is typed only when asked: the pill\'s menu, "Edit as path"', await ev(`document.querySelector('#wfinspect .field.runvalue')?.innerHTML.slice(0, 300)`));
+    // P132-FILTERNOCONDITION, and AC4 in Chrome: a Filter added from the menu is taken; its condition reads the item first
+    await b.clickSel('#steps .autoview .step[data-id="second"] h3');
+    await b.until(`!!document.querySelector('#wfinspect [data-act=addafter]')`, 5000).catch(() => {});
+    await ev(`document.querySelector('#wfinspect [data-act=addafter]').click()`); await wait(300);
+    await ev(`document.querySelector('.menu .item[data-kind="filter"]').click()`);
+    for (let i = 0; i < 40 && !pickedWf()?.steps.some((x) => x.kind === 'filter'); i++) await wait(150);
+    const filt = pickedWf()?.steps.find((x) => x.kind === 'filter');
+    ok(!!filt && JSON.stringify(filt.params.condition) === '{"left":{"$path":"item"},"op":"truthy"}' && (await be('/admin/workflow-defs/picked')).workflow?.steps?.some((x) => x.kind === 'filter'), 'P132-FILTERNOCONDITION: a Filter added from the menu starts with a condition, in the file and on the backend', pickedWf()?.steps);
+    await b.clickSel(`#steps .autoview .step[data-id="${filt?.id}"] h3`);
+    await b.until(`!!document.querySelector('#wfinspect .condwords .pill[data-path="item"]')`, 5000).catch(() => {});
+    ok(await ev(`document.querySelector('#wfinspect .condwords .pill[data-path="item"]')?.innerText === 'this item · from the list'`), 'its condition says it in words: "this item · from the list"', await ev(`document.querySelector('#wfinspect .condwords')?.innerText`));
+    await ev(`document.querySelector('#wfinspect .condwords .pill[data-path="item"]').click()`);
+    await b.until(`!!document.querySelector('.menu.picker .readsrc')`, 5000).catch(() => {});
+    ok(await ev(`[...document.querySelectorAll('.menu.picker .readsrc')].map((x) => x.dataset.root).join() === 'item,index,body,trigger,upstream.first,upstream.second'`), 'AC4: in its condition, this item and its position first, then what came before', await ev(`[...document.querySelectorAll('.menu.picker .readsrc')].map((x) => x.dataset.root)`));
+    await ev(`document.querySelector('.menu.picker')?.remove()`);
   }
   // a trigger the file does not have is refused, and nothing changes
   const refused = await fetch(url + 'api/automations/trigger', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: 'nobody', enabled: false }) });
