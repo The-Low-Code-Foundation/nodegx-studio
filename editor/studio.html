@@ -489,6 +489,16 @@
   #wfinspect .rundata .ok { color: var(--green); font-size: 12px; padding: 4px 0; }
   #wfinspect .rvctl { display: grid; grid-template-columns: auto 1fr; gap: 4px; }
   #wfinspect .rvctl .rvmode { width: auto; font-size: 11.5px; }
+  /* P132 BWF-004: a formula, its sentence in words above its values */
+  #wfinspect .field.hasformula { grid-template-columns: 1fr; }
+  #wfinspect .formula { display: grid; gap: 4px; padding: 6px 8px; border-left: 3px solid var(--accent, var(--line-2)); background: var(--panel-2); border-radius: 0 6px 6px 0; min-width: 0; }
+  #wfinspect .formula .fxhead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 11.5px; color: var(--ink-2); }
+  #wfinspect .formula .fxname { font-weight: 600; }
+  #wfinspect .formula .fxwords { font-size: 12.5px; color: var(--ink); overflow-wrap: anywhere; }
+  #wfinspect .formula .fxwords em { font-style: normal; font-weight: 600; }
+  #wfinspect .formula .fxadd { justify-self: start; font-size: 11.5px; }
+  #wfinspect .formula .field { position: relative; }
+  #wfinspect .formula .fxdrop { position: absolute; right: 0; top: 0; font-size: 12px; }
   /* P132 BWF-003: a value from what came before, a pill in words; what a step can read, a field a line to drag or pick */
   #wfinspect .rvpill { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .rvpill .pill { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft, var(--panel-2)); border: 1px solid var(--line-2); color: var(--ink); cursor: pointer; }
@@ -1216,7 +1226,7 @@ import { fieldReaders, typeReaders, renameField, renameType, appFields } from '.
 import { LANES, buildTimeline, lastRunOf, msText, shotAt, stepValues } from './timeline.mjs';
 import { runOver, lastActivity, watchSignals, runtimeTimers, runTimers } from './runwatch.mjs';
 import { CLOUD, REQUEST, RESPONSE, functionList, functionLayout, helperKey, requestAsks, responseWords, touchesWords } from './fngraph.mjs';
-import { ALWAYS_WORDS, AUTOMATIONS_FILE, CHANGE_WORDS, SAMPLE_KINDS, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, itemSources, moveStep, newStepId, nextOntoRoute, pathWords, readAutomations, readSources, runLine, sampleFor, sampleWords, scheduleTime, stepsOfRun, targetOf, triggerHead, stepPorts, upstreamOf, valueForm, workflowLayout } from './automations.mjs';
+import { ALWAYS_WORDS, AUTOMATIONS_FILE, CHANGE_WORDS, SAMPLE_KINDS, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, itemSources, formulaArgAt, formulaArgStart, formulaParts, formulaStart, moveStep, newStepId, nextOntoRoute, pathWords, readAutomations, readSources, runLine, sampleFor, sampleWords, scheduleTime, stepsOfRun, targetOf, triggerHead, stepPorts, upstreamOf, valueForm, workflowLayout } from './automations.mjs';
 import { logicOnPage, placedComponent, studioEdits, wiringLayout, wiringSvg } from './wiring.mjs';
 import { look as canvasLook, nodeScheme, wireColors } from './look.js';
 // STU-084: what Studio draws and edits, as data (the element types, the action menu, the value sources), one file the
@@ -5293,7 +5303,7 @@ function loadAutoBackend() {
   autoBeAsking = true;
   if (!autoBe) autoBe = { pending: true };
   Promise.all([api('/admin/triggers'), api('/admin/workflow-defs'), api('/admin/workflow-step-kinds').catch(() => ({ kinds: [] }))])
-    .then(([t, w, k]) => { autoBe = { triggers: new Map((t.triggers ?? []).map((x) => [x.id, x])), workflows: new Map((w.workflows ?? w.definitions ?? []).map((x) => [x.id, x])), lastRuns: w.lastRuns ?? {}, kinds: new Map((k.kinds ?? []).map((x) => [x.kind, x])), ops: k.conditionLanguage?.ops ?? [] }; })
+    .then(([t, w, k]) => { autoBe = { triggers: new Map((t.triggers ?? []).map((x) => [x.id, x])), workflows: new Map((w.workflows ?? w.definitions ?? []).map((x) => [x.id, x])), lastRuns: w.lastRuns ?? {}, kinds: new Map((k.kinds ?? []).map((x) => [x.kind, x])), ops: k.conditionLanguage?.ops ?? [], formulas: k.formulaLanguage?.formulas ?? null }; })
     .catch((e) => { autoBe = { triggers: new Map(), workflows: new Map(), lastRuns: {}, kinds: new Map(), words: noBackend(e) ? 'No backend is bound, so what a backend runs now is not shown: these are the project’s.' : `The backend did not say its triggers and workflows: ${e.message}` }; })
     .finally(() => { autoBeAsking = false; if (tab === 'workflow' || tab === 'backend') renderWorkflow(); });
 }
@@ -5752,11 +5762,16 @@ function runValueField(label, value, set, { type = 'any', enums = null, w = null
     box.replaceWith(h('div', {}, input, h('datalist', { id: dl }, ...paths.map((x) => h('option', { value: x }))))); input.focus();
   };
   const pick = (anchor) => pickMenu(anchor, w, item, (p) => set({ $path: p }), asPath);
-  const mode = h('select', { class: 'rvmode', 'aria-label': `How ${label} is given`, onchange: (e) => { if (e.target.value === 'from') { e.target.value = 'typed'; pick(e.target); } else set(undefined); } },
-    h('option', { value: 'typed', selected: !('from' in form) }, 'Typed'), h('option', { value: 'from', selected: 'from' in form }, 'From the run'));
+  const now = 'fn' in form ? 'fn' : 'from' in form ? 'from' : 'typed', formulas = beNow()?.formulas;
+  const mode = h('select', { class: 'rvmode', 'aria-label': `How ${label} is given`, onchange: (e) => {
+      const to = e.target.value; e.target.value = now;
+      if (to === 'from') pick(e.target); else if (to === 'fn') formulaMenu(e.target, (spec) => set(formulaStart(spec))); else set(undefined);
+    } },
+    h('option', { value: 'typed', selected: now === 'typed' }, 'Typed'), h('option', { value: 'from', selected: now === 'from' }, 'From the run'),
+    formulas?.length || now === 'fn' ? h('option', { value: 'fn', selected: now === 'fn' }, 'A formula…') : null);
+  if ('fn' in form) { f.classList.add('hasformula'); f.append(h('div', { class: 'ctl rvctl' }, mode, h('span')), formulaBox(value, set, { w, item })); return f; }
   if ('from' in form) {
-    const step = w?.steps?.find((s) => s.id === selAutoStep), p = step ? step.params ?? {} : {};
-    const words = pathWords(form.from, w ?? {}, w ? startsOf(w.id) : [], { item: item ? (p.itemKey ?? 'item') : '\0', index: item ? (p.indexKey ?? 'index') : '\0', kindName: (k) => kindSpec(k)?.displayName ?? k });
+    const words = pathPill(form.from, w, item);
     box = h('div', { class: 'rvpill' }, h('button', { class: `pill${words.missing ? ' missing' : ''}`, 'data-path': form.from, title: `${words.name} · from ${words.from} (${form.from}): pick another value`, onclick: (e) => pick(e.currentTarget) }, h('b', {}, words.name), ` · from ${words.from}`));
   }
   else if (type === 'boolean') box = h('input', { type: 'checkbox', style: 'width:auto;justify-self:start', checked: !!form.typed, onchange: (e) => set(e.target.checked) });
@@ -5770,6 +5785,83 @@ function runValueField(label, value, set, { type = 'any', enums = null, w = null
   } });
   f.append(h('div', { class: 'ctl rvctl' }, mode, box));
   return f;
+}
+/** A value read from the run in words (automations.mjs `pathWords`), for the selected step: `{ name, from, missing }`. */
+function pathPill(path, w, item) {
+  const step = w?.steps?.find((s) => s.id === selAutoStep), p = step ? step.params ?? {} : {};
+  return pathWords(path, w ?? {}, w ? startsOf(w.id) : [], { item: item ? (p.itemKey ?? 'item') : '\0', index: item ? (p.indexKey ?? 'index') : '\0', kindName: (k) => kindSpec(k)?.displayName ?? k });
+}
+/* ---- P132 BWF-004: a formula, `{ $fn, args }`, from the backend's own list (the catalog's `formulaLanguage`): picked by its
+   words from a menu, drawn as its sentence ("days between last watered and now"), each value in it given the way any
+   setting's is (typed, from the run, or another formula). Its JSON only behind *More*. ---- */
+const FX_GROUPS = { text: 'Text', numbers: 'Numbers', logic: 'Yes or no', dates: 'Dates', lists: 'Lists' };
+function formulaMenu(anchor, done) {
+  closeMenu();
+  const formulas = beNow()?.formulas ?? [];
+  const r = anchor.getBoundingClientRect();
+  const menu = h('div', { class: 'menu picker formulas', role: 'dialog', 'aria-label': 'A formula', style: `left:${Math.max(8, Math.min(r.left, innerWidth - 348))}px;top:${Math.max(8, Math.min(r.bottom + 4, innerHeight - 430))}px;width:340px` });
+  const list = h('div');
+  const search = h('input', { type: 'text', placeholder: 'Search formulas…', 'data-input': 'fxsearch', oninput: () => fill(search.value) });
+  const fill = (q) => {
+    list.innerHTML = '';
+    const q2 = q.trim().toLowerCase(), shown = formulas.filter((x) => !q2 || `${x.label} ${x.name} ${x.description}`.toLowerCase().includes(q2));
+    for (const g of [...new Set(shown.map((x) => x.group))]) {
+      list.append(h('div', { class: 'h' }, FX_GROUPS[g] ?? g));
+      for (const x of shown.filter((y) => y.group === g)) list.append(h('div', { class: 'item', 'data-fn': x.name, title: x.description, onclick: () => { closeMenu(); done(x); } }, h('span', { class: 'words' }, x.label, h('small', {}, x.description))));
+    }
+    if (!shown.length) list.append(h('div', { class: 'hint' }, `No formula matches “${q}”.`));
+  };
+  fill('');
+  menu.append(h('div', { class: 'hint' }, 'Work a value out: no code'), h('div', { class: 'search' }, icon('search'), search), list);
+  document.body.append(menu); search.focus();
+  dismissOnOutside(menu);
+}
+const FX_TYPE = { text: 'string', number: 'number', numbers: 'number', boolean: 'boolean', choice: 'enum' };
+/** A value inside a formula in words: a pill's name, typed text as it is, a formula as its own sentence. */
+function fxWords(v, w, item) {
+  if (v && typeof v === 'object' && typeof v.$path === 'string') return pathPill(v.$path, w, item).name;
+  if (typeof v === 'string') return v === '' ? '…' : v;
+  return v === undefined ? '…' : JSON.stringify(v);
+}
+function formulaBox(value, set, { w, item }) {
+  const formulas = beNow()?.formulas ?? [];
+  const spec = formulas.find((x) => x.name === value.$fn);
+  const args = Array.isArray(value.args) ? value.args : [];
+  const write = (next) => set(next.length ? { $fn: value.$fn, args: next } : { $fn: value.$fn });
+  const sentence = h('div', { class: 'fxwords', 'data-fn': value.$fn }, ...formulaParts(value, formulas, (v) => fxWords(v, w, item)).map((p) => (p.text !== undefined ? p.text : h('em', { 'data-arg': p.arg }, p.words))));
+  const more = h('button', { class: 'linkish', 'data-act': 'fxmore', title: 'More', onclick: (e) => {
+    closeMenu();
+    const menu = popover(e, 'actions');
+    menu.append(h('div', { class: 'item', 'data-act': 'fxchange', onclick: (ev) => { closeMenu(); formulaMenu(ev.currentTarget.isConnected ? ev.currentTarget : sentence, (s2) => set(formulaStart(s2))); } }, 'Another formula'),
+      h('div', { class: 'item', 'data-act': 'fxjson', onclick: () => { closeMenu(); box.replaceWith(jsonField('As JSON', value, set, 'The formula as the backend keeps it')); } }, 'Edit as JSON'),
+      h('div', { class: 'item', 'data-act': 'fxnone', onclick: () => { closeMenu(); set(undefined); } }, 'Not a formula'));
+    document.body.append(menu); dismissOnOutside(menu);
+  } }, 'More');
+  const head = h('div', { class: 'fxhead' }, h('span', { class: 'fxname' }, spec?.label ?? value.$fn), more);
+  const box = h('div', { class: 'formula', 'data-fn': value.$fn }, head, spec && !spec.args.length ? null : sentence); // Now is its name: no sentence under it
+  if (!spec) { box.append(h('div', { class: 'hint' }, 'This backend has no formula by that name: edit it as JSON, or pick another.')); return box; }
+  const slot = (a, i, label, removable) => {
+    const fld = runValueField(label, args[i], (v) => {
+      const next = [...args];
+      // cleared, or *Typed* chosen: a value to type over (a date is today's, where its start, Now, would undo the choice)
+      if (v === undefined) { if (a.optional || removable) next.splice(i, 1); else next[i] = a.type === 'date' ? new Date().toISOString().slice(0, 10) : formulaArgStart(a); }
+      else next[i] = v;
+      write(next);
+    }, { type: FX_TYPE[a.type] ?? 'any', enums: a.oneOf ?? null, w, item });
+    fld.dataset.arg = a.name; fld.dataset.at = String(i);
+    if (removable) fld.append(h('button', { class: 'linkish fxdrop', 'data-act': 'fxdrop', title: `Take this ${a.label} out`, onclick: () => { const next = [...args]; next.splice(i, 1); write(next); } }, '×'));
+    return fld;
+  };
+  spec.args.forEach((a, i) => {
+    if (a.repeats) {
+      const min = spec.name === 'default' ? Math.max(1, 2 - i) : 1, count = Math.max(args.length - i, min);
+      for (let j = 0; j < count; j++) box.append(slot(a, i + j, `${a.label} ${j + 1}`, count > min));
+      box.append(h('button', { class: 'linkish fxadd', 'data-act': 'fxadd', 'data-arg': a.name, onclick: () => write([...args, formulaArgStart(a)]) }, `+ Another ${a.label}`));
+    } else if (a.optional && i >= args.length) {
+      box.append(h('button', { class: 'linkish fxadd', 'data-act': 'fxadd', 'data-arg': a.name, onclick: () => write([...args, formulaArgStart(a)]) }, `+ ${a.label.charAt(0).toUpperCase() + a.label.slice(1)}`));
+    } else box.append(slot(a, i, a.label.charAt(0).toUpperCase() + a.label.slice(1), false));
+  });
+  return box;
 }
 /* ---- P132 BWF-003: what a step can read (automations.mjs `readSources`): what started it, how, and each step upstream of
    it, from the run lit on the canvas, else the test's sample, else the shape (the trigger's table, the catalog's words for

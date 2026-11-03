@@ -304,7 +304,11 @@ export function nextOntoRoute(wf, id, route) {
 }
 
 /** A param's value as Studio's control shows it: `{ from: path }` for a value read from the run, else `{ typed: value }`. */
-export const valueForm = (v) => (v && typeof v === 'object' && !Array.isArray(v) && typeof v.$path === 'string' && Object.keys(v).length === 1 ? { from: v.$path } : { typed: v });
+export const valueForm = (v) => {
+  if (v && typeof v === 'object' && !Array.isArray(v) && typeof v.$path === 'string' && Object.keys(v).length === 1) return { from: v.$path };
+  if (v && typeof v === 'object' && !Array.isArray(v) && typeof v.$fn === 'string') return { fn: v.$fn, args: Array.isArray(v.args) ? v.args : [] }; // P132 BWF-004
+  return { typed: v };
+};
 
 /* ---- P132 BWF-002: a workflow tested on a sample. A sample stands for what starts the workflow: a row change, a
    webhook's call, a schedule's fire, or nothing (a run asked for). It is kept per machine (serve.mjs's
@@ -460,3 +464,51 @@ export function pathWords(path, wf, starts = [], { item = 'item', index = 'index
   if (root === index && !rest.length) return { name: 'its position', from: 'the list' };
   return { name: seg([root, ...rest]), from: 'the run' };
 }
+
+/* ---- P132 BWF-004: formulas, `{ "$fn": name, "args": [...] }`, from the backend's closed list (the catalog's
+   `formulaLanguage`: each formula's label, sentence, typed args). Studio holds no list of its own. ---- */
+/** What an arg starts as: a value the backend accepts, so a formula is saved the moment it is picked (a date is Now). */
+const ARG_START = { text: '', number: 0, numbers: 0, boolean: false, date: { $fn: 'now' }, list: [], any: '' };
+export const formulaArgStart = (a) => (a.type === 'choice' ? (a.oneOf?.includes('days') ? 'days' : a.oneOf?.[0] ?? '') : structuredClone(ARG_START[a.type] ?? ''));
+/** A new formula from its served spec: every required arg filled, a repeating one twice where it combines values. */
+export function formulaStart(spec) {
+  const args = [];
+  for (const a of spec.args ?? []) {
+    if (a.optional) break;
+    args.push(formulaArgStart(a));
+    if (a.repeats && (a.type === 'numbers' || spec.name === 'default')) args.push(formulaArgStart(a));
+  }
+  return args.length ? { $fn: spec.name, args } : { $fn: spec.name };
+}
+/** Which of a formula's args a value at position `i` fills (a repeating last arg takes every value past it). */
+export const formulaArgAt = (spec, i) => spec.args[Math.min(i, spec.args.length - 1)];
+/** A formula drawn as its sentence, each arg in words (`valueWords(v)` for one): "days between last watered and now".
+    Returns the parts, `{ text }` and `{ arg, words }`, so a page can set the values apart. */
+export function formulaParts(f, formulas, valueWords) {
+  const spec = formulas?.find((x) => x.name === f.$fn);
+  if (!spec) return [{ text: `${f.$fn} (a formula this backend does not have)` }];
+  const args = Array.isArray(f.args) ? f.args : [];
+  const idx = (name) => spec.args.findIndex((a) => a.name === name);
+  const out = [], pieces = spec.sentence.split(/(\{\w+\})/).filter(Boolean);
+  for (let k = 0; k < pieces.length; k++) {
+    const piece = pieces[k], m = /^\{(\w+)\}$/.exec(piece);
+    if (!m) { out.push({ text: piece }); continue; }
+    const i = idx(m[1]), a = spec.args[i];
+    const vals = a?.repeats ? args.slice(i) : i < args.length ? [args[i]] : [];
+    if (a?.optional && !vals.length) { // its clause, ", to {places} decimal places", is left out with it
+      const before = out.at(-1)?.text, comma = before?.lastIndexOf(',') ?? -1;
+      if (comma > 0) out.at(-1).text = before.slice(0, comma); else if (before) out.pop();
+      if (k === pieces.length - 2) k++;
+      continue;
+    }
+    const words = vals.map((v) => wordsOf(v, formulas, valueWords));
+    out.push({ arg: m[1], words: !words.length ? `(no ${a?.label ?? m[1]})` : spec.name === 'text' ? words.join('') : words.length > 2 ? `${words.slice(0, -1).join(', ')} and ${words.at(-1)}` : words.join(' and ') });
+  }
+  return out;
+}
+function wordsOf(v, formulas, valueWords) {
+  const form = valueForm(v);
+  if ('fn' in form) return formulaParts(v, formulas, valueWords).map((p) => p.text ?? p.words).join('');
+  return valueWords(v);
+}
+export const formulaWords = (f, formulas, valueWords) => formulaParts(f, formulas, valueWords).map((p) => p.text ?? p.words).join('');

@@ -534,6 +534,73 @@ try {
     ok(await ev(`[...document.querySelectorAll('.menu.picker .readsrc')].map((x) => x.dataset.root).join() === 'item,index,body,trigger,upstream.first,upstream.second'`), 'AC4: in its condition, this item and its position first, then what came before', await ev(`[...document.querySelectorAll('.menu.picker .readsrc')].map((x) => x.dataset.root)`));
     await ev(`document.querySelector('.menu.picker')?.remove()`);
   }
+  // P132 BWF-004: a formula from the menu, no JSON typed: the days between a date and now, run in a test
+  console.log('check: P132 BWF-004, a formula picked by its words');
+  {
+    const cat = await be('/admin/workflow-step-kinds');
+    const steps = [{ id: 'days', name: 'How many days', kind: 'return', params: { value: '' } }];
+    const r = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: { id: 'thirsty', name: 'Thirsty', entry: 'days', steps }, trigger: { type: 'db-change', name: 'A task made', dbChange: { collection: 'Task', actions: ['create'] } } }) });
+    ok(r.ok, 'a Return a new Task starts, written as Studio writes one', r.ok || (await r.json()).error);
+    await b.until(`!!document.querySelector('#autolist .row[data-workflow="thirsty"]')`, 8000).catch(() => {});
+    await ev(`document.querySelector('#autolist .row[data-workflow="thirsty"]').click()`);
+    await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'thirsty'`, 8000).catch(() => {});
+    await b.clickSel('#steps .autoview .step[data-id="days"] h3');
+    await b.until(`!!document.querySelector('#wfinspect .field.runvalue .rvmode')`, 8000).catch(() => {});
+    const thirsty = () => fileNow().workflows.find((w) => w.id === 'thirsty');
+    const offered = await ev(`[...document.querySelector('#wfinspect .field.runvalue .rvmode').options].map((o) => o.value)`);
+    if (!cat.formulaLanguage) {
+      ok(!offered?.includes('fn'), 'a backend with no formulas is offered none (its catalog has no formulaLanguage)', offered);
+      console.log('  (AC3 not graded: this backend has no formulas yet. Run with NODEGX_REPO at a NodeGX carrying BWF-004, its dist rebuilt, or after a release carrying it)');
+    } else {
+      ok(offered?.join() === 'typed,from,fn', 'a setting is typed, read from the run, or a formula', offered);
+      await ev(`(() => { const sel = document.querySelector('#wfinspect .field.runvalue .rvmode'); sel.value = 'fn'; sel.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+      await b.until(`!!document.querySelector('.menu.formulas .item[data-fn="date-difference"]')`, 5000).catch(() => {});
+      const menu = await ev(`(() => { const m = document.querySelector('.menu.formulas'); return m && { heads: [...m.querySelectorAll('.h')].map((x) => x.textContent), items: m.querySelectorAll('.item').length, between: m.querySelector('.item[data-fn="date-difference"]')?.innerText }; })()`);
+      ok(menu?.heads.join() === 'Text,Numbers,Yes or no,Dates,Lists' && menu.items === cat.formulaLanguage.formulas.length && /^Time between/.test(menu.between), "the menu is the backend's list, in groups, by its words", menu);
+      await ev(`document.querySelector('.menu.formulas .item[data-fn="date-difference"]').click()`);
+      for (let i = 0; i < 40 && thirsty()?.steps[0].params.value?.$fn !== 'date-difference'; i++) await wait(150);
+      ok(JSON.stringify(thirsty()?.steps[0].params.value) === '{"$fn":"date-difference","args":[{"$fn":"now"},{"$fn":"now"},"days"]}' && (await be('/admin/workflow-defs/thirsty')).workflow?.steps?.[0]?.params?.value?.$fn === 'date-difference', 'picked: saved at once with values the backend takes (its dates Now, its unit days), in the file and on the backend', thirsty()?.steps[0]);
+      await b.until(`!!document.querySelector('#wfinspect .formula .fxwords')`, 5000).catch(() => {});
+      ok(await ev(`document.querySelector('#wfinspect .formula .fxwords')?.innerText === 'days between now and now'`), 'drawn as its sentence: "days between now and now"', await ev(`document.querySelector('#wfinspect .formula')?.innerText`));
+      // From: typed, then a date typed into it
+      await ev(`(() => { const sel = document.querySelector('#wfinspect .formula .field[data-arg="from"] .rvmode'); sel.value = 'typed'; sel.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+      for (let i = 0; i < 40 && typeof thirsty()?.steps[0].params.value?.args?.[0] !== 'string'; i++) await wait(150);
+      await b.until(`!!document.querySelector('#wfinspect .formula .field[data-arg="from"] input[type=text]')`, 5000).catch(() => {});
+      await ev(`(() => { const i = document.querySelector('#wfinspect .formula .field[data-arg="from"] input[type=text]'); i.value = '2026-10-28'; i.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+      for (let i = 0; i < 40 && thirsty()?.steps[0].params.value?.args?.[0] !== '2026-10-28'; i++) await wait(150);
+      await b.until(`document.querySelector('#wfinspect .formula .fxwords')?.innerText === 'days between 2026-10-28 and now'`, 5000).catch(() => {});
+      ok(JSON.stringify(thirsty()?.steps[0].params.value) === '{"$fn":"date-difference","args":["2026-10-28",{"$fn":"now"},"days"]}' && await ev(`document.querySelector('#wfinspect .formula .fxwords')?.innerText === 'days between 2026-10-28 and now'`), 'its From typed as a date: "days between 2026-10-28 and now", no JSON typed', thirsty()?.steps[0].params.value);
+      const unit = await ev(`[...document.querySelector('#wfinspect .formula .field[data-arg="unit"] select:not(.rvmode)').options].map((o) => o.value)`);
+      ok(unit?.slice(1).join() === 'minutes,hours,days,weeks,months,years', 'its unit is a choice of the served words', unit);
+      await shot('p132-bwf004');
+      if (cat.testRuns) {
+        // a sample first (BWF-002): a Task made, its first row
+        await b.clickSel('#steps [data-act="sample"]');
+        await b.until(`!!document.querySelector('.menu.sample [data-row]')`, 8000).catch(() => {});
+        await ev(`document.querySelector('.menu.sample [data-row]').click()`);
+        await ev(`document.querySelector('.menu.sample [data-act=keepsample]').click()`);
+        await b.until(`!document.querySelector('#steps [data-act="test"]')?.disabled`, 8000).catch(() => {});
+        const lo = Math.trunc((Date.now() - Date.parse('2026-10-28T00:00:00Z')) / 864e5);
+        await b.clickSel('#steps [data-act="test"]');
+        await b.until(`!!document.querySelector('.surescrim [data-act=yes]') || /Tested/.test(document.querySelector('#steps .fnfacts .run')?.innerText ?? '')`, 8000).catch(() => {});
+        await ev(`document.querySelector('.surescrim [data-act=yes]')?.click()`);
+        await b.until(`/Tested/.test(document.querySelector('#steps .fnfacts .run')?.innerText ?? '')`, 10000).catch(() => {});
+        const hi = Math.trunc((Date.now() - Date.parse('2026-10-28T00:00:00Z')) / 864e5);
+        const last = (await be('/admin/workflow-defs')).lastRuns?.thirsty;
+        const rec = last ? await be(`/executions/${encodeURIComponent(last.id)}`) : null;
+        const got = rec?.steps?.find((x) => x.nodeId === 'days')?.outputData?.value;
+        ok(got === lo || got === hi, `AC3: the test works it out on the backend: ${got} days`, rec && { status: rec.status, steps: rec.steps?.map((x) => [x.nodeId, x.status, x.outputData, x.error]) });
+        await b.clickSel('#steps .autoview .step[data-id="days"] h3');
+        await b.until(`!!document.querySelector('#wfinspect .rundata .rdout')`, 5000).catch(() => {});
+        ok(got !== undefined && await ev(`(document.querySelector('#wfinspect .rundata .rdout')?.innerText ?? '').split(String.fromCharCode(10)).some((l) => l.trim().split(' ').filter(Boolean).join(' ') === 'value ${got}')`), 'AC3: and the panel shows the number that came out', await ev(`document.querySelector('#wfinspect .rundata')?.innerText`));
+      }
+      // More: its JSON only when asked
+      await ev(`document.querySelector('#wfinspect .formula [data-act=fxmore]').click()`);
+      await b.until(`!!document.querySelector('.menu [data-act=fxjson]')`, 5000).catch(() => {});
+      await ev(`document.querySelector('.menu [data-act=fxjson]').click()`);
+      ok(await ev(`/"date-difference"/.test(document.querySelector('#wfinspect textarea.json')?.value ?? '')`), 'its JSON is behind More, "Edit as JSON"');
+    }
+  }
   // a trigger the file does not have is refused, and nothing changes
   const refused = await fetch(url + 'api/automations/trigger', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: 'nobody', enabled: false }) });
   ok(refused.status === 409 && /no trigger "nobody"/.test((await refused.json()).error), 'a trigger the project\'s file lacks is refused');

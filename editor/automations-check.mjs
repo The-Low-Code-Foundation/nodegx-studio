@@ -6,7 +6,7 @@
  *
  *   node editor/automations-check.mjs    PASS n/n and exit 0, or the failing lines and exit 1
  */
-import { ALWAYS_WORDS, itemSources, pathWords, readSources, shapeFields, startWords, upstreamOf, addStepAfter, sampleFor, sampleRun, sampleWords, testRefusal, agrees, atTime, canMove, deleteStep, insertBetween, moveStep, nextOntoRoute, stepPorts, newStepId, readAutomations, runLine, scheduleTime, stepsOfRun, stepWires, targetOf, triggerHead, valueForm, workflowLayout } from './automations.mjs';
+import { ALWAYS_WORDS, formulaParts, formulaStart, formulaWords, itemSources, pathWords, readSources, shapeFields, startWords, upstreamOf, addStepAfter, sampleFor, sampleRun, sampleWords, testRefusal, agrees, atTime, canMove, deleteStep, insertBetween, moveStep, nextOntoRoute, stepPorts, newStepId, readAutomations, runLine, scheduleTime, stepsOfRun, stepWires, targetOf, triggerHead, valueForm, workflowLayout } from './automations.mjs';
 
 const results = [];
 const ok = (cond, what, detail) => { results.push(!!cond); if (!cond || process.argv.includes('-v')) console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${what}${detail !== undefined ? ' — ' + JSON.stringify(detail).slice(0, 300) : ''}`); };
@@ -186,6 +186,29 @@ ok(valueForm({ $path: 'body.plant' }).from === 'body.plant' && valueForm('Kitche
   ok(JSON.stringify(pathWords('body.plant', ww, watered)) === '{"name":"plant","from":"the Watering that was made"}', '"plant · from the Watering that was made"');
   ok(pathWords('upstream.mark.result.changed', ww).name === 'changed' && pathWords('upstream.mark.result.changed', ww).from === 'Mark the plant watered', "a function's answer by its own name, from the step's name");
   ok(pathWords('upstream.gone.x', ww).missing && pathWords('previous.result', ww).from === 'the step before' && pathWords('plant.name', ww, [], { item: 'plant' }).from === 'the list' && pathWords('body.items.0.name', ww).name === 'items › #1 › name', 'a step that is not there, the step before, an item, a place in a list');
+}
+
+// P132 BWF-004: formulas, from the served list (three, shaped as nodegx-backend's `formulaLanguage` serves them)
+{
+  const UNITS = ['minutes', 'hours', 'days', 'weeks', 'months', 'years'];
+  const F = [
+    { name: 'date-difference', label: 'Time between', sentence: '{unit} between {from} and {to}', returns: 'number', args: [{ name: 'from', label: 'from', type: 'date' }, { name: 'to', label: 'to', type: 'date' }, { name: 'unit', label: 'in', type: 'choice', oneOf: UNITS }] },
+    { name: 'now', label: 'Now', sentence: 'now', returns: 'date', args: [] },
+    { name: 'text', label: 'Text with values', sentence: '{parts}', returns: 'text', args: [{ name: 'parts', label: 'part', type: 'any', repeats: true }] },
+    { name: 'add', label: 'Add', sentence: '{values} added together', returns: 'number', args: [{ name: 'values', label: 'number', type: 'numbers', repeats: true }] },
+    { name: 'round', label: 'Round', sentence: '{number} rounded, to {places} decimal places', returns: 'number', args: [{ name: 'number', label: 'number', type: 'number' }, { name: 'places', label: 'decimal places', type: 'number', optional: true }] }
+  ];
+  const spec = (n) => F.find((x) => x.name === n);
+  ok(JSON.stringify(formulaStart(spec('date-difference'))) === '{"$fn":"date-difference","args":[{"$fn":"now"},{"$fn":"now"},"days"]}', 'a formula picked starts with values the backend takes: its dates Now, its unit days', formulaStart(spec('date-difference')));
+  ok(JSON.stringify(formulaStart(spec('now'))) === '{"$fn":"now"}' && JSON.stringify(formulaStart(spec('add')).args) === '[0,0]' && JSON.stringify(formulaStart(spec('round')).args) === '[0]' && JSON.stringify(formulaStart(spec('text')).args) === '[""]', 'no args for Now; Add starts with two numbers; an optional arg is left out; text with one part');
+  ok(valueForm({ $fn: 'now' }).fn === 'now' && valueForm({ $fn: 'add', args: [1, 2] }).args.length === 2 && 'typed' in valueForm({ $in: [1] }), 'a formula is its own form; another $-keyed object is a typed value');
+  const vw = (v) => { const f = valueForm(v); return 'from' in f ? f.from.split('.').pop() : typeof f.typed === 'string' ? f.typed : JSON.stringify(f.typed); };
+  const days = { $fn: 'date-difference', args: [{ $path: 'body.lastWatered' }, { $fn: 'now' }, 'days'] };
+  ok(formulaWords(days, F, vw) === 'days between lastWatered and now', 'drawn as its sentence: "days between lastWatered and now"', formulaWords(days, F, vw));
+  ok(JSON.stringify(formulaParts(days, F, vw).filter((p) => p.arg).map((p) => p.arg)) === '["unit","from","to"]', 'each arg a part of its own, so the page can set the values apart');
+  ok(formulaWords({ $fn: 'text', args: ['Hi ', { $path: 'body.name' }, '!'] }, F, vw) === 'Hi name!' && formulaWords({ $fn: 'add', args: [1, 2, 3] }, F, vw) === '1, 2 and 3 added together', 'text with values reads as the text; three values as "1, 2 and 3"');
+  ok(formulaWords({ $fn: 'round', args: [2.456] }, F, vw) === '2.456 rounded' && formulaWords({ $fn: 'round', args: [2.456, 2] }, F, vw) === '2.456 rounded, to 2 decimal places', 'an optional arg left out takes its clause with it: "2.456 rounded"; given, "…, to 2 decimal places"');
+  ok(formulaWords({ $fn: 'date-difference', args: [{ $path: 'body.at' }] }, F, vw) === 'days between at and (no to)'.replace('days', '(no in)') && /does not have/.test(formulaWords({ $fn: 'eval' }, F, vw)), 'a required arg missing is said; a formula the backend lacks is said, not drawn', formulaWords({ $fn: 'date-difference', args: [{ $path: 'body.at' }] }, F, vw));
 }
 
 const passed = results.filter(Boolean).length;
