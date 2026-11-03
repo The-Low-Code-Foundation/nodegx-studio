@@ -512,3 +512,132 @@ function wordsOf(v, formulas, valueWords) {
   return valueWords(v);
 }
 export const formulaWords = (f, formulas, valueWords) => formulaParts(f, formulas, valueWords).map((p) => p.text ?? p.words).join('');
+
+/* ---- P132 BWF-006: *Paste a curl command* — an API's docs say how to call it as a curl line, and that line fills the
+   Call an API form. A key in the line (an Authorization header, a key-named header or query parameter, -u user:pass)
+   is lifted OUT of the settings: it is handed back as `key`, for Secrets, and the step names the Secret instead. ---- */
+
+/** A header or query name that carries a key (the backend's own list, httpParams.ts CREDENTIAL_NAME). */
+export const CREDENTIAL_NAME = /^(authorization|proxy-authorization|x-api-key|api-?key|apikey|x-auth-token|x-access-token|access_token|api_key|token|secret|client_secret|password|key|appid|app_id)$/i;
+
+/** A command line split as a shell would: quotes, backslash escapes, a backslash at a line's end joining lines. */
+export function shellWords(text) {
+  const out = []; let cur = null, i = 0;
+  const s = String(text).replace(/\\\r?\n/g, ' ');
+  const push = () => { if (cur !== null) out.push(cur); cur = null; };
+  while (i < s.length) {
+    const c = s[i];
+    if (/\s/.test(c)) { push(); i++; continue; }
+    cur ??= '';
+    if (c === "'") { const j = s.indexOf("'", i + 1); cur += s.slice(i + 1, j < 0 ? s.length : j); i = j < 0 ? s.length : j + 1; continue; }
+    if (c === '$' && s[i + 1] === "'") { const j = s.indexOf("'", i + 2); cur += s.slice(i + 2, j < 0 ? s.length : j).replace(/\\n/g, '\n').replace(/\\'/g, "'"); i = j < 0 ? s.length : j + 1; continue; }
+    if (c === '"') {
+      i++;
+      while (i < s.length && s[i] !== '"') { if (s[i] === '\\' && i + 1 < s.length && '"\\$`'.includes(s[i + 1])) i++; cur += s[i++]; }
+      i++; continue;
+    }
+    if (c === '\\' && i + 1 < s.length) { cur += s[i + 1]; i += 2; continue; }
+    cur += c; i++;
+  }
+  push();
+  return out;
+}
+
+/** A Secret's name for an API's key, from its address: api.openweathermap.org → OPENWEATHERMAP_KEY. */
+export function secretNameFor(url) {
+  let host = ''; try { host = new URL(url).hostname; } catch { /* below */ }
+  if (!host || host === 'localhost' || /^[\d.]+$|:/.test(host)) return 'API_KEY'; // an address by number names nothing
+  const parts = host.split('.').filter((p) => p && !/^(api|www|v\d+)$/i.test(p));
+  const word = (parts.length > 1 ? parts.at(-2) : parts[0] || 'API').replace(/[^A-Za-z0-9]+/g, '_').toUpperCase();
+  return `${word}_KEY`;
+}
+
+const CURL_FLAGS_WITH_VALUE = new Set(['-o', '--output', '-A', '--user-agent', '-e', '--referer', '-b', '--cookie', '-m', '--max-time', '--connect-timeout', '-x', '--proxy', '-w', '--write-out', '-c', '--cookie-jar', '--retry', '-T', '--upload-file', '-K', '--config', '--cacert', '--cert', '--key', '-r', '--range', '-z', '--time-cond']);
+
+/**
+ * A curl command as the `http-request` step's params: `{ params, key, notes }`. `key` is `{ value, name, how }` when the
+ * command carried one (`how`: bearer / header / query / basic, the step's `authType`), or null. Throws, in words, on a
+ * line that is not a curl command or names no address.
+ */
+export function parseCurl(text) {
+  const words = shellWords(String(text).trim());
+  if (words[0] !== 'curl') throw new Error('That is not a curl command: it should start with "curl".');
+  let method = null, url = null, getMode = false, bodyType = null, timeoutMs = null, user = null;
+  const headers = [], data = [], form = [], notes = [];
+  for (let i = 1; i < words.length; i++) {
+    const w = words[i], next = () => words[++i];
+    const long = w.startsWith('--') && w.includes('=') ? [w.slice(0, w.indexOf('=')), w.slice(w.indexOf('=') + 1)] : null;
+    const flag = long ? long[0] : w, val = () => (long ? long[1] : next());
+    if (flag === '-X' || flag === '--request') method = String(val()).toUpperCase();
+    else if (/^-X[A-Z]+$/.test(w)) method = w.slice(2);
+    else if (flag === '-H' || flag === '--header') headers.push(val());
+    else if (['-d', '--data', '--data-raw', '--data-binary', '--data-ascii'].includes(flag)) data.push(val());
+    else if (flag === '--data-urlencode') { data.push(val()); bodyType ??= 'form'; }
+    else if (flag === '--json') { data.push(val()); bodyType = 'json'; }
+    else if (flag === '-F' || flag === '--form') form.push(val());
+    else if (flag === '-u' || flag === '--user') user = val();
+    else if (flag === '-G' || flag === '--get') getMode = true;
+    else if (flag === '--url') url = val();
+    else if (flag === '-m' || flag === '--max-time') { const s = Number(val()); if (s > 0) timeoutMs = Math.round(s * 1000); }
+    else if (flag === '-A' || flag === '--user-agent') headers.push(`User-Agent: ${val()}`);
+    else if (flag === '-b' || flag === '--cookie') { const c = val(); if (!/^[^=]*$/.test(c)) headers.push(`Cookie: ${c}`); }
+    else if (CURL_FLAGS_WITH_VALUE.has(flag)) val();
+    else if (w.startsWith('-')) { /* -s, -L, -i, -k, --compressed…: how curl shows the answer, nothing the step needs */ }
+    else if (!url) url = w;
+  }
+  if (!url) throw new Error('The command names no address to call.');
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+  let u; try { u = new URL(url); } catch { throw new Error(`"${url}" is not an address.`); }
+
+  const params = {}; let key = null;
+  const takeKey = (value, how, name) => { if (!key && value) { key = { value, how, name: secretNameFor(u.href) }; if (name) params.authName = name; return true; } return false; };
+
+  const query = {};
+  for (const [k, v] of u.searchParams) {
+    if (CREDENTIAL_NAME.test(k) && takeKey(v, 'query', k)) continue;
+    query[k] = v;
+  }
+  const hdrs = {};
+  for (const line of headers) {
+    const at = line.indexOf(':'); if (at < 0) continue;
+    const name = line.slice(0, at).trim(), value = line.slice(at + 1).trim(), low = name.toLowerCase();
+    if (low === 'authorization') {
+      const m = /^(Bearer|Token)\s+(.+)$/i.exec(value), b = /^Basic\s+(.+)$/i.exec(value);
+      if (m && takeKey(m[2], 'bearer')) continue;
+      if (b) { let pair = ''; try { pair = atob(b[1]); } catch { /* not base64 */ } const c = pair.indexOf(':'); if (c > 0 && takeKey(pair.slice(c + 1), 'basic')) { params.authUser = pair.slice(0, c); continue; } }
+    } else if (CREDENTIAL_NAME.test(name) && takeKey(value, 'header', name)) continue;
+    if (low === 'content-type' && /^application\/json\b/i.test(value)) { bodyType ??= 'json'; continue; }
+    if (low === 'content-type' && /^application\/x-www-form-urlencoded\b/i.test(value)) { bodyType ??= 'form'; continue; }
+    if (low === 'accept' && /^application\/json$/i.test(value)) continue;
+    hdrs[name] = value;
+  }
+  if (user !== null) {
+    const c = user.indexOf(':');
+    if (c > 0 && takeKey(user.slice(c + 1), 'basic')) params.authUser = user.slice(0, c);
+    else if (c < 0) notes.push('The command names a user with no password (curl would ask for it): add the password as a Secret and choose Basic.');
+  }
+
+  // the body: JSON when it reads as JSON, a form's fields when it is name=value&…, the text otherwise
+  const raw = data.join('&');
+  let body;
+  if (form.length) { body = Object.fromEntries(form.map((f) => { const e = f.indexOf('='); return [f.slice(0, e), f.slice(e + 1)]; })); bodyType = 'form'; if (form.some((f) => /=@/.test(f))) notes.push('A file in the form (=@…) is sent as its name: a step sends no files.'); }
+  else if (data.length) {
+    const trimmed = raw.trim();
+    if (bodyType !== 'form' && /^[[{]/.test(trimmed)) { try { body = JSON.parse(trimmed); bodyType = 'json'; } catch { body = trimmed; bodyType = 'text'; } }
+    else if (/^[^=&\s]+=[^&]*(&[^=&\s]+=[^&]*)*$/.test(trimmed)) { body = Object.fromEntries(new URLSearchParams(trimmed)); bodyType = 'form'; }
+    else { body = trimmed; bodyType = bodyType === 'json' ? 'text' : bodyType ?? 'text'; }
+  }
+  if (getMode && body && typeof body === 'object' && !Array.isArray(body)) { Object.assign(query, body); body = undefined; }
+  // a key in the body (a form's api_key) goes the same way as one in the query: out, to Secrets
+  if (body && typeof body === 'object' && !Array.isArray(body)) for (const k of Object.keys(body)) if (CREDENTIAL_NAME.test(k) && typeof body[k] === 'string' && body[k]) { notes.push(`The body's "${k}" looks like a key: it was left out. Send it from Secrets, or pick it from the run.`); delete body[k]; }
+
+  method ??= body !== undefined && !getMode ? 'POST' : 'GET';
+  if (method !== 'GET') params.method = method;
+  params.url = u.origin + u.pathname;
+  if (Object.keys(query).length) params.query = query;
+  if (Object.keys(hdrs).length) params.headers = hdrs;
+  if (body !== undefined && method !== 'GET' && method !== 'HEAD') { params.body = body; if (bodyType && bodyType !== 'json') params.bodyType = bodyType; }
+  if (timeoutMs) params.timeoutMs = timeoutMs;
+  if (key) { params.authType = key.how; params.authSecret = key.name; }
+  return { params, key, notes };
+}

@@ -21,6 +21,7 @@
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import http from 'node:http';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -34,6 +35,7 @@ const repo = process.env.NODEGX_REPO ? resolve(process.env.NODEGX_REPO) : resolv
 const lookDir = join(repo, 'dev-docs', 'tasks', 'phase-127-the-backend-in-the-open', 'look');
 const tmp = mkdtempSync(join(tmpdir(), 'nodegx-studio-automations-drive-'));
 process.env.NODEGX_BACKENDS_DIR = join(tmp, 'backends'); // the server and the agent inherit it: nothing is written to ~/.noodl
+process.env.NODEGX_ALLOW_PRIVATE_HTTP = '1'; // P132 BWF-006: the API the drive calls is on 127.0.0.1, which a backend refuses unless asked
 const { kit } = await import('../lib/nodegx.mjs');
 const { templates } = kit;
 const mcpServer = process.env.NODEGX_MCP ? resolve(process.env.NODEGX_MCP) : kit.mcpServer;
@@ -667,6 +669,82 @@ try {
       await b.until(`!!document.querySelector('#wfinspect .reccond [data-cond="0"]')`, 5000).catch(() => {});
       const words = await ev(`(() => { const row = document.querySelector('#wfinspect .reccond [data-cond="0"]'); const [f, o] = row.querySelectorAll('select'); return { field: f.value, op: o.options[o.selectedIndex].text, ops: [...o.options].map((x) => x.value) }; })()`);
       ok(find()?.params.where?.length === 1 && find().params.where[0].op === 'eq' && words?.op === 'is' && !words.ops.includes('truthy') && words.ops.includes('startsWith'), 'Find records: a condition added by a click, "<field> is …", only the operators a search runs', { where: find()?.params.where, words });
+    }
+  }
+  // P132 BWF-006: Call an API from a pasted curl line: the key goes to Secrets and never the file, a test shows the answer
+  // as a tree a later step picks from
+  console.log('check: P132 BWF-006, Call an API from a pasted curl command');
+  {
+    await wait(20000); // the admin bucket again (see BWF-005's section)
+    const cat = await be('/admin/workflow-step-kinds');
+    if (!cat.kinds?.some((k) => k.kind === 'http-request')) {
+      console.log('  (not graded: this backend has no Call an API step yet. Run with NODEGX_REPO at a NodeGX carrying BWF-006, its dist rebuilt, or after a release carrying it)');
+    } else {
+      const KEY = 'wx-drive-7f3a9c21e5b8d4';
+      const seen = [];
+      const weather = http.createServer((req, res) => {
+        seen.push({ url: req.url, auth: req.headers.authorization });
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ current: { temperature_2m: 12.5 }, city: new URL(req.url, 'http://x').searchParams.get('city') }));
+      });
+      await new Promise((r) => weather.listen(0, '127.0.0.1', r));
+      const apiUrl = `http://127.0.0.1:${weather.address().port}`;
+      try {
+        const steps = [{ id: 'start', name: 'Read it', kind: 'transform', params: { output: { title: { $path: 'body.title' } } }, next: ['end'] }, { id: 'end', name: 'Answer', kind: 'return', params: {} }];
+        const r = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: { id: 'weather', name: 'Weather', entry: 'start', steps }, trigger: { type: 'db-change', name: 'A task made', dbChange: { collection: 'Task', actions: ['create'] } } }) });
+        ok(r.ok, 'a workflow a new Task starts, written as Studio writes one', r.ok || (await r.json()).error);
+        await b.until(`!!document.querySelector('#autolist .row[data-workflow="weather"]')`, 8000).catch(() => {});
+        await ev(`document.querySelector('#autolist .row[data-workflow="weather"]').click()`);
+        await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'weather'`, 8000).catch(() => {});
+        await b.clickSel('#steps .autoview .step[data-id="start"] h3');
+        await b.until(`!!document.querySelector('#wfinspect [data-act=addafter]')`, 5000).catch(() => {});
+        await ev(`document.querySelector('#wfinspect [data-act=addafter]').click()`);
+        await b.until(`!!document.querySelector('.menu .item[data-kind="http-request"]')`, 5000).catch(() => {});
+        ok(await ev(`[...document.querySelectorAll('.menu.actions .h')].some((x) => x.textContent === 'Integrations') && /Call an API/.test(document.querySelector('.menu .item[data-kind="http-request"]')?.innerText ?? '')`), 'the step menu has Call an API, under Integrations', await ev(`document.querySelector('.menu.actions')?.innerText`));
+        await ev(`document.querySelector('.menu .item[data-kind="http-request"]').click()`);
+        const wf = () => fileNow().workflows.find((w) => w.id === 'weather');
+        const call = () => wf()?.steps.find((x) => x.kind === 'http-request');
+        for (let i = 0; i < 40 && !call(); i++) await wait(150);
+        ok(call()?.params?.url === 'https://api.example.com/', 'added from the menu, it calls nobody until its address is set', call() ?? await ev(`document.getElementById('toast')?.textContent`));
+        await b.clickSel(`#steps .autoview .step[data-id="${call()?.id}"] h3`);
+        await b.until(`!!document.querySelector('#wfinspect [data-act=pastecurl]')`, 8000).catch(() => {});
+        ok(await ev(`!document.querySelector('#wfinspect [data-kv="Body"]') && !document.querySelector('#wfinspect [data-input=secret]') && !!document.querySelector('#wfinspect .paramsec[data-group="Authentication"]')`), 'a GET shows no body; with no authentication, no Secret to choose');
+        await ev(`document.querySelector('#wfinspect [data-act=pastecurl]').click()`);
+        await b.until(`!!document.querySelector('#wfinspect [data-input=curl]')`, 5000).catch(() => {});
+        await ev(`(() => { const t = document.querySelector('#wfinspect [data-input=curl]'); t.value = ${JSON.stringify(`curl -s "${apiUrl}/forecast?city=Paris" \\\n  -H 'Authorization: Bearer ${KEY}'`)}; document.querySelector('#wfinspect [data-act=fillcurl]').click(); })()`);
+        await b.until(`!!document.querySelector('#wfinspect .addsecret [data-input=secretname]')`, 5000).catch(() => {});
+        ok(await ev(`document.querySelector('#wfinspect .addsecret [data-input=secretname]')?.value === 'API_KEY' && document.querySelector('#wfinspect .addsecret [data-input=secretvalue]')?.type === 'password'`), 'the key in the command is asked a Secret\'s name, its value hidden', await ev(`document.querySelector('#wfinspect .curlbox')?.innerText`));
+        ok(!JSON.stringify(fileNow()).includes(KEY), 'nothing is written while the key waits for its name');
+        await ev(`(() => { const n = document.querySelector('#wfinspect .addsecret [data-input=secretname]'); n.value = 'WEATHER_KEY'; document.querySelector('#wfinspect [data-act=savesecret]').click(); })()`);
+        for (let i = 0; i < 40 && call()?.params?.authSecret !== 'WEATHER_KEY'; i++) await wait(150);
+        const p = call()?.params ?? {};
+        ok(p.url === `${apiUrl}/forecast` && p.query?.city === 'Paris' && p.authType === 'bearer' && p.authSecret === 'WEATHER_KEY' && !p.headers, 'the form is filled from the command: address, query, Bearer from WEATHER_KEY', p);
+        const listed = await be('/admin/secrets');
+        ok(listed.secrets?.some((x) => x.name === 'WEATHER_KEY'), 'WEATHER_KEY is in the backend\'s Secrets', listed.secrets?.map((x) => x.name));
+        const files = [readFileSync(join(project, 'nodegx.automations.json'), 'utf8'), JSON.stringify((await be('/admin/workflow-defs/weather')).workflow)];
+        ok(files.every((t) => !t.includes(KEY)), 'AC2 (in Chrome): the key is in neither the project\'s file nor the backend\'s workflow');
+        await b.until(`document.querySelector('#wfinspect [data-input=secret]')?.value === 'WEATHER_KEY'`, 5000).catch(() => {});
+        ok(await ev(`document.querySelector('#wfinspect [data-input=secret]')?.value === 'WEATHER_KEY' && ![...document.querySelectorAll('#wfinspect .field > label')].some((l) => /Header or parameter name|User name/.test(l.textContent))`), 'the panel says Bearer from WEATHER_KEY, and asks for no header name or user');
+        await shot('p132-bwf006');
+        if (cat.testRuns) {
+          await b.clickSel('#steps [data-act="sample"]');
+          await b.until(`!!document.querySelector('.menu.sample [data-row]')`, 8000).catch(() => {});
+          await ev(`document.querySelector('.menu.sample [data-row]').click()`);
+          await ev(`document.querySelector('.menu.sample [data-act=keepsample]').click()`);
+          await b.until(`!document.querySelector('#steps [data-act="test"]')?.disabled`, 8000).catch(() => {});
+          await b.clickSel('#steps [data-act="test"]');
+          await b.until(`!!document.querySelector('.surescrim [data-act=yes]') || /Tested/.test(document.querySelector('#steps .fnfacts .run')?.innerText ?? '')`, 8000).catch(() => {});
+          await ev(`document.querySelector('.surescrim [data-act=yes]')?.click()`);
+          await b.until(`/Tested/.test(document.querySelector('#steps .fnfacts .run')?.innerText ?? '')`, 10000).catch(() => {});
+          ok(seen.at(-1)?.auth === `Bearer ${KEY}` && /city=Paris/.test(seen.at(-1)?.url ?? ''), 'the test called the API with the key from Secrets', seen.at(-1));
+          await b.clickSel('#steps .autoview .step[data-id="end"] h3');
+          const at = `upstream.${call()?.id}.body.current.temperature_2m`;
+          await b.until(`!!document.querySelector('#wfinspect .pickfield[data-path="${at}"]')`, 8000).catch(() => {});
+          ok(await ev(`!!document.querySelector('#wfinspect .pickfield[data-path="${at}"]')`), 'AC3 (in Chrome): the next step can pick the answer\'s current temperature, from the test', await ev(`[...document.querySelectorAll('#wfinspect .pickfield')].map((x) => x.dataset.path)`));
+        }
+      } finally {
+        weather.close();
+      }
     }
   }
   // a trigger the file does not have is refused, and nothing changes

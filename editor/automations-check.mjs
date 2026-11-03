@@ -6,6 +6,7 @@
  *
  *   node editor/automations-check.mjs    PASS n/n and exit 0, or the failing lines and exit 1
  */
+import { parseCurl, secretNameFor, shellWords } from './automations.mjs';
 import { ALWAYS_WORDS, formulaParts, formulaStart, formulaWords, itemSources, pathWords, readSources, shapeFields, startWords, upstreamOf, addStepAfter, sampleFor, sampleRun, sampleWords, testRefusal, agrees, atTime, canMove, deleteStep, insertBetween, moveStep, nextOntoRoute, stepPorts, newStepId, readAutomations, runLine, scheduleTime, stepsOfRun, stepWires, targetOf, triggerHead, valueForm, workflowLayout } from './automations.mjs';
 
 const results = [];
@@ -209,6 +210,28 @@ ok(valueForm({ $path: 'body.plant' }).from === 'body.plant' && valueForm('Kitche
   ok(formulaWords({ $fn: 'text', args: ['Hi ', { $path: 'body.name' }, '!'] }, F, vw) === 'Hi name!' && formulaWords({ $fn: 'add', args: [1, 2, 3] }, F, vw) === '1, 2 and 3 added together', 'text with values reads as the text; three values as "1, 2 and 3"');
   ok(formulaWords({ $fn: 'round', args: [2.456] }, F, vw) === '2.456 rounded' && formulaWords({ $fn: 'round', args: [2.456, 2] }, F, vw) === '2.456 rounded, to 2 decimal places', 'an optional arg left out takes its clause with it: "2.456 rounded"; given, "…, to 2 decimal places"');
   ok(formulaWords({ $fn: 'date-difference', args: [{ $path: 'body.at' }] }, F, vw) === 'days between at and (no to)'.replace('days', '(no in)') && /does not have/.test(formulaWords({ $fn: 'eval' }, F, vw)), 'a required arg missing is said; a formula the backend lacks is said, not drawn', formulaWords({ $fn: 'date-difference', args: [{ $path: 'body.at' }] }, F, vw));
+}
+
+// P132 BWF-006: Paste a curl command — the form's settings from the line, a key it carries lifted out for Secrets
+{
+  const c1 = parseCurl(`curl -X POST https://api.example.com/v1/messages \\
+  -H 'Authorization: Bearer sk-live-abcdef123456' \\
+  -H 'Content-Type: application/json' \\
+  -d '{"text":"hi","n":2}'`);
+  ok(c1.key?.value === 'sk-live-abcdef123456' && c1.key.how === 'bearer' && JSON.stringify(c1.params) === JSON.stringify({ method: 'POST', url: 'https://api.example.com/v1/messages', body: { text: 'hi', n: 2 }, authType: 'bearer', authSecret: 'EXAMPLE_KEY' }), 'a Bearer header becomes Authentication from a Secret; the JSON body its fields; the content type left to the step', c1);
+  ok(!JSON.stringify(c1.params).includes('sk-live'), 'the key is in no setting');
+  const c2 = parseCurl('curl "https://api.openweathermap.org/data/2.5/weather?q=Paris&appid=abcdef123456"');
+  ok(c2.key?.how === 'query' && c2.params.authName === 'appid' && JSON.stringify(c2.params.query) === '{"q":"Paris"}' && c2.params.authSecret === 'OPENWEATHERMAP_KEY' && !c2.params.method, "a key in the query (appid) is lifted out; the rest of the query stays; the Secret named for the API", c2.params);
+  const c3 = parseCurl('curl -u greenhouse:s3cretpass https://api.stripe.com/v1/charges -d amount=200 -d currency=eur');
+  ok(c3.key?.how === 'basic' && c3.params.authUser === 'greenhouse' && c3.params.bodyType === 'form' && c3.params.body.amount === '200' && c3.params.method === 'POST', '-u user:pass is Basic, the password the key; -d pairs a form body, so POST', c3.params);
+  const c4 = parseCurl('curl -G https://api.example.com/search --data-urlencode "q=red plants" -H "X-API-Key: k-998877"');
+  ok(c4.key?.how === 'header' && c4.params.authName === 'X-API-Key' && c4.params.query.q === 'red plants' && !c4.params.body && !c4.params.method, '-G sends the data as the query; an X-API-Key header is a key, its name kept', c4.params);
+  const c5 = parseCurl('curl https://api.open-meteo.com/v1/forecast?latitude=48.85&longitude=2.35');
+  ok(c5.key === null && !c5.params.authType && c5.params.query.latitude === '48.85', 'a command with no key fills the form and asks for no Secret', c5);
+  let refused = ''; try { parseCurl('wget https://x.example'); } catch (e) { refused = e.message; }
+  ok(/not a curl command/.test(refused), 'a line that is not curl is said so', refused);
+  ok(JSON.stringify(shellWords(`curl -H "A: \\"q\\"" 'b c' d\\ e`)) === JSON.stringify(['curl', '-H', 'A: "q"', 'b c', 'd e']), 'a line split as a shell splits it: quotes and escapes');
+  ok(secretNameFor('http://127.0.0.1:5000/x') === 'API_KEY' && secretNameFor('https://hooks.slack.com/x') === 'SLACK_KEY', 'a Secret named for the API, or API_KEY for an address by number');
 }
 
 const passed = results.filter(Boolean).length;

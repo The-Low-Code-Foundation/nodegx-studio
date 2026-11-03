@@ -489,6 +489,10 @@
   #wfinspect .rundata .ok { color: var(--green); font-size: 12px; padding: 4px 0; }
   #wfinspect .rvctl { display: grid; grid-template-columns: auto 1fr; gap: 4px; }
   #wfinspect .rvctl .rvmode { width: auto; font-size: 11.5px; }
+  /* P132 BWF-006: Call an API — a row's name beside its remove button, a Secret beside Add a secret, the inline forms boxed */
+  #wfinspect .kv .ctl, #wfinspect .field .ctl:has([data-input=secret]) { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px; }
+  #wfinspect .addsecret, #wfinspect .curlbox { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; margin: 4px 0 8px; background: var(--panel-2); }
+  #wfinspect .curlbox textarea { width: 100%; box-sizing: border-box; }
   /* P132 BWF-004: a formula, its sentence in words above its values */
   #wfinspect .field.hasformula { grid-template-columns: 1fr; }
   #wfinspect .formula { display: grid; gap: 4px; padding: 6px 8px; border-left: 3px solid var(--accent, var(--line-2)); background: var(--panel-2); border-radius: 0 6px 6px 0; min-width: 0; }
@@ -1226,7 +1230,7 @@ import { fieldReaders, typeReaders, renameField, renameType, appFields } from '.
 import { LANES, buildTimeline, lastRunOf, msText, shotAt, stepValues } from './timeline.mjs';
 import { runOver, lastActivity, watchSignals, runtimeTimers, runTimers } from './runwatch.mjs';
 import { CLOUD, REQUEST, RESPONSE, functionList, functionLayout, helperKey, requestAsks, responseWords, touchesWords } from './fngraph.mjs';
-import { ALWAYS_WORDS, AUTOMATIONS_FILE, CHANGE_WORDS, SAMPLE_KINDS, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, itemSources, formulaArgAt, formulaArgStart, formulaParts, formulaStart, moveStep, newStepId, nextOntoRoute, pathWords, readAutomations, readSources, runLine, sampleFor, sampleWords, scheduleTime, stepsOfRun, targetOf, triggerHead, stepPorts, upstreamOf, valueForm, workflowLayout } from './automations.mjs';
+import { ALWAYS_WORDS, AUTOMATIONS_FILE, CHANGE_WORDS, SAMPLE_KINDS, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, itemSources, formulaArgAt, formulaArgStart, formulaParts, formulaStart, moveStep, newStepId, nextOntoRoute, parseCurl, pathWords, readAutomations, readSources, runLine, sampleFor, sampleWords, scheduleTime, stepsOfRun, targetOf, triggerHead, stepPorts, upstreamOf, valueForm, workflowLayout } from './automations.mjs';
 import { logicOnPage, placedComponent, studioEdits, wiringLayout, wiringSvg } from './wiring.mjs';
 import { look as canvasLook, nodeScheme, wireColors } from './look.js';
 // STU-084: what Studio draws and edits, as data (the element types, the action menu, the value sources), one file the
@@ -5680,7 +5684,7 @@ let selAutoStep = null;
 const kindSpec = (kind) => beNow()?.kinds.get(kind);
 const callableFns = () => functionList(Object.keys(registry()), fnNodesOf).filter((f) => f.endpoint).map((f) => fnName(f.key));
 const RECORD_KINDS = new Set(['create-record', 'update-record', 'delete-record', 'find-records']);
-const KIND_GLYPH = (kind, spec) => (spec?.invokesFunction ? 'bolt' : RECORD_KINDS.has(kind) ? 'db' : kind === 'branch' || kind === 'switch' ? 'branch' : kind === 'wait' || kind === 'wait-until' ? 'repeat' : 'code');
+const KIND_GLYPH = (kind, spec) => (spec?.invokesFunction || kind === 'http-request' ? 'bolt' : RECORD_KINDS.has(kind) ? 'db' : kind === 'branch' || kind === 'switch' ? 'branch' : kind === 'wait' || kind === 'wait-until' ? 'repeat' : 'code');
 const editingUp = () => { const be = beNow(); return !!be && !be.words && be.kinds.size > 0; };
 /** The kind's own routes (the catalog's, a switch's case labels): its ports, named, even with nothing on them yet. */
 const routeNamesOf = (step) => { const spec = kindSpec(step.kind); return spec?.routes?.length ? [...spec.routes.filter((r) => !r.dynamic).map((r) => r.name), ...(step.kind === 'switch' ? (step.params?.cases ?? []).map((c) => c.label).filter(Boolean) : [])] : []; };
@@ -5717,7 +5721,8 @@ function newAutoStep(w, kind) {
   for (const p of spec?.params ?? []) if (p.required && p.name !== 'ref' && p.default !== undefined) params[p.name] = structuredClone(p.default);
   // what a kind cannot be stored without, in its simplest working form; changed in the panel
   const first = { branch: { condition: { left: { $path: 'previous.result' }, op: 'truthy' } }, switch: { value: { $path: 'previous.result' }, cases: [{ label: 'first', equals: '' }] }, transform: { output: { result: { $path: 'previous.result' } } },
-    validate: { rules: [{ path: 'body.id', message: 'It arrived without an id.' }] }, filter: { condition: { left: { $path: 'item' }, op: 'truthy' } }, wait: { duration: 1, unit: 'minutes' }, 'wait-until': { target: { $path: 'body.at' } }, split: { size: 10 } }[kind];
+    validate: { rules: [{ path: 'body.id', message: 'It arrived without an id.' }] }, filter: { condition: { left: { $path: 'item' }, op: 'truthy' } }, wait: { duration: 1, unit: 'minutes' }, 'wait-until': { target: { $path: 'body.at' } }, split: { size: 10 },
+    'http-request': { url: 'https://api.example.com/' } }[kind]; // BWF-006: example.com is reserved for examples, so it calls nobody's API
   Object.assign(params, first);
   // P132 BWF-005: a record step starts on the table the workflow starts from (else the app's first), the row that started it
   if (RECORD_KINDS.has(kind)) {
@@ -5998,6 +6003,83 @@ function recordCondsField(label, value, set, table, allowed, w) {
   wrap.append(h('button', { 'data-act': 'addcond', onclick: () => set([...rows, { field: cols[0] ?? 'objectId', op: 'eq', value: '' }]) }, icon('plus'), 'Add a condition'));
   return wrap;
 }
+/* ---- P132 BWF-006: Call an API's settings. Rows of name and value (query, headers, a body's fields), the key chosen
+   from Secrets by its name (its value is written to the backend once and never read back: the listing has names only),
+   and *Paste a curl command*, which fills the form and sends a key the command carries to Secrets, not the file. ---- */
+let secretNames = null; // the backend's Secrets, by name: asked when a step that names one opens, never on every visit
+function loadSecretNames() {
+  return api('/admin/secrets').then((j) => {
+    secretNames = [...new Set([...(j.secrets ?? []).map((x) => x.name), ...(j.projectEnvFile ?? [])])].sort();
+    if (selAuto?.kind === 'workflow') renderWorkflow();
+  }).catch(() => { secretNames = []; });
+}
+const saveSecret = (name, value) => api(`/admin/secrets/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify({ value }) });
+function keyValuesField(label, value, set, w, description) {
+  if (value !== undefined && (typeof value !== 'object' || value === null || Array.isArray(value) || valueForm(value).from !== undefined || '$fn' in value)) return jsonField(label, value, set, description);
+  const now = value ?? {}, names = Object.keys(now);
+  const rename = (from, to) => { to = to.trim(); if (!to || to === from || to in now) return; set(Object.fromEntries(Object.entries(now).map(([k, v]) => [k === from ? to : k, v]))); };
+  const wrap = h('div', { class: 'condwords kv', 'data-kv': label, title: description }, h('div', { class: 'sechead' }, label));
+  for (const name of names) {
+    wrap.append(h('div', { class: 'field', 'data-kvrow': name }, h('label', {}, ''), h('div', { class: 'ctl' },
+      h('input', { type: 'text', value: name, 'aria-label': `${label}: name`, onchange: (e) => rename(name, e.target.value) }),
+      h('button', { class: 'quiet', title: 'Remove this row', onclick: () => { const next = { ...now }; delete next[name]; set(Object.keys(next).length ? next : undefined); } }, icon('trash')))));
+    wrap.append(runValueField('', now[name], (v) => set({ ...now, [name]: v ?? '' }), { w }));
+  }
+  const add = async (e) => { const name = await askName(e, `${label}: the new row's name`, { go: 'Add' }); if (name && !(name in now)) set({ ...now, [name]: '' }); };
+  wrap.append(h('button', { 'data-act': 'addkv', onclick: add }, icon('plus'), 'Add a row'));
+  return wrap;
+}
+function secretField(label, value, set, description) {
+  if (secretNames === null) { secretNames = []; loadSecretNames(); }
+  const names = [...secretNames]; if (typeof value === 'string' && value && !names.includes(value)) names.unshift(value);
+  const missing = typeof value === 'string' && value && !secretNames.includes(value);
+  const f = h('div', { class: 'field', title: description }, h('label', {}, label), h('div', { class: 'ctl' },
+    h('select', { 'aria-label': 'Which Secret', 'data-input': 'secret', onchange: (e) => set(e.target.value || undefined) },
+      !value ? h('option', { value: '' }, 'Choose a Secret') : null, ...names.map((n) => h('option', { value: n, selected: n === value }, n))),
+    h('button', { 'data-act': 'addsecret', onclick: () => addSecretForm(f, set) }, icon('plus'), 'Add a secret')));
+  return missing ? h('div', {}, f, h('div', { class: 'warn' }, `There is no Secret called ${value} on this backend yet: add it, or the step fails when it runs.`)) : f;
+}
+/** *Add a secret*: a name and a value in Studio's own fields (Electron has no prompt()), the value written once and cleared. */
+function addSecretForm(after, set, { name = '', value = '', then = null } = {}) {
+  after.parentElement?.querySelector('.addsecret')?.remove();
+  const nameIn = h('input', { type: 'text', value: name, 'data-input': 'secretname', placeholder: 'WEATHER_KEY', 'aria-label': 'The Secret\'s name' });
+  const valIn = h('input', { type: 'password', value, 'data-input': 'secretvalue', autocomplete: 'off', placeholder: 'Paste the key', 'aria-label': 'The key' });
+  const box = h('div', { class: 'addsecret' },
+    h('div', { class: 'hint' }, 'The key is kept by the backend, never in the project or the workflow, and is not shown again.'),
+    h('div', { class: 'field' }, h('label', {}, 'Name'), nameIn), h('div', { class: 'field' }, h('label', {}, 'Key'), valIn),
+    h('div', { class: 'after' }, h('button', { class: 'quiet', onclick: () => box.remove() }, 'Cancel'),
+      h('button', { class: 'primary', 'data-act': 'savesecret', onclick: async () => {
+        const n = nameIn.value.trim(), v = valIn.value;
+        if (!/^[A-Za-z0-9_.-]{1,128}$/.test(n)) return toast('A Secret\'s name is letters, digits, _ . or -');
+        if (!v) return toast('Paste the key first');
+        try { await saveSecret(n, v); valIn.value = ''; box.remove(); secretNames = [...new Set([...(secretNames ?? []), n])].sort(); toast(`${n} saved in Secrets`); then ? then(n) : set(n); }
+        catch (err) { toast(`Not saved: ${err.message}`); }
+      } }, 'Save the key')));
+  after.after(box); (name ? valIn : nameIn).focus();
+  return box;
+}
+/** *Paste a curl command*: the form filled from it; a key it carries goes to Secrets first, then the step names it. */
+function curlForm(after, step, change) {
+  after.parentElement?.querySelector('.curlbox')?.remove();
+  const ta = h('textarea', { rows: 4, spellcheck: false, class: 'json', 'data-input': 'curl', placeholder: "curl -H 'Authorization: Bearer …' https://api.example.com/v1/…" });
+  const box = h('div', { class: 'curlbox' }, h('div', { class: 'hint' }, 'Paste the curl line from the API\'s docs. It fills the settings below; a key in it is kept in Secrets, not in the workflow.'), ta);
+  const fill = (params) => change((s) => { s.params = params; }, `Filled from the curl command${BOTH}`);
+  box.append(h('div', { class: 'after' }, h('button', { class: 'quiet', onclick: () => box.remove() }, 'Cancel'), h('button', { class: 'primary', 'data-act': 'fillcurl', onclick: () => {
+    let got; try { got = parseCurl(ta.value); } catch (err) { return toast(err.message); }
+    for (const n of got.notes) toast(n);
+    ta.value = '';
+    if (!got.key) { box.remove(); return fill(got.params); }
+    const { value, name } = got.key;
+    box.replaceChildren(h('div', { class: 'warn' }, 'The command carries a key. Name it to keep it in Secrets; the step will send it from there.'));
+    addSecretForm(box.lastChild, null, { name, value, then: (n) => { box.remove(); fill({ ...got.params, authSecret: n }); } });
+  } }, 'Fill the form')));
+  after.after(box); ta.focus();
+}
+/** Which of Call an API's settings to show, by what the others say: no body on a GET, the key's fields by its kind. */
+const HTTP_SHOWN = {
+  body: (p) => !['GET', 'HEAD'].includes(p.method ?? 'GET'), bodyType: (p) => !['GET', 'HEAD'].includes(p.method ?? 'GET'),
+  authSecret: (p) => (p.authType ?? 'none') !== 'none', authName: (p) => p.authType === 'header' || p.authType === 'query', authUser: (p) => p.authType === 'basic'
+};
 /** A param the catalog gives no display name, in words: maxAttempts → "Max attempts". */
 const paramWords = (name) => { const w = name.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]/g, ' ').toLowerCase(); return w.charAt(0).toUpperCase() + w.slice(1).replace(/\bms\b/, '(ms)'); };
 const prettyJson = (v) => { const t = JSON.stringify(v, null, 2); return t === undefined ? '(nothing)' : t; };
@@ -6043,11 +6125,19 @@ function autoStepPanel(panel, w, step) {
     const params = step.params ?? {}, own = spec?.params ?? [];
     const more = h('details', { class: 'more' }, h('summary', {}, ''));
     let moreN = 0;
+    if (step.kind === 'http-request') { const at = h('div', { class: 'after' }, h('button', { 'data-act': 'pastecurl', onclick: () => curlForm(at, step, change) }, 'Paste a curl command')); wrap.append(at); }
+    const sections = new Map(); // a group other than the retry knobs is a section of its own (Authentication), not tucked away
     for (const p of own) {
       if (p.name === 'ref') continue;
-      const label = p.displayName || paramWords(p.name), v = params[p.name], into = p.group ? more : wrap;
-      if (p.group) moreN++;
-      if (p.control === 'table') into.append(tableField(label, v, (t) => { setParam(p.name)(t); loadAutoTables(w.id, [t]); }, p.description));
+      if (step.kind === 'http-request' && HTTP_SHOWN[p.name] && !HTTP_SHOWN[p.name](params)) continue;
+      const label = p.displayName || paramWords(p.name), v = params[p.name];
+      const tucked = p.group && /retry/i.test(p.group);
+      if (p.group && !tucked && !sections.has(p.group)) { const sec = h('div', { class: 'paramsec', 'data-group': p.group }, h('div', { class: 'sechead' }, p.group)); sections.set(p.group, sec); wrap.append(sec); }
+      const into = !p.group ? wrap : tucked ? more : sections.get(p.group);
+      if (tucked) moreN++;
+      if (p.control === 'secret') into.append(secretField(label, v, setParam(p.name), p.description));
+      else if (p.control === 'key-values') into.append(keyValuesField(label, v, setParam(p.name), w, p.description));
+      else if (p.control === 'table') into.append(tableField(label, v, (t) => { setParam(p.name)(t); loadAutoTables(w.id, [t]); }, p.description));
       else if (p.control === 'record-fields') into.append(recordFieldsField(label, v, setParam(p.name), params.table, w));
       else if (p.control === 'record-conditions') into.append(recordCondsField(label, v, setParam(p.name), params.table, p.enums, w));
       else if (p.type === 'condition') into.append(condField(label, v, setParam(p.name), w, own.some((x) => x.name === 'itemKey')));
