@@ -6,7 +6,7 @@
  *
  *   node editor/automations-check.mjs    PASS n/n and exit 0, or the failing lines and exit 1
  */
-import { parseCurl, secretNameFor, shellWords } from './automations.mjs';
+import { parseCurl, secretNameFor, shellWords, testMailWords } from './automations.mjs';
 import { ALWAYS_WORDS, formulaParts, formulaStart, formulaWords, itemSources, pathWords, readSources, shapeFields, startWords, upstreamOf, addStepAfter, sampleFor, sampleRun, sampleWords, testRefusal, agrees, atTime, canMove, deleteStep, insertBetween, moveStep, nextOntoRoute, stepPorts, newStepId, readAutomations, runLine, scheduleTime, stepsOfRun, stepWires, targetOf, triggerHead, valueForm, workflowLayout } from './automations.mjs';
 
 const results = [];
@@ -232,6 +232,20 @@ ok(valueForm({ $path: 'body.plant' }).from === 'body.plant' && valueForm('Kitche
   ok(/not a curl command/.test(refused), 'a line that is not curl is said so', refused);
   ok(JSON.stringify(shellWords(`curl -H "A: \\"q\\"" 'b c' d\\ e`)) === JSON.stringify(['curl', '-H', 'A: "q"', 'b c', 'd e']), 'a line split as a shell splits it: quotes and escapes');
   ok(secretNameFor('http://127.0.0.1:5000/x') === 'API_KEY' && secretNameFor('https://hooks.slack.com/x') === 'SLACK_KEY', 'a Secret named for the API, or API_KEY for an address by number');
+}
+
+// P132 BWF-007: a test that sends an email says who to, before it runs; only the steps the test runs count
+{
+  const wf = { id: 'morning', steps: [
+    { id: 'find', kind: 'find-records', params: { table: 'Plant' }, next: ['tell', 'keepers'] },
+    { id: 'tell', kind: 'send-email', params: { to: 'gardener@example.com; helper@example.com', subject: 'Water' } },
+    { id: 'keepers', kind: 'send-email', params: { to: { $path: 'body.email' }, subject: 'Yours' } },
+    { id: 'later', kind: 'send-email', params: { to: { $fn: 'pick', args: [{ $path: 'upstream.find.items' }, 'keeper'] }, subject: 'Later' } }
+  ] };
+  const words = (p) => `the ${p.split('.').pop()} it started with`;
+  ok(testMailWords(wf, null, words) === 'gardener@example.com, helper@example.com, the email it started with and the addresses its formula gives', 'the whole test: every address, a picked value in words, a formula said as one', testMailWords(wf, null, words));
+  ok(testMailWords(wf, 'tell', words) === 'gardener@example.com and helper@example.com', 'tested up to one step: only that step and the ones before it', testMailWords(wf, 'tell', words));
+  ok(testMailWords(wf, 'find', words) === null, 'a test that reaches no email step says nothing about email');
 }
 
 const passed = results.filter(Boolean).length;

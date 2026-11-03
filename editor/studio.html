@@ -1230,7 +1230,7 @@ import { fieldReaders, typeReaders, renameField, renameType, appFields } from '.
 import { LANES, buildTimeline, lastRunOf, msText, shotAt, stepValues } from './timeline.mjs';
 import { runOver, lastActivity, watchSignals, runtimeTimers, runTimers } from './runwatch.mjs';
 import { CLOUD, REQUEST, RESPONSE, functionList, functionLayout, helperKey, requestAsks, responseWords, touchesWords } from './fngraph.mjs';
-import { ALWAYS_WORDS, AUTOMATIONS_FILE, CHANGE_WORDS, SAMPLE_KINDS, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, itemSources, formulaArgAt, formulaArgStart, formulaParts, formulaStart, moveStep, newStepId, nextOntoRoute, parseCurl, pathWords, readAutomations, readSources, runLine, sampleFor, sampleWords, scheduleTime, stepsOfRun, targetOf, triggerHead, stepPorts, upstreamOf, valueForm, workflowLayout } from './automations.mjs';
+import { ALWAYS_WORDS, AUTOMATIONS_FILE, CHANGE_WORDS, SAMPLE_KINDS, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, itemSources, formulaArgAt, formulaArgStart, formulaParts, formulaStart, moveStep, newStepId, nextOntoRoute, parseCurl, pathWords, readAutomations, readSources, runLine, sampleFor, sampleWords, scheduleTime, stepsOfRun, targetOf, testMailWords, triggerHead, stepPorts, upstreamOf, valueForm, workflowLayout } from './automations.mjs';
 import { logicOnPage, placedComponent, studioEdits, wiringLayout, wiringSvg } from './wiring.mjs';
 import { look as canvasLook, nodeScheme, wireColors } from './look.js';
 // STU-084: what Studio draws and edits, as data (the element types, the action menu, the value sources), one file the
@@ -5447,9 +5447,15 @@ async function keepSample(w, change) {
 }
 async function testAuto(w, stopAfter = null) {
   if (!sampleOf(w)) return toast('Choose a sample first: what the test starts with.');
-  if (!autoSamples.warned.includes(w.id)) {
-    if (!(await askSure('This runs on your development backend: rows it makes are real.', { yes: 'Run the test', danger: false }))) return;
-    if (!(await keepSample(w, { warned: true }))) return;
+  // P132 BWF-007: a Send an email step in the test sends for real, so the first such test says who it writes to (asked
+  // again when that changes); said with the first warning when both are new, in one question
+  const mailTo = testMailWords(w, stopAfter, (p) => { const x = pathPill(p, w, false); return `the ${x.name} from ${x.from}`; });
+  const mailKey = mailTo ? `${w.id}#mail:${mailTo}` : null, newMail = mailKey && !autoSamples.warned.includes(mailKey);
+  if (!autoSamples.warned.includes(w.id) || newMail) {
+    const said = [!autoSamples.warned.includes(w.id) ? 'This runs on your development backend: rows it makes are real.' : null, newMail ? `It sends a real email to ${mailTo}.` : null].filter(Boolean).join(' ');
+    if (!(await askSure(said, { yes: newMail ? 'Send it and run the test' : 'Run the test', danger: false }))) return;
+    if (!autoSamples.warned.includes(w.id) && !(await keepSample(w, { warned: true }))) return;
+    if (newMail && !(await keepSample({ id: mailKey }, { warned: true }))) return;
   }
   const label = $('steps').querySelector('.autoview .fnfacts .run'); if (label) { label.textContent = '● Testing…'; label.className = 'run'; }
   const r = await fetch('/api/automations/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: w.id, ...(stopAfter ? { stopAfter } : {}) }) });
@@ -5684,7 +5690,7 @@ let selAutoStep = null;
 const kindSpec = (kind) => beNow()?.kinds.get(kind);
 const callableFns = () => functionList(Object.keys(registry()), fnNodesOf).filter((f) => f.endpoint).map((f) => fnName(f.key));
 const RECORD_KINDS = new Set(['create-record', 'update-record', 'delete-record', 'find-records']);
-const KIND_GLYPH = (kind, spec) => (spec?.invokesFunction || kind === 'http-request' ? 'bolt' : RECORD_KINDS.has(kind) ? 'db' : kind === 'branch' || kind === 'switch' ? 'branch' : kind === 'wait' || kind === 'wait-until' ? 'repeat' : 'code');
+const KIND_GLYPH = (kind, spec) => (spec?.invokesFunction || kind === 'http-request' || kind === 'send-email' ? 'bolt' : RECORD_KINDS.has(kind) ? 'db' : kind === 'branch' || kind === 'switch' ? 'branch' : kind === 'wait' || kind === 'wait-until' ? 'repeat' : 'code');
 const editingUp = () => { const be = beNow(); return !!be && !be.words && be.kinds.size > 0; };
 /** The kind's own routes (the catalog's, a switch's case labels): its ports, named, even with nothing on them yet. */
 const routeNamesOf = (step) => { const spec = kindSpec(step.kind); return spec?.routes?.length ? [...spec.routes.filter((r) => !r.dynamic).map((r) => r.name), ...(step.kind === 'switch' ? (step.params?.cases ?? []).map((c) => c.label).filter(Boolean) : [])] : []; };
@@ -5722,7 +5728,7 @@ function newAutoStep(w, kind) {
   // what a kind cannot be stored without, in its simplest working form; changed in the panel
   const first = { branch: { condition: { left: { $path: 'previous.result' }, op: 'truthy' } }, switch: { value: { $path: 'previous.result' }, cases: [{ label: 'first', equals: '' }] }, transform: { output: { result: { $path: 'previous.result' } } },
     validate: { rules: [{ path: 'body.id', message: 'It arrived without an id.' }] }, filter: { condition: { left: { $path: 'item' }, op: 'truthy' } }, wait: { duration: 1, unit: 'minutes' }, 'wait-until': { target: { $path: 'body.at' } }, split: { size: 10 },
-    'http-request': { url: 'https://api.example.com/' } }[kind]; // BWF-006: example.com is reserved for examples, so it calls nobody's API
+    'http-request': { url: 'https://api.example.com/' }, 'send-email': { to: 'someone@example.com', subject: 'From your app' } }[kind]; // BWF-006/007: example.com is reserved for examples, so it calls and mails nobody
   Object.assign(params, first);
   // P132 BWF-005: a record step starts on the table the workflow starts from (else the app's first), the row that started it
   if (RECORD_KINDS.has(kind)) {
@@ -5767,7 +5773,7 @@ function autoStepMenu(e, w, afterId, where, toId = null) {
 /** A value a step is given: typed, or read from the run (`{ $path }`), picked from what came before (P132 BWF-003): a
     field dragged onto it from *What it can read*, or chosen from the menu *From the run* opens; shown as a pill in words.
     `item`: the step goes through a list, and this setting is read once per item (a filter's condition). */
-function runValueField(label, value, set, { type = 'any', enums = null, w = null, description = '', item = false } = {}) {
+function runValueField(label, value, set, { type = 'any', enums = null, w = null, description = '', item = false, multiline = false } = {}) {
   const form = valueForm(value);
   const f = h('div', { class: 'field runvalue', title: description,
     ondragover: (e) => { if (!e.dataTransfer.types.includes(PATH_MIME)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; f.classList.add('dropping'); },
@@ -5795,6 +5801,7 @@ function runValueField(label, value, set, { type = 'any', enums = null, w = null
   }
   else if (type === 'boolean') box = h('input', { type: 'checkbox', style: 'width:auto;justify-self:start', checked: !!form.typed, onchange: (e) => set(e.target.checked) });
   else if (type === 'enum' && enums) box = h('select', { onchange: (e) => set(e.target.value === '' ? undefined : e.target.value) }, h('option', { value: '' }, '(default)'), ...enums.map((o) => h('option', { value: o, selected: form.typed === o }, o)));
+  else if (multiline) { box = h('textarea', { rows: 5, 'data-input': 'longtext', onchange: (e) => set(e.target.value === '' ? undefined : e.target.value) }); box.value = form.typed == null ? '' : String(form.typed); } // BWF-007: an email's words
   else box = h('input', { type: type === 'number' ? 'number' : 'text', value: form.typed == null ? '' : typeof form.typed === 'object' ? JSON.stringify(form.typed) : String(form.typed), onchange: (e) => {
     const t = e.target.value;
     if (t === '') return set(undefined);
@@ -6142,7 +6149,7 @@ function autoStepPanel(panel, w, step) {
       else if (p.control === 'record-conditions') into.append(recordCondsField(label, v, setParam(p.name), params.table, p.enums, w));
       else if (p.type === 'condition') into.append(condField(label, v, setParam(p.name), w, own.some((x) => x.name === 'itemKey')));
       else if (p.raw || p.type === 'object' || p.type === 'array') into.append(jsonField(label, v, setParam(p.name), p.description));
-      else into.append(runValueField(label, v, setParam(p.name), { type: p.type, enums: p.enums, w, description: `${p.description}${p.default !== undefined ? ` (when left empty: ${JSON.stringify(p.default)})` : ''}` }));
+      else into.append(runValueField(label, v, setParam(p.name), { type: p.type, enums: p.enums, w, multiline: p.control === 'long-text', description: `${p.description}${p.default !== undefined ? ` (when left empty: ${JSON.stringify(p.default)})` : ''}` }));
     }
     // a function step's own names: what it sends the function (the function's asks first, then any other name it was given)
     if (step.kind === 'call-function') {

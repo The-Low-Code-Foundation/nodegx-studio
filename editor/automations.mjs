@@ -356,6 +356,29 @@ export function testRefusal({ env, dev, live, name } = {}) {
   return null;
 }
 
+/**
+ * P132 BWF-007: who a test is about to email, in words, or null when it sends none. A test is a real run, so a *Send an
+ * email* step in it sends. Only the steps the test runs count: with `stopAfter`, that step and the steps before it.
+ * `valueWords(path)`: a value picked from the run, in words (the panel's pill words); a formula's addresses are not
+ * known until it runs, and say so.
+ */
+export function testMailWords(wf, stopAfter = null, valueWords = (p) => p) {
+  const runs = stopAfter ? new Set([stopAfter, ...upstreamOf(wf, stopAfter).map((s) => s.id)]) : null;
+  const who = [];
+  for (const s of wf?.steps ?? []) {
+    if (s.kind !== 'send-email' || (runs && !runs.has(s.id))) continue;
+    const to = s.params?.to, one = (v) => {
+      if (typeof v === 'string') for (const a of v.split(/[,;\n]/)) { if (a.trim()) who.push(a.trim()); }
+      else if (v && typeof v === 'object' && typeof v.$path === 'string') who.push(valueWords(v.$path));
+      else if (v && typeof v === 'object' && '$fn' in v) who.push('the addresses its formula gives');
+    };
+    if (Array.isArray(to)) to.forEach(one); else one(to);
+  }
+  const all = [...new Set(who)];
+  if (!all.length) return null;
+  return all.length === 1 ? all[0] : `${all.slice(0, -1).join(', ')} and ${all.at(-1)}`;
+}
+
 /* ---- P132 BWF-003: a value picked from what came before. A step reads what started it (`body`), how (`trigger`), and
    `upstream.<id>` of every step with a path to it over next, routes and onError: the backend's own rule (nodegx-backend
    WorkflowEngine `ancestorsOf`, the NodeGX editor's workflowScope.ts), so a value picked here is one a write accepts.
