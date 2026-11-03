@@ -521,7 +521,10 @@ try {
     // P132-FILTERNOCONDITION, and AC4 in Chrome: a Filter added from the menu is taken; its condition reads the item first
     await b.clickSel('#steps .autoview .step[data-id="second"] h3');
     await b.until(`!!document.querySelector('#wfinspect [data-act=addafter]')`, 5000).catch(() => {});
-    await ev(`document.querySelector('#wfinspect [data-act=addafter]').click()`); await wait(300);
+    // pressed low in the window, as under a tested step's panel: P132-STEPMENUOFFSCREEN, the menu's last kinds sat below it
+    await ev(`document.querySelector('#wfinspect [data-act=addafter]').dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 1300, clientY: innerHeight - 60 }))`); await wait(300);
+    const fit = await ev(`(() => { const r = document.querySelector('.menu.actions')?.getBoundingClientRect(); return r && { top: Math.round(r.top), bottom: Math.round(r.bottom), window: innerHeight }; })()`);
+    ok(fit && fit.bottom <= fit.window && fit.top >= 0, 'P132-STEPMENUOFFSCREEN: the step menu, opened near the bottom of the window, fits inside it', fit);
     await ev(`document.querySelector('.menu .item[data-kind="filter"]').click()`);
     for (let i = 0; i < 40 && !pickedWf()?.steps.some((x) => x.kind === 'filter'); i++) await wait(150);
     const filt = pickedWf()?.steps.find((x) => x.kind === 'filter');

@@ -4082,7 +4082,12 @@ function sourceMenu(e, node, p, onPick, initial = '') {
 }
 function popover(e, cls = '') {
   const x = Math.min(e.clientX, innerWidth - 440), y = Math.min(e.clientY + 8, innerHeight - 300);
-  return h('div', { class: `menu ${cls}`, style: `left:${Math.max(8, x)}px;top:${Math.max(8, y)}px` });
+  const menu = h('div', { class: `menu ${cls}`, style: `left:${Math.max(8, x)}px;top:${Math.max(8, y)}px` });
+  // P132-STEPMENUOFFSCREEN: `top` above assumes a menu 300 px tall; the step menu is up to 560, so opened low (Add a step
+  // after, under a tested step's panel) its last kinds sat below the window, out of reach. Once drawn, it is moved up.
+  // A microtask, not a frame: the caller fills and appends it in this same task, and a hidden window runs no frames.
+  queueMicrotask(() => { if (!menu.isConnected) return; const r = menu.getBoundingClientRect(); if (r.bottom > innerHeight - 8) menu.style.top = `${Math.max(8, innerHeight - 8 - r.height)}px`; });
+  return menu;
 }
 /** A menu closes on a click outside it; a listener left by a menu already gone does nothing (it used to close whatever opened after it). */
 function dismissOnOutside(menu) { setTimeout(() => document.addEventListener('mousedown', function outside(ev) { if (!menu.isConnected) return; if (!menu.contains(ev.target)) closeMenu(); else document.addEventListener('mousedown', outside, { once: true }); }, { once: true }), 0); }
