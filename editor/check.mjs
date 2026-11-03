@@ -1368,8 +1368,55 @@ try {
     const pickRow = await b.evaluate(`[...document.querySelectorAll('#events .row')].find(r => r.dataset.port === 'pickList')?.textContent || ''`);
     ok(pickPort && !pickPort.displayName && /Pick list/.test(pickRow) && !/pickList/.test(pickRow), 'a component\'s port with no words of its own reads spelled out ("Pick list"), not as its name', pickRow);
     await shot('workflow-index');
+    // P123-STU-NAVNOTFOLLOWED (Richard, Watering Can): the app opens a page by itself long after it was built (Use the app's
+    // "+ Add a plant"), and Design and Workflow follow it. Opened from inside the app, as its Go to page does.
+    {
+      await wait(3500); // past followSoon's 3 s after the build
+      const evNodes = async () => JSON.parse(await b.evaluate(`JSON.stringify([...document.querySelectorAll('#events .row')].map(r => r.dataset.node))`));
+      const before = { page: await page(), rows: (await evNodes()).length };
+      await b.evaluate(`__ob.preview.frame.contentWindow.Noodl.Navigation.navigate('Main', '/Pages/Sign in')`);
+      const followed = await b.until(`document.getElementById('pagepick').value === 'Pages/Sign in'`, 4000);
+      await wait(400);
+      const signIds = new Set(onDisk(SIGN + 'nodes.json').nodes.map((n) => n.id)), after = await evNodes();
+      ok(before.page === TODO && followed && (await appText()).includes('Create account') && after.length > 0 && after.every((id) => signIds.has(id)),
+        'P123-STU-NAVNOTFOLLOWED: a page the app opens by itself, seconds after it was built, is the page Studio shows: Workflow lists Sign in\'s events, none of Todo\'s',
+        { before, followed, after: after.length, foreign: after.filter((id) => !signIds.has(id)).slice(0, 3) });
+    }
     outsideWrite(keptWires);
     await b.until(`__ob.store.readComponent(${JSON.stringify(TODO)}).files.connections.connections.length === ${JSON.parse(keptWires).connections.length}`, 5000).catch(() => {}); await wait(600);
+    n0 = await shows();
+    await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Pages/Sign in'; s.dispatchEvent(new Event('change')); })()`);
+    await rebuilt(n0).catch(() => {}); await wait(600);
+  }
+  console.log('check: a type\'s default style (P123-STU-UNNAMEDSTYLE)');
+  {
+    // Richard, Watering Can: Mistral's three styles had no name, so Studio drew them blank. A variant with no name is its type's
+    // default: every Text Input that names no style wears it. Written from outside, as the agent wrote it; put back after.
+    const stylesPath = join(project, 'nodegx.styles.json'), keptStyles = existsSync(stylesPath) ? readFileSync(stylesPath, 'utf8') : null;
+    const st = keptStyles ? JSON.parse(keptStyles) : { version: 2 };
+    st.variants = [...(st.variants || []), { typename: 'net.noodl.controls.textinput', parameters: { borderRadius: { value: 7, unit: 'px' } } }];
+    const out0 = await b.evaluate('__ob.outside || 0');
+    writeFileSync(stylesPath + '.tmp-check', JSON.stringify(st, null, 2)); renameSync(stylesPath + '.tmp-check', stylesPath);
+    await b.until(`(__ob.outside || 0) > ${out0}`, 8000); await wait(800);
+    const plain = Object.keys(onDisk('components/_registry.json').components).flatMap((k) => { try { return onDisk(`components/${k}/nodes.json`).nodes; } catch { return []; } }).filter((n) => n.type === 'net.noodl.controls.textinput' && n.variant === undefined).length;
+    await b.clickSel('[data-tab=styles]'); await wait(300);
+    const listed = await b.evaluate(`[...document.querySelectorAll('#stylelist .row')].map(r => r.textContent)`);
+    await b.evaluate(`[...document.querySelectorAll('#stylelist .row')].find(r => r.textContent.startsWith('Default Text Input'))?.click()`); await wait(400);
+    const shown = await b.evaluate(`({ h2: document.querySelector('#stylemain h2')?.textContent, note: !!document.querySelector('#stylemain [data-default-style]'), name: document.querySelector('#styleprops .head input')?.value, fixed: document.querySelector('#styleprops .head input')?.readOnly, wearers: document.querySelector('#stylemain .card h4')?.textContent })`);
+    ok(listed.some((t) => t.startsWith('Default Text Input')) && shown.h2 === 'Default Text Input' && shown.note && shown.name === 'Default Text Input' && shown.fixed && plain > 0 && shown.wearers?.endsWith(`· ${plain}`),
+      'P123-STU-UNNAMEDSTYLE: a style with no name is listed and headed as its type\'s default ("Default Text Input"), says every Text Input wears it, keeps its name fixed, and counts every Text Input that names no style as wearing it', { listed, ...shown, plain });
+    // Design: an Email box (it names no style) offers the default as its first choice, not a blank one
+    await b.clickSel('[data-tab=design]'); await wait(300);
+    let n0 = await shows();
+    await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Reusable/Sign-in card'; s.dispatchEvent(new Event('change')); })()`);
+    await rebuilt(n0).catch(() => {}); await wait(600);
+    const emailBox = onDisk('components/Reusable/Sign-in card/nodes.json').nodes.find((n) => n.label === 'Email' && n.type === 'net.noodl.controls.textinput');
+    await select(emailBox.id);
+    const choices = await b.evaluate(`(() => { const s = [...document.querySelectorAll('#right select')].find(s => /Default Text Input|no style/.test(s.options[0]?.textContent || '')); return s ? [...s.options].map(o => o.textContent) : null; })()`);
+    ok(!emailBox.variant && choices?.[0] === '(Default Text Input)' && choices.every((t) => t.trim()), 'P123-STU-UNNAMEDSTYLE: an element wearing its type\'s default shows "(Default Text Input)" as its style, and no choice is blank', { choices });
+    const out1 = await b.evaluate('__ob.outside || 0');
+    if (keptStyles !== null) { writeFileSync(stylesPath + '.tmp-check', keptStyles); renameSync(stylesPath + '.tmp-check', stylesPath); } else rmSync(stylesPath);
+    await b.until(`(__ob.outside || 0) > ${out1}`, 8000); await wait(600);
     n0 = await shows();
     await b.evaluate(`(() => { const s = document.getElementById('pagepick'); s.value = 'Pages/Sign in'; s.dispatchEvent(new Event('change')); })()`);
     await rebuilt(n0).catch(() => {}); await wait(600);
