@@ -496,7 +496,7 @@ export function itemSources(wf, step, sources) {
 /** A value read from the run in words, for its pill: `{ name, from }`, "plant · from the Watering that was made". */
 export function pathWords(path, wf, starts = [], { item = 'item', index = 'index', kindName = (k) => k } = {}) {
   const [root, ...rest] = String(path).split('.');
-  const seg = (xs, whole = 'all of it') => (xs.length ? xs.map((x) => (/^\d+$/.test(x) ? `#${Number(x) + 1}` : x)).join(' › ') : whole);
+  const seg = (xs, whole = 'all of it') => (xs.length ? xs.map((x) => (x === '-1' ? 'the last' : /^\d+$/.test(x) ? `#${Number(x) + 1}` : x)).join(' › ') : whole); // BWF-011: -1 is the last one
   if (root === 'body') return { name: seg(rest), from: startWords(starts) };
   if (root === 'trigger') return { name: seg(rest), from: 'how it started' };
   if (root === 'previous') return { name: seg(rest), from: 'the step before' };
@@ -686,4 +686,97 @@ export function parseCurl(text) {
   if (timeoutMs) params.timeoutMs = timeoutMs;
   if (key) { params.authType = key.how; params.authSecret = key.name; }
   return { params, key, notes };
+}
+
+/* ---- P132 BWF-011 (R8): a value composed in a setting. Words and values together, as n8n's expressions and Studio's
+   front-end composer have them, built from the backend's formulas underneath (R2: never JavaScript). A setting's value
+   is a list of parts: words (strings) and values ("chips": a `{ $path }`, or one of the few formulas a chip is refined
+   into: first / last / how many / each one's field / joined). One chip alone is saved as itself, words alone as the
+   typed value, both as `{ $fn: 'text', args: parts }`. ---- */
+const CHIP_FNS = new Set(['count', 'pick', 'join']);
+const isPath = (v) => !!v && typeof v === 'object' && !Array.isArray(v) && typeof v.$path === 'string' && Object.keys(v).length === 1;
+/** A value a chip can stand for: a path, or how many / each one's field / joined, over a chip. */
+export function isChip(v) {
+  if (isPath(v)) return true;
+  if (!v || typeof v !== 'object' || Array.isArray(v) || !CHIP_FNS.has(v.$fn) || !Array.isArray(v.args) || !isChip(v.args[0])) return false;
+  const rest = v.args.slice(1);
+  return v.$fn === 'count' ? rest.length === 0 : rest.length === 1 && typeof rest[0] === 'string';
+}
+/** A setting's value as composer parts, or null when it is not one a composer shows (another formula, a list, an object). */
+export function composeParts(v) {
+  if (v === undefined || v === null || v === '') return [];
+  if (typeof v === 'string') return [v];
+  if (typeof v === 'number' || typeof v === 'boolean') return [String(v)];
+  if (isChip(v)) return [v];
+  if (v && typeof v === 'object' && v.$fn === 'text' && Array.isArray(v.args) && v.args.every((a) => typeof a === 'string' || typeof a === 'number' || isChip(a)))
+    return v.args.map((a) => (typeof a === 'number' ? String(a) : a));
+  return null;
+}
+/** Composer parts back to what the backend keeps. `type`: the setting's ('any' reads "5", "true", JSON as themselves). */
+export function composeValue(parts, type = 'any') {
+  const out = [];
+  for (const p of parts) {
+    if (typeof p === 'string') { if (!p) continue; if (typeof out.at(-1) === 'string') out[out.length - 1] += p; else out.push(p); }
+    else out.push(p);
+  }
+  if (!out.length) return undefined;
+  if (out.length > 1) return { $fn: 'text', args: out };
+  const [one] = out;
+  if (typeof one !== 'string' || type === 'string') return one;
+  try { return /^(-?\d+(\.\d+)?|true|false|null|[[{].*)$/s.test(one.trim()) ? JSON.parse(one) : one; } catch { return one; }
+}
+const ROW_STEPS = new Set(['create-record', 'update-record', 'find-records']);
+/** What is known at `path` among `sources` (readSources'): `{ value, from }` (value undefined when nothing is). Before a
+    run a record step's rows are its table's columns: a find's `items` a list of them, `first` and `record` one. */
+export function knownAt(sources, path, { wf = null, columns = () => null } = {}) {
+  const src = [...sources].sort((a, b) => b.root.length - a.root.length).find((s) => path === s.root || path.startsWith(`${s.root}.`));
+  if (!src) return { value: undefined, from: null };
+  const rest = path === src.root ? [] : path.slice(src.root.length + 1).split('.');
+  let base = src.value;
+  const step = src.step && (wf?.steps ?? []).find((s) => s.id === src.step);
+  if (src.from === 'shape' && step && ROW_STEPS.has(step.kind) && typeof step.params?.table === 'string') {
+    const cols = columns(step.params.table);
+    if (cols?.length) { const row = blank(['objectId', ...cols]); base = { ...(base ?? {}), ...(step.kind === 'find-records' ? { items: [row], first: row, count: null } : { record: row }) }; }
+  }
+  let v = base;
+  for (const k of rest) {
+    if (v == null || typeof v !== 'object') { v = undefined; break; }
+    if (Array.isArray(v)) { const i = Number(k); v = Number.isInteger(i) ? v[i < 0 ? v.length + i : i] : undefined; } else v = v[k];
+  }
+  return { value: v, from: src.from };
+}
+const isRowish = (x) => x && typeof x === 'object' && !Array.isArray(x) && x.__type !== 'Date';
+const LATE = ['objectId', 'createdAt', 'updatedAt'];
+const fieldsOf = (x) => (isRowish(x) ? Object.keys(x).filter((k) => !['ACL', '__type', 'className'].includes(k)).sort((a, b) => LATE.includes(a) - LATE.includes(b)) : []); // a row's own fields first, its id and dates after
+/** What a chip can become, refined in place: a list's first, last, how many, each one's field, joined; a record's fields.
+    `known` is knownAt's value at the chip's path (undefined when not known). Each `{ group, words, value }`. */
+export function chipRefinements(chip, known) {
+  const out = [];
+  if (isPath(chip)) {
+    const p = chip.$path;
+    if (Array.isArray(known)) {
+      const el = known.find((x) => x != null), fs = fieldsOf(el);
+      out.push({ group: 'list', words: 'the first one', value: { $path: `${p}.0` } });
+      for (const f of fs) out.push({ group: 'first', words: `the first one's ${f}`, value: { $path: `${p}.0.${f}` } });
+      out.push({ group: 'list', words: 'the last one', value: { $path: `${p}.-1` } });
+      out.push({ group: 'list', words: 'how many there are', value: { $fn: 'count', args: [chip] } });
+      for (const f of fs) out.push({ group: 'each', words: `each one's ${f}`, value: { $fn: 'pick', args: [chip, f] } });
+      if (!fs.length) out.push({ group: 'list', words: 'all of them, joined with commas', value: { $fn: 'join', args: [chip, ', '] } });
+    } else for (const f of fieldsOf(known)) out.push({ group: 'field', words: f, value: { $path: `${p}.${f}` } });
+  } else if (chip?.$fn === 'pick') {
+    out.push({ group: 'list', words: 'joined with commas', value: { $fn: 'join', args: [chip, ', '] } });
+    out.push({ group: 'list', words: 'how many there are', value: { $fn: 'count', args: [chip.args[0]] } });
+  }
+  return out;
+}
+/** The path a chip reads, under its formulas. */
+export const chipPath = (chip) => (isPath(chip) ? chip.$path : chip?.args ? chipPath(chip.args[0]) : null);
+/** A chip in words, `{ name, from }`: `pathName(path)` gives a path's `{ name, from }` (pathWords, for the step open). */
+export function chipWords(chip, pathName) {
+  if (isPath(chip)) return pathName(chip.$path);
+  const inner = chipWords(chip.args[0], pathName);
+  if (chip.$fn === 'count') return { ...inner, name: `how many ${inner.name}` };
+  if (chip.$fn === 'pick') return { ...inner, name: `each one's ${chip.args[1]} in ${inner.name}` };
+  if (chip.$fn === 'join') return { ...inner, name: `${inner.name}, joined${chip.args[1] === ', ' ? ' with commas' : ` with “${chip.args[1]}”`}` };
+  return inner;
 }

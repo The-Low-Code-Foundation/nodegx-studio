@@ -6,7 +6,7 @@
  *
  *   node editor/automations-check.mjs    PASS n/n and exit 0, or the failing lines and exit 1
  */
-import { parseCurl, secretNameFor, shellWords, testMailWords } from './automations.mjs';
+import { parseCurl, secretNameFor, shellWords, testMailWords, composeParts, composeValue, isChip, knownAt, chipRefinements, chipWords } from './automations.mjs';
 import { ALWAYS_WORDS, formulaParts, formulaStart, formulaWords, itemSources, pathWords, readSources, shapeFields, startWords, upstreamOf, addStepAfter, sampleFor, sampleRun, sampleWords, testRefusal, agrees, atTime, canMove, deleteStep, insertBetween, moveStep, nextOntoRoute, stepPorts, newStepId, readAutomations, runLine, scheduleTime, stepsOfRun, stepWires, targetOf, triggerHead, valueForm, workflowLayout } from './automations.mjs';
 
 const results = [];
@@ -254,6 +254,43 @@ ok(valueForm({ $path: 'body.plant' }).from === 'body.plant' && valueForm('Kitche
   ok(testMailWords(wf, null, words) === 'gardener@example.com, helper@example.com, the email it started with and the addresses its formula gives', 'the whole test: every address, a picked value in words, a formula said as one', testMailWords(wf, null, words));
   ok(testMailWords(wf, 'tell', words) === 'gardener@example.com and helper@example.com', 'tested up to one step: only that step and the ones before it', testMailWords(wf, 'tell', words));
   ok(testMailWords(wf, 'find', words) === null, 'a test that reaches no email step says nothing about email');
+}
+
+// P132 BWF-011 (R8): a value composed in a setting, words and values, saved as the backend's formulas
+console.log('check: P132 BWF-011, a value composed in a setting');
+{
+  const name = { $path: 'upstream.find.items.0.name' };
+  ok(JSON.stringify(composeValue(['Water ', name, ' today'])) === JSON.stringify({ $fn: 'text', args: ['Water ', name, ' today'] }), 'words around a value: { $fn: "text", args: parts }');
+  ok(JSON.stringify(composeValue([name])) === JSON.stringify(name) && JSON.stringify(composeValue(['', name, ''])) === JSON.stringify(name), 'one value alone is itself, a path (empty words dropped)');
+  ok(composeValue(['Water the ', 'plants']) === 'Water the plants', 'words alone are the typed text, joined');
+  ok(composeValue([]) === undefined && composeValue(['']) === undefined, 'nothing is no value');
+  ok(composeValue(['5']) === 5 && composeValue(['true']) === true && composeValue(['5'], 'string') === '5', 'a setting of any kind reads "5" and "true" as themselves; a text setting keeps them text');
+  ok(JSON.stringify(composeParts({ $fn: 'text', args: ['Hi ', { $path: 'body.name' }, 3] })) === '["Hi ",{"$path":"body.name"},"3"]', 'a text formula back as its parts');
+  ok(JSON.stringify(composeParts('Hello')) === '["Hello"]' && JSON.stringify(composeParts(undefined)) === '[]' && JSON.stringify(composeParts(4)) === '["4"]', 'a typed value is its words');
+  ok(composeParts({ $fn: 'upper', args: [{ $path: 'body.code' }] }) === null && composeParts({ $fn: 'text', args: [{ $fn: 'upper', args: ['x'] }] }) === null && composeParts([1, 2]) === null && composeParts({ a: 1 }) === null, 'another formula, a list or an object is not a composer\'s: it keeps its own control');
+  ok(isChip({ $fn: 'count', args: [{ $path: 'x' }] }) && isChip({ $fn: 'pick', args: [{ $path: 'x' }, 'name'] }) && isChip({ $fn: 'join', args: [{ $fn: 'pick', args: [{ $path: 'x' }, 'name'] }, ', '] }) && !isChip({ $fn: 'join', args: [{ $path: 'x' }] }) && !isChip({ $fn: 'first', args: [{ $path: 'x' }] }), 'a chip: a path, how many, each one\'s field, joined; a first is a path, never a formula');
+  // what a chip can become
+  const items = { $path: 'upstream.find.items' }, rows = [{ name: 'Fern', room: 'Kitchen' }];
+  const refs = chipRefinements(items, rows), by = (w) => refs.find((x) => x.words === w)?.value;
+  ok(JSON.stringify(by('the first one')) === '{"$path":"upstream.find.items.0"}' && JSON.stringify(by("the first one's name")) === '{"$path":"upstream.find.items.0.name"}', "a list: the first one, and the first one's name in one step, as paths (AC2: items → first → name)");
+  ok(JSON.stringify(by('the last one')) === '{"$path":"upstream.find.items.-1"}' && JSON.stringify(by('how many there are')) === '{"$fn":"count","args":[{"$path":"upstream.find.items"}]}', 'its last one is a path (-1), how many a formula');
+  ok(JSON.stringify(by("each one's name")) === '{"$fn":"pick","args":[{"$path":"upstream.find.items"},"name"]}', "each one's name: pick");
+  ok(JSON.stringify(chipRefinements({ $fn: 'pick', args: [items, 'name'] }).find((x) => x.words === 'joined with commas')?.value) === '{"$fn":"join","args":[{"$fn":"pick","args":[{"$path":"upstream.find.items"},"name"]},", "]}', "each one's name, joined with commas");
+  ok(JSON.stringify(chipRefinements({ $path: 'body' }, { name: 'Fern', ACL: {} }).map((x) => x.value.$path)) === '["body.name"]', 'a record: its fields, never who may read it');
+  ok(JSON.stringify(chipRefinements({ $path: 'body' }, { objectId: 'a', createdAt: 't', name: 'Fern', room: 'K' }).map((x) => x.words)) === '["name","room","objectId","createdAt"]', "a row's own fields first, its id and dates after");
+  ok(chipRefinements({ $path: 'body.name' }, 'Fern').length === 0 && chipRefinements({ $path: 'body.x' }, undefined).length === 0, 'one value, or nothing known: nothing to refine');
+  // what is known at a path, before a run: a find's items are its table's rows
+  const wf = { steps: [{ id: 'find', kind: 'find-records', params: { table: 'Plant' } }, { id: 'mail', kind: 'send-email' }] };
+  const shape = [{ root: 'body', from: 'shape', value: {} }, { root: 'upstream.find', from: 'shape', step: 'find', value: { items: null, count: null, first: null } }];
+  const k = knownAt(shape, 'upstream.find.items', { wf, columns: (t) => (t === 'Plant' ? ['name', 'room'] : null) });
+  ok(Array.isArray(k.value) && JSON.stringify(Object.keys(k.value[0])) === '["objectId","name","room"]' && k.from === 'shape', "no run yet: a find's items are a list of its table's rows", k);
+  ok(JSON.stringify(Object.keys(knownAt(shape, 'upstream.find.items.0', { wf, columns: () => ['name'] }).value)) === '["objectId","name"]', "and its first one is a row");
+  const ran = [{ root: 'upstream.find', from: 'run', step: 'find', value: { items: [{ name: 'Fern' }, { name: 'Basil' }] } }];
+  ok(knownAt(ran, 'upstream.find.items.-1.name', { wf }).value === 'Basil' && knownAt(ran, 'upstream.nothing', { wf }).value === undefined, 'after a run, what it gave: -1 is the last one; another root, nothing');
+  // a chip in words
+  const pw = (p) => ({ name: p.split('.').slice(2).join(' › '), from: 'Find plants' });
+  ok(chipWords({ $fn: 'join', args: [{ $fn: 'pick', args: [items, 'name'] }, ', '] }, pw).name === "each one's name in items, joined with commas" && chipWords({ $fn: 'count', args: [items] }, pw).name === 'how many items', 'a chip says what it is in words');
+  ok(pathWords('upstream.find.items.-1', { steps: [{ id: 'find', name: 'Find plants', kind: 'find-records' }] }).name === 'items › the last', 'the last one is said, never "-1"');
 }
 
 const passed = results.filter(Boolean).length;

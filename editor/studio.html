@@ -507,6 +507,16 @@
   #wfinspect .rvpill { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .rvpill .pill { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft, var(--panel-2)); border: 1px solid var(--line-2); color: var(--ink); cursor: pointer; }
   .rvpill .pill.missing { border-color: var(--red); color: var(--red); }
+  /* P132 BWF-011: the composer, words and value chips in one box (a chip inline, never inline-flex: its text stays one line) */
+  #wfinspect .vcompose { min-height: 28px; padding: 4px 8px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--panel); font-size: 12.5px; line-height: 22px; white-space: pre-wrap; word-break: break-word; outline: none; cursor: text; min-width: 0; }
+  #wfinspect .vcompose.multi { min-height: 96px; }
+  #wfinspect .vcompose:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(31,94,255,.12); }
+  #wfinspect .vcompose .pill.chip { display: inline; white-space: nowrap; font-size: 11.5px; padding: 1px 7px; margin: 0 1px; border-radius: 999px; background: var(--accent-soft, var(--panel-2)); border: 1px solid var(--line-2); color: var(--ink); cursor: pointer; line-height: 18px; }
+  #wfinspect .vcompose .pill.chip.missing { border-color: var(--red); color: var(--red); }
+  #wfinspect .field.composes .rvctl { grid-template-columns: minmax(0, 1fr); }
+  #wfinspect .field.composes .rvaddrow { grid-column: 1 / -1; display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: -1px; }
+  #wfinspect .field.composes .rvaddrow .rvmode { width: auto; font-size: 11px; padding: 1px 4px; color: var(--muted); border-color: transparent; background: transparent; }
+  .menu.chipmenu .item.sub { padding-left: 24px; }
   .menu.picker > .linkish { margin-top: 6px; font-size: 11.5px; }
   #wfinspect .field.runvalue.dropping { outline: 2px dashed var(--accent); outline-offset: 2px; border-radius: 6px; }
   .reads > summary { cursor: pointer; }
@@ -1235,7 +1245,7 @@ import { fieldReaders, typeReaders, renameField, renameType, appFields } from '.
 import { LANES, buildTimeline, lastRunOf, msText, shotAt, stepValues } from './timeline.mjs';
 import { runOver, lastActivity, watchSignals, runtimeTimers, runTimers } from './runwatch.mjs';
 import { CLOUD, REQUEST, RESPONSE, functionList, functionLayout, helperKey, requestAsks, responseWords, touchesWords } from './fngraph.mjs';
-import { ALWAYS_WORDS, AUTOMATIONS_FILE, CHANGE_WORDS, SAMPLE_KINDS, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, itemSources, formulaArgAt, formulaArgStart, formulaParts, formulaStart, moveStep, newStepId, nextOntoRoute, parseCurl, pathWords, readAutomations, readSources, runLine, sampleFor, sampleWords, scheduleTime, stepsOfRun, targetOf, testMailWords, triggerHead, stepPorts, upstreamOf, valueForm, workflowLayout } from './automations.mjs';
+import { ALWAYS_WORDS, AUTOMATIONS_FILE, CHANGE_WORDS, SAMPLE_KINDS, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, itemSources, formulaArgAt, formulaArgStart, formulaParts, formulaStart, moveStep, newStepId, nextOntoRoute, parseCurl, pathWords, readAutomations, readSources, runLine, sampleFor, sampleWords, scheduleTime, stepsOfRun, targetOf, testMailWords, triggerHead, stepPorts, upstreamOf, valueForm, workflowLayout, composeParts, composeValue, knownAt, chipRefinements, chipPath, chipWords } from './automations.mjs';
 import { logicOnPage, placedComponent, studioEdits, wiringLayout, wiringSvg } from './wiring.mjs';
 import { look as canvasLook, nodeScheme, wireColors } from './look.js';
 // STU-084: what Studio draws and edits, as data (the element types, the action menu, the value sources), one file the
@@ -5822,22 +5832,36 @@ function runValueField(label, value, set, { type = 'any', enums = null, w = null
   const f = h('div', { class: 'field runvalue', title: description,
     ondragover: (e) => { if (!e.dataTransfer.types.includes(PATH_MIME)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; f.classList.add('dropping'); },
     ondragleave: () => f.classList.remove('dropping'),
-    ondrop: (e) => { f.classList.remove('dropping'); const p = e.dataTransfer.getData(PATH_MIME); if (!p) return; e.preventDefault(); set({ $path: p }); } }, h('label', {}, label));
-  let box;
+    ondrop: (e) => { f.classList.remove('dropping'); const p = e.dataTransfer.getData(PATH_MIME); if (!p) return; e.preventDefault(); dropTo(p, e); } }, h('label', {}, label));
+  let box, dropTo = (p) => set({ $path: p });
   const asPath = () => { // the path by hand, only when asked (the menu's last line)
     const dl = `rv-${Math.random().toString(36).slice(2, 8)}`;
     const paths = ['body.', 'trigger.', ...(w && selAutoStep ? upstreamOf(w, selAutoStep).map((s) => `upstream.${s.id}.`) : [])];
     const input = h('input', { type: 'text', value: form.from ?? '', list: dl, 'data-input': 'aspath', placeholder: 'body.plant, upstream.check.result…', onchange: (e) => set(e.target.value.trim() ? { $path: e.target.value.trim() } : undefined) });
     box.replaceWith(h('div', {}, input, h('datalist', { id: dl }, ...paths.map((x) => h('option', { value: x }))))); input.focus();
   };
-  const pick = (anchor) => pickMenu(anchor, w, item, (p) => set({ $path: p }), asPath);
+  const pick = (anchor, done = (p) => set({ $path: p })) => pickMenu(anchor, w, item, done, asPath);
   const now = 'fn' in form ? 'fn' : 'from' in form ? 'from' : 'typed', formulas = beNow()?.formulas;
+  let cb = null, nowC = now; // BWF-011: with a composer, "From the run" puts a value where the cursor is
   const mode = h('select', { class: 'rvmode', 'aria-label': `How ${label} is given`, onchange: (e) => {
-      const to = e.target.value; e.target.value = now;
-      if (to === 'from') pick(e.target); else if (to === 'fn') formulaMenu(e.target, (spec) => set(formulaStart(spec))); else set(undefined);
+      const to = e.target.value; e.target.value = nowC;
+      if (to === 'from') pick(e.target, cb ? (p) => cb.insert({ $path: p }) : undefined); else if (to === 'fn') formulaMenu(e.target, (spec) => set(formulaStart(spec))); else set(undefined);
     } },
     h('option', { value: 'typed', selected: now === 'typed' }, 'Typed'), h('option', { value: 'from', selected: now === 'from' }, 'From the run'),
     formulas?.length || now === 'fn' ? h('option', { value: 'fn', selected: now === 'fn' }, 'A formula…') : null);
+  // P132 BWF-011 (R8): a text setting is words and values together, a value dropped or picked where the cursor is
+  const parts = type === 'boolean' || type === 'number' || (type === 'enum' && enums) ? null : composeParts(value);
+  if (parts) {
+    cb = composeBox(parts, (ps) => set(composeValue(ps, type === 'string' ? 'string' : 'any')), { multiline, w, item, label, asPath: () => asPath() });
+    box = cb.el; dropTo = (p, e) => cb.insert({ $path: p }, e);
+    // the select says "From the run" for one value alone, else "Typed" (words, with values in them or not)
+    nowC = parts.length === 1 && typeof parts[0] !== 'string' ? 'from' : 'typed'; mode.value = nowC;
+    mode.querySelector('option[value=typed]').textContent = 'Words and values';
+    const add = h('button', { class: 'linkish rvadd', 'data-act': 'addvalue', title: 'Put a value from what came before where the cursor is', onmousedown: (e) => e.preventDefault(), onclick: (e) => pick(e.currentTarget, (p) => cb.insert({ $path: p })) }, '+ A value');
+    f.classList.add('composes');
+    f.append(h('div', { class: 'ctl rvctl' }, box), h('div', { class: 'rvaddrow' }, add, mode)); // the words get the width; how it is given sits under them
+    return f;
+  }
   if ('fn' in form) { f.classList.add('hasformula'); f.append(h('div', { class: 'ctl rvctl' }, mode, h('span')), formulaBox(value, set, { w, item })); return f; }
   if ('from' in form) {
     const words = pathPill(form.from, w, item);
@@ -5860,6 +5884,87 @@ function runValueField(label, value, set, { type = 'any', enums = null, w = null
 function pathPill(path, w, item) {
   const step = w?.steps?.find((s) => s.id === selAutoStep), p = step ? step.params ?? {} : {};
   return pathWords(path, w ?? {}, w ? startsOf(w.id) : [], { item: item ? (p.itemKey ?? 'item') : '\0', index: item ? (p.indexKey ?? 'index') : '\0', kindName: (k) => kindSpec(k)?.displayName ?? k });
+}
+/* ---- P132 BWF-011 (R8): the composer. One editable line (or box, for an email's words) of words with value chips in it:
+   a chip is dropped from *What it can read*, or picked with *+ A value* / *From the run*, where the cursor was; Backspace
+   takes one out whole; a press on a chip refines it in place (a list's first, last, how many, each one's field, joined;
+   a record's fields) or picks another. Saved when it is left, as automations.mjs composeValue keeps it. ---- */
+function composeBox(parts, commit, { multiline = false, w = null, item = false, label = '', asPath = null } = {}) {
+  const vals = [];
+  const el = h('div', { class: `vcompose${multiline ? ' multi' : ''}`, contenteditable: 'true', role: 'textbox', 'aria-multiline': String(multiline), 'aria-label': label, 'data-input': 'compose', spellcheck: 'false' });
+  const words = (c) => chipWords(c, (p) => pathPill(p, w, item));
+  const chipEl = (c) => {
+    const k = vals.push(c) - 1, wd = words(c), path = chipPath(c);
+    return h('button', { class: `pill chip${wd.missing ? ' missing' : ''}`, contenteditable: 'false', tabindex: '-1', 'data-k': String(k), 'data-path': typeof c.$path === 'string' ? c.$path : path, 'data-fn': c.$fn ?? null,
+      title: `${wd.name} · from ${wd.from}: press it to use part of it, or another value`, onmousedown: (e) => e.preventDefault(), onclick: (e) => { e.preventDefault(); e.stopPropagation(); chipMenu(e.currentTarget, c, k); } }, h('b', {}, wd.name), ` · from ${wd.from}`);
+  };
+  for (const p of parts) el.append(typeof p === 'string' ? document.createTextNode(p) : chipEl(p));
+  const read = () => {
+    const out = [];
+    const walk = (n) => { for (const c of n.childNodes) {
+      if (c.nodeType === 3) out.push(c.data);
+      else if (c.dataset?.k !== undefined) out.push(vals[Number(c.dataset.k)]);
+      else if (c.nodeName === 'BR') { if (c !== el.lastChild) out.push('\n'); }
+      else { if (c.nodeName === 'DIV' && out.length) out.push('\n'); walk(c); }
+    } };
+    walk(el);
+    return multiline ? out : out.map((x) => (typeof x === 'string' ? x.replace(/\n/g, ' ') : x));
+  };
+  // what was last kept: a save that would keep the same is none (a press in a menu leaves the box, then the pick saves)
+  let last = JSON.stringify(composeValue(parts));
+  const keepAs = (ps) => { const j = JSON.stringify(composeValue(ps)); if (j === last) return; last = j; commit(ps); };
+  const save = () => keepAs(read());
+  let caret = null; // where the next value goes: the last place the cursor was in the box
+  const keep = () => { const sel = getSelection(); if (sel.rangeCount && el.contains(sel.getRangeAt(0).startContainer)) caret = sel.getRangeAt(0).cloneRange(); };
+  for (const ev of ['keyup', 'mouseup', 'input', 'focus']) el.addEventListener(ev, keep);
+  // left for a value's menu (a press there takes the focus): kept when the menu is gone, unless the pick kept it first
+  el.addEventListener('focusout', (e) => { if (el.contains(e.relatedTarget)) return; const later = () => (document.querySelector('.menu.picker, .menu.chipmenu') ? setTimeout(later, 200) : save()); setTimeout(later, 0); });
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !multiline) { e.preventDefault(); el.blur(); }
+    else if (e.key === 'Enter') { e.preventDefault(); document.execCommand('insertText', false, '\n'); }
+    else if (e.key === 'Escape') el.blur();
+  });
+  el.addEventListener('paste', (e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData.getData('text/plain')); });
+  /** A value put in: at the drop's point, else where the cursor was, else at the end; then kept. */
+  const insert = (c, e = null) => {
+    const at = e && document.caretRangeFromPoint ? document.caretRangeFromPoint(e.clientX, e.clientY) : null;
+    const r = at && el.contains(at.startContainer) ? at : caret && el.contains(caret.startContainer) ? caret : null;
+    const node = chipEl(c);
+    if (r) { r.deleteContents(); r.insertNode(node); } else el.append(node);
+    save();
+  };
+  /** A chip pressed: what it can become (BWF-011 item 2), another value, its path, or out. */
+  const chipMenu = (anchor, c, k) => {
+    closeMenu();
+    const swap = (to) => keepAs(read().map((x) => (x === vals[k] ? to : x)).filter((x) => x !== undefined));
+    const path = typeof c.$path === 'string' ? c.$path : null;
+    const known = path && w && selAutoStep ? knownAt(readsFor(w, selAutoStep, item), path, { wf: w, columns: tableColumns }).value : undefined;
+    const refs = chipRefinements(c, known), wd = words(c);
+    const r = anchor.getBoundingClientRect();
+    const menu = h('div', { class: 'menu picker chipmenu', role: 'dialog', 'aria-label': `${wd.name}: use part of it`, style: `left:${Math.max(8, Math.min(r.left, innerWidth - 348))}px;top:${Math.max(8, Math.min(r.bottom + 4, innerHeight - 430))}px;width:340px` });
+    menu.append(h('div', { class: 'hint' }, `${wd.name} · from ${wd.from}`));
+    const HEADS = { list: 'A list: use', first: null, each: 'Each one’s…', field: 'Its fields' };
+    const headed = new Set();
+    for (const x of refs) {
+      if (!headed.has(x.group) && HEADS[x.group]) menu.append(h('div', { class: 'h' }, HEADS[x.group]));
+      headed.add(x.group);
+      menu.append(h('div', { class: `item${x.group === 'first' ? ' sub' : ''}`, 'data-refine': x.words, onclick: () => { closeMenu(); swap(x.value); } }, x.words));
+    }
+    if (!refs.length && path) menu.append(h('div', { class: 'hint' }, known === undefined ? 'Its parts show once the workflow is tested.' : 'One value: nothing in it to choose.'));
+    // or another value: what the step can read, as the picker shows it (folded, so the refinements stay in view)
+    menu.append(h('div', { class: 'h' }, 'Or another value'), ...(w && selAutoStep ? readsFor(w, selAutoStep, item).map((src) => readBlock(src, (p) => { closeMenu(); swap({ $path: p }); }, false)) : []),
+      h('div', { class: 'item', 'data-act': 'takeout', onclick: () => { closeMenu(); swap(undefined); } }, 'Take it out'));
+    // the path by hand: the whole setting when the chip is all of it (as the pill's menu did), else this chip's own
+    const whole = parts.length === 1 && read().filter((x) => x !== '').length === 1;
+    if (path) menu.append(h('button', { class: 'linkish', 'data-act': 'aspath', title: 'Write where the value is read from by hand', onclick: () => {
+      if (whole && asPath) { closeMenu(); return asPath(); }
+      const i = h('input', { type: 'text', value: path, 'data-input': 'chippath', onchange: (e) => { const v = e.target.value.trim(); closeMenu(); swap(v ? { $path: v } : undefined); } });
+      menu.lastChild.replaceWith(i); i.focus();
+    } }, 'Edit as path'));
+    document.body.append(menu);
+    dismissOnOutside(menu);
+  };
+  return { el, insert };
 }
 /* ---- P132 BWF-004: a formula, `{ $fn, args }`, from the backend's own list (the catalog's `formulaLanguage`): picked by its
    words from a menu, drawn as its sentence ("days between last watered and now"), each value in it given the way any

@@ -591,8 +591,8 @@ try {
       // From: typed, then a date typed into it
       await ev(`(() => { const sel = document.querySelector('#wfinspect .formula .field[data-arg="from"] .rvmode'); sel.value = 'typed'; sel.dispatchEvent(new Event('change', { bubbles: true })); })()`);
       for (let i = 0; i < 40 && typeof thirsty()?.steps[0].params.value?.args?.[0] !== 'string'; i++) await wait(150);
-      await b.until(`!!document.querySelector('#wfinspect .formula .field[data-arg="from"] input[type=text]')`, 5000).catch(() => {});
-      await ev(`(() => { const i = document.querySelector('#wfinspect .formula .field[data-arg="from"] input[type=text]'); i.value = '2026-10-28'; i.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+      await b.until(`!!document.querySelector('#wfinspect .formula .field[data-arg="from"] .vcompose')`, 5000).catch(() => {});
+      await ev(`(() => { const c = document.querySelector('#wfinspect .formula .field[data-arg="from"] .vcompose'); c.textContent = '2026-10-28'; c.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); })()`);
       for (let i = 0; i < 40 && thirsty()?.steps[0].params.value?.args?.[0] !== '2026-10-28'; i++) await wait(150);
       await b.until(`document.querySelector('#wfinspect .formula .fxwords')?.innerText === 'days between 2026-10-28 and now'`, 5000).catch(() => {});
       ok(JSON.stringify(thirsty()?.steps[0].params.value) === '{"$fn":"date-difference","args":["2026-10-28",{"$fn":"now"},"days"]}' && await ev(`document.querySelector('#wfinspect .formula .fxwords')?.innerText === 'days between 2026-10-28 and now'`), 'its From typed as a date: "days between 2026-10-28 and now", no JSON typed', thirsty()?.steps[0].params.value);
@@ -657,7 +657,7 @@ try {
       ok(await ev(`document.querySelector('#wfinspect select[data-input=table]')?.value === 'Task' && document.querySelector('#wfinspect .pill[data-path="body"]')?.innerText === 'all of it · from the Task that was made'`), 'its table is a choice, its record a pill in words', await ev(`[document.querySelector('#wfinspect select[data-input=table]')?.value, document.querySelector('#wfinspect .rvpill')?.innerText]`));
       const boxes = await ev(`[...document.querySelectorAll('#wfinspect .recfields .field.runvalue > label')].map((l) => l.textContent)`);
       ok(boxes?.includes('title') && !boxes.includes('objectId'), "a box for each of the Task's fields, from the table", boxes);
-      await ev(`(() => { const f = [...document.querySelectorAll('#wfinspect .recfields .field.runvalue')].find((x) => x.querySelector('label')?.textContent === 'title'); const i = f.querySelector('input[type=text]'); i.value = 'Changed by a step'; i.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+      await ev(`(() => { const f = [...document.querySelectorAll('#wfinspect .recfields .field.runvalue')].find((x) => x.querySelector('label')?.textContent === 'title'); const i = f.querySelector('.vcompose'); i.textContent = 'Changed by a step'; i.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); })()`);
       for (let i = 0; i < 40 && upd()?.params.fields?.title !== 'Changed by a step'; i++) await wait(150);
       ok(JSON.stringify(upd()?.params.fields) === '{"title":"Changed by a step"}', 'a value typed in the title box: fields { title }, nothing else', upd()?.params);
       await shot('p132-bwf005');
@@ -725,7 +725,7 @@ try {
       }
       await b.clickSel('#steps .autoview .step[data-id="chg"] h3');
       await b.until(`[...document.querySelectorAll('#wfinspect .recfields .field.runvalue > label')].some((l) => l.textContent === 'done')`, 10000).catch(() => {});
-      const ctl = await ev(`Object.fromEntries([...document.querySelectorAll('#wfinspect .recfields .field.runvalue')].map((f) => [f.querySelector('label')?.textContent, f.querySelector('.rvctl input, .rvctl select:not(.rvmode), .rvctl textarea')?.type]))`);
+      const ctl = await ev(`Object.fromEntries([...document.querySelectorAll('#wfinspect .recfields .field.runvalue')].map((f) => [f.querySelector('label')?.textContent, f.querySelector('.rvctl input, .rvctl select:not(.rvmode), .rvctl textarea')?.type ?? (f.querySelector('.rvctl .vcompose') ? 'text' : undefined)]))`);
       const chore = ctl?.done ? null : { made: (await be('/admin/schema')).tables?.find((t) => t.name === 'Chore')?.columns, panel: await ev(`document.querySelector('#wfinspect')?.innerText.slice(0, 300)`) };
       ok(ctl?.done === 'checkbox' && ctl?.minutes === 'number' && ctl?.name === 'text', 'Typed: a yes/no field is a tick, a number field a number box, a text field text', { ctl, chore });
     }
@@ -804,6 +804,85 @@ try {
       } finally {
         weather.close();
       }
+    }
+  }
+
+  // P132 BWF-011 (R8): a value composed in a setting. An email's subject typed as words with the found row's title in the
+  // middle, no formula menu opened (AC1); the chip refined from "items" to the first one's title in two presses (AC2);
+  // tested, the email caught here says the subject with the title in it
+  console.log('check: P132 BWF-011, a value composed in a setting');
+  {
+    const cat = await be('/admin/workflow-step-kinds');
+    if (!cat.kinds?.some((k) => k.kind === 'send-email') || !cat.kinds?.some((k) => k.kind === 'find-records')) console.log('  (not graded: this backend has no Send an email or Find records yet. Run with NODEGX_REPO at NodeGX 622696c25 or later)');
+    else {
+      const caught = [];
+      const smtp = net.createServer((sock) => {
+        let buf = '', data = false, msg = null; const out = (l) => sock.write(l + '\r\n'); out('220 catcher ESMTP');
+        sock.on('data', (d) => { buf += d.toString('utf8'); for (;;) {
+          if (data) { const end = buf.indexOf('\r\n.\r\n'); if (end < 0) return; msg.data = buf.slice(0, end); buf = buf.slice(end + 5); data = false; caught.push(msg); msg = null; out('250 kept'); continue; }
+          const nl = buf.indexOf('\r\n'); if (nl < 0) return; const line = buf.slice(0, nl); buf = buf.slice(nl + 2); const cmd = line.slice(0, 4).toUpperCase();
+          if (cmd === 'EHLO' || cmd === 'HELO') out('250 catcher'); else if (cmd === 'MAIL') { msg = { to: [] }; out('250 ok'); } else if (cmd === 'RCPT') { msg?.to.push(line.slice(8)); out('250 ok'); } else if (cmd === 'DATA') { data = true; out('354 go on'); } else if (cmd === 'QUIT') { out('221 bye'); sock.end(); } else out('250 ok');
+        } });
+        sock.on('error', () => {});
+      });
+      await new Promise((r) => smtp.listen(0, '127.0.0.1', r));
+      try {
+        await be('/admin/email/config', { method: 'PUT', body: JSON.stringify({ enabled: true, smtp: { host: '127.0.0.1', port: smtp.address().port, secure: false, username: '' }, fromAddress: 'app@todo.test', fromName: 'Todo' }) });
+        await be('/classes/Task', { method: 'POST', body: JSON.stringify({ title: 'Repot the fern' }) });
+        const steps = [{ id: 'find', name: 'Find tasks', kind: 'find-records', params: { table: 'Task', limit: 5 }, routes: { nonempty: ['mail'] } },
+          { id: 'mail', name: 'Tell me', kind: 'send-email', params: { to: 'me@todo.test', subject: 'From your app' } }];
+        const r = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: { id: 'composed', name: 'Composed', entry: 'find', steps } }) });
+        ok(r.ok, 'a Find then an email, written as Studio writes them', r.ok || (await r.json()).error);
+        const subj = () => fileNow().workflows.find((x) => x.id === 'composed')?.steps.find((x) => x.id === 'mail')?.params?.subject;
+        await b.until(`!!document.querySelector('#autolist .row[data-workflow="composed"]')`, 8000).catch(() => {});
+        await ev(`document.querySelector('#autolist .row[data-workflow="composed"]').click()`);
+        await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'composed'`, 8000).catch(() => {});
+        await b.clickSel('#steps .autoview .step[data-id="mail"] h3');
+        const F = `[...document.querySelectorAll('#wfinspect .field.runvalue')].find((x) => x.querySelector(':scope > label')?.textContent === 'Subject')`;
+        await b.until(`!!${F}?.querySelector('.vcompose')`, 8000).catch(() => {});
+        ok(await ev(`${F}?.querySelector('.vcompose')?.innerText === 'From your app' && !!${F}?.querySelector('[data-act=addvalue]')`), 'the subject is a composer: its words, and "+ A value" beside it', await ev(`${F}?.innerHTML.slice(0, 300)`));
+        await ev(`window.__fx = false; window.__fxWatch = new MutationObserver(() => { if (document.querySelector('.menu.formulas')) window.__fx = true; }); window.__fxWatch.observe(document.body, { childList: true }); 0`);
+        // words typed, the cursor left after them, then a value put there
+        await ev(`(() => { const c = ${F}.querySelector('.vcompose'); c.focus(); c.textContent = 'Water '; const r = document.createRange(); r.setStart(c.firstChild, 6); r.collapse(true); const s = getSelection(); s.removeAllRanges(); s.addRange(r); c.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true })); })()`);
+        await ev(`${F}.querySelector('[data-act=addvalue]').click()`);
+        await b.until(`!!document.querySelector('.menu.picker .pickfield[data-path="upstream.find.items"]')`, 5000).catch(() => {});
+        // as a person's press does: the box loses the focus first (its words kept or not), then the pick lands
+        await ev(`${F}.querySelector('.vcompose').dispatchEvent(new FocusEvent('focusout', { bubbles: true }))`); await wait(100);
+        await ev(`document.querySelector('.menu.picker .pickfield[data-path="upstream.find.items"]').click()`);
+        for (let i = 0; i < 40 && subj()?.$fn !== 'text'; i++) await wait(150);
+        ok(JSON.stringify(subj()) === '{"$fn":"text","args":["Water ",{"$path":"upstream.find.items"}]}', 'a value put where the cursor was, after the words: { $fn: "text" } in the file', subj());
+        await b.until(`!!${F}?.querySelector('.vcompose .pill[data-path="upstream.find.items"]')`, 5000).catch(() => {});
+        await ev(`(() => { const c = ${F}.querySelector('.vcompose'); c.append(' today'); c.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); })()`);
+        for (let i = 0; i < 40 && subj()?.args?.length !== 3; i++) await wait(150);
+        ok(JSON.stringify(subj()) === '{"$fn":"text","args":["Water ",{"$path":"upstream.find.items"}," today"]}' && JSON.stringify((await be('/admin/workflow-defs/composed')).workflow?.steps?.find((x) => x.id === 'mail')?.params?.subject) === JSON.stringify(subj()), 'more words after it: "Water " + the value + " today", in the file and on the backend', subj());
+        // AC2: the chip refined in two presses: the chip, then "the first one's title"
+        await b.until(`!!${F}?.querySelector('.vcompose .pill[data-path="upstream.find.items"]')`, 5000).catch(() => {});
+        await ev(`${F}.querySelector('.vcompose .pill[data-path="upstream.find.items"]').click()`);
+        await b.until(`!!document.querySelector('.menu.chipmenu [data-refine]')`, 5000).catch(() => {});
+        const offered = await ev(`[...document.querySelectorAll('.menu.chipmenu [data-refine]')].map((x) => x.dataset.refine)`);
+        ok(offered?.includes('the first one') && offered.includes("the first one's title") && offered.includes('how many there are') && offered.includes("each one's title"), "pressed, a list's chip offers its first one, the first one's fields (the table's, no run yet), how many, each one's field", offered);
+        await ev(`document.querySelector('.menu.chipmenu [data-refine="the first one\\'s title"]').click()`);
+        for (let i = 0; i < 40 && subj()?.args?.[1]?.$path !== 'upstream.find.items.0.title'; i++) await wait(150);
+        ok(JSON.stringify(subj()) === '{"$fn":"text","args":["Water ",{"$path":"upstream.find.items.0.title"}," today"]}', "AC2: items → first → title in two presses, saved as a path in its place", subj());
+        await b.until(`!!${F}?.querySelector('.vcompose .pill[data-path="upstream.find.items.0.title"]')`, 5000).catch(() => {});
+        ok(await ev(`${F}?.querySelector('.vcompose')?.innerText.replace(/\\s+/g, ' ') === 'Water items › #1 › title · from Find tasks today'`), 'the composer says it in words: "Water [items › #1 › title · from Find tasks] today"', await ev(`${F}?.querySelector('.vcompose')?.innerText`));
+        ok(await ev(`(window.__fxWatch.disconnect(), window.__fx === false)`), 'AC1: no formula menu was opened');
+        await shot('p132-bwf011');
+        if (cat.testRuns) {
+          await b.clickSel('#steps [data-act="sample"]');
+          await b.until(`!!document.querySelector('.menu.sample [data-act=keepsample]')`, 5000).catch(() => {});
+          await ev(`document.querySelector('.menu.sample [data-act=keepsample]').click()`);
+          await b.until(`!document.querySelector('#steps [data-act="test"]')?.disabled`, 8000).catch(() => {});
+          await b.clickSel('#steps [data-act="test"]');
+          await b.until(`!!document.querySelector('.surescrim [data-act=yes]')`, 5000).catch(() => {});
+          await ev(`document.querySelector('.surescrim [data-act=yes]')?.click()`);
+          for (let i = 0; i < 60 && !caught.length; i++) await wait(200);
+          const subject = /^Subject: (.*)$/m.exec(caught[0]?.data ?? '')?.[1];
+          const last = (await be('/admin/workflow-defs')).lastRuns?.composed, rec = last ? await be(`/executions/${encodeURIComponent(last.id)}`) : null;
+          const firstTitle = rec?.steps?.find((x) => x.nodeId === 'find')?.outputData?.items?.[0]?.title;
+          ok(!!firstTitle && subject === `Water ${firstTitle} today`, 'AC1: tested, the email arrives with the subject "Water <the first task found\'s title> today"', { subject, firstTitle, caught: caught.length });
+        } else console.log('  (the test not graded: this backend has no tests yet)');
+      } finally { smtp.close(); }
     }
   }
   // P132-STUDIOPRIVACYDROP: a workflow set to obey the privacy rules (R5) says so in the file, not only on the backend,
