@@ -105,6 +105,60 @@ export function usersOfCall(workflows, id) {
   return (workflows ?? []).filter((w) => (w.steps ?? []).some((s) => s.kind === 'http-request' && s.params?.call === id)).map((w) => w.id);
 }
 
+/* ---- P132 BWF-013 (R6): a reusable piece is a workflow others run, with a `run-workflow` step
+   (`{ workflow: '<id>', send: { <name>: value } }`), `send` arriving in the piece as `body.<name>`. ---- */
+export const PIECE_KIND = 'run-workflow';
+/** The piece a step runs, by a plain id, or null (the engine's `pieceOf`). */
+export const pieceOf = (s) => (s?.kind === PIECE_KIND && typeof s.params?.workflow === 'string' && s.params.workflow ? s.params.workflow : null);
+/** The workflows that are pieces: the project's workflows no trigger starts (a trigger starting a function starts no workflow). */
+export function piecesIn(workflows = [], triggers = []) {
+  const started = new Set(triggers.map(targetOf).filter((g) => g.kind === 'workflow').map((g) => g.name));
+  return workflows.filter((w) => !started.has(w.id));
+}
+/** The workflows (by id, each once, in the file's order) with a step that runs `id`. */
+export function runnersOf(workflows, id) {
+  return (workflows ?? []).filter((w) => (w.steps ?? []).some((s) => pieceOf(s) === id)).map((w) => w.id);
+}
+/** The names `id` is sent by the steps that run it, each once, in the order they are first met. */
+export function sentNames(workflows, id) {
+  const out = [];
+  for (const w of workflows ?? []) for (const s of w.steps ?? []) if (pieceOf(s) === id && isObj(s.params?.send)) for (const k of Object.keys(s.params.send)) if (!out.includes(k)) out.push(k);
+  return out;
+}
+/** The names a workflow reads from what it was given (`body.<name>` anywhere in its steps' settings), each once: what a piece asks for. */
+export function bodyNames(wf) {
+  const out = [];
+  const walk = (v) => {
+    if (Array.isArray(v)) return v.forEach(walk);
+    if (!isObj(v)) return;
+    if (typeof v.$path === 'string') { const [root, name] = v.$path.split('.'); if (root === 'body' && name && !out.includes(name)) out.push(name); return; }
+    if ('$literal' in v) return;
+    Object.values(v).forEach(walk);
+  };
+  for (const s of wf?.steps ?? []) walk(s.params);
+  return out;
+}
+/** True when a step in `fromId` running `toId` would close a ring: `toId` is `fromId`, or runs it, directly or through others. */
+export function wouldRing(workflows, fromId, toId) {
+  const runs = new Map((workflows ?? []).map((w) => [w.id, (w.steps ?? []).map(pieceOf).filter(Boolean)]));
+  const seen = new Set(), queue = [toId];
+  while (queue.length) {
+    const id = queue.shift();
+    if (id === fromId) return true;
+    if (seen.has(id)) continue;
+    seen.add(id); queue.push(...(runs.get(id) ?? []));
+  }
+  return false;
+}
+/** The run a piece's failure names ("… (its run: <id>)", the engine's words), or null. */
+export const runInFailure = (error) => /\(its run: ([^)\s]+)\)/.exec(String(error ?? ''))?.[1] ?? null;
+/** A piece's row: who runs it, in words. `nameOf(id)`: a workflow's name. */
+export function runnersWords(ids, nameOf = (id) => id) {
+  if (!ids.length) return 'No workflow runs it yet';
+  const names = ids.map((id) => `“${nameOf(id)}”`);
+  return `Run by ${names.length < 3 ? names.join(' and ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`}`;
+}
+
 /** True when a value reads the run somewhere (a `$path` not into a blank): in a saved call, such a part must be a blank. */
 export function readsRun(v) {
   if (Array.isArray(v)) return v.some(readsRun);
@@ -535,7 +589,7 @@ export function startWords(starts = []) {
  *   starts      the triggers that start it                       columns(table)   a table's column names, or null
  *   kind(kind)  the catalog's entry                              answers(step)    what a function step's function answers (its Response's names), or null
  */
-export function readSources(wf, stepId, { run = null, sample = null, starts = [], columns = () => null, kind = () => null, answers = () => null } = {}) {
+export function readSources(wf, stepId, { run = null, sample = null, starts = [], columns = () => null, kind = () => null, answers = () => null, sent = [] } = {}) {
   const ran = [...(run?.values() ?? [])].find((r) => r.input && typeof r.input === 'object' && 'body' in r.input);
   const t = starts[0], out = [];
   // what started it
@@ -545,14 +599,15 @@ export function readSources(wf, stepId, { run = null, sample = null, starts = []
   else if (t?.type === 'db-change') {
     const cols = columns(t.dbChange?.collection) ?? [];
     out.push({ root: 'body', words: startWords(starts), from: 'shape', value: blank(['objectId', ...cols, 'createdAt', 'updatedAt']) });
-  } else out.push({ root: 'body', words: startWords(starts), from: 'shape', value: {}, note: t?.type === 'schedule' ? 'A schedule sends nothing unless it is given a payload.' : 'Its fields show once the test has a sample.' });
+  } else if (!t && sent.length) out.push({ root: 'body', words: startWords(starts), from: 'shape', value: blank(sent) }); // BWF-013: a piece is given what the workflows that run it send
+  else out.push({ root: 'body', words: startWords(starts), from: 'shape', value: {}, note: t?.type === 'schedule' ? 'A schedule sends nothing unless it is given a payload.' : 'Its fields show once the test has a sample.' });
   const how = { type: null, firedAt: null, ...(t?.type === 'db-change' ? { collection: null, action: null, recordId: null } : t?.type === 'webhook' ? { slug: null } : t?.type === 'schedule' ? { cron: null } : {}) };
   out.push(ran?.input.trigger && typeof ran.input.trigger === 'object' ? { root: 'trigger', words: 'how it started', from: 'run', value: ran.input.trigger } : { root: 'trigger', words: 'how it started', from: 'shape', value: how });
   // each step upstream of it
   for (const s of upstreamOf(wf, stepId)) {
     const r = run?.get(s.id), words = s.name || kind(s.kind)?.displayName || s.id;
     if (r && r.output !== undefined && r.status !== 'error' && r.status !== 'skipped') { out.push({ root: `upstream.${s.id}`, words, from: 'run', value: r.output, step: s.id }); continue; }
-    const fn = s.kind === 'call-function' ? answers(s) : null;
+    const fn = s.kind === 'call-function' || s.kind === PIECE_KIND ? answers(s) : null; // BWF-013: a piece answers { result, run } as a function answers { result }
     const own = s.kind === 'transform' && s.params?.output && typeof s.params.output === 'object' && !Array.isArray(s.params.output) ? Object.keys(s.params.output) : null;
     const value = fn ? { result: blank(fn) } : own ? blank(own) : blank(shapeFields(kind(s.kind)?.output));
     out.push({ root: `upstream.${s.id}`, words, from: 'shape', value, step: s.id });
@@ -592,7 +647,7 @@ export function pathWords(path, wf, starts = [], { item = 'item', index = 'index
   if (root === 'upstream') {
     const s = (wf.steps ?? []).find((x) => x.id === rest[0]);
     let r = rest.slice(1);
-    if (s?.kind === 'call-function' && r[0] === 'result' && r.length > 1) r = r.slice(1); // a function answers { result: { … } }: its names are what a person knows
+    if ((s?.kind === 'call-function' || s?.kind === PIECE_KIND) && r[0] === 'result' && r.length > 1) r = r.slice(1); // a function (a piece) answers { result: { … } }: its names are what a person knows
     return s ? { name: seg(r), from: s.name || kindName(s.kind) } : { name: seg(r), from: `a step that is not there (${rest[0] ?? ''})`, missing: true };
   }
   if (root === item) return { name: seg(rest, 'this item'), from: 'the list' };

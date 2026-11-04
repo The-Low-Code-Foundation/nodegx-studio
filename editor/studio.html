@@ -1117,8 +1117,9 @@
           <h3 class="sec"><span id="autosec">Workflows</span> <button class="tiny primary" id="newauto" title="A workflow on the backend, and what starts it"><svg class="i"><use href="#i-plus"/></svg>New</button></h3>
           <p class="secsub">steps the backend runs, and what starts them</p>
           <div class="events list" id="autolist"></div>
-          <h3 class="sec" id="fnsec">Reusable pieces</h3>
-          <p class="secsub">cloud functions: a workflow or a screen can run these</p>
+          <h3 class="sec"><span id="fnsec">Reusable pieces</span> <button class="tiny primary" id="newpiece" title="Steps of their own, run by name from any workflow" hidden><svg class="i"><use href="#i-plus"/></svg>New</button></h3>
+          <p class="secsub" id="fnsub">cloud functions: a workflow or a screen can run these</p>
+          <div class="events list" id="piecelist"></div>
           <div class="events list" id="fnlist"></div>
         </div>
       </aside>
@@ -1246,7 +1247,7 @@ import { fieldReaders, typeReaders, renameField, renameType, appFields } from '.
 import { LANES, buildTimeline, lastRunOf, msText, shotAt, stepValues } from './timeline.mjs';
 import { runOver, lastActivity, watchSignals, runtimeTimers, runTimers } from './runwatch.mjs';
 import { CLOUD, REQUEST, RESPONSE, functionList, functionLayout, helperKey, requestAsks, responseWords, touchesWords } from './fngraph.mjs';
-import { ALWAYS_WORDS, AUTOMATIONS_FILE, CHANGE_WORDS, SAMPLE_KINDS, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, itemSources, formulaArgAt, formulaArgStart, formulaParts, formulaStart, moveStep, newStepId, nextOntoRoute, parseCurl, pathWords, readAutomations, readSources, runLine, sampleFor, sampleWords, scheduleTime, stepsOfRun, targetOf, testMailWords, triggerHead, stepPorts, upstreamOf, valueForm, workflowLayout, composeParts, composeValue, knownAt, chipRefinements, chipPath, chipWords, callParts, saveCallFrom, stepForCall, usersOfCall, callId, readsRun } from './automations.mjs';
+import { ALWAYS_WORDS, AUTOMATIONS_FILE, CHANGE_WORDS, SAMPLE_KINDS, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, itemSources, formulaArgAt, formulaArgStart, formulaParts, formulaStart, moveStep, newStepId, nextOntoRoute, parseCurl, pathWords, readAutomations, readSources, runLine, sampleFor, sampleWords, scheduleTime, stepsOfRun, targetOf, testMailWords, triggerHead, stepPorts, upstreamOf, valueForm, workflowLayout, composeParts, composeValue, knownAt, chipRefinements, chipPath, chipWords, callParts, saveCallFrom, stepForCall, usersOfCall, callId, readsRun, PIECE_KIND, pieceOf, piecesIn, runnersOf, sentNames, bodyNames, runnersWords, wouldRing, runInFailure } from './automations.mjs';
 import { logicOnPage, placedComponent, studioEdits, wiringLayout, wiringSvg } from './wiring.mjs';
 import { look as canvasLook, nodeScheme, wireColors } from './look.js';
 // STU-084: what Studio draws and edits, as data (the element types, the action menu, the value sources), one file the
@@ -2439,7 +2440,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && tab === 'backend' && selFn && selFnStep && !inField && !document.querySelector('.menu')) { selFnStep = null; renderFunction(); renderStepPanel(); return; }
   if (e.key === 'Escape' && tab === 'backend' && selFn && fnBack.length && !inField && !document.querySelector('.menu')) { backFromFn(); return; }
   if (e.key === 'Escape' && tab === 'backend' && !selFn && selAutoStep && !inField && !document.querySelector('.menu')) { pickAutoStep(null); return; }
-  if (e.key === 'Escape' && tab === 'backend' && !selFn && selAuto?.from && !inField && !document.querySelector('.menu')) { backFromAuto(); return; }
+  if (e.key === 'Escape' && tab === 'backend' && !selFn && (selAuto?.from || selAuto?.back) && !inField && !document.querySelector('.menu')) { backFromAuto(); return; }
   if (e.key === 'Escape' && tab === 'workflow' && selStep && !inField && !document.querySelector('.menu')) { pickStep(null); return; }
   if (e.key === 'Escape' && tab === 'workflow' && cardBack && !inField && !document.querySelector('.menu')) { backFromCard(); return; }
   // Esc with nothing selected, inside a copy on its page: up one level, the copy selected (as the NodeGX editor's breadcrumb)
@@ -5036,12 +5037,27 @@ function loadFnTouches() {
     .finally(() => { if (tab === 'backend' && selFn) renderWorkflow(); });
 }
 function renderFnList() {
-  const box = $('fnlist'); box.innerHTML = '';
-  const q = wfFilter.q.toLowerCase();
+  const box = $('fnlist'), pbox = $('piecelist'); box.innerHTML = ''; pbox.innerHTML = '';
+  const q = wfFilter.q.toLowerCase(), on = piecesOn();
   const all = functionList(Object.keys(registry()), fnNodesOf);
   const shown = all.filter((f) => !q || f.name.toLowerCase().includes(q));
-  $('fnsec').textContent = shown.length < all.length ? `Reusable pieces: ${shown.length} of ${all.length}` : 'Reusable pieces';
-  if (!all.length) return box.append(h('div', { class: 'hint' }, 'No cloud functions in this app yet: the steps that run on the backend, out of reach of the device.'));
+  // P132 BWF-013 (R6): a piece made by hand is a workflow no trigger starts, which other workflows run; the cloud
+  // functions (node graphs the agent makes) are listed under them
+  $('newpiece').hidden = !on;
+  $('fnsub').textContent = on ? 'steps of their own, run by name from any workflow: a change to one reaches every workflow that runs it' : 'cloud functions: a workflow or a screen can run these';
+  const a = autos(), ps = on ? piecesIn(a.workflows, a.triggers) : [];
+  const psShown = ps.filter((w) => !q || `${w.name ?? ''} ${w.id}`.toLowerCase().includes(q));
+  for (const w of psShown) {
+    const by = runnersOf(a.workflows, w.id), n = (w.steps ?? []).length, last = lastRunWords('workflow', w.id);
+    pbox.append(h('div', { class: 'row', 'data-piece': w.id, 'data-workflow': w.id, 'aria-selected': selAuto?.kind === 'workflow' && selAuto.id === w.id, onclick: () => openAuto({ kind: 'workflow', id: w.id }) },
+      h('span', {}, w.name || w.id), h('small', {}, `${runnersWords(by, wfName)} · ${n} step${n === 1 ? '' : 's'}`, last ? ' · ' : '', lastRunLink(last, () => openAuto({ kind: 'workflow', id: w.id }, null, { play: true }), 'last run'))));
+  }
+  if (on && !ps.length) pbox.append(h('div', { class: 'hint' }, 'No reusable piece yet. New makes one: steps of their own, which any workflow runs with a Run a workflow step.'));
+  const total = ps.length + all.length, seen = psShown.length + shown.length;
+  $('fnsec').textContent = seen < total ? `Reusable pieces: ${seen} of ${total}` : 'Reusable pieces';
+  if (on) $('backhow').replaceChildren('A ', h('b', {}, 'workflow'), ' runs on the backend when something starts it: a change to a table, a time, a call from outside, or you. A ', h('b', {}, 'reusable piece'), ' is steps kept once that any workflow runs by name, with a Run a workflow step.');
+  if (on && all.length) box.append(h('h3', { class: 'sec', 'data-agentmade': '' }, 'Made by the agent'), h('p', { class: 'secsub' }, 'cloud functions, steps drawn as nodes: a workflow or a screen can run these; open one to see its steps'));
+  if (!all.length) return on ? null : box.append(h('div', { class: 'hint' }, 'No cloud functions in this app yet: the steps that run on the backend, out of reach of the device.'));
   // P123-GH-TRIGGERSTALE's second half: "Called from the app" was said of every function with a Request, called or not
   const callers = fnCallers();
   for (const f of shown) {
@@ -5319,6 +5335,13 @@ let autoSamples = null; // P132 BWF-002: this computer's test samples, `{ sample
 const autos = () => readAutomations(files.read(AUTOMATIONS_FILE));
 const autoEntry = (a) => (a.kind === 'trigger' ? autos().triggers : a.kind === 'apiCall' ? autos().apiCalls : autos().workflows).find((x) => x.id === a.id);
 const beNow = () => (autoBe && !autoBe.pending ? autoBe : null);
+/** P132 BWF-013: the backend runs a workflow from a step (catalog `pieces`). Kept while it is asked again, so the list does
+    not jump between one shape and the other on every change. */
+let piecesSeen = false;
+const piecesOn = () => beNow()?.pieces ?? piecesSeen;
+const wfName = (id) => autos().workflows.find((w) => w.id === id)?.name || id;
+/** The workflows that are pieces now: those no trigger starts, once the backend runs one from a step. */
+const pieceIds = () => (piecesOn() ? new Set(piecesIn(autos().workflows, autos().triggers).map((w) => w.id)) : new Set());
 const noBackend = (e) => /not bound|503/.test(e.message);
 /** Asks the backend again. What it said last stays shown until the answer comes (P123-GH-TRIGGERSTALE: a card read once
     said "Not fired yet" after its trigger had fired, until Studio reloaded). */
@@ -5328,7 +5351,7 @@ function loadAutoBackend() {
   autoBeAsking = true;
   if (!autoBe) autoBe = { pending: true };
   Promise.all([api('/admin/triggers'), api('/admin/workflow-defs'), api('/admin/workflow-step-kinds').catch(() => ({ kinds: [] }))])
-    .then(([t, w, k]) => { autoBe = { triggers: new Map((t.triggers ?? []).map((x) => [x.id, x])), workflows: new Map((w.workflows ?? w.definitions ?? []).map((x) => [x.id, x])), lastRuns: w.lastRuns ?? {}, kinds: new Map((k.kinds ?? []).map((x) => [x.kind, x])), ops: k.conditionLanguage?.ops ?? [], formulas: k.formulaLanguage?.formulas ?? null, savedCalls: !!k.savedCalls }; })
+    .then(([t, w, k]) => { autoBe = { triggers: new Map((t.triggers ?? []).map((x) => [x.id, x])), workflows: new Map((w.workflows ?? w.definitions ?? []).map((x) => [x.id, x])), lastRuns: w.lastRuns ?? {}, kinds: new Map((k.kinds ?? []).map((x) => [x.kind, x])), ops: k.conditionLanguage?.ops ?? [], formulas: k.formulaLanguage?.formulas ?? null, savedCalls: !!k.savedCalls, pieces: !!k.pieces }; piecesSeen = autoBe.pieces; })
     .catch((e) => { autoBe = { triggers: new Map(), workflows: new Map(), lastRuns: {}, kinds: new Map(), words: noBackend(e) ? 'No backend is bound, so what a backend runs now is not shown: these are the project’s.' : `The backend did not say its triggers and workflows: ${e.message}` }; })
     .finally(() => { autoBeAsking = false; if (tab === 'workflow' || tab === 'backend') renderWorkflow(); });
 }
@@ -5407,7 +5430,10 @@ function renderAutoList() {
     box.append(h('div', { class: 'row trig', 'data-trigger': t.id, 'aria-selected': selAuto?.kind === 'trigger' && selAuto.id === t.id, onclick: () => openAuto({ kind: 'trigger', id: t.id }) },
       h('span', {}, icon('bolt'), ' ', head, switchOf(t)), h('small', {}, `Starts ${startsWords(t)}${same ? '' : ' · the backend’s copy differs'}`, lastRunWords('trigger', t.id) ? ' · ' : '', lastRunLink(lastRunWords('trigger', t.id), () => openTriggerRun(t), 'last run'))));
   }
+  const pieces = pieceIds();
+  if (!a.triggers.length && a.workflows.length && a.workflows.every((w) => pieces.has(w.id))) box.append(h('div', { class: 'hint' }, 'Nothing starts a workflow yet: each one below is a reusable piece. Give one a start from its first card.'));
   for (const w of a.workflows) {
+    if (pieces.has(w.id)) continue; // P132 BWF-013: a workflow nothing starts is a reusable piece, listed under them
     if (q && !`${w.name ?? ''} ${w.id}`.toLowerCase().includes(q)) continue;
     const same = !be || be.words || agrees('workflow', w, be.workflows.get(w.id));
     const ts = startsOf(w.id), by = ts.map((t) => triggerHead(t, be?.triggers.get(t.id)?.scheduleWords));
@@ -5433,12 +5459,17 @@ function openAuto(target, from = null, opts = {}) {
   if (!autoEntry(target)) return toast(`The project has no ${target.kind} called ${target.id}`);
   // P132 BWF-010: a trigger that starts a workflow opens that workflow, its card picked (its settings on the right)
   if (target.kind === 'trigger' && foldedTrigger(autoEntry(target))) return openAuto({ kind: 'workflow', id: targetOf(autoEntry(target)).name }, null, { ...opts, pick: `trigger:${target.id}` });
-  selAuto = { kind: target.kind, id: target.id, from, play: !!opts.play }; selFn = null; fnBack = []; autoRun = null; selAutoStep = opts.pick ?? null; autoPlay = null; hideBoltTip();
+  // P132 BWF-013: `back` the workflow (and step, and run) a piece was opened from; `runId` one run to show, not the newest
+  selAuto = { kind: target.kind, id: target.id, from, play: !!opts.play, back: opts.back ?? null, runId: opts.runId ?? null }; selFn = null; fnBack = []; autoRun = null; selAutoStep = opts.pick ?? null; autoPlay = null; hideBoltTip();
   if (beNow()) loadAutoBackend(); // P123-GH-TRIGGERSTALE: a card says what the backend says now, not when the list was first read
   if (tab !== 'backend') switchTab('backend'); else renderWorkflow();
   if (target.kind === 'workflow') { readAutoRun(target.id); if (!autoSamples) loadSamples(); loadAutoTables(target.id); }
 }
-const backFromAuto = () => { selAuto = selAuto?.from ? { kind: 'trigger', id: selAuto.from, from: null } : null; autoRun = null; renderWorkflow(); };
+const backFromAuto = () => {
+  const back = selAuto?.back; // P132 BWF-013: back to the workflow whose step opened the piece, that step picked, that run shown
+  if (back && autoEntry({ kind: 'workflow', id: back.id })) return openAuto({ kind: 'workflow', id: back.id }, null, { pick: back.pick ?? null, runId: back.runId ?? null });
+  selAuto = selAuto?.from ? { kind: 'trigger', id: selAuto.from, from: null } : null; autoRun = null; renderWorkflow();
+};
 async function changeTrigger(id, change, words = null) {
   const r = await fetch('/api/automations/trigger', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, ...change, client: windowId }) });
   const j = await r.json().catch(() => ({}));
@@ -5452,8 +5483,9 @@ async function changeTrigger(id, change, words = null) {
 /** The workflow's newest run (the backend's `lastRuns`), with its steps (`/executions/:id`). */
 async function readAutoRun(id) {
   let run = null, words = null;
+  const chosen = selAuto?.kind === 'workflow' && selAuto.id === id ? selAuto.runId : null; // P132 BWF-013: *Open that run*
   try {
-    const last = (await api('/admin/workflow-defs')).lastRuns?.[id];
+    const last = chosen ? { id: chosen } : (await api('/admin/workflow-defs')).lastRuns?.[id];
     if (last) run = await api(`/executions/${encodeURIComponent(last.id)}`);
   } catch (e) { words = noBackend(e) ? 'No backend is bound, so there is no run to show.' : `The backend did not say its runs: ${e.message}`; }
   if (selAuto?.kind !== 'workflow' || selAuto.id !== id) return;
@@ -5587,7 +5619,9 @@ function runDot(path) {
 }
 function autoNav() {
   const from = selAuto.from && autos().triggers.find((t) => t.id === selAuto.from);
+  const back = selAuto.back && autoEntry({ kind: 'workflow', id: selAuto.back.id }) ? selAuto.back : null;
   return h('div', { class: 'cardnav' }, from ? h('button', { class: 'quiet back', title: 'Back to the trigger that starts it (Esc)', onclick: backFromAuto }, '← ', triggerHead(from, beNow()?.triggers.get(from.id)?.scheduleWords)) : null,
+    back ? h('button', { class: 'quiet back', 'data-act': 'backtorunner', title: 'Back to the workflow that runs it (Esc)', onclick: backFromAuto }, '← ', wfName(back.id)) : null,
     h('button', { class: 'quiet tiny', title: 'Every workflow and function on the backend, listed', onclick: () => { selAuto = null; renderWorkflow(); } }, 'All on the backend'));
 }
 const agreeWords = (kind, entry) => {
@@ -5644,13 +5678,17 @@ function renderTrigger(t) {
     h('div', { class: 'acts' }), h('div', { class: 'lines' }, open));
   autoFlow(wf, [[headCard], [targetCard]], [{ from: 'trigger', to: 'target', kind: on ? 'then' : 'dead' }]);
 }
+/** P132 BWF-013: a piece opened from the step that runs it: Back returns there, that step picked (and `runId`'s run shown). */
+const openPiece = (id, from, opts = {}) => openAuto({ kind: 'workflow', id }, null, { back: from, ...opts });
 function autoStepCard(step, n, lit, wfLabel) {
   const spec = beNow()?.kinds.get(step.kind), runsFn = !!step.ref && (spec?.invokesFunction ?? /^(call-function|for-each)$/.test(step.kind));
-  const title = step.name || (runsFn ? `Run ${step.ref}` : spec?.displayName || step.kind), sub = step.name ? spec?.displayName ?? step.kind : '';
+  const piece = pieceOf(step), pieceThere = !!piece && autos().workflows.some((w) => w.id === piece);
+  const title = step.name || (runsFn ? `Run ${step.ref}` : piece ? `Run ${wfName(piece)}` : spec?.displayName || step.kind), sub = step.name ? spec?.displayName ?? step.kind : piece ? 'a reusable piece' : '';
   const lines = [];
-  if (runsFn) lines.push(h('span', {}, 'Runs the cloud function ', h('code', {}, step.ref), ' ', registry()[CLOUD + step.ref] ? h('button', { class: 'quiet tiny fnopen', title: `Open ${step.ref}'s own steps`, onclick: (e) => { e.stopPropagation(); openFunction(CLOUD + step.ref, { kind: 'auto', auto: { ...selAuto }, title: wfLabel }); } }, 'Open its steps ↗') : h('span', { style: 'color:var(--red)' }, '(not in the project)')));
+  if (piece) lines.push(h('span', {}, 'Runs the piece ', h('code', {}, wfName(piece)), ' ', pieceThere ? h('button', { class: 'quiet tiny fnopen', 'data-act': 'openpiece', title: `Open ${wfName(piece)}: its own steps`, onclick: (e) => { e.stopPropagation(); openPiece(piece, { id: selAuto.id, pick: step.id }); } }, 'Open the piece ↗') : h('span', { style: 'color:var(--red)' }, '(not in the project)')));
+  else if (runsFn) lines.push(h('span', {}, 'Runs the cloud function ', h('code', {}, step.ref), ' ', registry()[CLOUD + step.ref] ? h('button', { class: 'quiet tiny fnopen', title: `Open ${step.ref}'s own steps`, onclick: (e) => { e.stopPropagation(); openFunction(CLOUD + step.ref, { kind: 'auto', auto: { ...selAuto }, title: wfLabel }); } }, 'Open its steps ↗') : h('span', { style: 'color:var(--red)' }, '(not in the project)')));
   else if (spec?.summary) lines.push(h('span', { style: 'color:var(--sub)' }, spec.summary));
-  for (const [k, v] of Object.entries(step.params ?? {})) if (lines.length < 4 && (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')) lines.push(h('span', {}, `${k}: `, h('code', {}, String(v).slice(0, 60))));
+  for (const [k, v] of Object.entries(step.params ?? {})) if (lines.length < 4 && !(piece && k === 'workflow') && (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')) lines.push(h('span', {}, `${k}: `, h('code', {}, String(v).slice(0, 60))));
   let cls = 'step';
   if (lit) {
     const s = lit.get(step.id);
@@ -5661,7 +5699,7 @@ function autoStepCard(step, n, lit, wfLabel) {
   }
   if (selAutoStep === step.id) cls += ' picked';
   const ports = autoPorts(step).length;
-  return h('div', { class: cls, 'data-id': step.id, 'data-kind': step.kind, title: 'Its settings, and what it took and gave in the last run', onclick: () => pickAutoStep(step.id), style: `--kind:${runsFn ? KIND_COLOUR.bolt : step.kind === 'branch' || step.kind === 'switch' ? KIND_COLOUR.branch : KIND_COLOUR.code}${ports > 1 ? `;min-height:${ports * 34 + 16}px` : ''}` },
+  return h('div', { class: cls, 'data-id': step.id, 'data-kind': step.kind, title: 'Its settings, and what it took and gave in the last run', onclick: () => pickAutoStep(step.id), style: `--kind:${runsFn || piece ? KIND_COLOUR.bolt : step.kind === 'branch' || step.kind === 'switch' ? KIND_COLOUR.branch : KIND_COLOUR.code}${ports > 1 ? `;min-height:${ports * 34 + 16}px` : ''}` },
     h('div', { class: 'num' }, String(n)), h('h3', {}, title, sub ? h('span', {}, sub) : null), h('div', { class: 'acts' }), h('div', { class: 'lines' }, ...lines));
 }
 /* ---- P132 BWF-010: what starts a workflow is its first card (Richard, 2026-11-03: a trigger listed as a row of its own,
@@ -5680,11 +5718,24 @@ function autoTriggerCard(t) {
   return h('div', { class: `step fnstart${on ? '' : ' trigoff'}${selAutoStep === id ? ' picked' : ''}`, 'data-id': id, 'data-trigger': t.id, title: 'What starts it: its settings', onclick: () => pickAutoStep(id), style: `--kind:${FLOW.then}` },
     h('div', { class: 'num' }, icon('bolt')), h('h3', {}, head, h('span', {}, on ? 'what starts it' : 'off')), h('div', { class: 'acts' }), h('div', { class: 'lines' }, ...triggerLines(t)));
 }
+/** P132 BWF-013: the workflows that run a piece, each a button opening it (Back returns to the piece). */
+const runnerButtons = (w) => runnersOf(autos().workflows, w.id).map((id) => h('button', { class: 'quiet tiny startedby', 'data-runner': id, title: `Open ${wfName(id)}`, onclick: (e) => { e.stopPropagation(); openPiece(id, { id: w.id }); } }, wfName(id)));
 function autoNoTriggerCard(w) {
-  return h('div', { class: 'step fnstart nostart', 'data-id': 'starts', title: 'Nothing starts it on its own', style: `--kind:${FLOW.dead}` },
-    h('div', { class: 'num' }, icon('bolt')), h('h3', {}, 'Nothing starts it on its own'), h('div', { class: 'acts' }),
-    h('div', { class: 'lines' }, h('span', { style: 'color:var(--sub)' }, 'Another workflow, the agent or a test runs it.'),
+  const piece = pieceIds().has(w.id), by = piece ? runnerButtons(w) : [];
+  return h('div', { class: 'step fnstart nostart', 'data-id': 'starts', title: piece ? 'A reusable piece: other workflows run it' : 'Nothing starts it on its own', style: `--kind:${FLOW.dead}` },
+    h('div', { class: 'num' }, icon('bolt')), h('h3', {}, piece ? 'A reusable piece' : 'Nothing starts it on its own', piece ? h('span', {}, 'nothing starts it on its own') : null), h('div', { class: 'acts' }),
+    h('div', { class: 'lines' }, piece ? h('span', { 'data-runby': '' }, ...(by.length ? ['Run by ', ...by] : [h('span', { style: 'color:var(--sub)' }, 'No workflow runs it yet: add a Run a workflow step to one.')]))
+      : h('span', { style: 'color:var(--sub)' }, 'Another workflow, the agent or a test runs it.'),
       editingUp() ? h('button', { class: 'tiny', 'data-act': 'addtrigger', onclick: (e) => { e.stopPropagation(); addTriggerForm(e, w); } }, icon('plus'), 'Add what starts it') : null));
+}
+/** P132 BWF-013: a piece's run started by another workflow's step says so, with that run one press away. */
+function pieceParentLine() {
+  const m = autoRun?.run?.metadata;
+  if (!m?.parentWorkflowId || !m.parentExecutionId) return null;
+  const there = !!autoEntry({ kind: 'workflow', id: m.parentWorkflowId });
+  const stepName = (() => { const s = autos().workflows.find((x) => x.id === m.parentWorkflowId)?.steps?.find((x) => x.id === m.parentStepId); return s?.name || (s ? `Run ${wfName(selAuto.id)}` : m.parentStepId); })();
+  return h('div', { class: 'pieceparent', 'data-parent-run': m.parentExecutionId }, `This run was started by ${wfName(m.parentWorkflowId)}, at its step “${stepName}”. `,
+    there ? h('button', { class: 'quiet tiny', 'data-act': 'openparentrun', title: 'That workflow, as it ran: its steps lit', onclick: () => openAuto({ kind: 'workflow', id: m.parentWorkflowId }, null, { pick: m.parentStepId ?? null, runId: m.parentExecutionId }) }, 'Open that run ↗') : null);
 }
 function renderAutoWorkflow(w) {
   const L = workflowLayout(w, routeNamesOf), byStep = Object.fromEntries((w.steps ?? []).map((s) => [s.id, s]));
@@ -5694,10 +5745,12 @@ function renderAutoWorkflow(w) {
   wf.append(h('div', { class: 'event-card' }, h('div', { class: 'named' }, h('h2', {}, label), h('small', {}, 'A workflow on the backend: its steps run there, left to right, never on the device')),
     h('div', { style: 'margin-left:auto;display:flex;gap:6px;align-items:center' }, h('div', { class: 'zoom' }, h('button', { title: 'Smaller', onclick: () => zoomFlow(-0.1) }, '−'), h('span', { class: 'zoomval' }), h('button', { title: 'Bigger', onclick: () => zoomFlow(0.1) }, '+'), h('button', { title: 'Fit the whole workflow in view', onclick: () => { flowZoom = null; fitFlow(); } }, 'Fit')))));
   const starts = autos().triggers.filter((t) => targetOf(t).kind === 'workflow' && targetOf(t).name === w.id);
-  const nameOf = (id) => byStep[id]?.name || (byStep[id]?.ref ? `Run ${byStep[id].ref}` : id);
+  const nameOf = (id) => byStep[id]?.name || (byStep[id]?.ref ? `Run ${byStep[id].ref}` : pieceOf(byStep[id]) ? `Run ${wfName(pieceOf(byStep[id]))}` : id);
   const failedRun = autoRun?.run && autoRun.run.status !== 'success' && autoRun.run.status !== 'running';
   wf.append(h('div', { class: 'fnfacts' },
-    h('div', {}, starts.length ? ['Started by ', ...starts.map((t) => h('button', { class: 'quiet tiny startedby', 'data-trigger': t.id, title: 'Its settings, on its card', onclick: () => pickAutoStep(`trigger:${t.id}`) }, triggerHead(t, beNow()?.triggers.get(t.id)?.scheduleWords)))] : NOSTART_WORDS),
+    h('div', {}, starts.length ? ['Started by ', ...starts.map((t) => h('button', { class: 'quiet tiny startedby', 'data-trigger': t.id, title: 'Its settings, on its card', onclick: () => pickAutoStep(`trigger:${t.id}`) }, triggerHead(t, beNow()?.triggers.get(t.id)?.scheduleWords)))]
+      : pieceIds().has(w.id) ? (runnersOf(autos().workflows, w.id).length ? ['A reusable piece, run by ', ...runnerButtons(w)] : 'A reusable piece: no workflow runs it yet.') : NOSTART_WORDS),
+    pieceParentLine(),
     h('div', { class: 'agree' }, agreeWords('workflow', w)),
     h('div', { class: `run ${autoRun?.run ? (failedRun ? 'refused' : 'ran') : ''}` }, autoRun ? autoRun.words ?? runLine(autoRun.run, nameOf) : 'Reading its last run…',
       autoRun?.run ? h('button', { class: 'quiet tiny playrun', title: 'Each step lit in the order it ran, a dot along each wire it crossed', onclick: () => playAutoRun() }, '▶ Play the run') : null),
@@ -5751,7 +5804,7 @@ let selAutoStep = null;
 const kindSpec = (kind) => beNow()?.kinds.get(kind);
 const callableFns = () => functionList(Object.keys(registry()), fnNodesOf).filter((f) => f.endpoint).map((f) => fnName(f.key));
 const RECORD_KINDS = new Set(['create-record', 'update-record', 'delete-record', 'find-records']);
-const KIND_GLYPH = (kind, spec) => (spec?.invokesFunction || kind === 'http-request' || kind === 'send-email' ? 'bolt' : RECORD_KINDS.has(kind) ? 'db' : kind === 'branch' || kind === 'switch' ? 'branch' : kind === 'wait' || kind === 'wait-until' ? 'repeat' : 'code');
+const KIND_GLYPH = (kind, spec) => (spec?.invokesFunction || kind === 'http-request' || kind === 'send-email' || kind === PIECE_KIND ? 'bolt' : RECORD_KINDS.has(kind) ? 'db' : kind === 'branch' || kind === 'switch' ? 'branch' : kind === 'wait' || kind === 'wait-until' ? 'repeat' : 'code');
 const editingUp = () => { const be = beNow(); return !!be && !be.words && be.kinds.size > 0; };
 /** The kind's own routes (the catalog's, a switch's case labels): its ports, named, even with nothing on them yet. */
 const routeNamesOf = (step) => { const spec = kindSpec(step.kind); return spec?.routes?.length ? [...spec.routes.filter((r) => !r.dynamic).map((r) => r.name), ...(step.kind === 'switch' ? (step.params?.cases ?? []).map((c) => c.label).filter(Boolean) : [])] : []; };
@@ -5800,6 +5853,13 @@ function newAutoStep(w, kind) {
     // or a caller's body), a pill the person changes; '' was refused by the backend, so the step could not be added at all
     if (kind === 'update-record' || kind === 'delete-record') params.record = { $path: from ? 'body' : 'body.id' };
     if (kind === 'create-record' || kind === 'update-record') params.fields = {};
+  }
+  // P132 BWF-013: a Run a workflow step starts on the first piece it can run without a ring (else any such workflow)
+  if (kind === PIECE_KIND) {
+    const wfs = autos().workflows, can = wfs.filter((x) => x.id !== w.id && !wouldRing(wfs, w.id, x.id)), pieces = pieceIds();
+    const to = can.find((x) => pieces.has(x.id)) ?? can[0];
+    if (!to) throw new Error('There is no other workflow for it to run yet: make a reusable piece first (Reusable pieces, New).');
+    params.workflow = to.id;
   }
   if (Object.keys(params).length) step.params = params;
   if (kind === 'branch') step.routes = { ontrue: [] };
@@ -6082,9 +6142,14 @@ function loadAutoTables(id, also = []) {
   }).catch(() => {});
 }
 /** What a function step's function answers: the names its Responses send (a refusal's aside), or null when it is not read. */
-const fnAnswers = (step) => { try { const res = fnNodesOf(CLOUD + step.ref).filter((n) => n.type === RESPONSE).map((n) => responseWords(n)).filter((r) => !r.refusal); return res.length ? [...new Set(res.flatMap((r) => r.sends))] : null; } catch { return null; } };
+const fnAnswers = (step) => { if (pieceOf(step)) return pieceAnswers(pieceOf(step)); try { const res = fnNodesOf(CLOUD + step.ref).filter((n) => n.type === RESPONSE).map((n) => responseWords(n)).filter((r) => !r.refusal); return res.length ? [...new Set(res.flatMap((r) => r.sends))] : null; } catch { return null; } };
+/** P132 BWF-013: what a piece answers, by name: the fields of its `return`'s value when it says them, else null. */
+function pieceAnswers(id) {
+  const ret = autos().workflows.find((x) => x.id === id)?.steps?.find((s) => s.kind === 'return')?.params?.value;
+  return ret && typeof ret === 'object' && !Array.isArray(ret) && valueForm(ret).from === undefined && !('$fn' in ret) && !('$literal' in ret) ? Object.keys(ret) : null;
+}
 function readsFor(w, stepId, item = false) {
-  const have = { run: autoRun?.run ? stepsOfRun(autoRun.run) : null, sample: sampleOf(w), starts: startsOf(w.id), columns: tableColumns, kind: kindSpec, answers: fnAnswers };
+  const have = { run: autoRun?.run ? stepsOfRun(autoRun.run) : null, sample: sampleOf(w), starts: startsOf(w.id), columns: tableColumns, kind: kindSpec, answers: fnAnswers, sent: sentNames(autos().workflows, w.id) };
   const out = readSources(w, stepId, have), step = w.steps.find((s) => s.id === stepId);
   return item && step ? [...itemSources(w, step, out), ...out] : out;
 }
@@ -6261,6 +6326,38 @@ const HTTP_SHOWN = {
 /** A param the catalog gives no display name, in words: maxAttempts → "Max attempts". */
 const paramWords = (name) => { const w = name.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]/g, ' ').toLowerCase(); return w.charAt(0).toUpperCase() + w.slice(1).replace(/\bms\b/, '(ms)'); };
 const prettyJson = (v) => { const t = JSON.stringify(v, null, 2); return t === undefined ? '(nothing)' : t; };
+/** P132 BWF-013: the piece a Run a workflow step runs, by name: pieces first, then the workflows something starts; one
+    that runs this workflow (a ring) is shown, not offered. */
+function pieceField(value, set, w, step, description) {
+  const wfs = autos().workflows, all = wfs.filter((x) => x.id !== w.id), pieces = pieceIds();
+  const opt = (x) => { const ring = wouldRing(wfs, w.id, x.id); return h('option', { value: x.id, selected: x.id === value, disabled: ring && x.id !== value }, `${x.name || x.id}${ring ? ` (it runs ${w.name || w.id})` : ''}`); };
+  const there = !!value && all.some((x) => x.id === value);
+  const mine = all.filter((x) => pieces.has(x.id)), others = all.filter((x) => !pieces.has(x.id));
+  const sel = h('select', { 'aria-label': 'The piece it runs', 'data-input': 'piece', onchange: (e) => set(e.target.value) },
+    there ? null : h('option', { value: value ?? '', selected: true, disabled: true }, value ? `${value} (not in the project)` : 'Choose a piece'),
+    mine.length ? h('optgroup', { label: 'Reusable pieces' }, ...mine.map(opt)) : null,
+    others.length ? h('optgroup', { label: 'Workflows something starts' }, ...others.map(opt)) : null);
+  return h('div', { class: 'field', 'data-piecefield': '', title: description }, h('label', {}, 'The piece'), h('div', { class: 'ctl' }, sel,
+    there ? h('button', { class: 'quiet tiny', 'data-act': 'openpiece', title: 'Its own steps (Back returns here)', onclick: () => openPiece(value, { id: w.id, pick: step.id }) }, 'Open the piece ↗') : null));
+}
+/** What a Run a workflow step sends: a value per name the piece reads (`body.<name>` in its steps), then any other name it is sent. */
+function pieceSendSection(wrap, w, step, params, setParam) {
+  const target = autos().workflows.find((x) => x.id === params.workflow), asks = target ? bodyNames(target) : [];
+  const send = params.send;
+  if (send !== undefined && (typeof send !== 'object' || send === null || Array.isArray(send) || valueForm(send).from !== undefined || '$fn' in send)) return wrap.append(jsonField('What it sends the piece', send, setParam('send')));
+  const now = send ?? {}, named = [...new Set([...asks, ...Object.keys(now)])];
+  const setOne = (name) => (v) => { const next = { ...now }; if (v === undefined) delete next[name]; else next[name] = v; setParam('send')(Object.keys(next).length ? next : undefined); };
+  const piece = target ? target.name || target.id : 'The piece';
+  wrap.append(h('div', { class: 'sechead', 'data-pieceasks': asks.join(',') }, 'What it sends the piece'));
+  if (!named.length) wrap.append(h('div', { class: 'hint' }, `${piece} reads nothing it is given yet. Add a value to send one: the piece reads it as what it was given.`));
+  for (const name of named) wrap.append(runValueField(name, now[name], setOne(name), { w, description: asks.includes(name) ? `${piece} reads it` : `Sent as ${name}: ${piece} does not read it yet` }));
+  wrap.append(h('div', { class: 'after' }, h('button', { 'data-act': 'addsend', onclick: async (e) => {
+    const name = (await askName(e, 'The value\'s name, as the piece reads it', { go: 'Add' }))?.trim();
+    if (!name) return;
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return toast('A name is letters, digits and _, starting with a letter: the piece reads it as one word.');
+    if (!(name in now)) setOne(name)('');
+  } }, icon('plus'), 'Add a value')));
+}
 function autoStepPanel(panel, w, step) {
   const spec = kindSpec(step.kind), up = editingUp();
   const save = (next, words) => saveAutoWf(next, words);
@@ -6287,6 +6384,9 @@ function autoStepPanel(panel, w, step) {
       // folded: *What it can read* below says the same, without the backend's deprecated copy of the payload (BWF-003)
       box.append(h('details', { class: 'rdinfold' }, h('summary', { class: 'rdlabel' }, 'What went in'), h('div', { class: 'rdin' }, ran.input === undefined ? '(not recorded)' : valueTree(ran.input))));
       if (ran.status !== 'error') box.append(h('div', { class: 'rdlabel' }, 'What came out'), h('div', { class: 'rdout' }, ran.output === undefined ? '(nothing)' : valueTree(ran.output)));
+      // P132 BWF-013: the piece's own run, its steps lit, with Back to this step in this run
+      const childRun = pieceOf(step) && (ran.output?.run || runInFailure(ran.error));
+      if (childRun) box.append(h('div', { class: 'after' }, h('button', { 'data-act': 'openpiecerun', title: `${wfName(pieceOf(step))} as it ran for this step: each of its steps lit`, onclick: () => openPiece(pieceOf(step), { id: w.id, pick: step.id, runId: autoRun.run.id }, { runId: childRun }) }, 'Open that run ↗')));
     }
     wrap.append(box);
   }
@@ -6313,13 +6413,15 @@ function autoStepPanel(panel, w, step) {
     const sections = new Map(); // a group other than the retry knobs is a section of its own (Authentication), not tucked away
     for (const p of viaCall ? [] : own) {
       if (p.name === 'ref' || p.control === 'saved-call' || p.control === 'call-blanks') continue;
+      if (step.kind === PIECE_KIND && p.name === 'send') continue; // drawn below as the names the piece reads
       if (step.kind === 'http-request' && HTTP_SHOWN[p.name] && !HTTP_SHOWN[p.name](params)) continue;
       const label = p.displayName || paramWords(p.name), v = params[p.name];
       const tucked = p.group && /retry/i.test(p.group);
       if (p.group && !tucked && !sections.has(p.group)) { const sec = h('div', { class: 'paramsec', 'data-group': p.group }, h('div', { class: 'sechead' }, p.group)); sections.set(p.group, sec); wrap.append(sec); }
       const into = !p.group ? wrap : tucked ? more : sections.get(p.group);
       if (tucked) moreN++;
-      if (p.control === 'secret') into.append(secretField(label, v, setParam(p.name), p.description));
+      if (p.control === 'workflow') into.append(pieceField(v, setParam(p.name), w, step, p.description));
+      else if (p.control === 'secret') into.append(secretField(label, v, setParam(p.name), p.description));
       else if (p.control === 'key-values') into.append(keyValuesField(label, v, setParam(p.name), w, p.description));
       else if (p.control === 'table') into.append(tableField(label, v, (t) => { setParam(p.name)(t); loadAutoTables(w.id, [t]); }, p.description));
       else if (p.control === 'record-fields') into.append(recordFieldsField(label, v, setParam(p.name), params.table, w));
@@ -6336,6 +6438,7 @@ function autoStepPanel(panel, w, step) {
       if (!named.length) wrap.append(h('div', { class: 'hint' }, 'The function asks for nothing.'));
       for (const name of named) wrap.append(runValueField(name, params[name], setParam(name), { w, description: asks.includes(name) ? 'The function asks for it' : 'Sent under this name' }));
     }
+    if (step.kind === PIECE_KIND) pieceSendSection(wrap, w, step, params, setParam);
     if (moreN) { more.firstChild.textContent = `More options (${moreN})`; wrap.append(more); }
     // what comes next
     wrap.append(h('div', { class: 'sechead' }, 'Then'));
@@ -6582,12 +6685,13 @@ function startFields(fallback, { nothing = true } = {}) {
   };
   return f;
 }
-function newAutoForm(e) {
+/** `piece`: P132 BWF-013, a reusable piece: a workflow nothing starts, which other workflows run by name. */
+function newAutoForm(e, { piece = false } = {}) {
   closeMenu();
   if (!editingUp()) return toast(beNow()?.words ?? 'Asking the backend… try again in a moment. A workflow is made on the backend and in the project together.');
   const fns = callableFns();
-  const menu = popover(e, 'newitem newpage newauto');
-  const name = h('input', { type: 'text', placeholder: 'The morning check, When an order arrives…', 'aria-label': 'Workflow name' });
+  const menu = popover(e, `newitem newpage newauto${piece ? ' newpiece' : ''}`);
+  const name = h('input', { type: 'text', placeholder: piece ? 'Find thirsty plants, Tell the gardener…' : 'The morning check, When an order arrives…', 'aria-label': piece ? 'The piece\'s name' : 'Workflow name' });
   const sf = startFields(() => name.value);
   // a workflow has at least one step: a function it runs, any other step, or an end to add steps before
   const others = [...(beNow()?.kinds.values() ?? [])].filter((k) => !k.invokesFunction && !['return', 'stop'].includes(k.kind));
@@ -6600,10 +6704,11 @@ function newAutoForm(e) {
   const slug = () => slugOf(name.value);
   const check = () => {
     sf.refresh();
-    const id = slug(), taken = autos().workflows.some((w) => w.id === id), problem = sf.problem();
+    const id = slug(), taken = autos().workflows.some((w) => w.id === id), problem = piece ? null : sf.problem();
     const first = fn.value.startsWith('kind:') ? kindSpec(fn.value.slice(5))?.displayName : fn.value.replace(/^Cloud Functions\//, '');
-    const noTypes = sf.starts.value === 'db-change' && !typeNames().length;
-    note.textContent = noTypes ? problem : !id ? 'Its name, as the list shows it.' : taken ? `There is already a workflow called ${id}.` : problem ? problem : fn.value ? `It starts with ${first}; add its other steps on the canvas.` : 'It starts with one step that ends it: add its steps before that one.';
+    const noTypes = !piece && sf.starts.value === 'db-change' && !typeNames().length;
+    const runIt = piece ? ' Any workflow runs it with a Run a workflow step, and what it sends arrives here as what it was given.' : '';
+    note.textContent = noTypes ? problem : !id ? 'Its name, as the list shows it.' : taken ? `There is already a workflow called ${id}.` : problem ? problem : (fn.value ? `It starts with ${first}; add its other steps on the canvas.` : 'It starts with one step that ends it: add its steps before that one.') + runIt;
     create.disabled = !id || taken || !!problem;
   };
   for (const el of [name, ...sf.inputs, fn]) el.addEventListener(el.tagName === 'INPUT' && el.type === 'text' ? 'input' : 'change', check);
@@ -6615,11 +6720,11 @@ function newAutoForm(e) {
     try { if (fn.value.startsWith('kind:')) firstStep = newAutoStep({ steps: [] }, fn.value.slice(5)); else if (fn.value) firstStep = { id: 'first', kind: 'call-function', ref: fn.value }; }
     catch (err) { return toast(err.message); }
     const wf = { id, name: name.value.trim(), entry: firstStep.id, concurrency: 1, steps: [firstStep] };
-    const trigger = sf.make();
-    const j = await saveAutoWf(wf, `${wf.name} made${BOTH}`, trigger ? { trigger } : {});
+    const trigger = piece ? undefined : sf.make();
+    const j = await saveAutoWf(wf, `${wf.name} made${piece ? ', a reusable piece' : ''}${BOTH}`, trigger ? { trigger } : {});
     if (j) { openAuto({ kind: 'workflow', id }); if (j.hook) hookMade(e, j.hook); }
   };
-  menu.append(h('div', { class: 'h' }, 'New workflow on the backend'), h('div', { class: 'field' }, h('label', {}, 'Name'), name), h('div', { class: 'field' }, h('label', {}, 'Starts on'), sf.starts), ...sf.rows,
+  menu.append(h('div', { class: 'h' }, piece ? 'New reusable piece' : 'New workflow on the backend'), h('div', { class: 'field' }, h('label', {}, 'Name'), name), ...(piece ? [] : [h('div', { class: 'field' }, h('label', {}, 'Starts on'), sf.starts), ...sf.rows]),
     h('div', { class: 'field' }, h('label', {}, 'First step'), fn), note, h('div', { class: 'foot' }, h('button', { onclick: () => closeMenu() }, 'Cancel'), create));
   document.body.append(menu); name.focus(); check();
   dismissOnOutside(menu);
@@ -6661,6 +6766,7 @@ function hookMade(e, hook) {
   document.body.append(menu);
 }
 $('newauto').onclick = (e) => newAutoForm(e);
+$('newpiece').onclick = (e) => newAutoForm(e, { piece: true });
 /** Asked in Studio's own popover (a page inside the conversation may have no confirm()): STU-082's rule. */
 function confirmPop(e, title, words, yes, then) {
   closeMenu();
@@ -6673,7 +6779,9 @@ function confirmPop(e, title, words, yes, then) {
 function deleteAutoWf(e, w) {
   const by = autos().triggers.filter((t) => targetOf(t).kind === 'workflow' && targetOf(t).name === w.id);
   if (by.length) return toast(`${triggerHead(by[0], beNow()?.triggers.get(by[0].id)?.scheduleWords)} still starts it: press its card, the first on the canvas, and delete it first, or it would start nothing.`);
-  confirmPop(e, `Delete “${w.name || w.id}”?`, 'It is taken off the backend and out of the project. Its past runs stay in the backend’s history.', 'Delete it', async () => {
+  const runners = runnersOf(autos().workflows, w.id).filter((id) => id !== w.id); // P132 BWF-013: a piece others still run
+  const runWords = runners.length ? ` ${runnersWords(runners, wfName).replace(/^Run by/, 'It is run by')}: that step fails once it is gone.` : '';
+  confirmPop(e, `Delete “${w.name || w.id}”?`, `It is taken off the backend and out of the project. Its past runs stay in the backend’s history.${runWords}`, 'Delete it', async () => {
     const j = await saveAutoWf(undefined, `${w.name || w.id} deleted${BOTH}`, { remove: w.id });
     if (j) { selAuto = null; selAutoStep = null; renderWorkflow(); }
   });

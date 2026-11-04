@@ -7,6 +7,7 @@
  *   node editor/automations-check.mjs    PASS n/n and exit 0, or the failing lines and exit 1
  */
 import { callParts, saveCallFrom, stepForCall, usersOfCall, callId, readsRun, blankName } from './automations.mjs';
+import { pieceOf, piecesIn, runnersOf, sentNames, bodyNames, runnersWords, wouldRing, runInFailure } from './automations.mjs';
 import { parseCurl, secretNameFor, shellWords, testMailWords, composeParts, composeValue, isChip, knownAt, chipRefinements, chipWords } from './automations.mjs';
 import { ALWAYS_WORDS, formulaParts, formulaStart, formulaWords, itemSources, pathWords, readSources, shapeFields, startWords, upstreamOf, addStepAfter, sampleFor, sampleRun, sampleWords, testRefusal, agrees, atTime, canMove, deleteStep, insertBetween, moveStep, nextOntoRoute, stepPorts, newStepId, readAutomations, runLine, scheduleTime, stepsOfRun, stepWires, targetOf, triggerHead, valueForm, workflowLayout } from './automations.mjs';
 
@@ -311,6 +312,35 @@ console.log('check: P132 BWF-011, a value composed in a setting');
   ok(blankName('X-Request-Id', []) === 'X_Request_Id' && blankName('2fa', []) === '_2fa' && blankName('city', ['city']) === 'city_2', "a blank's name is one a path can carry");
   ok(JSON.stringify(usersOfCall([{ id: 'a', steps: [{ kind: 'http-request', params: { call: 'w' } }] }, { id: 'b', steps: [{ kind: 'http-request', params: { url: 'x' } }] }], 'w')) === '["a"]', 'who uses a saved call');
   ok(JSON.stringify(readAutomations('{"version":1,"workflows":[],"triggers":[],"apiCalls":[{"id":"w"}]}').apiCalls) === '[{"id":"w"}]' && readAutomations(null).apiCalls.length === 0, 'the file\'s saved calls are read');
+}
+
+// P132 BWF-013 (R6): a reusable piece is a workflow others run
+{
+  const run = (to, send) => ({ id: `run-${to}`, kind: 'run-workflow', params: { workflow: to, ...(send ? { send } : {}) } });
+  const thirsty = { id: 'thirsty', name: 'Find thirsty plants', steps: [{ id: 'find', kind: 'find-records', params: { table: 'Plant', where: [{ field: 'room', op: 'eq', value: { $path: 'body.room' } }] } }, { id: 'say', kind: 'transform', params: { output: { line: { $fn: 'text', args: ['Water ', { $path: 'body.who.name' }] }, kept: { $literal: { $path: 'body.never' } } } } }] };
+  const morning = { id: 'morning', name: 'The morning check', steps: [run('thirsty', { room: 'Kitchen' })] };
+  const evening = { id: 'evening', name: 'The evening check', steps: [run('thirsty', { room: { $path: 'body.room' }, extra: 1 }), run('tell')] };
+  const tell = { id: 'tell', name: 'Tell the gardener', steps: [] };
+  const wfs = [thirsty, morning, evening, tell];
+  const trig = [{ id: 't1', type: 'schedule', target: { kind: 'workflow', name: 'morning' } }, { id: 't2', type: 'schedule', target: { kind: 'workflow', name: 'evening' } }, { id: 't3', type: 'schedule', target: { kind: 'function', name: 'tell' } }];
+  ok(JSON.stringify(piecesIn(wfs, trig).map((w) => w.id)) === '["thirsty","tell"]', 'the pieces: the workflows no trigger starts (a trigger starting a FUNCTION of the same name starts no workflow)');
+  ok(pieceOf(morning.steps[0]) === 'thirsty' && pieceOf({ kind: 'run-workflow', params: { workflow: { $path: 'body.w' } } }) === null && pieceOf({ kind: 'call-function', ref: 'x' }) === null, 'the piece a step runs, by a plain id only');
+  ok(JSON.stringify(runnersOf(wfs, 'thirsty')) === '["morning","evening"]' && runnersOf(wfs, 'morning').length === 0, 'who runs a piece, in the file\'s order');
+  ok(JSON.stringify(sentNames(wfs, 'thirsty')) === '["room","extra"]', 'the names a piece is sent, each once', sentNames(wfs, 'thirsty'));
+  ok(JSON.stringify(bodyNames(thirsty)) === '["room","who"]', 'the names a piece reads from what it was given, inside conditions and formulas, never inside a $literal', bodyNames(thirsty));
+  ok(runnersWords(['morning', 'evening'], (id) => wfs.find((w) => w.id === id).name) === 'Run by “The morning check” and “The evening check”' && runnersWords([]) === 'No workflow runs it yet' && /and 1 more$/.test(runnersWords(['a', 'b', 'c'])), 'a piece\'s row says who runs it');
+  ok(wouldRing(wfs, 'thirsty', 'morning') && wouldRing(wfs, 'thirsty', 'thirsty') && !wouldRing(wfs, 'morning', 'thirsty') && !wouldRing(wfs, 'tell', 'thirsty'), 'a ring is seen before it is offered: running a workflow that runs this one, or itself');
+  ok(wouldRing([{ id: 'a', steps: [run('b')] }, { id: 'b', steps: [run('c')] }, { id: 'c', steps: [] }], 'c', 'a') && !wouldRing([{ id: 'a', steps: [run('b')] }, { id: 'b', steps: [] }], 'c', 'a'), 'and through a second piece');
+  ok(runInFailure('Step "ask": the piece "Always fails" failed at its step "Say no": no (its run: 9f2c-1)') === '9f2c-1' && runInFailure('(its run: not recorded)') === null && runInFailure('boom') === null, "the piece's run named in its failure (none when it was not recorded)");
+  // what a piece can read: what its runners send, before any run or sample
+  const src = readSources(thirsty, 'find', { sent: sentNames(wfs, 'thirsty') });
+  ok(src[0].root === 'body' && src[0].from === 'shape' && JSON.stringify(Object.keys(src[0].value)) === '["room","extra"]' && !src[0].note, 'inside a piece, what it was given is the names its runners send', src[0]);
+  ok(readSources(thirsty, 'find', {}).length && readSources(thirsty, 'find', {})[0].note, 'a piece nothing runs yet keeps the note');
+  ok(readSources(thirsty, 'find', { sent: ['room'], starts: [trig[0]] })[0].note, 'a started workflow is not given its runners\' names');
+  // a step running a piece answers { result, run }, said by the piece's names
+  const after = readSources({ steps: [{ ...morning.steps[0], next: ['next'] }, { id: 'next', kind: 'transform' }], entry: 'run-thirsty' }, 'next', { answers: (s) => (s.kind === 'run-workflow' ? ['plants'] : null) });
+  ok(JSON.stringify(after.find((x) => x.root === 'upstream.run-thirsty')?.value) === '{"result":{"plants":null}}', 'after a Run a workflow, its result\'s names, as a function step\'s', after.map((x) => x.root));
+  ok(pathWords('upstream.run-thirsty.result.plants', { steps: [{ ...morning.steps[0], name: 'Thirsty' }] }).name === 'plants', 'a piece\'s answer is said by its own names, not "result › plants"');
 }
 
 const passed = results.filter(Boolean).length;

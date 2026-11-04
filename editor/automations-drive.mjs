@@ -143,12 +143,12 @@ try {
   await b.clickSel('#rail [data-tab=backend]');
   await b.until(`document.querySelectorAll('#autolist .row').length === 2 && !document.querySelector('#autolist')?.innerText.includes('0 9 * * *')`, 10000);
   // STU-093: the Map's words for when it last ran ("just now: it failed") arrive with its words.js
-  await b.until(`/last run/.test(document.querySelector('#autolist .row[data-workflow="triage"]')?.innerText ?? '') && !/\\d{4}/.test(document.querySelector('#autolist .row[data-workflow="triage"]')?.innerText ?? '')`, 8000).catch(() => {});
+  await b.until(`/last run/.test(document.querySelector('.wfback .row[data-workflow="triage"]')?.innerText ?? '') && !/\\d{4}/.test(document.querySelector('.wfback .row[data-workflow="triage"]')?.innerText ?? '')`, 8000).catch(() => {});
   const listed = await ev(`[...document.querySelectorAll('#autolist .row')].map((r) => ({ trigger: r.dataset.trigger, workflow: r.dataset.workflow, text: r.innerText.replace(/\\s+/g, ' ').trim() }))`);
   const said = (id) => listed.find((r) => r.trigger === id)?.text ?? '';
   ok(/^Every day at 09:00 ?On ?Starts the function sendDigest$/.test(said(dailyId)), 'the daily trigger: "Every day at 09:00", on, starting sendDigest (the backend\'s words for its cron)', said(dailyId));
   // P132 BWF-010 (P132-TRIGGERROWS): a trigger that starts a workflow is no row of its own; its switch is on the workflow's
-  ok(listed.length === 2 && !listed.some((r) => r.trigger === rowsId) && await ev(`!!document.querySelector('#autolist .row[data-workflow="triage"] .trigswitch[data-trigger="${rowsId}"]')`), 'one row per workflow: the row-change trigger is not listed on its own, its switch is on the workflow\'s row', listed);
+  ok(listed.length === 2 && !listed.some((r) => r.trigger === rowsId) && await ev(`!!document.querySelector('.wfback .row[data-workflow="triage"] .trigswitch[data-trigger="${rowsId}"]')`), 'one row per workflow: the row-change trigger is not listed on its own, its switch is on the workflow\'s row', listed);
   ok(listed.some((r) => r.workflow === 'triage' && /^Triage a new task ?On ?Started by When a Task is created · 3 steps · last run (just now|\d+ seconds ago): it failed$/.test(r.text)), 'the workflow, by its name: on, what starts it, its three steps, and its last run in the Map\'s words (STU-093)', listed);
   ok(!listed.some((r) => /differs/.test(r.text)), 'the backend agrees with the project on every one');
   await shot('list');
@@ -165,7 +165,7 @@ try {
   await shot('trigger');
 
   // 3. the workflow, its last run lit
-  await ev(`document.querySelector('#autolist .row[data-workflow="triage"]').click()`);
+  await ev(`document.querySelector('.wfback .row[data-workflow="triage"]').click()`);
   await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'triage' && !/Reading its last run/.test(document.querySelector('#steps .fnfacts')?.innerText)`, 8000);
   {
     const v = await view();
@@ -189,7 +189,7 @@ try {
   await ev(`window.__playLog = []; clearInterval(window.__playTimer); window.__playTimer = setInterval(() => { const f = document.querySelector('#steps .autoview[data-workflow] .flow'); if (!f) return;
     const e = (f.classList.contains('playing') ? 'P' : '-') + '|' + [...f.querySelectorAll('.step.played')].map((x) => x.dataset.id).join(',') + '|' + [...f.querySelectorAll('circle.playdot')].map((c) => { const p = [...f.querySelectorAll('svg.wires path[data-ran]')].find((q) => q.getAttribute('d') === c.querySelector('animateMotion')?.getAttribute('path')); return p ? p.dataset.from + '>' + p.dataset.to : '?'; }).join(',');
     if (window.__playLog.at(-1) !== e) window.__playLog.push(e); }, 25); 0`);
-  await ev(`document.querySelector('#autolist .row[data-workflow="triage"] .lastrun').click()`);
+  await ev(`document.querySelector('.wfback .row[data-workflow="triage"] .lastrun').click()`);
   await b.until(`(window.__playLog ?? []).some((e) => e.startsWith('P')) && window.__playLog.at(-1).startsWith('-')`, 10000).catch(() => {});
   {
     const log = await ev(`(clearInterval(window.__playTimer), window.__playLog)`);
@@ -252,7 +252,7 @@ try {
   ok(await ev(`getComputedStyle(document.getElementById('autolist')).display === 'none' || !document.getElementById('autolist').offsetParent`), 'the Workflow tab lists the page\'s workflows only: the backend\'s are not in it');
   await b.clickSel('#rail [data-tab=backend]'); await wait(300);
   ok(await ev(`!!document.getElementById('autolist').offsetParent && !!document.getElementById('fnlist').offsetParent && !document.getElementById('events').offsetParent`), 'the Backend tab lists workflows and functions, and no page workflows');
-  await ev(`document.querySelector('#autolist .row[data-workflow="triage"]').click()`);
+  await ev(`document.querySelector('.wfback .row[data-workflow="triage"]').click()`);
   await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'triage' && !/Reading its last run/.test(document.querySelector('#steps .fnfacts')?.innerText) && !!document.querySelector('#steps .wfacts [data-act=addfirst]')`, 8000);
   await ev(`document.querySelector('#steps .autoview .step[data-id="pause"]').click()`);
   await b.until(`!document.getElementById('wfinspect').hidden && !!document.querySelector('#wfinspect .rdin')`, 5000);
@@ -305,7 +305,7 @@ try {
     await ev(`document.querySelector('.menu [data-act=confirm]').click()`);
     await b.until(`!!document.querySelector('#steps .autoview[data-workflow="nightly-tidy"] .step[data-id="starts"]')`, 8000).catch(() => {});
     ok(!fileNow().triggers.some((x) => x.id === t?.id) && !(await be('/admin/triggers')).triggers.some((x) => x.id === t?.id) && fileNow().workflows.some((w) => w.id === 'nightly-tidy'), 'its trigger deleted from its card: gone from the file and the backend, the workflow kept');
-    ok(await ev(`(() => { const c = document.querySelector('#steps .autoview[data-workflow="nightly-tidy"] .step[data-id="starts"]'); return !!c && /^Nothing starts it on its own\\s+Another workflow, the agent or a test runs it\\./.test(c.innerText.trim()) && !!c.querySelector('[data-act=addtrigger]') && getComputedStyle(c).opacity === '1'; })()`), 'the workflow stays open, its first card saying nothing starts it, with Add what starts it', await ev(`document.querySelector('#steps .autoview .fncol')?.innerText`));
+    ok(await ev(`(() => { const c = document.querySelector('#steps .autoview[data-workflow="nightly-tidy"] .step[data-id="starts"]'); return !!c && (/^Nothing starts it on its own\\s+Another workflow, the agent or a test runs it\\./.test(c.innerText.trim()) || /^A reusable piece\\s+nothing starts it on its own\\s+No workflow runs it yet/.test(c.innerText.trim())) && !!c.querySelector('[data-act=addtrigger]') && getComputedStyle(c).opacity === '1'; })()`), 'the workflow stays open, its first card saying nothing starts it (BWF-013: a reusable piece, on a backend that runs one), with Add what starts it', await ev(`document.querySelector('#steps .autoview .fncol')?.innerText`));
     await b.clickSel('#steps .autoview .step[data-id="starts"] [data-act=addtrigger]'); await wait(300);
     const shownAdd = {};
     for (const v of ['db-change', 'schedule', 'webhook']) {
@@ -326,7 +326,7 @@ try {
     }
     await ev(`document.querySelector('.wfacts [data-act=delete]').click()`); await wait(300);
     await ev(`document.querySelector('.menu [data-act=confirm]').click()`);
-    await b.until(`!document.querySelector('#autolist .row[data-workflow="nightly-tidy"]')`, 8000).catch(() => {});
+    await b.until(`!document.querySelector('.wfback .row[data-workflow="nightly-tidy"]')`, 8000).catch(() => {});
     const gone = await fetch(url + 'api/backend/admin/workflow-defs/nightly-tidy');
     ok(!fileNow().triggers.some((x) => x.id === t?.id) && !fileNow().workflows.some((w) => w.id === 'nightly-tidy') && gone.status === 404 && !(await be('/admin/triggers')).triggers.some((x) => x.id === t?.id), 'the trigger, then the workflow, deleted: gone from the file and the backend');
   }
@@ -348,7 +348,7 @@ try {
   }
   const triage = () => fileNow().workflows.find((w) => w.id === 'triage');
   const stepOf = (w, id) => w?.steps.find((x) => x.id === id);
-  await ev(`document.querySelector('#autolist .row[data-workflow="triage"]').click()`);
+  await ev(`document.querySelector('.wfback .row[data-workflow="triage"]').click()`);
   await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'triage' && !!document.querySelector('#steps .wfacts [data-act=addfirst]')`, 8000);
   await ev(`document.querySelector('#steps .wfacts [data-act=addfirst]').click()`); await wait(300);
   await ev(`document.querySelector('.menu .item[data-kind="branch"]').click()`);
@@ -431,8 +431,8 @@ try {
       { id: 'say', name: 'Say it', kind: 'transform', params: { output: { line: { $path: 'upstream.read.task' } } } }];
     const r = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: { id: 'watered', name: 'When a task is made', entry: 'read', steps }, trigger: { type: 'db-change', name: 'A task made', dbChange: { collection: 'Task', actions: ['create'] } } }) });
     ok(r.ok, 'a two-step workflow a new Task starts, written as Studio writes one', r.ok || (await r.json()).error);
-    await b.until(`!!document.querySelector('#autolist .row[data-workflow="watered"]')`, 8000).catch(() => {});
-    await ev(`document.querySelector('#autolist .row[data-workflow="watered"]').click()`);
+    await b.until(`!!document.querySelector('.wfback .row[data-workflow="watered"]')`, 8000).catch(() => {});
+    await ev(`document.querySelector('.wfback .row[data-workflow="watered"]').click()`);
     await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'watered' && /No sample yet/.test(document.querySelector('#steps .testrow')?.innerText ?? '')`, 8000).catch(() => {});
     ok(await ev(`/No sample yet/.test(document.querySelector('#steps .testrow')?.innerText ?? '') && document.querySelector('#steps [data-act="test"]').disabled`), 'no sample yet: said, and Test waits for one', await ev(`document.querySelector('#steps .testrow')?.innerText`));
     await b.clickSel('#steps [data-act="sample"]');
@@ -485,8 +485,8 @@ try {
     await b.goto(url);
     await b.waitTitle((t) => t.startsWith('ready'), 90000);
     await b.clickSel('#rail [data-tab=backend]');
-    await b.until(`!!document.querySelector('#autolist .row[data-workflow="watered"]')`, 8000).catch(() => {});
-    await ev(`document.querySelector('#autolist .row[data-workflow="watered"]').click()`);
+    await b.until(`!!document.querySelector('.wfback .row[data-workflow="watered"]')`, 8000).catch(() => {});
+    await ev(`document.querySelector('.wfback .row[data-workflow="watered"]').click()`);
     ok(await b.until(`/Sample: Task Water the plants, made/.test(document.querySelector('#steps .testrow')?.innerText ?? '')`, 8000), 'AC3: Studio opened again, the sample is still there');
     // AC4: never on live
     const live = await fetch(url + 'api/automations/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: 'watered', env: 'live' }) });
@@ -502,8 +502,8 @@ try {
     const steps = [{ id: 'first', name: 'Is it there', kind: 'branch', params: { condition: { left: '', op: 'truthy' } }, routes: { ontrue: ['second'] } }, { id: 'second', kind: 'wait', params: { duration: 1 } }];
     const r = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: { id: 'picked', name: 'Picked', entry: 'first', steps }, trigger: { type: 'db-change', name: 'A task made', dbChange: { collection: 'Task', actions: ['create'] } } }) });
     ok(r.ok, 'an If then a Wait a new Task starts, written as Studio writes one', r.ok || (await r.json()).error);
-    await b.until(`!!document.querySelector('#autolist .row[data-workflow="picked"]')`, 8000).catch(() => {});
-    await ev(`document.querySelector('#autolist .row[data-workflow="picked"]').click()`);
+    await b.until(`!!document.querySelector('.wfback .row[data-workflow="picked"]')`, 8000).catch(() => {});
+    await ev(`document.querySelector('.wfback .row[data-workflow="picked"]').click()`);
     await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'picked'`, 8000).catch(() => {});
     await b.clickSel('#steps .autoview .step[data-id="first"] h3');
     await b.until(`!!document.querySelector('#wfinspect .reads .readsrc')`, 8000).catch(() => {});
@@ -564,8 +564,8 @@ try {
     const steps = [{ id: 'days', name: 'How many days', kind: 'return', params: { value: '' } }];
     const r = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: { id: 'thirsty', name: 'Thirsty', entry: 'days', steps }, trigger: { type: 'db-change', name: 'A task made', dbChange: { collection: 'Task', actions: ['create'] } } }) });
     ok(r.ok, 'a Return a new Task starts, written as Studio writes one', r.ok || (await r.json()).error);
-    await b.until(`!!document.querySelector('#autolist .row[data-workflow="thirsty"]')`, 8000).catch(() => {});
-    await ev(`document.querySelector('#autolist .row[data-workflow="thirsty"]').click()`);
+    await b.until(`!!document.querySelector('.wfback .row[data-workflow="thirsty"]')`, 8000).catch(() => {});
+    await ev(`document.querySelector('.wfback .row[data-workflow="thirsty"]').click()`);
     await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'thirsty'`, 8000).catch(() => {});
     await b.clickSel('#steps .autoview .step[data-id="days"] h3');
     await b.until(`!!document.querySelector('#wfinspect .field.runvalue .rvmode')`, 8000).catch(() => {});
@@ -639,8 +639,8 @@ try {
       const steps = [{ id: 'start', name: 'Read it', kind: 'transform', params: { output: { title: { $path: 'body.title' } } } }];
       const r = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: { id: 'touch', name: 'Touch', entry: 'start', steps }, trigger: { type: 'db-change', name: 'A task made', dbChange: { collection: 'Task', actions: ['create'] } } }) });
       ok(r.ok, 'a workflow a new Task starts, written as Studio writes one', r.ok || (await r.json()).error);
-      await b.until(`!!document.querySelector('#autolist .row[data-workflow="touch"]')`, 8000).catch(() => {});
-      await ev(`document.querySelector('#autolist .row[data-workflow="touch"]').click()`);
+      await b.until(`!!document.querySelector('.wfback .row[data-workflow="touch"]')`, 8000).catch(() => {});
+      await ev(`document.querySelector('.wfback .row[data-workflow="touch"]').click()`);
       await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'touch'`, 8000).catch(() => {});
       await b.clickSel('#steps .autoview .step[data-id="start"] h3');
       await b.until(`!!document.querySelector('#wfinspect [data-act=addafter]')`, 5000).catch(() => {});
@@ -707,8 +707,8 @@ try {
         { id: 'chg', name: 'Mark it', kind: 'update-record', params: { table: 'Chore', record: { $path: 'body.id' }, fields: {} } }];
       const r = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: { id: 'tidy', name: 'Tidy', entry: 'start', steps } }) });
       ok(r.ok, 'a workflow nothing in a table starts (the agent or a call runs it)', r.ok || (await r.json()).error);
-      await b.until(`!!document.querySelector('#autolist .row[data-workflow="tidy"]')`, 8000).catch(() => {});
-      await ev(`document.querySelector('#autolist .row[data-workflow="tidy"]').click()`);
+      await b.until(`!!document.querySelector('.wfback .row[data-workflow="tidy"]')`, 8000).catch(() => {});
+      await ev(`document.querySelector('.wfback .row[data-workflow="tidy"]').click()`);
       await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'tidy'`, 8000).catch(() => {});
       const tidy = () => fileNow().workflows.find((w) => w.id === 'tidy');
       let last = 'chg';
@@ -752,8 +752,8 @@ try {
         const steps = [{ id: 'start', name: 'Read it', kind: 'transform', params: { output: { title: { $path: 'body.title' } } }, next: ['end'] }, { id: 'end', name: 'Answer', kind: 'return', params: {} }];
         const r = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: { id: 'weather', name: 'Weather', entry: 'start', steps }, trigger: { type: 'db-change', name: 'A task made', dbChange: { collection: 'Task', actions: ['create'] } } }) });
         ok(r.ok, 'a workflow a new Task starts, written as Studio writes one', r.ok || (await r.json()).error);
-        await b.until(`!!document.querySelector('#autolist .row[data-workflow="weather"]')`, 8000).catch(() => {});
-        await ev(`document.querySelector('#autolist .row[data-workflow="weather"]').click()`);
+        await b.until(`!!document.querySelector('.wfback .row[data-workflow="weather"]')`, 8000).catch(() => {});
+        await ev(`document.querySelector('.wfback .row[data-workflow="weather"]').click()`);
         await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'weather'`, 8000).catch(() => {});
         await b.clickSel('#steps .autoview .step[data-id="start"] h3');
         await b.until(`!!document.querySelector('#wfinspect [data-act=addafter]')`, 5000).catch(() => {});
@@ -835,8 +835,8 @@ try {
           { id: 'end', name: 'Answer', kind: 'return', params: { value: { $path: 'upstream.ask.body.current.temperature_2m' } } }];
         const r = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: { id: 'morningsky', name: 'Morning sky', entry: 'ask', steps } }) });
         ok(r.ok, 'a workflow that calls the weather for a task\'s title, written as Studio writes one', r.ok || (await r.json()).error);
-        await b.until(`!!document.querySelector('#autolist .row[data-workflow="morningsky"]')`, 8000).catch(() => {});
-        await ev(`document.querySelector('#autolist .row[data-workflow="morningsky"]').click()`);
+        await b.until(`!!document.querySelector('.wfback .row[data-workflow="morningsky"]')`, 8000).catch(() => {});
+        await ev(`document.querySelector('.wfback .row[data-workflow="morningsky"]').click()`);
         await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'morningsky'`, 8000).catch(() => {});
         await b.clickSel('#steps .autoview .step[data-id="ask"] h3');
         await b.until(`!!document.querySelector('#wfinspect [data-act=savecall]')`, 8000).catch(() => {});
@@ -856,9 +856,9 @@ try {
         // a second workflow picks it from the step menu, by its name, and types only the city
         const r2 = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: { id: 'lyonsky', name: 'Lyon sky', entry: 'start', steps: [{ id: 'start', name: 'Begin', kind: 'transform', params: { output: { ok: true } } }] } }) });
         ok(r2.ok, 'a second workflow', r2.ok || (await r2.json()).error);
-        await b.until(`!!document.querySelector('#autolist .row[data-workflow="lyonsky"]')`, 8000).catch(() => {});
-        ok(await ev(`!!document.querySelector('#autolist .row[data-workflow="lyonsky"]')`), 'drawn in the list', { focus: await ev(`document.activeElement?.outerHTML?.slice(0, 120)`), problems: b.problems.slice(-3) });
-        await ev(`document.querySelector('#autolist .row[data-workflow="lyonsky"]').click()`);
+        await b.until(`!!document.querySelector('.wfback .row[data-workflow="lyonsky"]')`, 8000).catch(() => {});
+        ok(await ev(`!!document.querySelector('.wfback .row[data-workflow="lyonsky"]')`), 'drawn in the list', { focus: await ev(`document.activeElement?.outerHTML?.slice(0, 120)`), problems: b.problems.slice(-3) });
+        await ev(`document.querySelector('.wfback .row[data-workflow="lyonsky"]').click()`);
         await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'lyonsky'`, 8000).catch(() => {});
         await b.clickSel('#steps .autoview .step[data-id="start"] h3');
         await b.until(`!!document.querySelector('#wfinspect [data-act=addafter]')`, 5000).catch(() => {});
@@ -931,8 +931,8 @@ try {
         const r = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: { id: 'composed', name: 'Composed', entry: 'find', steps } }) });
         ok(r.ok, 'a Find then an email, written as Studio writes them', r.ok || (await r.json()).error);
         const subj = () => fileNow().workflows.find((x) => x.id === 'composed')?.steps.find((x) => x.id === 'mail')?.params?.subject;
-        await b.until(`!!document.querySelector('#autolist .row[data-workflow="composed"]')`, 8000).catch(() => {});
-        await ev(`document.querySelector('#autolist .row[data-workflow="composed"]').click()`);
+        await b.until(`!!document.querySelector('.wfback .row[data-workflow="composed"]')`, 8000).catch(() => {});
+        await ev(`document.querySelector('.wfback .row[data-workflow="composed"]').click()`);
         await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'composed'`, 8000).catch(() => {});
         await b.clickSel('#steps .autoview .step[data-id="mail"] h3');
         const F = `[...document.querySelectorAll('#wfinspect .field.runvalue')].find((x) => x.querySelector(':scope > label')?.textContent === 'Subject')`;
@@ -980,6 +980,110 @@ try {
           ok(!!firstTitle && subject === `Water ${firstTitle} today`, 'AC1: tested, the email arrives with the subject "Water <the first task found\'s title> today"', { subject, firstTitle, caught: caught.length });
         } else console.log('  (the test not graded: this backend has no tests yet)');
       } finally { smtp.close(); }
+    }
+  }
+  // P132 BWF-013 (R6): a reusable piece is a workflow others run. *New* under Reusable pieces makes one (no start asked);
+  // two workflows something starts each run it with a Run a workflow step, picked by name, sending their own room; both
+  // tested; the step's *Open that run* opens the piece as it ran, and Back returns (AC1 in Chrome). A ring is refused by name.
+  console.log('check: P132 BWF-013, a reusable piece run from two workflows');
+  {
+    await wait(20000); // the admin bucket again (see BWF-005's section)
+    const cat = await be('/admin/workflow-step-kinds');
+    if (!cat.pieces) console.log('  (not graded: this backend runs no workflow from a step yet. Run with NODEGX_REPO at a NodeGX carrying BWF-013 (05cdc7ce6), its dist rebuilt, or after a release carrying it)');
+    else {
+      const wfOf = (id) => fileNow().workflows.find((w) => w.id === id);
+      const write = async (workflow, extra = {}) => { const r = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow, ...extra }) }); return { ok: r.ok, j: await r.json().catch(() => ({})) }; };
+      ok(await ev(`!document.getElementById('newpiece').hidden && /steps of their own/.test(document.getElementById('fnsub').textContent)`), 'Reusable pieces has New, and says what a piece is', await ev(`document.getElementById('fnsub').textContent`));
+      ok(await ev(`!!document.querySelector('#fnlist [data-agentmade]') || !document.querySelector('#fnlist .row')`), 'the cloud functions sit under "Made by the agent"');
+      await b.clickSel('#newpiece');
+      await b.until(`!!document.querySelector('.menu.newpiece input')`, 5000).catch(() => {});
+      ok(await ev(`/New reusable piece/.test(document.querySelector('.menu.newpiece .h')?.textContent ?? '') && ![...document.querySelectorAll('.menu.newpiece label')].some((l) => l.textContent === 'Starts on')`), 'New asks a name and a first step, never what starts it', await ev(`document.querySelector('.menu.newpiece')?.innerText`));
+      await ev(`(() => { const m = document.querySelector('.menu.newpiece'), n = m.querySelector('input'); n.value = 'Find thirsty plants'; n.dispatchEvent(new Event('input', { bubbles: true })); const s = m.querySelector('select'); s.value = 'kind:transform'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+      ok(await ev(`/Any workflow runs it with a Run a workflow step/.test(document.querySelector('.menu.newpiece .note')?.textContent ?? '')`), 'its note says how a piece is run', await ev(`document.querySelector('.menu.newpiece .note')?.textContent`));
+      await ev(`[...document.querySelectorAll('.menu.newpiece button')].find((x) => x.textContent === 'Create').click()`);
+      const P = 'find-thirsty-plants';
+      for (let i = 0; i < 40 && !wfOf(P); i++) await wait(150);
+      ok(wfOf(P)?.steps?.length === 1 && !fileNow().triggers.some((t) => t.target?.name === P), 'made: a workflow of one step that nothing starts, on the backend and in the project', wfOf(P));
+      await b.until(`!!document.querySelector('#piecelist .row[data-piece="${P}"]')`, 8000).catch(() => {});
+      ok(await ev(`/No workflow runs it yet/.test(document.querySelector('#piecelist .row[data-piece="${P}"]')?.innerText ?? '') && !document.querySelector('#autolist .row[data-workflow="${P}"]')`), 'listed under Reusable pieces, not under Workflows: no workflow runs it yet', await ev(`document.querySelector('#piecelist')?.innerText`));
+      ok(await ev(`document.querySelector('#steps .autoview')?.dataset.workflow === '${P}' && /A reusable piece/.test(document.querySelector('#steps .autoview .step[data-id="starts"]')?.innerText ?? '')`), 'it opens, its first card saying it is a reusable piece', await ev(`document.querySelector('#steps .autoview .step[data-id="starts"]')?.innerText`));
+      // its steps: words with the room it is sent, given back (written as Studio writes them; composing is BWF-011's section)
+      const piece = { ...wfOf(P), entry: 'say', steps: [{ id: 'say', name: 'Say which plants', kind: 'transform', params: { output: { line: { $fn: 'text', args: ['Water the ', { $path: 'body.room' }, ' plants'] } } }, next: ['end'] }, { id: 'end', name: 'Answer', kind: 'return', params: { value: { line: { $path: 'upstream.say.line' } } } }] };
+      ok((await write(piece)).ok, 'the piece reads the room it is sent and answers a line');
+      // two workflows something starts (off: a drive starts nothing on a clock), each beginning with one step
+      const runner = (id, name) => write({ id, name, entry: 'begin', concurrency: 1, steps: [{ id: 'begin', name: 'Begin', kind: 'transform', params: { output: { ok: true } } }] }, { trigger: { type: 'schedule', name: `${name} at 08:00`, enabled: false, schedule: { cron: '0 8 * * *', missedFirePolicy: 'skip' } } });
+      const m1 = await runner('mcheck', 'The morning check'), m2 = await runner('echeck', 'The evening check');
+      ok(m1.ok && m2.ok, 'two workflows a time starts', [m1.j.error, m2.j.error]);
+      const runStep = (id) => wfOf(id)?.steps?.find((s) => s.kind === 'run-workflow');
+      for (const [id, room] of [['mcheck', 'Kitchen'], ['echeck', 'Hall']]) {
+        await b.until(`!!document.querySelector('#autolist .row[data-workflow="${id}"]')`, 8000).catch(() => {});
+        await ev(`document.querySelector('#autolist .row[data-workflow="${id}"]').click()`);
+        await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === '${id}'`, 8000).catch(() => {});
+        await b.clickSel('#steps .autoview .step[data-id="begin"] h3');
+        await b.until(`!!document.querySelector('#wfinspect [data-act=addafter]')`, 5000).catch(() => {});
+        await ev(`document.querySelector('#wfinspect [data-act=addafter]').click()`);
+        await b.until(`!!document.querySelector('.menu .item[data-kind="run-workflow"]')`, 5000).catch(() => {});
+        ok(await ev(`/Run a workflow/.test(document.querySelector('.menu .item[data-kind="run-workflow"]')?.innerText ?? '')`), `${id}: the step menu has Run a workflow`, await ev(`document.querySelector('.menu.actions')?.innerText.slice(0, 300)`));
+        await ev(`document.querySelector('.menu .item[data-kind="run-workflow"]').click()`);
+        for (let i = 0; i < 40 && !runStep(id); i++) await wait(150);
+        const sid = runStep(id)?.id;
+        ok(!!sid && typeof runStep(id).params?.workflow === 'string' && runStep(id).params.workflow !== id, `${id}: added, running a piece (never itself)`, runStep(id));
+        // the person picks the piece by its name
+        await b.until(`!!document.querySelector('#wfinspect select[data-input=piece]')`, 5000).catch(() => {});
+        const opts = await ev(`[...document.querySelectorAll('#wfinspect select[data-input=piece] optgroup')].map((g) => [g.label, [...g.querySelectorAll('option')].map((o) => o.textContent)])`);
+        ok(opts?.[0]?.[0] === 'Reusable pieces' && opts[0][1].includes('Find thirsty plants') && !opts.flatMap((g) => g[1]).includes(id === 'mcheck' ? 'The morning check' : 'The evening check'), `${id}: the piece is picked by name, pieces first, the workflow itself not offered`, opts);
+        await ev(`(() => { const s = document.querySelector('#wfinspect select[data-input=piece]'); s.value = '${P}'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+        for (let i = 0; i < 40 && runStep(id)?.params?.workflow !== P; i++) await wait(150);
+        ok(runStep(id)?.params?.workflow === P, `${id}: it runs Find thirsty plants, in the file`, runStep(id));
+        // what it sends: the piece reads "room", so the panel asks for it
+        const F = `[...document.querySelectorAll('#wfinspect .field.runvalue')].find((x) => x.querySelector(':scope > label')?.textContent === 'room')`;
+        await b.until(`!!${F}?.querySelector('.vcompose')`, 8000).catch(() => {});
+        ok(await ev(`document.querySelector('#wfinspect [data-pieceasks]')?.dataset.pieceasks === 'room' && !!${F}`), `${id}: "What it sends the piece" asks for room, the name the piece reads`, await ev(`document.querySelector('#wfinspect')?.innerText.slice(0, 600)`));
+        await ev(`(() => { const c = ${F}.querySelector('.vcompose'); c.focus(); c.textContent = '${room}'; c.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); })()`);
+        for (let i = 0; i < 40 && runStep(id)?.params?.send?.room !== room; i++) await wait(150);
+        ok(JSON.stringify(runStep(id)?.params) === JSON.stringify({ workflow: P, send: { room } }), `${id}: it sends room "${room}"`, runStep(id)?.params);
+        await b.until(`/Run Find thirsty plants/.test(document.querySelector('#steps .autoview .step[data-id="${sid}"] h3')?.innerText ?? '')`, 5000).catch(() => {});
+        ok(await ev(`/Run Find thirsty plants/.test(document.querySelector('#steps .autoview .step[data-id="${sid}"] h3')?.innerText ?? '') && !!document.querySelector('#steps .autoview .step[data-id="${sid}"] [data-act=openpiece]')`), `${id}: its card says "Run Find thirsty plants", with Open the piece`, await ev(`document.querySelector('#steps .autoview .step[data-id="${sid}"]')?.innerText`));
+        // tested, on a sample (a time's fire)
+        await b.clickSel('#steps [data-act="sample"]');
+        await b.until(`!!document.querySelector('.menu.sample [data-act=keepsample]')`, 5000).catch(() => {});
+        await ev(`document.querySelector('.menu.sample [data-act=keepsample]').click()`);
+        await b.until(`!document.querySelector('#steps [data-act="test"]')?.disabled`, 8000).catch(() => {});
+        await b.clickSel('#steps [data-act="test"]');
+        await b.until(`!!document.querySelector('.surescrim [data-act=yes]') || /Tested/.test(document.querySelector('#steps .fnfacts .run')?.innerText ?? '')`, 8000).catch(() => {});
+        await ev(`document.querySelector('.surescrim [data-act=yes]')?.click()`);
+        await b.until(`/Tested/.test(document.querySelector('#steps .fnfacts .run')?.innerText ?? '')`, 10000).catch(() => {});
+        const last = (await be('/admin/workflow-defs')).lastRuns?.[id], rec = last ? await be(`/executions/${encodeURIComponent(last.id)}`) : null;
+        const out = rec?.steps?.find((x) => x.nodeId === sid)?.outputData;
+        ok(rec?.status === 'success' && out?.result?.line === `Water the ${room} plants` && typeof out?.run === 'string', `AC1 (in Chrome): ${id} tested, the piece answered "Water the ${room} plants"`, rec && { status: rec.status, steps: rec.steps?.map((x) => [x.nodeId, x.status, x.outputData, x.error]) });
+        if (id === 'mcheck') {
+          // Open that run: the piece as it ran for this step, and back
+          await b.clickSel(`#steps .autoview .step[data-id="${sid}"] h3`);
+          await b.until(`!!document.querySelector('#wfinspect [data-act=openpiecerun]')`, 5000).catch(() => {});
+          ok(await ev(`!!document.querySelector('#wfinspect [data-act=openpiecerun]')`), 'the step\'s panel, after the test, has Open that run', await ev(`document.querySelector('#wfinspect .rundata')?.innerText`));
+          await ev(`document.querySelector('#wfinspect [data-act=openpiecerun]').click()`);
+          await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === '${P}' && !!document.querySelector('#steps .autoview .step[data-id="say"].litok')`, 8000).catch(() => {});
+          ok(await ev(`!!document.querySelector('#steps .autoview .step[data-id="say"].litok') && !!document.querySelector('#steps .autoview .step[data-id="end"].litok')`), 'Open that run: the piece opens with its steps lit from that run', await ev(`document.querySelector('#steps .autoview .fnfacts')?.innerText`));
+          ok(await ev(`document.querySelector('#steps .pieceparent')?.dataset.parentRun === ${JSON.stringify(last?.id ?? '')} && /started by The morning check/.test(document.querySelector('#steps .pieceparent')?.innerText ?? '')`), 'it says which workflow\'s run started it', await ev(`document.querySelector('#steps .pieceparent')?.innerText`));
+          await ev(`document.querySelector('#steps [data-act=backtorunner]').click()`);
+          await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'mcheck'`, 8000).catch(() => {});
+          ok(await ev(`document.querySelector('#steps .autoview')?.dataset.workflow === 'mcheck' && !!document.querySelector('#steps .autoview .step[data-id="${sid}"].picked')`), 'Back: the morning check again, its step picked', await ev(`document.querySelector('#steps .autoview')?.dataset.workflow`));
+        }
+      }
+      await b.until(`/Run by “The morning check” and “The evening check”/.test(document.querySelector('#piecelist .row[data-piece="${P}"]')?.innerText ?? '')`, 5000).catch(() => {});
+      ok(await ev(`/Run by “The morning check” and “The evening check” · 2 steps/.test(document.querySelector('#piecelist .row[data-piece="${P}"]')?.innerText ?? '')`), 'the piece\'s row says who runs it', await ev(`document.querySelector('#piecelist .row[data-piece="${P}"]')?.innerText`));
+      // inside the piece, what it was given is what its runners send
+      await ev(`document.querySelector('#piecelist .row[data-piece="${P}"]').click()`);
+      await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === '${P}'`, 8000).catch(() => {});
+      ok(await ev(`/Run by/.test(document.querySelector('#steps .autoview .step[data-id="starts"]')?.innerText ?? '') && !!document.querySelector('#steps .autoview .step[data-id="starts"] [data-runner="mcheck"]')`), 'its first card names the workflows that run it, each a press away', await ev(`document.querySelector('#steps .autoview .step[data-id="starts"]')?.innerText`));
+      // a ring: the piece running the morning check is refused, both named, and nothing stored
+      const ring = await write({ ...wfOf(P), steps: wfOf(P).steps.map((s) => (s.id === 'end' ? { ...s, kind: 'run-workflow', params: { workflow: 'mcheck' } } : s)) });
+      ok(!ring.ok && /find-thirsty-plants/.test(ring.j.error ?? '') && /mcheck/.test(ring.j.error ?? '') && wfOf(P).steps.find((s) => s.id === 'end').kind === 'return', 'AC3: a ring is refused with both names, the file unchanged', ring.j.error);
+      // deleting a piece others run says so first
+      await ev(`document.querySelector('.wfacts [data-act=delete]').click()`); await wait(300);
+      ok(await ev(`/It is run by “The morning check” and “The evening check”: that step fails once it is gone/.test(document.querySelector('.menu')?.innerText ?? '')`), 'Delete says who still runs it', await ev(`document.querySelector('.menu')?.innerText`));
+      await ev(`[...document.querySelectorAll('.menu button')].find((x) => x.textContent === 'Cancel')?.click()`);
+      await shot('p132-bwf013');
     }
   }
   // P132-STUDIOPRIVACYDROP: a workflow set to obey the privacy rules (R5) says so in the file, not only on the backend,
