@@ -493,6 +493,7 @@
   #wfinspect .kv .ctl, #wfinspect .field .ctl:has([data-input=secret]) { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px; }
   #wfinspect .addsecret, #wfinspect .curlbox { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; margin: 4px 0 8px; background: var(--panel-2); }
   #wfinspect .curlbox textarea { width: 100%; box-sizing: border-box; }
+  #wfinspect .savecallbox .partpick { display: block; margin: 4px 0; } /* BWF-012: one part per line, not run together */
   /* P132 BWF-004: a formula, its sentence in words above its values */
   #wfinspect .field.hasformula { grid-template-columns: 1fr; }
   #wfinspect .formula { display: grid; gap: 4px; padding: 6px 8px; border-left: 3px solid var(--accent, var(--line-2)); background: var(--panel-2); border-radius: 0 6px 6px 0; min-width: 0; }
@@ -5417,7 +5418,7 @@ function renderAutoList() {
   }
   // P132 BWF-012: the saved API calls, under the workflows: a call set up once and used by name
   const calls = a.apiCalls.filter((c) => !q || `${c.name ?? ''} ${c.id}`.toLowerCase().includes(q));
-  if (calls.length) box.append(h('div', { class: 'h', 'data-apicalls': '' }, 'Saved API calls'));
+  if (calls.length) box.append(h('h3', { class: 'sec', 'data-apicalls': '' }, 'Saved API calls'), h('p', { class: 'secsub' }, 'an outside API set up once, used by name in any workflow'));
   for (const c of calls) {
     const users = usersOfCall(a.workflows, c.id);
     box.append(h('div', { class: 'row', 'data-apicall': c.id, 'aria-selected': selAuto?.kind === 'apiCall' && selAuto.id === c.id, onclick: () => openAuto({ kind: 'apiCall', id: c.id }) },

@@ -588,6 +588,7 @@ export function pathWords(path, wf, starts = [], { item = 'item', index = 'index
   if (root === 'body') return { name: seg(rest), from: startWords(starts) };
   if (root === 'trigger') return { name: seg(rest), from: 'how it started' };
   if (root === 'previous') return { name: seg(rest), from: 'the step before' };
+  if (root === 'fill') return { name: seg(rest), from: 'each workflow' }; // BWF-012: a saved call's blank, filled in by each workflow using it
   if (root === 'upstream') {
     const s = (wf.steps ?? []).find((x) => x.id === rest[0]);
     let r = rest.slice(1);

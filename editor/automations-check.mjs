@@ -292,6 +292,7 @@ console.log('check: P132 BWF-011, a value composed in a setting');
   const pw = (p) => ({ name: p.split('.').slice(2).join(' › '), from: 'Find plants' });
   ok(chipWords({ $fn: 'join', args: [{ $fn: 'pick', args: [items, 'name'] }, ', '] }, pw).name === "each one's name in items, joined with commas" && chipWords({ $fn: 'count', args: [items] }, pw).name === 'how many items', 'a chip says what it is in words');
   ok(pathWords('upstream.find.items.-1', { steps: [{ id: 'find', name: 'Find plants', kind: 'find-records' }] }).name === 'items › the last', 'the last one is said, never "-1"');
+  ok(JSON.stringify(pathWords('fill.city', {})) === '{"name":"city","from":"each workflow"}', 'P132 BWF-012: a saved call\'s blank is "city · from each workflow", never "fill › city · from the run"');
 }
 
 // P132 BWF-012: saved API calls
