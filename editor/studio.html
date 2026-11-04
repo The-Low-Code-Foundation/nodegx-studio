@@ -1245,7 +1245,7 @@ import { fieldReaders, typeReaders, renameField, renameType, appFields } from '.
 import { LANES, buildTimeline, lastRunOf, msText, shotAt, stepValues } from './timeline.mjs';
 import { runOver, lastActivity, watchSignals, runtimeTimers, runTimers } from './runwatch.mjs';
 import { CLOUD, REQUEST, RESPONSE, functionList, functionLayout, helperKey, requestAsks, responseWords, touchesWords } from './fngraph.mjs';
-import { ALWAYS_WORDS, AUTOMATIONS_FILE, CHANGE_WORDS, SAMPLE_KINDS, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, itemSources, formulaArgAt, formulaArgStart, formulaParts, formulaStart, moveStep, newStepId, nextOntoRoute, parseCurl, pathWords, readAutomations, readSources, runLine, sampleFor, sampleWords, scheduleTime, stepsOfRun, targetOf, testMailWords, triggerHead, stepPorts, upstreamOf, valueForm, workflowLayout, composeParts, composeValue, knownAt, chipRefinements, chipPath, chipWords } from './automations.mjs';
+import { ALWAYS_WORDS, AUTOMATIONS_FILE, CHANGE_WORDS, SAMPLE_KINDS, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, itemSources, formulaArgAt, formulaArgStart, formulaParts, formulaStart, moveStep, newStepId, nextOntoRoute, parseCurl, pathWords, readAutomations, readSources, runLine, sampleFor, sampleWords, scheduleTime, stepsOfRun, targetOf, testMailWords, triggerHead, stepPorts, upstreamOf, valueForm, workflowLayout, composeParts, composeValue, knownAt, chipRefinements, chipPath, chipWords, callParts, saveCallFrom, stepForCall, usersOfCall, callId, readsRun } from './automations.mjs';
 import { logicOnPage, placedComponent, studioEdits, wiringLayout, wiringSvg } from './wiring.mjs';
 import { look as canvasLook, nodeScheme, wireColors } from './look.js';
 // STU-084: what Studio draws and edits, as data (the element types, the action menu, the value sources), one file the
@@ -5316,7 +5316,7 @@ addEventListener('message', (e) => {
 let selAuto = null, autoBe = null, autoText, autoRun = null;
 let autoSamples = null; // P132 BWF-002: this computer's test samples, `{ samples, warned }` (serve.mjs `.nodegx/workflow-samples.json`)
 const autos = () => readAutomations(files.read(AUTOMATIONS_FILE));
-const autoEntry = (a) => (a.kind === 'trigger' ? autos().triggers : autos().workflows).find((x) => x.id === a.id);
+const autoEntry = (a) => (a.kind === 'trigger' ? autos().triggers : a.kind === 'apiCall' ? autos().apiCalls : autos().workflows).find((x) => x.id === a.id);
 const beNow = () => (autoBe && !autoBe.pending ? autoBe : null);
 const noBackend = (e) => /not bound|503/.test(e.message);
 /** Asks the backend again. What it said last stays shown until the answer comes (P123-GH-TRIGGERSTALE: a card read once
@@ -5327,7 +5327,7 @@ function loadAutoBackend() {
   autoBeAsking = true;
   if (!autoBe) autoBe = { pending: true };
   Promise.all([api('/admin/triggers'), api('/admin/workflow-defs'), api('/admin/workflow-step-kinds').catch(() => ({ kinds: [] }))])
-    .then(([t, w, k]) => { autoBe = { triggers: new Map((t.triggers ?? []).map((x) => [x.id, x])), workflows: new Map((w.workflows ?? w.definitions ?? []).map((x) => [x.id, x])), lastRuns: w.lastRuns ?? {}, kinds: new Map((k.kinds ?? []).map((x) => [x.kind, x])), ops: k.conditionLanguage?.ops ?? [], formulas: k.formulaLanguage?.formulas ?? null }; })
+    .then(([t, w, k]) => { autoBe = { triggers: new Map((t.triggers ?? []).map((x) => [x.id, x])), workflows: new Map((w.workflows ?? w.definitions ?? []).map((x) => [x.id, x])), lastRuns: w.lastRuns ?? {}, kinds: new Map((k.kinds ?? []).map((x) => [x.kind, x])), ops: k.conditionLanguage?.ops ?? [], formulas: k.formulaLanguage?.formulas ?? null, savedCalls: !!k.savedCalls }; })
     .catch((e) => { autoBe = { triggers: new Map(), workflows: new Map(), lastRuns: {}, kinds: new Map(), words: noBackend(e) ? 'No backend is bound, so what a backend runs now is not shown: these are the project’s.' : `The backend did not say its triggers and workflows: ${e.message}` }; })
     .finally(() => { autoBeAsking = false; if (tab === 'workflow' || tab === 'backend') renderWorkflow(); });
 }
@@ -5414,6 +5414,14 @@ function renderAutoList() {
     const last = lastRunWords('workflow', w.id);
     box.append(h('div', { class: 'row', 'data-workflow': w.id, 'aria-selected': selAuto?.kind === 'workflow' && selAuto.id === w.id, onclick: () => openAuto({ kind: 'workflow', id: w.id }) },
       h('span', {}, w.name || w.id, ...ts.map((t) => switchOf(t))), h('small', {}, `${by.length ? `Started by ${by.join(' or ')}` : 'Nothing starts it on its own'} · ${(w.steps ?? []).length} step${(w.steps ?? []).length === 1 ? '' : 's'}${same && trigSame ? '' : ' · the backend’s copy differs'}`, last ? ' · ' : '', lastRunLink(last, () => openAuto({ kind: 'workflow', id: w.id }, null, { play: true }), 'last run'))));
+  }
+  // P132 BWF-012: the saved API calls, under the workflows: a call set up once and used by name
+  const calls = a.apiCalls.filter((c) => !q || `${c.name ?? ''} ${c.id}`.toLowerCase().includes(q));
+  if (calls.length) box.append(h('div', { class: 'h', 'data-apicalls': '' }, 'Saved API calls'));
+  for (const c of calls) {
+    const users = usersOfCall(a.workflows, c.id);
+    box.append(h('div', { class: 'row', 'data-apicall': c.id, 'aria-selected': selAuto?.kind === 'apiCall' && selAuto.id === c.id, onclick: () => openAuto({ kind: 'apiCall', id: c.id }) },
+      h('span', {}, icon('bolt'), ' ', c.name || c.id), h('small', {}, `${users.length ? `Used by ${users.length} workflow${users.length === 1 ? '' : 's'}` : 'No workflow uses it yet'}${(c.blanks ?? []).length ? ` · fills in ${c.blanks.map((b) => b.name).join(', ')}` : ''}`)));
   }
   // the file is the truth: what only the backend has is said, not drawn
   const only = be && !be.words ? [...be.triggers.keys()].filter((id) => !a.triggers.some((t) => t.id === id)).length + [...be.workflows.keys()].filter((id) => !a.workflows.some((w) => w.id === id)).length : 0;
@@ -5804,19 +5812,23 @@ function autoStepMenu(e, w, afterId, where, toId = null) {
   const search = h('input', { type: 'text', placeholder: 'Search steps…', oninput: () => fill(search.value) });
   const list = h('div');
   const kinds = [...(beNow()?.kinds.values() ?? [])];
-  const pick = (kind) => {
+  const calls = (q2) => autos().apiCalls.filter((c) => !q2 || `${c.name ?? ''} ${c.id} ${c.description ?? ''}`.toLowerCase().includes(q2));
+  const pick = (kind, call = null) => {
     closeMenu();
-    try { const step = newAutoStep(w, kind); saveAutoWf(toId ? insertBetween(w, afterId, where, toId, step) : addStepAfter(w, afterId, where, step), `${kindSpec(kind)?.displayName ?? kind} added${BOTH}`).then((j) => { if (j) pickAutoStep(step.id); }); }
+    try { const step = newAutoStep(w, kind); if (call) { step.params = stepForCall(call); step.name = call.name || call.id; } saveAutoWf(toId ? insertBetween(w, afterId, where, toId, step) : addStepAfter(w, afterId, where, step), `${call ? `${call.name || call.id} (a saved call)` : kindSpec(kind)?.displayName ?? kind} added${BOTH}`).then((j) => { if (j) pickAutoStep(step.id); }); }
     catch (err) { toast(err.message); }
   };
   const fill = (q) => {
     list.innerHTML = '';
     const q2 = q.trim().toLowerCase();
-    const shown = kinds.filter((k) => !q2 || `${k.displayName} ${k.kind} ${k.summary}`.toLowerCase().includes(q2));
+    const shown = kinds.filter((k) => !q2 || `${k.displayName} ${k.kind} ${k.summary}`.toLowerCase().includes(q2) || (k.kind === 'http-request' && calls(q2).length));
     for (const cat of [...new Set(shown.map((k) => k.category))]) {
       list.append(h('div', { class: 'h' }, cat.replace(/^Workflow ?/, '') || 'Run'));
       for (const k of shown.filter((x) => x.category === cat)) list.append(h('div', { class: 'item', 'data-kind': k.kind, title: k.whenToUse || '', onclick: () => pick(k.kind) },
         h('span', { class: 'ic', style: `background:${KIND_COLOUR[KIND_GLYPH(k.kind, k)] ?? KIND_COLOUR.code}` }, icon(KIND_GLYPH(k.kind, k))), h('span', { class: 'words' }, k.displayName, h('small', {}, k.summary))));
+      // P132 BWF-012: each saved API call by its name, beside Call an API: picked, only its blanks are left to fill
+      if (shown.some((x) => x.category === cat && x.kind === 'http-request') && beNow()?.savedCalls) for (const c of calls(q2)) list.append(h('div', { class: 'item', 'data-call': c.id, title: c.description || 'A saved API call: set up once, used by name', onclick: () => pick('http-request', c) },
+        h('span', { class: 'ic', style: `background:${KIND_COLOUR.bolt}` }, icon('bolt')), h('span', { class: 'words' }, c.name || c.id, h('small', {}, `A saved call${(c.blanks ?? []).length ? `: fill in ${c.blanks.map((b) => b.name).join(', ')}` : ''}`))));
     }
     if (!shown.length) list.append(h('div', { class: 'hint' }, `No step matches “${q}”.`));
   };
@@ -6290,10 +6302,16 @@ function autoStepPanel(panel, w, step) {
     const params = step.params ?? {}, own = spec?.params ?? [];
     const more = h('details', { class: 'more' }, h('summary', {}, ''));
     let moreN = 0;
-    if (step.kind === 'http-request') { const at = h('div', { class: 'after' }, h('button', { 'data-act': 'pastecurl', onclick: () => curlForm(at, step, change) }, 'Paste a curl command')); wrap.append(at); }
+    const viaCall = step.kind === 'http-request' && params.call !== undefined;
+    if (viaCall) savedCallSection(wrap, w, step, change);
+    else if (step.kind === 'http-request') {
+      const at = h('div', { class: 'after' }, h('button', { 'data-act': 'pastecurl', onclick: () => curlForm(at, step, change) }, 'Paste a curl command'),
+        beNow()?.savedCalls ? h('button', { 'data-act': 'savecall', title: 'Keep these settings once, by a name, and use them in other workflows', onclick: () => saveCallForm(at, w, step) }, 'Save this call') : null);
+      wrap.append(at);
+    }
     const sections = new Map(); // a group other than the retry knobs is a section of its own (Authentication), not tucked away
-    for (const p of own) {
-      if (p.name === 'ref') continue;
+    for (const p of viaCall ? [] : own) {
+      if (p.name === 'ref' || p.control === 'saved-call' || p.control === 'call-blanks') continue;
       if (step.kind === 'http-request' && HTTP_SHOWN[p.name] && !HTTP_SHOWN[p.name](params)) continue;
       const label = p.displayName || paramWords(p.name), v = params[p.name];
       const tucked = p.group && /retry/i.test(p.group);
@@ -6344,8 +6362,121 @@ function autoStepPanel(panel, w, step) {
   }
   panel.append(wrap);
 }
+/* ---- P132 BWF-012: saved API calls (R7). A Call an API set up once, named, kept in the file's `apiCalls`; picked by
+   name from the step menu, its blanks filled in each workflow; changed in one place for every workflow using it. ---- */
+async function saveApiCall(body, words) {
+  const r = await fetch('/api/automations/api-call', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...body, client: windowId }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { toast(j.error ?? `Nothing was changed (${r.status})`); renderWorkflow(); return null; }
+  files.write(j.file, j.text); persisted[j.file] = j.text; autoText = j.text;
+  if (words) toast(words);
+  renderWorkflow();
+  return j;
+}
+/** A step that uses a saved call: which one, a way to it, and its blanks, each a setting as any other (BWF-011's composer). */
+function savedCallSection(wrap, w, step, change) {
+  const id = step.params.call, c = autos().apiCalls.find((x) => x.id === id), fill = step.params.fill ?? {};
+  wrap.append(h('div', { class: 'savedcall', 'data-savedcall': id },
+    h('div', { class: 'thenline' }, 'Uses the saved call ', h('b', {}, c ? c.name || c.id : id)),
+    c ? h('div', { class: 'hint' }, 'Its address, key and the rest are kept once, in the saved call: a change there reaches every workflow using it.')
+      : h('div', { class: 'warn' }, `The project has no saved call “${id}”: this step fails when it runs. Choose another from the step menu, or ask the agent to save it.`),
+    c ? h('div', { class: 'after' }, h('button', { 'data-act': 'opencall', onclick: () => openAuto({ kind: 'apiCall', id }) }, 'Open the saved call ↗')) : null));
+  if (!c) return;
+  wrap.append(h('div', { class: 'sechead' }, (c.blanks ?? []).length ? 'Fill in' : 'Nothing to fill in'));
+  for (const b of c.blanks ?? []) {
+    wrap.append(runValueField(b.name, fill[b.name], (v) => change((s) => { s.params.fill = { ...(s.params.fill ?? {}), [b.name]: v ?? '' }; }, `${b.name} filled in${BOTH}`),
+      { type: b.type === 'number' || b.type === 'boolean' ? b.type : 'any', w, description: `${b.description ? `${b.description}. ` : ''}${b.example !== undefined ? `For example: ${typeof b.example === 'string' ? b.example : JSON.stringify(b.example)}` : ''}` }));
+  }
+}
+/** *Save this call*: its name, and which parts each workflow fills in (a part read from the run has to be one). */
+function saveCallForm(after, w, step) {
+  after.parentElement?.querySelector('.savecallbox')?.remove();
+  const params = step.params ?? {}, parts = callParts(params);
+  let host = ''; try { host = typeof params.url === 'string' ? new URL(params.url).hostname.replace(/^(www|api)\./, '') : ''; } catch { /* a formula */ }
+  const name = h('input', { type: 'text', value: step.name || host || '', 'data-input': 'callname', placeholder: 'The weather in a city', 'aria-label': 'The saved call\'s name' });
+  const boxes = parts.map((p) => { const must = readsRun(p.value); return h('label', { class: 'partpick', 'data-part': p.key, title: must ? 'It reads the run, so each workflow fills it in' : '' },
+    h('input', { type: 'checkbox', value: p.key, checked: must, disabled: must, style: 'width:auto' }), ` ${p.words}`, h('small', {}, must ? ' (read from the run: each workflow fills it in)' : typeof p.value === 'string' ? ` (now “${p.value.slice(0, 40)}”)` : '')); });
+  const box = h('div', { class: 'curlbox savecallbox' },
+    h('div', { class: 'hint' }, 'Keep these settings once, by a name: any workflow can then use them from the step menu, filling in only what you tick here. This step uses it straight away.'),
+    h('div', { class: 'field' }, h('label', {}, 'Name'), name),
+    parts.length ? h('div', { class: 'sechead' }, 'What each workflow fills in') : h('div', { class: 'hint' }, 'It has nothing to fill in: every workflow calls it the same way.'), ...boxes,
+    h('div', { class: 'after' }, h('button', { class: 'quiet', onclick: () => box.remove() }, 'Cancel'), h('button', { class: 'primary', 'data-act': 'savecallgo', onclick: async () => {
+      const n = name.value.trim();
+      if (!n) return toast('Give the call a name first');
+      // the box goes with the redraw: left focused, the panel would put the caret in whichever field took its place,
+      // and an outside change waits for that field to be left (takeOutside)
+      name.blur();
+      const id = callId(n, autos().apiCalls.map((c) => c.id));
+      const blankKeys = boxes.map((l) => l.querySelector('input')).filter((x) => x.checked).map((x) => x.value);
+      const { call, stepParams } = saveCallFrom(params, { id, name: n, blankKeys });
+      const made = await saveApiCall({ call }, null);
+      if (!made) return;
+      const next = structuredClone(autoEntry({ kind: 'workflow', id: w.id }) ?? w), s = next.steps.find((x) => x.id === step.id);
+      s.params = stepParams; if (!s.name) s.name = n;
+      saveAutoWf(next, `Saved as “${n}”: this step uses it now${BOTH}`);
+    } }, 'Save the call')));
+  after.after(box); name.focus(); name.select();
+}
+/** A saved call on the canvas: what it is, who uses it, and how to delete it. Its settings are on the right. */
+function renderApiCall(c) {
+  const users = usersOfCall(autos().workflows, c.id);
+  const wf = h('div', { class: 'wf fnview autoview', 'data-apicall': c.id });
+  wf.append(autoNav());
+  wf.append(h('div', { class: 'event-card' }, h('div', { class: 'ic' }, icon('bolt')), h('div', { class: 'named' }, h('h2', {}, c.name || c.id), h('small', {}, 'A saved API call: set up once, used by name in any workflow, its blanks filled in each'))));
+  wf.append(h('div', { class: 'fnfacts' },
+    h('div', { class: 'trigline' }, users.length ? `Used by ${users.length === 1 ? 'one workflow' : `${users.length} workflows`}: a change on the right reaches ${users.length === 1 ? 'it' : 'all of them'}, with no edit to ${users.length === 1 ? 'it' : 'any'}.` : 'No workflow uses it yet: add it to one from the step menu, under Integrations.'),
+    ...users.map((id) => h('div', { class: 'trigline' }, h('button', { class: 'quiet tiny', 'data-open-user': id, onclick: () => openAuto({ kind: 'workflow', id }) }, `${autos().workflows.find((x) => x.id === id)?.name || id} ↗`))),
+    h('div', { class: 'hint' }, 'In the project’s files it is ', h('code', {}, c.id), ', in nodegx.automations.json beside the workflows.'),
+    h('div', { class: 'wfacts' }, h('button', { class: 'tiny quiet danger', 'data-act': 'delcall', disabled: !!users.length, title: users.length ? 'A workflow still uses it: change that step first' : '', onclick: (e) => confirmPop(e, `Delete “${c.name || c.id}”?`, 'It goes from the backend and from the project. No workflow uses it.', 'Delete it', () => saveApiCall({ remove: c.id }, `Saved call deleted${BOTH}`).then((j) => { if (j) { selAuto = null; renderWorkflow(); } })) }, icon('trash'), 'Delete the saved call'))));
+  $('steps').append(wf);
+}
+/** A saved call's settings: Call an API's own form, written to the call (so to every workflow using it), and its blanks. */
+function apiCallPanel(panel, c) {
+  const spec = kindSpec('http-request'), up = editingUp() && !!beNow()?.savedCalls, users = usersOfCall(autos().workflows, c.id);
+  const save = (fn, words = `Saved for ${users.length ? `the ${users.length === 1 ? 'workflow' : `${users.length} workflows`} using it` : 'every workflow that uses it'}${BOTH}`) => { const next = structuredClone(c); fn(next); return saveApiCall({ call: next }, words); };
+  const setParam = (name) => (v) => save((n) => { if (v === undefined) delete n.params[name]; else n.params[name] = v; });
+  panel.append(h('div', { class: 'head' },
+    h('input', { type: 'text', value: c.name || '', disabled: !up, placeholder: c.id, title: 'The saved call\'s name, as the step menu lists it', 'data-input': 'callname', onchange: (e) => save((n) => { const v = e.target.value.trim(); if (v) n.name = v; else delete n.name; }, `Renamed${BOTH}`) }),
+    h('div', { class: 'type' }, h('span', { class: 'stepkind', style: `background:${KIND_COLOUR.bolt}` }, icon('bolt')), 'A saved API call')));
+  const wrap = h('div', { class: 'props' });
+  if (!up) wrap.append(h('div', { class: 'warn' }, beNow()?.words ?? (beNow() && !beNow().savedCalls ? 'This backend is older than saved API calls: it cannot keep one. They come with the next NodeGX release.' : 'Asking the backend what its steps take…')));
+  else {
+    const params = c.params ?? {}, read = new Set(JSON.stringify(params).match(/"fill\.([A-Za-z0-9_]+)/g)?.map((m) => m.slice(7)) ?? []);
+    wrap.append(h('div', { class: 'sechead' }, 'Settings'), h('div', { class: 'hint' }, users.length ? `${users.length === 1 ? 'One workflow uses' : `${users.length} workflows use`} these: a change here reaches ${users.length === 1 ? 'it' : 'each of them'} the next time it runs.` : 'No workflow uses these yet.'));
+    const sections = new Map();
+    for (const p of spec?.params ?? []) {
+      if (p.control === 'saved-call' || p.control === 'call-blanks' || (p.group && /retry/i.test(p.group))) continue;
+      if (HTTP_SHOWN[p.name] && !HTTP_SHOWN[p.name](params)) continue;
+      const label = p.displayName || paramWords(p.name), v = params[p.name];
+      if (p.group && !sections.has(p.group)) { const sec = h('div', { class: 'paramsec', 'data-group': p.group }, h('div', { class: 'sechead' }, p.group)); sections.set(p.group, sec); wrap.append(sec); }
+      const into = p.group ? sections.get(p.group) : wrap;
+      if (p.control === 'secret') into.append(secretField(label, v, setParam(p.name), p.description));
+      else if (p.control === 'key-values') into.append(keyValuesField(label, v, setParam(p.name), null, p.description));
+      else if (p.raw || p.type === 'object' || p.type === 'array') into.append(jsonField(label, v, setParam(p.name), p.description));
+      else into.append(runValueField(label, v, setParam(p.name), { type: p.type, enums: p.enums, description: `${p.description}${p.default !== undefined ? ` (when left empty: ${JSON.stringify(p.default)})` : ''}` }));
+    }
+    wrap.append(h('div', { class: 'sechead' }, 'What each workflow fills in'));
+    if (!(c.blanks ?? []).length) wrap.append(h('div', { class: 'hint' }, 'Nothing: every workflow calls it the same way.'));
+    for (const b of c.blanks ?? []) {
+      wrap.append(h('div', { class: 'field', 'data-blank': b.name }, h('label', {}, b.name), h('div', { class: 'ctl' },
+        h('input', { type: 'text', value: b.example === undefined ? '' : typeof b.example === 'string' ? b.example : JSON.stringify(b.example), placeholder: 'An example, for a test', 'aria-label': `${b.name}: an example`, onchange: (e) => save((n) => { const x = n.blanks.find((y) => y.name === b.name); const t = e.target.value; if (t === '') delete x.example; else x.example = b.type === 'number' && Number.isFinite(Number(t)) ? Number(t) : t; }, `Example kept${BOTH}`) }),
+        read.has(b.name) ? null : h('button', { class: 'quiet', title: 'No setting reads it: remove it', onclick: () => save((n) => { n.blanks = n.blanks.filter((y) => y.name !== b.name); if (!n.blanks.length) delete n.blanks; }, `Removed${BOTH}`) }, icon('trash')))));
+    }
+    if ((c.blanks ?? []).length) wrap.append(h('div', { class: 'hint' }, 'A blank is read in a setting above as fill.<its name>. Made with Save this call on a step.'));
+  }
+  panel.append(wrap);
+}
 function renderAutoStepPanel(panel) {
   if (selFn) return renderFnPanel(panel);
+  if (selAuto?.kind === 'apiCall') {
+    const c = autoEntry(selAuto);
+    $('workflow').classList.toggle('inspecting', !!c); panel.hidden = !c;
+    const a = document.activeElement, focusAt = c && a && panel.contains(a) && a.matches('input,select,textarea') ? [...panel.querySelectorAll('input,select,textarea')].indexOf(a) : -1;
+    panel.innerHTML = '';
+    if (c) apiCallPanel(panel, c);
+    if (focusAt >= 0) panel.querySelectorAll('input,select,textarea')[focusAt]?.focus();
+    return;
+  }
   if (selAuto?.kind === 'trigger') {
     const t = autoEntry(selAuto), on = !!t && selAutoStep === 'trigger';
     $('workflow').classList.toggle('inspecting', on);
@@ -6572,7 +6703,7 @@ function renderAuto() {
   const entry = autoEntry(selAuto);
   $('steps').innerHTML = '';
   $('workflow').classList.remove('card'); // the list stays beside a run or a workflow opened from a trigger (Richard, 2026-10-31)
-  if (selAuto.kind === 'trigger') renderTrigger(entry); else renderAutoWorkflow(entry);
+  if (selAuto.kind === 'trigger') renderTrigger(entry); else if (selAuto.kind === 'apiCall') renderApiCall(entry); else renderAutoWorkflow(entry);
 }
 window.__ob.openAuto = openAuto;
 /**

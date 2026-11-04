@@ -807,6 +807,103 @@ try {
     }
   }
 
+  // P132 BWF-012 (R7): a saved API call. *Save this call* on a Call an API step (the city read from the run is a blank
+  // without asking), the step then uses it; a second workflow picks it by name from the step menu and types only its city;
+  // both run, the key in neither file (AC1). The address changed on the saved call: both call the new one, unedited (AC2).
+  console.log('check: P132 BWF-012, a saved API call used by name');
+  {
+    await wait(20000); // the admin bucket again (see BWF-005's section)
+    const cat = await be('/admin/workflow-step-kinds');
+    const secrets = await be('/admin/secrets');
+    if (!cat.savedCalls) console.log('  (not graded: this backend has no saved API calls yet. Run with NODEGX_REPO at a NodeGX carrying BWF-012, its dist rebuilt, or after a release carrying it)');
+    else if (!secrets.secrets?.some((x) => x.name === 'WEATHER_KEY')) console.log('  (not graded: BWF-006\'s section makes WEATHER_KEY, and it did not run)');
+    else {
+      const KEY = 'wx-drive-7f3a9c21e5b8d4'; // BWF-006's section saved it as WEATHER_KEY
+      const seen = [];
+      const weather = http.createServer((req, res) => {
+        const u = new URL(req.url, 'http://x');
+        seen.push({ path: u.pathname, city: u.searchParams.get('city'), auth: req.headers.authorization });
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ current: { temperature_2m: u.pathname.startsWith('/v2') ? 14 : 12.5 } }));
+      });
+      await new Promise((r) => weather.listen(0, '127.0.0.1', r));
+      const apiUrl = `http://127.0.0.1:${weather.address().port}`;
+      const wfOf = (id) => fileNow().workflows.find((w) => w.id === id);
+      const runOf = async (id, payload) => (await be(`/admin/workflow-defs/${id}/run`, { method: 'POST', body: JSON.stringify({ payload }) })).run;
+      try {
+        const steps = [{ id: 'ask', name: 'Ask the weather', kind: 'http-request', params: { url: `${apiUrl}/forecast`, query: { city: { $path: 'body.title' }, units: 'metric' }, authType: 'bearer', authSecret: 'WEATHER_KEY' }, next: ['end'] },
+          { id: 'end', name: 'Answer', kind: 'return', params: { value: { $path: 'upstream.ask.body.current.temperature_2m' } } }];
+        const r = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: { id: 'morningsky', name: 'Morning sky', entry: 'ask', steps } }) });
+        ok(r.ok, 'a workflow that calls the weather for a task\'s title, written as Studio writes one', r.ok || (await r.json()).error);
+        await b.until(`!!document.querySelector('#autolist .row[data-workflow="morningsky"]')`, 8000).catch(() => {});
+        await ev(`document.querySelector('#autolist .row[data-workflow="morningsky"]').click()`);
+        await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'morningsky'`, 8000).catch(() => {});
+        await b.clickSel('#steps .autoview .step[data-id="ask"] h3');
+        await b.until(`!!document.querySelector('#wfinspect [data-act=savecall]')`, 8000).catch(() => {});
+        await ev(`document.querySelector('#wfinspect [data-act=savecall]').click()`);
+        await b.until(`!!document.querySelector('#wfinspect .savecallbox')`, 5000).catch(() => {});
+        const box = (key) => `document.querySelector('#wfinspect .savecallbox [data-part="${key}"] input')`;
+        ok(await ev(`${box('query.city')}?.checked && ${box('query.city')}?.disabled && !${box('query.units')}?.checked && !${box('url')}?.checked`), 'the city, read from the run, is a blank without asking; the address and units are the call\'s own until ticked', await ev(`document.querySelector('#wfinspect .savecallbox')?.innerText`));
+        await ev(`(() => { const n = document.querySelector('#wfinspect [data-input=callname]'); n.value = 'The weather'; document.querySelector('#wfinspect [data-act=savecallgo]').click(); })()`);
+        for (let i = 0; i < 60 && wfOf('morningsky')?.steps.find((x) => x.id === 'ask')?.params?.call !== 'the-weather'; i++) await wait(150);
+        const saved = fileNow().apiCalls?.find((c) => c.id === 'the-weather');
+        ok(saved?.name === 'The weather' && JSON.stringify(saved.params.query) === '{"city":{"$path":"fill.city"},"units":"metric"}' && saved.params.authSecret === 'WEATHER_KEY' && JSON.stringify(saved.blanks) === '[{"name":"city","type":"text"}]', 'saved in the project\'s apiCalls: the address and the key\'s Secret once, the city a blank', saved ?? await ev(`document.getElementById('toast')?.textContent`));
+        ok(JSON.stringify(wfOf('morningsky')?.steps.find((x) => x.id === 'ask')?.params) === '{"call":"the-weather","fill":{"city":{"$path":"body.title"}}}', 'the step now uses it by name and fills the city from the run, as it did before', wfOf('morningsky')?.steps.find((x) => x.id === 'ask')?.params);
+        ok((await be('/admin/api-calls')).calls?.some((c) => c.id === 'the-weather'), 'and the backend keeps it too');
+        await b.until(`!!document.querySelector('#autolist .row[data-apicall="the-weather"]')`, 5000).catch(() => {});
+        ok(await ev(`/Used by 1 workflow/.test(document.querySelector('#autolist .row[data-apicall="the-weather"]')?.innerText ?? '')`), 'the list has it under Saved API calls, used by one workflow', await ev(`document.querySelector('#autolist')?.innerText`));
+
+        // a second workflow picks it from the step menu, by its name, and types only the city
+        const r2 = await fetch(url + 'api/automations/workflow', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: { id: 'lyonsky', name: 'Lyon sky', entry: 'start', steps: [{ id: 'start', name: 'Begin', kind: 'transform', params: { output: { ok: true } } }] } }) });
+        ok(r2.ok, 'a second workflow', r2.ok || (await r2.json()).error);
+        await b.until(`!!document.querySelector('#autolist .row[data-workflow="lyonsky"]')`, 8000).catch(() => {});
+        ok(await ev(`!!document.querySelector('#autolist .row[data-workflow="lyonsky"]')`), 'drawn in the list', { focus: await ev(`document.activeElement?.outerHTML?.slice(0, 120)`), problems: b.problems.slice(-3) });
+        await ev(`document.querySelector('#autolist .row[data-workflow="lyonsky"]').click()`);
+        await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'lyonsky'`, 8000).catch(() => {});
+        await b.clickSel('#steps .autoview .step[data-id="start"] h3');
+        await b.until(`!!document.querySelector('#wfinspect [data-act=addafter]')`, 5000).catch(() => {});
+        await ev(`document.querySelector('#wfinspect [data-act=addafter]').click()`);
+        await b.until(`!!document.querySelector('.menu .item[data-call="the-weather"]')`, 5000).catch(() => {});
+        ok(await ev(`(() => { const it = document.querySelector('.menu .item[data-call="the-weather"]'); let h = it?.previousElementSibling; while (h && !h.classList.contains('h')) h = h.previousElementSibling; return h?.textContent === 'Integrations' && /The weather/.test(it.innerText) && /fill in city/.test(it.innerText); })()`), 'the step menu lists The weather under Integrations, saying what it fills in', await ev(`document.querySelector('.menu.actions')?.innerText`));
+        await ev(`document.querySelector('.menu .item[data-call="the-weather"]').click()`);
+        const used = () => wfOf('lyonsky')?.steps.find((x) => x.params?.call === 'the-weather');
+        for (let i = 0; i < 40 && !used(); i++) await wait(150);
+        ok(JSON.stringify(used()?.params) === '{"call":"the-weather","fill":{"city":""}}' && used()?.name === 'The weather', 'added by name, with only its city to fill and no copy of its settings', used());
+        await b.clickSel(`#steps .autoview .step[data-id="${used()?.id}"] h3`);
+        const F = `[...document.querySelectorAll('#wfinspect .field.runvalue')].find((x) => x.querySelector(':scope > label')?.textContent === 'city')`;
+        await b.until(`!!${F}?.querySelector('.vcompose')`, 8000).catch(() => {});
+        ok(await ev(`/The weather/.test(document.querySelector('#wfinspect .savedcall')?.innerText ?? '') && !!document.querySelector('#wfinspect [data-act=opencall]') && !document.querySelector('#wfinspect [data-act=pastecurl]') && ![...document.querySelectorAll('#wfinspect .field > label')].some((l) => l.textContent === 'Address')`), 'its panel says which saved call, opens it, and asks only for the city', await ev(`document.querySelector('#wfinspect')?.innerText.slice(0, 400)`));
+        await ev(`(() => { const c = ${F}.querySelector('.vcompose'); c.focus(); c.textContent = 'Lyon'; c.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); })()`);
+        for (let i = 0; i < 40 && used()?.params?.fill?.city !== 'Lyon'; i++) await wait(150);
+        ok(used()?.params?.fill?.city === 'Lyon', 'the city typed: Lyon', used()?.params);
+        const n = seen.length;
+        const one = await runOf('morningsky', { title: 'Paris' }), two = await runOf('lyonsky', {});
+        ok(one?.status === 'success' && two?.status === 'success' && one.output === 12.5, 'AC1: both run', { one: one?.status, two: two?.status, err: one?.error ?? two?.error });
+        ok(JSON.stringify(seen.slice(n)) === JSON.stringify([{ path: '/forecast', city: 'Paris', auth: `Bearer ${KEY}` }, { path: '/forecast', city: 'Lyon', auth: `Bearer ${KEY}` }]), 'AC1: each called the weather for its own city, with the key from Secrets', seen.slice(n));
+        const texts = [readFileSync(join(project, 'nodegx.automations.json'), 'utf8'), JSON.stringify(await be('/admin/api-calls')), JSON.stringify((await be('/admin/workflow-defs')).workflows)];
+        ok(texts.every((t) => !t.includes(KEY)), 'AC1: the key is in neither workflow, nor the saved call, nor the project\'s file');
+
+        // AC2: the saved call's address changed, on the saved call
+        const before = JSON.stringify(['morningsky', 'lyonsky'].map(wfOf));
+        await ev(`document.querySelector('#autolist .row[data-apicall="the-weather"]').click()`);
+        await b.until(`document.querySelector('#steps .autoview')?.dataset.apicall === 'the-weather'`, 8000).catch(() => {});
+        ok(await ev(`/Used by 2 workflows/.test(document.querySelector('#steps .autoview')?.innerText ?? '') && document.querySelector('#steps [data-act=delcall]')?.disabled`), 'opened, it says the two workflows using it, and cannot be deleted while they do', await ev(`document.querySelector('#steps .autoview')?.innerText`));
+        const A = `[...document.querySelectorAll('#wfinspect .field.runvalue')].find((x) => x.querySelector(':scope > label')?.textContent === 'Address')`;
+        await b.until(`!!${A}?.querySelector('.vcompose')`, 8000).catch(() => {});
+        await ev(`(() => { const c = ${A}.querySelector('.vcompose'); c.focus(); c.textContent = ${JSON.stringify(`${apiUrl}/v2/forecast`)}; c.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); })()`);
+        for (let i = 0; i < 40 && fileNow().apiCalls?.[0]?.params?.url !== `${apiUrl}/v2/forecast`; i++) await wait(150);
+        ok(fileNow().apiCalls?.[0]?.params?.url === `${apiUrl}/v2/forecast`, 'the address changed on the saved call, in the file', fileNow().apiCalls?.[0]?.params?.url);
+        ok(JSON.stringify(['morningsky', 'lyonsky'].map(wfOf)) === before, 'AC2: neither workflow was edited');
+        const m = seen.length;
+        await runOf('morningsky', { title: 'Oslo' }); await runOf('lyonsky', {});
+        ok(JSON.stringify(seen.slice(m).map((x) => `${x.path}?${x.city}`)) === '["/v2/forecast?Oslo","/v2/forecast?Lyon"]', 'AC2: both call the new address', seen.slice(m));
+        await shot('p132-bwf012');
+      } finally {
+        weather.close();
+      }
+    }
+  }
+
   // P132 BWF-011 (R8): a value composed in a setting. An email's subject typed as words with the found row's title in the
   // middle, no formula menu opened (AC1); the chip refined from "items" to the first one's title in two presses (AC2);
   // tested, the email caught here says the subject with the title in it

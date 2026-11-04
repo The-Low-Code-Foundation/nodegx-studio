@@ -47,6 +47,8 @@
  *                          off, or a daily schedule moved, on the backend and in `nodegx.automations.json` together
  *                          (BKO-001's rule: the backend first, then the file; the backend put back if the file fails).
  *                          Answers `{ file, text, backend }`: the file's new text and what the backend stored
+ *   POST /api/automations/api-call P132 BWF-012: { call, remove?, client } a saved API call written (or removed by id) on the
+ *                          backend (`PUT/DELETE /admin/api-calls/:id`) and in the file's `apiCalls` together, as a workflow is
  *   GET  /api/automations/samples  P132 BWF-002: `{ samples: { workflowId: sample }, warned: [workflowId] }`, this computer's
  *   POST /api/automations/sample   { workflow, sample?, warned? } kept in `.nodegx/workflow-samples.json` (gitignored)
  *   POST /api/automations/test     { workflow, stopAfter?, env? } the workflow run on its sample on the development backend
@@ -432,6 +434,47 @@ async function saveWorkflow({ workflow, remove, trigger }) {
   // P132 BWF-001: a webhook made here is said with the URL it answers on and its key, which the backend shows only now
   const hook = madeTrigger?.type === 'webhook' && backend.endpoint ? { url: `${backend.endpoint}/hooks/${encodeURIComponent(backend.id)}/${madeTrigger.webhook.slug}`, scheme: madeTrigger.webhook.scheme, secret: hookSecret } : undefined;
   return { file: rel, text, workflow: stored, trigger: madeTrigger && { id: madeTrigger.id }, hook, warnings: put?.warnings ?? [] };
+}
+/** P132 BWF-012: the project's shape of a saved API call (nodegx-backend automations/shape.ts `projectApiCall`): no timestamps. */
+const projectApiCall = (c) => Object.fromEntries(Object.entries({ id: c.id, name: c.name, description: c.description, params: c.params, blanks: c.blanks?.length ? c.blanks : undefined }).filter(([, v]) => v !== undefined));
+/**
+ * P132 BWF-012: a saved API call written from Studio, as a workflow is: the backend first (it checks the call, refuses a
+ * change that would leave a workflow using it with a blank unfilled, and a delete while a workflow uses it), then the
+ * project's `apiCalls`, the entry patched by id and nothing else touched; the backend put back if the file fails.
+ */
+async function saveApiCall({ call, remove }) {
+  const rel = AUTOMATIONS_FILE, file = join(projectDir, rel);
+  const before = diskText(rel);
+  const autos = readAutomations(before);
+  if (autos.error) throw new Error(autos.error);
+  const id = remove ?? call?.id;
+  if (!id || typeof id !== 'string') throw new Error('Say which saved call: it has no id.');
+  const be = await adminOf('development').catch((e) => { throw new Error(`${e.message} A saved call is changed on the backend and in the project together, so start the backend first.`); });
+  const catalog = await be.get('/admin/workflow-step-kinds').catch(() => null);
+  if (!catalog?.savedCalls) throw new Error('This backend is older than saved API calls: it cannot keep one, or run a step that uses one. They come with the next NodeGX release.');
+  const path = `/admin/api-calls/${encodeURIComponent(id)}`;
+  const was = await be.get(path).then((j) => j.call).catch(() => null);
+  if (remove) { if (was) await be.del(path); }
+  const put = remove ? null : await be.put(path, call);
+  const stored = put ? projectApiCall(put.call) : null;
+  const json = before == null ? { version: 1, workflows: [], triggers: [] } : JSON.parse(before);
+  const list = Array.isArray(json.apiCalls) ? json.apiCalls : [];
+  const at = list.findIndex((c) => c.id === id);
+  if (remove) { if (at >= 0) list.splice(at, 1); }
+  else if (at >= 0) list[at] = stored; else list.push(stored);
+  if (list.length) json.apiCalls = list; else delete json.apiCalls; // none: the file an older backend reads
+  const text = JSON.stringify(json, null, 2) + (before == null || before.endsWith('\n') ? '\n' : '');
+  try {
+    known.set(rel, text);
+    writeFileSync(`${file}.studio-tmp`, text);
+    renameSync(`${file}.studio-tmp`, file);
+  } catch (e) {
+    known.set(rel, before);
+    let undone = true;
+    try { if (was) await be.put(path, was); else if (!remove) await be.del(path); } catch { undone = false; }
+    throw new Error(`The backend took the change but ${rel} could not be written (${e.message}), ${undone ? 'so the backend was put back as it was. Nothing changed.' : 'and putting the backend back failed too: the backend now has a change the project does not.'}`);
+  }
+  return { file: rel, text, call: stored, usedBy: put?.usedBy ?? [] };
 }
 /**
  * P132 BWF-002: each workflow's test sample, and which workflows have said "this runs for real" once. Kept on this
@@ -821,6 +864,16 @@ const server = http.createServer(async (req, res) => {
       try {
         const done = await setTrigger({ id, enabled, time, cron, dbChange, remove });
         tell({ changed: { [done.file]: done.text }, removed: [] }, client); // another Studio window on the project
+        return json(200, done);
+      } catch (err) {
+        return json(409, { error: err.message });
+      }
+    }
+    if (url.pathname === '/api/automations/api-call' && req.method === 'POST') {
+      const { call, remove, client } = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      try {
+        const done = await saveApiCall({ call, remove });
+        tell({ changed: { [done.file]: done.text }, removed: [] }, client);
         return json(200, done);
       } catch (err) {
         return json(409, { error: err.message });

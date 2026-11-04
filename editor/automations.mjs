@@ -20,14 +20,102 @@ export const CLOUD_PREFIX = '__cloud__/';
 
 /** The file's text read as automations, or a sentence saying why it can't be. Null text: the project has none. */
 export function readAutomations(text) {
-  if (text == null) return { workflows: [], triggers: [] };
+  if (text == null) return { workflows: [], triggers: [], apiCalls: [] };
   try {
     const j = JSON.parse(text);
-    return { workflows: Array.isArray(j.workflows) ? j.workflows : [], triggers: Array.isArray(j.triggers) ? j.triggers : [] };
+    return { workflows: Array.isArray(j.workflows) ? j.workflows : [], triggers: Array.isArray(j.triggers) ? j.triggers : [], apiCalls: Array.isArray(j.apiCalls) ? j.apiCalls : [] };
   } catch (e) {
-    return { workflows: [], triggers: [], error: `${AUTOMATIONS_FILE} is not readable JSON (${e.message})` };
+    return { workflows: [], triggers: [], apiCalls: [], error: `${AUTOMATIONS_FILE} is not readable JSON (${e.message})` };
   }
 }
+
+/*
+ * P132 BWF-012 — saved API calls (R7). A saved call is a Call an API's settings kept once in the file's `apiCalls`, its
+ * blanks written in them as `{ $path: 'fill.<blank>' }`; a step uses it as `{ call: '<id>', fill: { <blank>: value } }`.
+ * The backend reads the call when the step runs, so a change to it reaches every workflow that uses it.
+ */
+
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const isSpec = (v) => isObj(v) && (typeof v.$path === 'string' || '$fn' in v || '$literal' in v);
+const BLANK_RE = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
+
+/** What part of a step's settings a blank can be: the address, and each query, header and body entry by name. */
+export function callParts(params = {}) {
+  const parts = [];
+  if (params.url !== undefined) parts.push({ key: 'url', words: 'The address', value: params.url, suggest: 'address' });
+  for (const [group, words] of [['query', 'Query'], ['headers', 'Header'], ['body', 'Body']]) {
+    const v = params[group];
+    if (!isObj(v) || isSpec(v)) continue;
+    for (const [name, value] of Object.entries(v)) parts.push({ key: `${group}.${name}`, words: `${words}: ${name}`, value, suggest: name });
+  }
+  return parts;
+}
+
+/** A blank's name made from a part's: letters, digits and _, starting with a letter or _, and not one already taken. */
+export function blankName(suggest, taken = []) {
+  let n = String(suggest ?? '').replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'value';
+  if (/^[0-9]/.test(n)) n = `_${n}`;
+  n = n.slice(0, 60);
+  let out = n, i = 2;
+  while (taken.includes(out)) out = `${n}_${i++}`;
+  return out;
+}
+
+/** A saved call's id from its name: what a workflow writes after `call:`. Unique among `taken`. */
+export function callId(name, taken = []) {
+  const base = (String(name ?? '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'api-call').slice(0, 56);
+  let out = /^[a-z0-9]/.test(base) ? base : `call-${base}`, i = 2;
+  while (taken.includes(out)) out = `${base}-${i++}`;
+  return out;
+}
+
+/**
+ * *Save this call*: a Call an API step's settings made a saved call, the parts `blankKeys` names made its blanks, and the
+ * step's new params, which fill each blank with what the step had there, so the step does exactly what it did before.
+ * A literal part's value is the blank's example (what a test fills it with); one read from the run is not.
+ */
+export function saveCallFrom(params, { id, name, blankKeys = [] }) {
+  const callParams = structuredClone(params ?? {});
+  delete callParams.call; delete callParams.fill;
+  const parts = callParts(params);
+  const blanks = [], fill = {}, taken = [];
+  for (const key of blankKeys) {
+    const part = parts.find((p) => p.key === key);
+    if (!part) continue;
+    const b = blankName(part.suggest, taken); taken.push(b);
+    const spec = { $path: `fill.${b}` };
+    if (key === 'url') callParams.url = spec;
+    else { const [group, ...rest] = key.split('.'); callParams[group][rest.join('.')] = spec; }
+    fill[b] = structuredClone(part.value);
+    blanks.push(Object.fromEntries(Object.entries({ name: b, type: typeof part.value === 'number' ? 'number' : typeof part.value === 'boolean' ? 'boolean' : 'text', example: isSpec(part.value) || isObj(part.value) ? undefined : part.value }).filter(([, v]) => v !== undefined)));
+  }
+  const call = { id, ...(name ? { name } : {}), params: callParams, ...(blanks.length ? { blanks } : {}) };
+  return { call, stepParams: { call: id, ...(blanks.length ? { fill } : {}) } };
+}
+
+/** A new step's params for a saved call: each blank filled with its example (or empty), so the step can be stored. */
+export function stepForCall(c) {
+  const fill = {};
+  for (const b of c.blanks ?? []) fill[b.name] = b.example !== undefined ? structuredClone(b.example) : '';
+  return { call: c.id, ...(Object.keys(fill).length ? { fill } : {}) };
+}
+
+/** The workflows (by id) whose steps use the saved call `id`. */
+export function usersOfCall(workflows, id) {
+  return (workflows ?? []).filter((w) => (w.steps ?? []).some((s) => s.kind === 'http-request' && s.params?.call === id)).map((w) => w.id);
+}
+
+/** True when a value reads the run somewhere (a `$path` not into a blank): in a saved call, such a part must be a blank. */
+export function readsRun(v) {
+  if (Array.isArray(v)) return v.some(readsRun);
+  if (!isObj(v)) return false;
+  if (typeof v.$path === 'string') return !v.$path.startsWith('fill.');
+  if ('$literal' in v) return false;
+  return Object.values(v).some(readsRun);
+}
+
+/** True when a name is one a blank can have. */
+export const isBlankName = (n) => BLANK_RE.test(n);
 
 const ACTION_WORDS = { create: 'created', update: 'changed', delete: 'deleted' };
 const orList = (xs) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} or ${xs.at(-1)}`);

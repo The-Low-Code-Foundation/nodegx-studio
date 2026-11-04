@@ -6,6 +6,7 @@
  *
  *   node editor/automations-check.mjs    PASS n/n and exit 0, or the failing lines and exit 1
  */
+import { callParts, saveCallFrom, stepForCall, usersOfCall, callId, readsRun, blankName } from './automations.mjs';
 import { parseCurl, secretNameFor, shellWords, testMailWords, composeParts, composeValue, isChip, knownAt, chipRefinements, chipWords } from './automations.mjs';
 import { ALWAYS_WORDS, formulaParts, formulaStart, formulaWords, itemSources, pathWords, readSources, shapeFields, startWords, upstreamOf, addStepAfter, sampleFor, sampleRun, sampleWords, testRefusal, agrees, atTime, canMove, deleteStep, insertBetween, moveStep, nextOntoRoute, stepPorts, newStepId, readAutomations, runLine, scheduleTime, stepsOfRun, stepWires, targetOf, triggerHead, valueForm, workflowLayout } from './automations.mjs';
 
@@ -291,6 +292,24 @@ console.log('check: P132 BWF-011, a value composed in a setting');
   const pw = (p) => ({ name: p.split('.').slice(2).join(' › '), from: 'Find plants' });
   ok(chipWords({ $fn: 'join', args: [{ $fn: 'pick', args: [items, 'name'] }, ', '] }, pw).name === "each one's name in items, joined with commas" && chipWords({ $fn: 'count', args: [items] }, pw).name === 'how many items', 'a chip says what it is in words');
   ok(pathWords('upstream.find.items.-1', { steps: [{ id: 'find', name: 'Find plants', kind: 'find-records' }] }).name === 'items › the last', 'the last one is said, never "-1"');
+}
+
+// P132 BWF-012: saved API calls
+{
+  const params = { url: 'https://api.example.com/forecast', query: { city: { $path: 'body.title' }, units: 'metric' }, authType: 'bearer', authSecret: 'WEATHER_KEY', timeoutMs: 5000 };
+  ok(JSON.stringify(callParts(params).map((p) => p.key)) === '["url","query.city","query.units"]', 'a Call an API\'s parts that can be blanks: the address, each query entry');
+  ok(readsRun(params.query.city) && !readsRun('metric') && readsRun({ $fn: 'text', args: ['x', { $path: 'body.a' }] }) && !readsRun({ $path: 'fill.city' }), 'a part that reads the run is told from one that reads a blank or is typed');
+  const { call, stepParams } = saveCallFrom(params, { id: 'the-weather', name: 'The weather', blankKeys: ['query.city'] });
+  ok(JSON.stringify(call) === JSON.stringify({ id: 'the-weather', name: 'The weather', params: { url: 'https://api.example.com/forecast', query: { city: { $path: 'fill.city' }, units: 'metric' }, authType: 'bearer', authSecret: 'WEATHER_KEY', timeoutMs: 5000 }, blanks: [{ name: 'city', type: 'text' }] }), 'saved: the settings once, the ticked part a blank read as fill.city', call);
+  ok(JSON.stringify(stepParams) === '{"call":"the-weather","fill":{"city":{"$path":"body.title"}}}', 'and the step fills it with what it had there, so it does what it did', stepParams);
+  ok(params.query.city.$path === 'body.title', "the step's own settings are not changed in place");
+  const typed = saveCallFrom(params, { id: 'w', blankKeys: ['query.units', 'url'] });
+  ok(typed.call.blanks.find((b) => b.name === 'units').example === 'metric' && typed.call.params.url.$path === 'fill.address' && typed.stepParams.fill.address === 'https://api.example.com/forecast', 'a typed part becomes a blank with its value as the example; the address is "address"', typed);
+  ok(JSON.stringify(stepForCall(typed.call)) === JSON.stringify({ call: 'w', fill: { units: 'metric', address: 'https://api.example.com/forecast' } }) && JSON.stringify(stepForCall(call)) === '{"call":"the-weather","fill":{"city":""}}', 'picked from the menu, each blank starts at its example, or empty, so the step can be stored');
+  ok(callId('The weather', []) === 'the-weather' && callId('The weather', ['the-weather']) === 'the-weather-2' && callId('  !!', []) === 'api-call', "a call's id from its name, unique");
+  ok(blankName('X-Request-Id', []) === 'X_Request_Id' && blankName('2fa', []) === '_2fa' && blankName('city', ['city']) === 'city_2', "a blank's name is one a path can carry");
+  ok(JSON.stringify(usersOfCall([{ id: 'a', steps: [{ kind: 'http-request', params: { call: 'w' } }] }, { id: 'b', steps: [{ kind: 'http-request', params: { url: 'x' } }] }], 'w')) === '["a"]', 'who uses a saved call');
+  ok(JSON.stringify(readAutomations('{"version":1,"workflows":[],"triggers":[],"apiCalls":[{"id":"w"}]}').apiCalls) === '[{"id":"w"}]' && readAutomations(null).apiCalls.length === 0, 'the file\'s saved calls are read');
 }
 
 const passed = results.filter(Boolean).length;
