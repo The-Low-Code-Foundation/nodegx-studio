@@ -382,6 +382,19 @@ try {
     await wait(300);
     ok(JSON.stringify(stepOf(triage(), 'branch')?.routes) === '{"ontrue":["wait"],"onfalse":["stop"]}' && !('next' in stepOf(triage(), 'branch')) && !('next' in stepOf(await beWf(), 'branch')), 'put on No: the If decides again, in the file and on the backend', stepOf(triage(), 'branch'));
   }
+  // the route words are the backend's (catalog 1.9.0): one word served differently is the word drawn, and the served list back is Yes again
+  {
+    const portwords = `[...document.querySelectorAll('#steps svg.wires text.portword')].map((t) => t.textContent)`;
+    await ev(`(() => { window.__realFetch = window.__realFetch || window.fetch; window.fetch = async (u, i) => { const r = await window.__realFetch(u, i); if (!String(u).endsWith('/admin/workflow-step-kinds')) return r; const j = await r.json(); for (const k of j.kinds ?? []) if (k.kind === 'branch') for (const x of k.routes ?? []) if (x.name === 'ontrue') x.displayName = 'When it holds'; return new Response(JSON.stringify(j), { status: r.status, headers: { 'content-type': 'application/json' } }); }; })()`);
+    await ev(`document.querySelector('.wfback .row[data-workflow="triage"]').click()`);
+    await b.until(`${portwords}.includes('When it holds')`, 8000).catch(() => {});
+    const served = await ev(portwords);
+    await ev(`window.fetch = window.__realFetch`);
+    await ev(`document.querySelector('.wfback .row[data-workflow="triage"]').click()`);
+    await b.until(`${portwords}.includes('Yes')`, 8000).catch(() => {});
+    const back = await ev(portwords);
+    ok(served.includes('When it holds') && !served.includes('Yes') && served.includes('No') && back.includes('Yes') && !back.includes('When it holds'), "the If's sides are drawn in the backend's words: a word it serves differently is the word on the wire", { served, back });
+  }
   // a webhook made in Studio answers at the address it shows, with the key it shows once; the file never holds the key
   await b.clickSel('#newauto'); await wait(300);
   await ev(`(() => { const m = document.querySelector('.menu.newauto'); const set = (sel, v, t) => { const el = m.querySelector(sel); el.value = v; el.dispatchEvent(new Event(t)); }; set('select[aria-label="What starts it"]', 'webhook', 'change'); set('input[aria-label="Workflow name"]', 'New order', 'input'); set('select[aria-label="The function it runs first"]', 'kind:transform', 'change'); })()`);

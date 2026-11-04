@@ -1251,7 +1251,7 @@ import { fieldReaders, typeReaders, renameField, renameType, appFields } from '.
 import { LANES, buildTimeline, lastRunOf, msText, shotAt, stepValues } from './timeline.mjs';
 import { runOver, lastActivity, watchSignals, runtimeTimers, runTimers } from './runwatch.mjs';
 import { CLOUD, REQUEST, RESPONSE, functionList, functionLayout, helperKey, requestAsks, responseWords, touchesWords } from './fngraph.mjs';
-import { ALWAYS_WORDS, AUTOMATIONS_FILE, CHANGE_WORDS, SAMPLE_KINDS, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, itemSources, formulaArgAt, formulaArgStart, formulaParts, formulaStart, moveStep, newStepId, nextOntoRoute, parseCurl, pathWords, readAutomations, readSources, runLine, sampleFor, sampleWords, scheduleTime, stepsOfRun, targetOf, testMailWords, triggerHead, stepPorts, upstreamOf, valueForm, workflowLayout, composeParts, composeValue, knownAt, chipRefinements, chipPath, chipWords, callParts, saveCallFrom, stepForCall, usersOfCall, callId, readsRun, PIECE_KIND, pieceOf, piecesIn, runnersOf, sentNames, bodyNames, runnersWords, wouldRing, runInFailure, pieceFrom, stepTitle } from './automations.mjs';
+import { ALWAYS_WORDS, AUTOMATIONS_FILE, CHANGE_WORDS, SAMPLE_KINDS, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, itemSources, formulaArgAt, formulaArgStart, formulaParts, formulaStart, moveStep, newStepId, nextOntoRoute, parseCurl, pathWords, readAutomations, readSources, runLine, sampleFor, sampleWords, scheduleTime, stepsOfRun, targetOf, testMailWords, triggerHead, stepPorts, upstreamOf, valueForm, workflowLayout, composeParts, composeValue, knownAt, chipRefinements, chipPath, chipWords, callParts, saveCallFrom, stepForCall, usersOfCall, callId, readsRun, PIECE_KIND, pieceOf, piecesIn, runnersOf, sentNames, bodyNames, runnersWords, wouldRing, runInFailure, pieceFrom, stepTitle, servedRouteWords } from './automations.mjs';
 import { logicOnPage, placedComponent, studioEdits, wiringLayout, wiringSvg } from './wiring.mjs';
 import { look as canvasLook, nodeScheme, wireColors } from './look.js';
 // STU-084: what Studio draws and edits, as data (the element types, the action menu, the value sources), one file the
@@ -5703,7 +5703,7 @@ function autoCardPress(e, id) {
 function groupBar(w, numOf) {
   if (!piecesOn() || !editingUp() || autoGroup?.wf !== w.id || !autoGroup.ids.length) return null;
   let problem = null;
-  try { pieceFrom(w, autoGroup.ids, { id: '\u0000', defaults: kindDefaults, title: autoStepTitle }); } catch (err) { problem = err.message; }
+  try { pieceFrom(w, autoGroup.ids, { id: '\u0000', defaults: kindDefaults, title: autoStepTitle, routeWordsOf: autoRouteWords }); } catch (err) { problem = err.message; }
   // by the numbers on their cards: two unnamed steps running one function have the same title
   const nums = autoGroup.ids.map((id) => numOf.get(id)).filter(Boolean).sort((a, b) => a - b);
   return h('div', { class: 'groupbar', 'data-group': '' }, h('span', {}, nums.length === 1 ? `Step ${nums[0]} chosen` : `Steps ${nums.slice(0, -1).join(', ')} and ${nums.at(-1)} chosen`),
@@ -5720,7 +5720,7 @@ function makePieceForm(e, w) {
   const check = () => {
     const id = slugOf(name.value);
     try {
-      made = id ? pieceFrom(w, autoGroup?.ids ?? [], { id, name: name.value, defaults: kindDefaults, title: autoStepTitle, workflows: autos().workflows }) : null;
+      made = id ? pieceFrom(w, autoGroup?.ids ?? [], { id, name: name.value, defaults: kindDefaults, title: autoStepTitle, workflows: autos().workflows, routeWordsOf: autoRouteWords }) : null;
       note.textContent = !made ? 'Its name, as Reusable pieces lists it.' : [`They move into it, and one step, Run ${name.value.trim()}, takes their place.`,
         made.sends.length ? ` It sends the piece what they read from before them: ${made.sends.map((x) => x.name).join(', ')}.` : '', ...made.notes.map((n) => ` ${n}`)].join('');
     } catch (err) { made = null; note.textContent = err.message; }
@@ -5876,7 +5876,8 @@ const editingUp = () => { const be = beNow(); return !!be && !be.words && be.kin
 /** The kind's own routes (the catalog's, a switch's case labels): its ports, named, even with nothing on them yet. */
 const routeNamesOf = (step) => { const spec = kindSpec(step.kind); return spec?.routes?.length ? [...spec.routes.filter((r) => !r.dynamic).map((r) => r.name), ...(step.kind === 'switch' ? (step.params?.cases ?? []).map((c) => c.label).filter(Boolean) : [])] : []; };
 const endsHere = (step) => step.kind === 'return' || (step.kind === 'stop' && step.params?.isError !== false);
-const autoPorts = (step) => (endsHere(step) ? [] : stepPorts(step, routeNamesOf(step)));
+const autoRouteWords = (step) => servedRouteWords(step && kindSpec(step.kind)); // the backend's words for this kind's routes (catalog 1.9.0)
+const autoPorts = (step) => (endsHere(step) ? [] : stepPorts(step, routeNamesOf(step), autoRouteWords(step)));
 function pickAutoStep(id) {
   selAutoStep = id;
   for (const el of $('steps').querySelectorAll('.autoview .fnflow .step[data-id]')) el.classList.toggle('picked', el.dataset.id === id);

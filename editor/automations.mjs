@@ -196,7 +196,7 @@ function explicitReads(step, defaults) {
   return { ...step, params };
 }
 const nameFrom = (s) => String(s).replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').replace(/^(\d)/, '_$1');
-export function pieceFrom(wf, chosen, { id, name = '', defaults = () => ({}), title = (s) => s.name || s.id, workflows = [] } = {}) {
+export function pieceFrom(wf, chosen, { id, name = '', defaults = () => ({}), title = (s) => s.name || s.id, workflows = [], routeWordsOf = () => ({}) } = {}) {
   const steps = wf.steps ?? [], byId = new Map(steps.map((s) => [s.id, s]));
   const ids = new Set([...chosen].filter((x) => byId.has(x)));
   if (!ids.size) throw new Error('Shift-press the steps to put in the piece.');
@@ -214,11 +214,11 @@ export function pieceFrom(wf, chosen, { id, name = '', defaults = () => ({}), ti
   const inner = steps.filter((s) => ids.has(s.id)), wires = inner.flatMap(stepWires);
   const out = wires.filter((w) => !ids.has(w.to)), lasts = inner.filter((s) => !stepWires(s).some((w) => ids.has(w.to)));
   if (out.length > 1 || (out.length === 1 && lasts.length > 1)) {
-    const ways = [...out.map((w) => `${said(w.from)} leads on to ${said(w.to)}${w.kind === 'fail' ? ' if it fails' : w.label ? ` on ${ROUTE_WORDS[w.label] ?? w.label}` : ''}`), ...lasts.filter((s) => !out.some((w) => w.from === s.id)).map((s) => `${said(s.id)} ends there`)];
+    const ways = [...out.map((w) => `${said(w.from)} leads on to ${said(w.to)}${w.kind === 'fail' ? ' if it fails' : w.label ? ` on ${routeWord(w.label, routeWordsOf(byId.get(w.from)))}` : ''}`), ...lasts.filter((s) => !out.some((w) => w.from === s.id)).map((s) => `${said(s.id)} ends there`)];
     throw new Error(`These steps have ${ways.length} ways out: ${list(ways)}. A piece comes back to one place.`);
   }
   const exit = out[0] ?? null;
-  if (exit && exit.kind !== 'then') throw new Error(`${said(exit.from)} leads on to ${said(exit.to)} only ${exit.kind === 'fail' ? 'if it fails' : `on ${ROUTE_WORDS[exit.label] ?? exit.label}`}: after a piece, what comes next always runs. Put ${said(exit.to)} in too, or leave ${said(exit.from)} out.`);
+  if (exit && exit.kind !== 'then') throw new Error(`${said(exit.from)} leads on to ${said(exit.to)} only ${exit.kind === 'fail' ? 'if it fails' : `on ${routeWord(exit.label, routeWordsOf(byId.get(exit.from)))}`}: after a piece, what comes next always runs. Put ${said(exit.to)} in too, or leave ${said(exit.from)} out.`);
   const last = lasts.length === 1 ? lasts[0].id : null;
   // what reads the moved steps after them: only the last one's answer comes back out
   const others = steps.filter((s) => !ids.has(s.id)).map((s) => (exit && s.id === exit.to ? explicitReads(s, defaults) : s));
@@ -578,14 +578,21 @@ export function moveStep(wf, id, dir) {
 
 /* ---- P132 BWF-001: where a step leads on, drawn. Each way on is a port on the card's right edge, named in words: a
    branch's Yes and No, a switch's cases and Anything else, a list's none and some; then a plain `next`, which on a step
-   that branches is "Always, as well" (the engine follows it whatever the route: P132-BRANCHNEXT); then the error route. ---- */
+   that branches is "Always, as well" (the engine follows it whatever the route: P132-BRANCHNEXT); then the error route.
+   The words for a route are the backend's (catalog 1.9.0 serves a route's `displayName`, so a new route's words reach
+   Studio and the NodeGX editor from one place); ROUTE_WORDS is only for a backend older than that. ---- */
 export const ROUTE_WORDS = { ontrue: 'Yes', onfalse: 'No', empty: 'If there are none', nonempty: 'If there are some', done: 'When the time comes', skipped: 'If it was already past', default: 'Anything else', onError: 'If it fails' };
 export const ALWAYS_WORDS = 'Always, as well';
 const FAILISH = /^(fail|failed|error|onerror)$/i;
-/** `routeNames`: the kind's own routes (the catalog's, a switch's case labels); routes the step carries are added. */
-export function stepPorts(step, routeNames = []) {
+/** A route's words: `served` (the catalog's `{ name: displayName }` for the step's kind) first, then Studio's own table, then the name. */
+export const routeWord = (name, served = {}) => served[name] || ROUTE_WORDS[name] || name;
+/** The catalog entry's routes as `{ name: displayName }` (empty for a backend before 1.9.0, or a kind with none). */
+export const servedRouteWords = (spec) => Object.fromEntries((spec?.routes ?? []).filter((r) => r.displayName).map((r) => [r.name, r.displayName]));
+/** `routeNames`: the kind's own routes (the catalog's, a switch's case labels); routes the step carries are added.
+ *  `served`: the catalog's words for those routes (`servedRouteWords`). */
+export function stepPorts(step, routeNames = [], served = {}) {
   const routes = [...new Set([...routeNames, ...Object.keys(step.routes ?? {})])];
-  const ports = routes.map((r) => ({ where: r, label: ROUTE_WORDS[r] ?? r, kind: r === 'ontrue' ? 'yes' : r === 'onfalse' ? 'no' : FAILISH.test(r) ? 'fail' : 'route', tos: step.routes?.[r] ?? [] }));
+  const ports = routes.map((r) => ({ where: r, label: routeWord(r, served), kind: r === 'ontrue' ? 'yes' : r === 'onfalse' ? 'no' : FAILISH.test(r) ? 'fail' : 'route', tos: step.routes?.[r] ?? [] }));
   if ((step.next ?? []).length || !routes.length) ports.push({ where: 'next', label: routes.length ? ALWAYS_WORDS : '', kind: routes.length ? 'always' : 'then', tos: step.next ?? [] });
   if ((step.onError ?? []).length) ports.push({ where: 'onError', label: ROUTE_WORDS.onError, kind: 'fail', tos: step.onError });
   return ports;

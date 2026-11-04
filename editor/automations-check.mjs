@@ -9,7 +9,7 @@
 import { callParts, saveCallFrom, stepForCall, usersOfCall, callId, readsRun, blankName } from './automations.mjs';
 import { stepTitle, pieceOf, piecesIn, runnersOf, sentNames, bodyNames, runnersWords, wouldRing, runInFailure, pieceFrom } from './automations.mjs';
 import { parseCurl, secretNameFor, shellWords, testMailWords, composeParts, composeValue, isChip, knownAt, chipRefinements, chipWords } from './automations.mjs';
-import { ALWAYS_WORDS, formulaParts, formulaStart, formulaWords, itemSources, pathWords, readSources, shapeFields, startWords, upstreamOf, addStepAfter, sampleFor, sampleRun, sampleWords, testRefusal, agrees, atTime, canMove, deleteStep, insertBetween, moveStep, nextOntoRoute, stepPorts, newStepId, readAutomations, runLine, scheduleTime, stepsOfRun, stepWires, targetOf, triggerHead, valueForm, workflowLayout } from './automations.mjs';
+import { ALWAYS_WORDS, formulaParts, formulaStart, formulaWords, itemSources, pathWords, readSources, shapeFields, startWords, upstreamOf, addStepAfter, sampleFor, sampleRun, sampleWords, testRefusal, agrees, atTime, canMove, deleteStep, insertBetween, moveStep, nextOntoRoute, stepPorts, routeWord, servedRouteWords, newStepId, readAutomations, runLine, scheduleTime, stepsOfRun, stepWires, targetOf, triggerHead, valueForm, workflowLayout } from './automations.mjs';
 
 const results = [];
 const ok = (cond, what, detail) => { results.push(!!cond); if (!cond || process.argv.includes('-v')) console.log(`  ${cond ? 'ok  ' : 'FAIL'} ${what}${detail !== undefined ? ' — ' + JSON.stringify(detail).slice(0, 300) : ''}`); };
@@ -135,6 +135,11 @@ const sw = stepPorts({ id: 's', kind: 'switch', routes: { small: ['a'], default:
 ok(sw.length === 4 && sw.map((p) => p.label).join() === 'Anything else,small,medium,large' && sw.every((p) => p.where !== 'next'), 'a switch with three cases: four ports, each named, no plain next', sw.map((p) => p.label));
 ok(stepPorts({ id: 'a', kind: 'wait', next: ['b'], onError: ['f'] }).map((p) => `${p.where}/${p.kind}/${p.label}`).join() === 'next/then/,onError/fail/If it fails', 'a plain step: one port on, and its error route in words');
 ok(stepPorts({ id: 'a', kind: 'wait' })[0].tos.length === 0, 'a step with nothing after it has an open port');
+// Studio reads the backend's route words (catalog 1.9.0) before its own table; a backend before 1.9.0 has none, and the table speaks
+const servedBranch = servedRouteWords({ kind: 'branch', routes: [{ name: 'ontrue', displayName: 'When it holds' }, { name: 'onfalse', displayName: 'No' }] });
+ok(stepPorts(tt, ['ontrue', 'onfalse'], servedBranch).map((p) => p.label).join() === `When it holds,No,${ALWAYS_WORDS}`, "a route's words are the backend's when it serves them (a word Studio's table does not have)");
+ok(stepPorts(tt, ['ontrue', 'onfalse'], servedRouteWords({ kind: 'branch', routes: [{ name: 'ontrue' }, { name: 'onfalse' }] })).map((p) => p.label).join() === `Yes,No,${ALWAYS_WORDS}` && JSON.stringify(servedRouteWords(undefined)) === '{}', 'a backend before 1.9.0 (no displayName, or no kind at all): Studio\'s own words');
+ok(routeWord('later', {}) === 'later' && routeWord('later', { later: 'Some time after' }) === 'Some time after', 'a route nobody has words for says its name; served words name a route Studio never heard of');
 const fixed = nextOntoRoute({ id: 'w', entry: 'branch', steps: [tt] }, 'branch', 'onfalse');
 ok(JSON.stringify(fixed.steps[0].routes) === '{"ontrue":["c3"],"onfalse":["c2"]}' && !('next' in fixed.steps[0]) && tt.next[0] === 'c2', 'the next put on No: the If decides again; the given workflow untouched');
 ok(valueForm({ $path: 'body.plant' }).from === 'body.plant' && valueForm('Kitchen').typed === 'Kitchen' && valueForm({ $path: 'a', x: 1 }).typed, 'a value read from the run, and a typed one');
@@ -366,6 +371,7 @@ console.log('check: P132 BWF-011, a value composed in a setting');
   ok(/ways in: “call-function-2” and “call-function-3”/.test(refused(() => pieceFrom(tt, ['call-function-2', 'call-function-3'], { id: 'x' }))), 'two ways in refused, naming both');
   ok(/“The end” ends the whole workflow/.test(refused(() => pieceFrom(tt, ['call-function', 'first'], { id: 'x' }))), 'a Return is not moved: in a piece it would end only the piece');
   ok(/only on Yes/.test(refused(() => pieceFrom({ entry: 'b', steps: [{ id: 'b', kind: 'branch', routes: { ontrue: ['t'] } }, { id: 't', kind: 'transform' }] }, ['b'], { id: 'x' }))), 'a way out on one side only refused: after a piece, what comes next always runs');
+  ok(/only on When it holds/.test(refused(() => pieceFrom({ entry: 'b', steps: [{ id: 'b', kind: 'branch', routes: { ontrue: ['t'] } }, { id: 't', kind: 'transform' }] }, ['b'], { id: 'x', routeWordsOf: (st) => (st?.kind === 'branch' ? { ontrue: 'When it holds' } : {}) }))), 'the refusal says the side in the backend\'s words');
   ok(/ends there/.test(refused(() => pieceFrom({ entry: 'b', steps: [{ id: 'b', kind: 'branch', routes: { ontrue: ['y'], onfalse: ['n'] } }, { id: 'y', kind: 'transform', next: ['t'] }, { id: 'n', kind: 'transform' }, { id: 't', kind: 'transform' }] }, ['b', 'y', 'n'], { id: 'x' }))), 'one side leading on while the other ends there: two ways out');
   ok(/There is already a workflow called triggertest/.test(refused(() => pieceFrom(tt, ['call-function'], { id: 'triggertest', workflows: [tt] }))) && /Shift-press/.test(refused(() => pieceFrom(tt, [], { id: 'x' }))), 'a taken name, and nothing chosen');
   // what the moved steps read from before them is sent by name; what reads them after reads the piece's answer
