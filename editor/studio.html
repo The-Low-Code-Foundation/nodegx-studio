@@ -5719,7 +5719,8 @@ function autoTriggerCard(t) {
     h('div', { class: 'num' }, icon('bolt')), h('h3', {}, head, h('span', {}, on ? 'what starts it' : 'off')), h('div', { class: 'acts' }), h('div', { class: 'lines' }, ...triggerLines(t)));
 }
 /** P132 BWF-013: the workflows that run a piece, each a button opening it (Back returns to the piece). */
-const runnerButtons = (w) => runnersOf(autos().workflows, w.id).map((id) => h('button', { class: 'quiet tiny startedby', 'data-runner': id, title: `Open ${wfName(id)}`, onclick: (e) => { e.stopPropagation(); openPiece(id, { id: w.id }); } }, wfName(id)));
+const runnerButtons = (w) => runnersOf(autos().workflows, w.id).flatMap((id, i, all) => [i ? (i === all.length - 1 ? ' and ' : ', ') : null,
+  h('button', { class: 'quiet tiny startedby', 'data-runner': id, title: `Open ${wfName(id)}`, onclick: (e) => { e.stopPropagation(); openPiece(id, { id: w.id }); } }, wfName(id))].filter(Boolean));
 function autoNoTriggerCard(w) {
   const piece = pieceIds().has(w.id), by = piece ? runnerButtons(w) : [];
   return h('div', { class: 'step fnstart nostart', 'data-id': 'starts', title: piece ? 'A reusable piece: other workflows run it' : 'Nothing starts it on its own', style: `--kind:${FLOW.dead}` },
@@ -5956,7 +5957,7 @@ function runValueField(label, value, set, { type = 'any', enums = null, w = null
 /** A value read from the run in words (automations.mjs `pathWords`), for the selected step: `{ name, from, missing }`. */
 function pathPill(path, w, item) {
   const step = w?.steps?.find((s) => s.id === selAutoStep), p = step ? step.params ?? {} : {};
-  return pathWords(path, w ?? {}, w ? startsOf(w.id) : [], { item: item ? (p.itemKey ?? 'item') : '\0', index: item ? (p.indexKey ?? 'index') : '\0', kindName: (k) => kindSpec(k)?.displayName ?? k });
+  return pathWords(path, w ?? {}, w ? startsOf(w.id) : [], { item: item ? (p.itemKey ?? 'item') : '\0', index: item ? (p.indexKey ?? 'index') : '\0', kindName: (k) => kindSpec(k)?.displayName ?? k, workflowName: wfName });
 }
 /* ---- P132 BWF-011 (R8): the composer. One editable line (or box, for an email's words) of words with value chips in it:
    a chip is dropped from *What it can read*, or picked with *+ A value* / *From the run*, where the cursor was; Backspace
@@ -6149,7 +6150,7 @@ function pieceAnswers(id) {
   return ret && typeof ret === 'object' && !Array.isArray(ret) && valueForm(ret).from === undefined && !('$fn' in ret) && !('$literal' in ret) ? Object.keys(ret) : null;
 }
 function readsFor(w, stepId, item = false) {
-  const have = { run: autoRun?.run ? stepsOfRun(autoRun.run) : null, sample: sampleOf(w), starts: startsOf(w.id), columns: tableColumns, kind: kindSpec, answers: fnAnswers, sent: sentNames(autos().workflows, w.id) };
+  const have = { run: autoRun?.run ? stepsOfRun(autoRun.run) : null, sample: sampleOf(w), starts: startsOf(w.id), columns: tableColumns, kind: kindSpec, answers: fnAnswers, sent: sentNames(autos().workflows, w.id), workflowName: wfName };
   const out = readSources(w, stepId, have), step = w.steps.find((s) => s.id === stepId);
   return item && step ? [...itemSources(w, step, out), ...out] : out;
 }

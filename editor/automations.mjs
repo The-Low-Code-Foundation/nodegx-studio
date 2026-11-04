@@ -152,6 +152,13 @@ export function wouldRing(workflows, fromId, toId) {
 }
 /** The run a piece's failure names ("… (its run: <id>)", the engine's words), or null. */
 export const runInFailure = (error) => /\(its run: ([^)\s]+)\)/.exec(String(error ?? ''))?.[1] ?? null;
+/** An unnamed step's title, as its card says it: "Run <function>", "Run <piece>", else the kind's words. `workflowName(id)`: a piece's name. */
+export function stepTitle(s, kindName = (k) => k, workflowName = (id) => id) {
+  if (s.name) return s.name;
+  if (s.kind === 'call-function' && s.ref) return `Run ${s.ref}`;
+  if (pieceOf(s)) return `Run ${workflowName(pieceOf(s))}`;
+  return kindName(s.kind);
+}
 /** A piece's row: who runs it, in words. `nameOf(id)`: a workflow's name. */
 export function runnersWords(ids, nameOf = (id) => id) {
   if (!ids.length) return 'No workflow runs it yet';
@@ -589,7 +596,7 @@ export function startWords(starts = []) {
  *   starts      the triggers that start it                       columns(table)   a table's column names, or null
  *   kind(kind)  the catalog's entry                              answers(step)    what a function step's function answers (its Response's names), or null
  */
-export function readSources(wf, stepId, { run = null, sample = null, starts = [], columns = () => null, kind = () => null, answers = () => null, sent = [] } = {}) {
+export function readSources(wf, stepId, { run = null, sample = null, starts = [], columns = () => null, kind = () => null, answers = () => null, sent = [], workflowName = (id) => id } = {}) {
   const ran = [...(run?.values() ?? [])].find((r) => r.input && typeof r.input === 'object' && 'body' in r.input);
   const t = starts[0], out = [];
   // what started it
@@ -605,7 +612,7 @@ export function readSources(wf, stepId, { run = null, sample = null, starts = []
   out.push(ran?.input.trigger && typeof ran.input.trigger === 'object' ? { root: 'trigger', words: 'how it started', from: 'run', value: ran.input.trigger } : { root: 'trigger', words: 'how it started', from: 'shape', value: how });
   // each step upstream of it
   for (const s of upstreamOf(wf, stepId)) {
-    const r = run?.get(s.id), words = s.name || kind(s.kind)?.displayName || s.id;
+    const r = run?.get(s.id), words = stepTitle(s, (k) => kind(k)?.displayName || s.id, workflowName); // as its card says it
     if (r && r.output !== undefined && r.status !== 'error' && r.status !== 'skipped') { out.push({ root: `upstream.${s.id}`, words, from: 'run', value: r.output, step: s.id }); continue; }
     const fn = s.kind === 'call-function' || s.kind === PIECE_KIND ? answers(s) : null; // BWF-013: a piece answers { result, run } as a function answers { result }
     const own = s.kind === 'transform' && s.params?.output && typeof s.params.output === 'object' && !Array.isArray(s.params.output) ? Object.keys(s.params.output) : null;
@@ -637,7 +644,7 @@ export function itemSources(wf, step, sources) {
   return [item, { root: at, words: 'its position', from: item.from, value: 0, leaf: true }];
 }
 /** A value read from the run in words, for its pill: `{ name, from }`, "plant · from the Watering that was made". */
-export function pathWords(path, wf, starts = [], { item = 'item', index = 'index', kindName = (k) => k } = {}) {
+export function pathWords(path, wf, starts = [], { item = 'item', index = 'index', kindName = (k) => k, workflowName = (id) => id } = {}) {
   const [root, ...rest] = String(path).split('.');
   const seg = (xs, whole = 'all of it') => (xs.length ? xs.map((x) => (x === '-1' ? 'the last' : /^\d+$/.test(x) ? `#${Number(x) + 1}` : x)).join(' › ') : whole); // BWF-011: -1 is the last one
   if (root === 'body') return { name: seg(rest), from: startWords(starts) };
@@ -648,7 +655,7 @@ export function pathWords(path, wf, starts = [], { item = 'item', index = 'index
     const s = (wf.steps ?? []).find((x) => x.id === rest[0]);
     let r = rest.slice(1);
     if ((s?.kind === 'call-function' || s?.kind === PIECE_KIND) && r[0] === 'result' && r.length > 1) r = r.slice(1); // a function (a piece) answers { result: { … } }: its names are what a person knows
-    return s ? { name: seg(r), from: s.name || kindName(s.kind) } : { name: seg(r), from: `a step that is not there (${rest[0] ?? ''})`, missing: true };
+    return s ? { name: seg(r), from: stepTitle(s, kindName, workflowName) } : { name: seg(r), from: `a step that is not there (${rest[0] ?? ''})`, missing: true };
   }
   if (root === item) return { name: seg(rest, 'this item'), from: 'the list' };
   if (root === index && !rest.length) return { name: 'its position', from: 'the list' };

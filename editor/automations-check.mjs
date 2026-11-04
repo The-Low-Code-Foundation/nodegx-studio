@@ -7,7 +7,7 @@
  *   node editor/automations-check.mjs    PASS n/n and exit 0, or the failing lines and exit 1
  */
 import { callParts, saveCallFrom, stepForCall, usersOfCall, callId, readsRun, blankName } from './automations.mjs';
-import { pieceOf, piecesIn, runnersOf, sentNames, bodyNames, runnersWords, wouldRing, runInFailure } from './automations.mjs';
+import { stepTitle, pieceOf, piecesIn, runnersOf, sentNames, bodyNames, runnersWords, wouldRing, runInFailure } from './automations.mjs';
 import { parseCurl, secretNameFor, shellWords, testMailWords, composeParts, composeValue, isChip, knownAt, chipRefinements, chipWords } from './automations.mjs';
 import { ALWAYS_WORDS, formulaParts, formulaStart, formulaWords, itemSources, pathWords, readSources, shapeFields, startWords, upstreamOf, addStepAfter, sampleFor, sampleRun, sampleWords, testRefusal, agrees, atTime, canMove, deleteStep, insertBetween, moveStep, nextOntoRoute, stepPorts, newStepId, readAutomations, runLine, scheduleTime, stepsOfRun, stepWires, targetOf, triggerHead, valueForm, workflowLayout } from './automations.mjs';
 
@@ -341,6 +341,10 @@ console.log('check: P132 BWF-011, a value composed in a setting');
   const after = readSources({ steps: [{ ...morning.steps[0], next: ['next'] }, { id: 'next', kind: 'transform' }], entry: 'run-thirsty' }, 'next', { answers: (s) => (s.kind === 'run-workflow' ? ['plants'] : null) });
   ok(JSON.stringify(after.find((x) => x.root === 'upstream.run-thirsty')?.value) === '{"result":{"plants":null}}', 'after a Run a workflow, its result\'s names, as a function step\'s', after.map((x) => x.root));
   ok(pathWords('upstream.run-thirsty.result.plants', { steps: [{ ...morning.steps[0], name: 'Thirsty' }] }).name === 'plants', 'a piece\'s answer is said by its own names, not "result › plants"');
+  // an unnamed step is said as its card says it (s17, Electron: a chip read "checked · from Call Function" beside a card saying "Run Check thirst")
+  const unnamed = { entry: 'first', steps: [{ id: 'first', kind: 'call-function', ref: 'Cloud Functions/Check thirst', next: ['run-thirsty'] }, morning.steps[0]] };
+  ok(pathWords('upstream.first.result.checked', unnamed, [], { kindName: () => 'Call Function' }).from === 'Run Cloud Functions/Check thirst' && pathWords('upstream.run-thirsty.result.x', unnamed, [], { workflowName: (id) => (id === 'thirsty' ? 'Find thirsty plants' : id) }).from === 'Run Find thirsty plants', 'an unnamed step\'s values are "from Run <its function>" / "from Run <its piece>", as its card is titled');
+  ok(readSources(unnamed, 'run-thirsty', { kind: () => ({ displayName: 'Call Function' }) }).find((x) => x.step === 'first')?.words === 'Run Cloud Functions/Check thirst', 'and What it can read heads its block the same');
 }
 
 const passed = results.filter(Boolean).length;
