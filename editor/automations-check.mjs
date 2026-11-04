@@ -7,7 +7,7 @@
  *   node editor/automations-check.mjs    PASS n/n and exit 0, or the failing lines and exit 1
  */
 import { callParts, saveCallFrom, stepForCall, usersOfCall, callId, readsRun, blankName } from './automations.mjs';
-import { stepTitle, pieceOf, piecesIn, runnersOf, sentNames, bodyNames, runnersWords, wouldRing, runInFailure } from './automations.mjs';
+import { stepTitle, pieceOf, piecesIn, runnersOf, sentNames, bodyNames, runnersWords, wouldRing, runInFailure, pieceFrom } from './automations.mjs';
 import { parseCurl, secretNameFor, shellWords, testMailWords, composeParts, composeValue, isChip, knownAt, chipRefinements, chipWords } from './automations.mjs';
 import { ALWAYS_WORDS, formulaParts, formulaStart, formulaWords, itemSources, pathWords, readSources, shapeFields, startWords, upstreamOf, addStepAfter, sampleFor, sampleRun, sampleWords, testRefusal, agrees, atTime, canMove, deleteStep, insertBetween, moveStep, nextOntoRoute, stepPorts, newStepId, readAutomations, runLine, scheduleTime, stepsOfRun, stepWires, targetOf, triggerHead, valueForm, workflowLayout } from './automations.mjs';
 
@@ -345,6 +345,47 @@ console.log('check: P132 BWF-011, a value composed in a setting');
   const unnamed = { entry: 'first', steps: [{ id: 'first', kind: 'call-function', ref: 'Cloud Functions/Check thirst', next: ['run-thirsty'] }, morning.steps[0]] };
   ok(pathWords('upstream.first.result.checked', unnamed, [], { kindName: () => 'Call Function' }).from === 'Run Cloud Functions/Check thirst' && pathWords('upstream.run-thirsty.result.x', unnamed, [], { workflowName: (id) => (id === 'thirsty' ? 'Find thirsty plants' : id) }).from === 'Run Find thirsty plants', 'an unnamed step\'s values are "from Run <its function>" / "from Run <its piece>", as its card is titled');
   ok(readSources(unnamed, 'run-thirsty', { kind: () => ({ displayName: 'Call Function' }) }).find((x) => x.step === 'first')?.words === 'Run Cloud Functions/Check thirst', 'and What it can read heads its block the same');
+}
+
+// P132 BWF-013 Build 3: Make a reusable piece from chosen steps
+{
+  const J = (v) => JSON.stringify(v);
+  const refused = (f) => { try { f(); return null; } catch (e) { return e.message; } };
+  // Greenhouse's TriggerTest, as Richard left it
+  const tt = { id: 'triggertest', name: 'TriggerTest', entry: 'transform', steps: [{ id: 'transform', kind: 'transform', params: { output: { result: { $path: 'previous.result' } } }, next: ['branch'] }, { id: 'branch', kind: 'branch', params: { condition: { left: { $path: 'previous.result' }, op: 'truthy' } }, routes: { ontrue: ['call-function-3'] }, next: ['call-function-2'] }, { id: 'call-function-2', kind: 'call-function', ref: 'Cloud Functions/Check thirst', next: ['call-function'] }, { id: 'call-function', kind: 'call-function', ref: 'Cloud Functions/Check thirst', next: ['first'] }, { id: 'first', name: 'The end', kind: 'return' }, { id: 'call-function-3', kind: 'call-function', ref: 'Cloud Functions/Check thirst' }] };
+  const m = pieceFrom(tt, ['call-function-2', 'call-function'], { id: 'check-twice', name: 'Check twice' });
+  ok(J(m.piece.steps.map((s) => s.id)) === '["call-function-2","call-function","return"]' && m.piece.entry === 'call-function-2' && J(m.piece.steps[2].params) === '{"value":{"$path":"upstream.call-function"}}' && J(m.piece.steps[1].next) === '["return"]', 'the chosen steps move into the piece, which ends in a Return of the last one\'s answer', m.piece);
+  ok(!('triggers' in m.piece) && m.piece.name === 'Check twice' && m.piece.id === 'check-twice', 'a piece: a name, no trigger');
+  const rs = m.runner.steps;
+  ok(J(rs.map((s) => s.id)) === '["transform","branch","run-workflow","first","call-function-3"]' && J(rs[1].next) === '["run-workflow"]' && J(rs[2].next) === '["first"]' && rs[2].params.workflow === 'check-twice' && !rs[2].params.send, 'one Run <piece> step where they were, the wire into it and on from it kept', rs);
+  ok(J(rs[3].params) === '{"value":{"$path":"previous.result"}}', 'a Return after them that said nothing returned their last answer: it now returns the piece\'s answer, the same value', rs[3]);
+  ok(J(rs[1].routes) === '{"ontrue":["call-function-3"]}' && J(rs[0]) === J(tt.steps[0]) && J(tt.steps.map((s) => s.id)) === '["transform","branch","call-function-2","call-function","first","call-function-3"]', 'the rest as it was; the workflow given is not touched');
+  ok(m.notes.length === 2 && m.notes.every((n) => /runs a function/.test(n)) && pieceFrom(tt, ['call-function-2', 'call-function'], { id: 'x', title: () => 'Same' }).notes.length === 1, 'a moved function step is said, once per name: it is given what the piece is sent', m.notes);
+  // refused, in words
+  ok(/2 ways out: “branch” leads on to “call-function-2” and “branch” leads on to “call-function-3” on Yes\./.test(refused(() => pieceFrom(tt, ['transform', 'branch'], { id: 'x' }))), 'two ways out (a branch\'s Yes and its Always) refused, naming both', refused(() => pieceFrom(tt, ['transform', 'branch'], { id: 'x' })));
+  ok(/ways in: “call-function-2” and “call-function-3”/.test(refused(() => pieceFrom(tt, ['call-function-2', 'call-function-3'], { id: 'x' }))), 'two ways in refused, naming both');
+  ok(/“The end” ends the whole workflow/.test(refused(() => pieceFrom(tt, ['call-function', 'first'], { id: 'x' }))), 'a Return is not moved: in a piece it would end only the piece');
+  ok(/only on Yes/.test(refused(() => pieceFrom({ entry: 'b', steps: [{ id: 'b', kind: 'branch', routes: { ontrue: ['t'] } }, { id: 't', kind: 'transform' }] }, ['b'], { id: 'x' }))), 'a way out on one side only refused: after a piece, what comes next always runs');
+  ok(/ends there/.test(refused(() => pieceFrom({ entry: 'b', steps: [{ id: 'b', kind: 'branch', routes: { ontrue: ['y'], onfalse: ['n'] } }, { id: 'y', kind: 'transform', next: ['t'] }, { id: 'n', kind: 'transform' }, { id: 't', kind: 'transform' }] }, ['b', 'y', 'n'], { id: 'x' }))), 'one side leading on while the other ends there: two ways out');
+  ok(/There is already a workflow called triggertest/.test(refused(() => pieceFrom(tt, ['call-function'], { id: 'triggertest', workflows: [tt] }))) && /Shift-press/.test(refused(() => pieceFrom(tt, [], { id: 'x' }))), 'a taken name, and nothing chosen');
+  // what the moved steps read from before them is sent by name; what reads them after reads the piece's answer
+  const mc = { id: 'morning-check', entry: 'check', steps: [{ id: 'check', name: 'Mark who is thirsty today', kind: 'call-function', ref: 'Cloud Functions/Check thirst', next: ['branch'] }, { id: 'done', kind: 'return', params: { value: { $path: 'previous.result' } } }, { id: 'branch', kind: 'branch', params: { condition: { left: { $path: 'upstream.check.result.checked' }, op: 'gte', right: { $fn: 'lower', args: [{ $path: 'upstream.check.result.checked' }] } } }, routes: { ontrue: ['done'] } }] };
+  const c = pieceFrom(mc, ['check'], { id: 'p' });
+  ok(c.runner.entry === 'run-workflow' && J(c.runner.steps.find((s) => s.id === 'branch').params.condition) === '{"left":{"$path":"upstream.run-workflow.result.result.checked"},"op":"gte","right":{"$fn":"lower","args":[{"$path":"upstream.run-workflow.result.result.checked"}]}}', 'the first step moved: the Run step is the first; a later read of the moved last step reads the piece\'s answer, inside formulas too', c.runner);
+  ok(/“branch” reads “Mark who is thirsty today”, which would move into the piece: only the answer of its last step, “t”, comes back out/.test(refused(() => pieceFrom({ ...mc, steps: [{ ...mc.steps[0], next: ['t'] }, { id: 't', kind: 'transform', next: ['branch'] }, mc.steps[2], mc.steps[1]] }, ['check', 't'], { id: 'p' }))), 'a later read of a moved step that is not the last refused, naming both');
+  const ww = { id: 'when-watered', entry: 'check', steps: [{ id: 'check', kind: 'validate', params: { rules: [{ path: 'body.plant', message: 'm' }, { path: 'upstream.x.id', message: 'n' }] }, next: ['mark'] }, { id: 'mark', kind: 'call-function', ref: 'F', params: { plant: { $path: 'body.plant' }, watering: { $path: 'body.objectId' }, n: 2, k: { $literal: { $path: 'body.never' } }, at: { $path: 'trigger.firedAt' }, w: { $path: 'upstream.x.items.0.name' } } }, { id: 'x', kind: 'transform' }] };
+  ww.steps[2].next = ['check']; ww.entry = 'x';
+  const w2 = pieceFrom(ww, ['check', 'mark'], { id: 'p' });
+  ok(J(w2.sends) === J([{ name: 'plant', path: 'body.plant' }, { name: 'id', path: 'upstream.x.id' }, { name: 'objectId', path: 'body.objectId' }, { name: 'firedAt', path: 'trigger.firedAt' }, { name: 'name', path: 'upstream.x.items.0.name' }]), 'each value read from before them sent once, named by its last part', w2.sends);
+  const pm = w2.piece.steps.find((s) => s.id === 'mark').params, pv = w2.piece.steps.find((s) => s.id === 'check').params;
+  ok(J(pv.rules.map((r) => r.path)) === '["body.plant","body.id"]' && pm.plant.$path === 'body.plant' && pm.watering.$path === 'body.objectId' && pm.at.$path === 'body.firedAt' && pm.w.$path === 'body.name' && J(pm.k) === '{"$literal":{"$path":"body.never"}}' && pm.n === 2, 'inside the piece each reads what it was sent (a Validate rule\'s path too); a $literal and a typed value stay', pm);
+  ok(J(w2.run.params.send) === J({ plant: { $path: 'body.plant' }, id: { $path: 'upstream.x.id' }, objectId: { $path: 'body.objectId' }, firedAt: { $path: 'trigger.firedAt' }, name: { $path: 'upstream.x.items.0.name' } }), 'and the Run step sends each from where it was read', w2.run.params);
+  // what a step read without saying: a list's items, from the step before
+  const lf = { id: 'l', entry: 'f', steps: [{ id: 'f', kind: 'find-records', params: { table: 'Plant' }, next: ['dry'] }, { id: 'dry', kind: 'filter', params: { condition: { left: { $path: 'item.dry' }, op: 'truthy' } }, next: ['s'] }, { id: 's', kind: 'sort', params: { by: 'name' } }] };
+  const l = pieceFrom(lf, ['dry'], { id: 'p', defaults: (k) => (k === 'filter' || k === 'sort' ? { items: { $path: 'previous.items' } } : {}) });
+  ok(J(l.sends) === '[{"name":"items","path":"previous.items"}]' && l.piece.steps[0].params.items.$path === 'body.items' && l.piece.steps[0].params.condition.left.$path === 'item.dry', 'a list step\'s unsaid items (the step before\'s) are sent; its item stays its item', l.piece.steps[0]);
+  ok(l.runner.steps.find((s) => s.id === 's').params.items.$path === 'previous.result.items', 'and the step after, which read the moved one\'s items without saying, reads them from the piece\'s answer');
+  ok(/collects the steps/.test(refused(() => pieceFrom({ entry: 'a', steps: [{ id: 'a', kind: 'transform', next: ['m'] }, { id: 'm', kind: 'merge' }] }, ['a'], { id: 'p' }))), 'a Merge after them, which collects by step name, refused');
 }
 
 const passed = results.filter(Boolean).length;

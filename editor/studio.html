@@ -450,6 +450,10 @@
   .fnfacts .fndeploy.failed { color: var(--danger); }
   .fnflow .step { cursor: pointer; }
   .fnflow .step.picked { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* P132 BWF-013 Build 3: steps chosen with a shift-press, to make a reusable piece of */
+  .fnflow .step.grouped { outline: 2px dashed var(--accent); outline-offset: 3px; }
+  .groupbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .groupbar .groupwhy { flex-basis: 100%; color: var(--warn); }
   #wfinspect .head .type { display: flex; align-items: center; gap: 6px; }
   #wfinspect .what { margin: 0; padding: 10px 12px; color: var(--ink-2); font-size: 12.5px; line-height: 1.5; border-bottom: 1px solid var(--line); background: var(--panel-2); }
   #wfinspect .stepkind { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; color: #fff; flex: none; }
@@ -1247,7 +1251,7 @@ import { fieldReaders, typeReaders, renameField, renameType, appFields } from '.
 import { LANES, buildTimeline, lastRunOf, msText, shotAt, stepValues } from './timeline.mjs';
 import { runOver, lastActivity, watchSignals, runtimeTimers, runTimers } from './runwatch.mjs';
 import { CLOUD, REQUEST, RESPONSE, functionList, functionLayout, helperKey, requestAsks, responseWords, touchesWords } from './fngraph.mjs';
-import { ALWAYS_WORDS, AUTOMATIONS_FILE, CHANGE_WORDS, SAMPLE_KINDS, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, itemSources, formulaArgAt, formulaArgStart, formulaParts, formulaStart, moveStep, newStepId, nextOntoRoute, parseCurl, pathWords, readAutomations, readSources, runLine, sampleFor, sampleWords, scheduleTime, stepsOfRun, targetOf, testMailWords, triggerHead, stepPorts, upstreamOf, valueForm, workflowLayout, composeParts, composeValue, knownAt, chipRefinements, chipPath, chipWords, callParts, saveCallFrom, stepForCall, usersOfCall, callId, readsRun, PIECE_KIND, pieceOf, piecesIn, runnersOf, sentNames, bodyNames, runnersWords, wouldRing, runInFailure } from './automations.mjs';
+import { ALWAYS_WORDS, AUTOMATIONS_FILE, CHANGE_WORDS, SAMPLE_KINDS, addStepAfter, agrees, canMove, deleteStep as deleteAutoStep, hhmm, insertBetween, itemSources, formulaArgAt, formulaArgStart, formulaParts, formulaStart, moveStep, newStepId, nextOntoRoute, parseCurl, pathWords, readAutomations, readSources, runLine, sampleFor, sampleWords, scheduleTime, stepsOfRun, targetOf, testMailWords, triggerHead, stepPorts, upstreamOf, valueForm, workflowLayout, composeParts, composeValue, knownAt, chipRefinements, chipPath, chipWords, callParts, saveCallFrom, stepForCall, usersOfCall, callId, readsRun, PIECE_KIND, pieceOf, piecesIn, runnersOf, sentNames, bodyNames, runnersWords, wouldRing, runInFailure, pieceFrom, stepTitle } from './automations.mjs';
 import { logicOnPage, placedComponent, studioEdits, wiringLayout, wiringSvg } from './wiring.mjs';
 import { look as canvasLook, nodeScheme, wireColors } from './look.js';
 // STU-084: what Studio draws and edits, as data (the element types, the action menu, the value sources), one file the
@@ -2439,6 +2443,7 @@ window.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !inField) { e.preventDefault(); undo(); return; }
   if (e.key === 'Escape' && tab === 'backend' && selFn && selFnStep && !inField && !document.querySelector('.menu')) { selFnStep = null; renderFunction(); renderStepPanel(); return; }
   if (e.key === 'Escape' && tab === 'backend' && selFn && fnBack.length && !inField && !document.querySelector('.menu')) { backFromFn(); return; }
+  if (e.key === 'Escape' && tab === 'backend' && !selFn && autoGroup && !inField && !document.querySelector('.menu')) { autoGroup = null; renderWorkflow(); return; }
   if (e.key === 'Escape' && tab === 'backend' && !selFn && selAutoStep && !inField && !document.querySelector('.menu')) { pickAutoStep(null); return; }
   if (e.key === 'Escape' && tab === 'backend' && !selFn && (selAuto?.from || selAuto?.back) && !inField && !document.querySelector('.menu')) { backFromAuto(); return; }
   if (e.key === 'Escape' && tab === 'workflow' && selStep && !inField && !document.querySelector('.menu')) { pickStep(null); return; }
@@ -5460,7 +5465,7 @@ function openAuto(target, from = null, opts = {}) {
   // P132 BWF-010: a trigger that starts a workflow opens that workflow, its card picked (its settings on the right)
   if (target.kind === 'trigger' && foldedTrigger(autoEntry(target))) return openAuto({ kind: 'workflow', id: targetOf(autoEntry(target)).name }, null, { ...opts, pick: `trigger:${target.id}` });
   // P132 BWF-013: `back` the workflow (and step, and run) a piece was opened from; `runId` one run to show, not the newest
-  selAuto = { kind: target.kind, id: target.id, from, play: !!opts.play, back: opts.back ?? null, runId: opts.runId ?? null }; selFn = null; fnBack = []; autoRun = null; selAutoStep = opts.pick ?? null; autoPlay = null; hideBoltTip();
+  selAuto = { kind: target.kind, id: target.id, from, play: !!opts.play, back: opts.back ?? null, runId: opts.runId ?? null }; selFn = null; autoGroup = null; fnBack = []; autoRun = null; selAutoStep = opts.pick ?? null; autoPlay = null; hideBoltTip();
   if (beNow()) loadAutoBackend(); // P123-GH-TRIGGERSTALE: a card says what the backend says now, not when the list was first read
   if (tab !== 'backend') switchTab('backend'); else renderWorkflow();
   if (target.kind === 'workflow') { readAutoRun(target.id); if (!autoSamples) loadSamples(); loadAutoTables(target.id); }
@@ -5678,6 +5683,65 @@ function renderTrigger(t) {
     h('div', { class: 'acts' }), h('div', { class: 'lines' }, open));
   autoFlow(wf, [[headCard], [targetCard]], [{ from: 'trigger', to: 'target', kind: on ? 'then' : 'dead' }]);
 }
+/* ---- P132 BWF-013 Build 3: steps chosen with a shift-press (the step picked first is chosen too), then *Make a reusable
+   piece*: automations.mjs `pieceFrom` says whether they can be one, in words, and builds both workflows. ---- */
+let autoGroup = null; // { wf, ids }: the steps chosen on that workflow's canvas
+const kindDefaults = (k) => Object.fromEntries((kindSpec(k)?.params ?? []).filter((p) => p.default !== undefined).map((p) => [p.name, p.default]));
+const autoStepTitle = (s) => stepTitle(s, (k) => kindSpec(k)?.displayName || k, wfName);
+function autoCardPress(e, id) {
+  const w = selAuto?.kind === 'workflow' ? autoEntry(selAuto) : null;
+  if (!w || !e.shiftKey || !piecesOn() || !editingUp()) {
+    if (autoGroup) { autoGroup = null; selAutoStep = id; return renderWorkflow(); } // a plain press leaves the choice
+    return pickAutoStep(id);
+  }
+  if (autoGroup?.wf !== w.id) autoGroup = { wf: w.id, ids: selAutoStep && selAutoStep !== id && (w.steps ?? []).some((s) => s.id === selAutoStep) ? [selAutoStep] : [] };
+  autoGroup.ids = autoGroup.ids.includes(id) ? autoGroup.ids.filter((x) => x !== id) : [...autoGroup.ids, id];
+  if (!autoGroup.ids.length) autoGroup = null;
+  selAutoStep = null;
+  renderWorkflow();
+}
+function groupBar(w, numOf) {
+  if (!piecesOn() || !editingUp() || autoGroup?.wf !== w.id || !autoGroup.ids.length) return null;
+  let problem = null;
+  try { pieceFrom(w, autoGroup.ids, { id: '\u0000', defaults: kindDefaults, title: autoStepTitle }); } catch (err) { problem = err.message; }
+  // by the numbers on their cards: two unnamed steps running one function have the same title
+  const nums = autoGroup.ids.map((id) => numOf.get(id)).filter(Boolean).sort((a, b) => a - b);
+  return h('div', { class: 'groupbar', 'data-group': '' }, h('span', {}, nums.length === 1 ? `Step ${nums[0]} chosen` : `Steps ${nums.slice(0, -1).join(', ')} and ${nums.at(-1)} chosen`),
+    h('button', { class: 'tiny primary', 'data-act': 'makepiece', disabled: !!problem, title: problem ?? 'They move into a new piece, and one step runs it where they were', onclick: (e) => makePieceForm(e, w) }, 'Make a reusable piece'),
+    h('button', { class: 'tiny quiet', 'data-act': 'cleargroup', title: 'Esc', onclick: () => { autoGroup = null; renderWorkflow(); } }, 'Clear'),
+    problem ? h('div', { class: 'groupwhy', 'data-why': '' }, problem) : null);
+}
+function makePieceForm(e, w) {
+  closeMenu();
+  const menu = popover(e, 'newitem newpage newauto newpiece makepiece');
+  const name = h('input', { type: 'text', placeholder: 'Check the plants, Tell the gardener…', 'aria-label': 'The piece\'s name' });
+  const note = h('div', { class: 'note' }), create = h('button', { class: 'primary', 'data-act': 'makeit' }, 'Make it');
+  let made = null;
+  const check = () => {
+    const id = slugOf(name.value);
+    try {
+      made = id ? pieceFrom(w, autoGroup?.ids ?? [], { id, name: name.value, defaults: kindDefaults, title: autoStepTitle, workflows: autos().workflows }) : null;
+      note.textContent = !made ? 'Its name, as Reusable pieces lists it.' : [`They move into it, and one step, Run ${name.value.trim()}, takes their place.`,
+        made.sends.length ? ` It sends the piece what they read from before them: ${made.sends.map((x) => x.name).join(', ')}.` : '', ...made.notes.map((n) => ` ${n}`)].join('');
+    } catch (err) { made = null; note.textContent = err.message; }
+    create.disabled = !made;
+  };
+  name.addEventListener('input', check);
+  name.onkeydown = (ev) => { if (ev.key === 'Enter' && !create.disabled) create.click(); else if (ev.key === 'Escape') closeMenu(); };
+  create.onclick = async () => {
+    const m = made; if (!m) return;
+    closeMenu();
+    // the piece first: the step that runs it then names a workflow the backend has
+    if (!(await saveAutoWf(m.piece, null))) return;
+    const j = await saveAutoWf(m.runner, `${m.piece.name} made, a reusable piece: ${w.name || w.id} runs it${BOTH}`);
+    if (!j) return;
+    autoGroup = null; selAutoStep = m.run.id; renderWorkflow();
+  };
+  menu.append(h('div', { class: 'h' }, 'Make a reusable piece'), h('div', { class: 'field' }, h('label', {}, 'Name'), name), note,
+    h('div', { class: 'foot' }, h('button', { onclick: () => closeMenu() }, 'Cancel'), create));
+  document.body.append(menu); name.focus(); check();
+  dismissOnOutside(menu);
+}
 /** P132 BWF-013: a piece opened from the step that runs it: Back returns there, that step picked (and `runId`'s run shown). */
 const openPiece = (id, from, opts = {}) => openAuto({ kind: 'workflow', id }, null, { back: from, ...opts });
 function autoStepCard(step, n, lit, wfLabel) {
@@ -5698,8 +5762,9 @@ function autoStepCard(step, n, lit, wfLabel) {
     else { cls += ' litok'; lines.push(h('span', { class: 'lit' }, `✓ Ran${s.durationMs != null ? ` in ${s.durationMs} ms` : ''}`)); }
   }
   if (selAutoStep === step.id) cls += ' picked';
+  if (autoGroup?.wf === selAuto?.id && autoGroup.ids.includes(step.id)) cls += ' grouped';
   const ports = autoPorts(step).length;
-  return h('div', { class: cls, 'data-id': step.id, 'data-kind': step.kind, title: 'Its settings, and what it took and gave in the last run', onclick: () => pickAutoStep(step.id), style: `--kind:${runsFn || piece ? KIND_COLOUR.bolt : step.kind === 'branch' || step.kind === 'switch' ? KIND_COLOUR.branch : KIND_COLOUR.code}${ports > 1 ? `;min-height:${ports * 34 + 16}px` : ''}` },
+  return h('div', { class: cls, 'data-id': step.id, 'data-kind': step.kind, title: 'Its settings, and what it took and gave in the last run', onclick: (e) => autoCardPress(e, step.id), onmousedown: (e) => { if (e.shiftKey) e.preventDefault(); } /* a shift-press chooses, it never selects text */, style: `--kind:${runsFn || piece ? KIND_COLOUR.bolt : step.kind === 'branch' || step.kind === 'switch' ? KIND_COLOUR.branch : KIND_COLOUR.code}${ports > 1 ? `;min-height:${ports * 34 + 16}px` : ''}` },
     h('div', { class: 'num' }, String(n)), h('h3', {}, title, sub ? h('span', {}, sub) : null), h('div', { class: 'acts' }), h('div', { class: 'lines' }, ...lines));
 }
 /* ---- P132 BWF-010: what starts a workflow is its first card (Richard, 2026-11-03: a trigger listed as a row of its own,
@@ -5766,8 +5831,9 @@ function renderAutoWorkflow(w) {
       h('button', { class: 'tiny', 'data-act': 'addfirst', onclick: (e) => autoStepMenu(e, w, null, 'next') }, icon('plus'), 'Add a step at the start'),
       h('button', { class: 'tiny quiet', 'data-act': 'rename', onclick: (e) => renameAutoWf(e, w) }, 'Rename'),
       h('button', { class: 'tiny quiet danger', 'data-act': 'delete', onclick: (e) => deleteAutoWf(e, w) }, icon('trash'), 'Delete the workflow'),
-      h('span', { style: 'color:var(--dim)' }, autoRun?.run ? 'Click a step: its settings, and what went in and came out in the last run.' : 'Click a step to change it.')]
-      : h('span', { style: 'color:var(--dim)' }, beNow()?.words ? 'Start the backend (Data) to change it here: a workflow is changed on the backend and in the project together.' : 'Asking the backend what its steps take…'))));
+      h('span', { style: 'color:var(--dim)' }, `${autoRun?.run ? 'Click a step: its settings, and what went in and came out in the last run.' : 'Click a step to change it.'}${piecesOn() ? ' Shift-press steps to make a reusable piece of them.' : ''}`)]
+      : h('span', { style: 'color:var(--dim)' }, beNow()?.words ? 'Start the backend (Data) to change it here: a workflow is changed on the backend and in the project together.' : 'Asking the backend what its steps take…')),
+    groupBar(w, new Map(L.columns.flat().map((id, i) => [id, i + 1])))));
   let n = 0;
   // P132 BWF-010: what starts it is the first column, left of the entry step and wired to it; a workflow nothing starts
   // says so there, with a way to give it a start

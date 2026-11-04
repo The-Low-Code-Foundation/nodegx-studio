@@ -166,6 +166,132 @@ export function runnersWords(ids, nameOf = (id) => id) {
   return `Run by ${names.length < 3 ? names.join(' and ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`}`;
 }
 
+/* ---- P132 BWF-013 Build 3: *Make a reusable piece* from steps chosen on the canvas. Allowed when they have one way in
+   (one step something outside them, or the start, leads to) and at most one way out (the plain next of their only last
+   step), and none of them ends the workflow. They move into a new piece that ends in a Return of their last step's
+   answer; one Run <piece> step takes their place, sending each value the moved steps read from before them. What reads
+   the moved last step after them reads the piece's answer instead (`upstream.<run>.result…`, `previous.result…`), so
+   the workflow does what it did. Pure: answers { piece, runner, run, sends, notes } or throws a sentence. ---- */
+const ROOTS_SENT = new Set(['body', 'trigger', 'previous', 'upstream']);
+/** Every value path in a step's settings (a `$path`, a Validate rule's `path`), each given to `fn(path)`, which answers
+    the path to put there instead (or the same). Inside a `$literal` nothing is a path. Answers the new params. */
+function mapPaths(step, fn) {
+  const walk = (v) => {
+    if (Array.isArray(v)) return v.map(walk);
+    if (!isObj(v)) return v;
+    if (typeof v.$path === 'string') return { ...v, $path: fn(v.$path) };
+    if ('$literal' in v) return v;
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]));
+  };
+  const params = walk(step.params ?? {});
+  if (step.kind === 'validate' && Array.isArray(params.rules)) params.rules = params.rules.map((r) => (isObj(r) && typeof r.path === 'string' ? { ...r, path: fn(r.path) } : r));
+  return params;
+}
+/** A step's settings with what it reads without saying made explicit: a list kind's `items` (the catalog's default,
+    `previous.items`), a Return's value (the step before's answer). `defaults(kind)`: { <param>: its default }. */
+function explicitReads(step, defaults) {
+  const params = { ...(step.params ?? {}) };
+  for (const [k, d] of Object.entries(defaults(step.kind) ?? {})) if (params[k] === undefined && isObj(d) && typeof d.$path === 'string') params[k] = structuredClone(d);
+  if (step.kind === 'return' && params.value === undefined) params.value = { $path: 'previous' };
+  return { ...step, params };
+}
+const nameFrom = (s) => String(s).replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').replace(/^(\d)/, '_$1');
+export function pieceFrom(wf, chosen, { id, name = '', defaults = () => ({}), title = (s) => s.name || s.id, workflows = [] } = {}) {
+  const steps = wf.steps ?? [], byId = new Map(steps.map((s) => [s.id, s]));
+  const ids = new Set([...chosen].filter((x) => byId.has(x)));
+  if (!ids.size) throw new Error('Shift-press the steps to put in the piece.');
+  const said = (x) => `“${title(byId.get(x))}”`;
+  const list = (xs) => (xs.length < 3 ? xs.join(' and ') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}`);
+  const ends = steps.filter((s) => ids.has(s.id) && (s.kind === 'return' || s.kind === 'stop'));
+  if (ends.length) throw new Error(`${said(ends[0].id)} ends the whole workflow: in a piece it would end only the piece. Leave it out.`);
+  // one way in
+  const wiresIn = steps.filter((s) => !ids.has(s.id)).flatMap(stepWires).filter((w) => ids.has(w.to));
+  const heads = [...new Set([...(ids.has(wf.entry) ? [wf.entry] : []), ...wiresIn.map((w) => w.to)])];
+  if (!heads.length) throw new Error('Nothing leads into these steps: a piece starts where the workflow reaches it.');
+  if (heads.length > 1) throw new Error(`These steps have ${heads.length} ways in: ${list(heads.map(said))} are each reached from outside them. A piece starts at one step.`);
+  const head = heads[0];
+  // at most one way out: the plain next of their only last step
+  const inner = steps.filter((s) => ids.has(s.id)), wires = inner.flatMap(stepWires);
+  const out = wires.filter((w) => !ids.has(w.to)), lasts = inner.filter((s) => !stepWires(s).some((w) => ids.has(w.to)));
+  if (out.length > 1 || (out.length === 1 && lasts.length > 1)) {
+    const ways = [...out.map((w) => `${said(w.from)} leads on to ${said(w.to)}${w.kind === 'fail' ? ' if it fails' : w.label ? ` on ${ROUTE_WORDS[w.label] ?? w.label}` : ''}`), ...lasts.filter((s) => !out.some((w) => w.from === s.id)).map((s) => `${said(s.id)} ends there`)];
+    throw new Error(`These steps have ${ways.length} ways out: ${list(ways)}. A piece comes back to one place.`);
+  }
+  const exit = out[0] ?? null;
+  if (exit && exit.kind !== 'then') throw new Error(`${said(exit.from)} leads on to ${said(exit.to)} only ${exit.kind === 'fail' ? 'if it fails' : `on ${ROUTE_WORDS[exit.label] ?? exit.label}`}: after a piece, what comes next always runs. Put ${said(exit.to)} in too, or leave ${said(exit.from)} out.`);
+  const last = lasts.length === 1 ? lasts[0].id : null;
+  // what reads the moved steps after them: only the last one's answer comes back out
+  const others = steps.filter((s) => !ids.has(s.id)).map((s) => (exit && s.id === exit.to ? explicitReads(s, defaults) : s));
+  for (const s of others) {
+    let bad = null;
+    mapPaths(s, (p) => { const [r, x] = p.split('.'); if (r === 'upstream' && ids.has(x) && x !== last) bad ??= x; return p; });
+    for (const src of s.kind === 'merge' && Array.isArray(s.params?.sources) ? s.params.sources : []) if (ids.has(src)) bad ??= src;
+    if (bad) throw new Error(`${said(s.id)} reads ${said(bad)}, which would move into the piece: only the answer of its last step${last ? `, ${said(last)},` : ''} comes back out.`);
+    if (s.kind === 'merge' && exit && s.id === exit.to && !Array.isArray(s.params?.sources)) throw new Error(`${said(s.id)} collects the steps that lead into it by their names: put it in the piece too, or leave ${said(exit.from)} out.`);
+  }
+  if (!id) throw new Error('The piece needs a name.');
+  if (id === wf.id || workflows.some((w) => w.id === id)) throw new Error(`There is already a workflow called ${id}.`);
+  // what the moved steps read from before them, sent by name
+  const sends = [], taken = new Set(), nameOf = new Map();
+  const before = steps.filter((s) => (s.next ?? []).includes(head) || Object.values(s.routes ?? {}).some((t) => t?.includes(head)) || (s.onError ?? []).includes(head));
+  const send = (p) => {
+    if (nameOf.has(p)) return nameOf.get(p);
+    const [root, ...rest] = p.split('.');
+    const tail = (root === 'upstream' ? rest.slice(1) : rest).filter((x) => x !== 'result' && !/^-?\d+$/.test(x));
+    const base = nameFrom(tail.at(-1) ?? (root === 'upstream' ? rest[0] : root === 'previous' && before.length === 1 ? before[0].id : root)) || 'value';
+    let n = base;
+    for (let i = 2; taken.has(n); i++) n = `${base}_${i}`;
+    taken.add(n); nameOf.set(p, n); sends.push({ name: n, path: p });
+    return n;
+  };
+  const moved = inner.map((s) => {
+    const own = s.id === head ? explicitReads(s, defaults) : s;
+    const params = mapPaths(own, (p) => {
+      const [root, x] = p.split('.');
+      if (!ROOTS_SENT.has(root) || (root === 'upstream' && ids.has(x)) || (root === 'previous' && s.id !== head)) return p;
+      return `body.${send(p)}`;
+    });
+    const copy = structuredClone({ ...s, ...(Object.keys(params).length ? { params } : {}) });
+    if (exit && copy.id === exit.from) { copy.next = copy.next.filter((t) => t !== exit.to); if (!copy.next.length) delete copy.next; }
+    return copy;
+  });
+  // the piece: the moved steps, then a Return of the last one's answer
+  const piece = { id, ...(name.trim() ? { name: name.trim() } : {}), entry: head, concurrency: 1, steps: moved };
+  const end = last && moved.find((s) => s.id === last);
+  if (end && !end.routes) { // a last step with sides (a branch) leads nowhere on them: the piece answers with it, as the engine does
+    const ret = { id: newStepId(piece, 'return'), kind: 'return', params: { value: { $path: `upstream.${last}` } } };
+    end.next = [...(end.next ?? []), ret.id];
+    piece.steps.push(ret);
+  }
+  // the runner: one Run <piece> step where the moved steps were
+  const runner = clone(wf);
+  const run = { id: newStepId({ steps: steps.filter((s) => !ids.has(s.id)) }, PIECE_KIND), kind: PIECE_KIND, params: { workflow: id, ...(sends.length ? { send: Object.fromEntries(sends.map((s) => [s.name, { $path: s.path }])) } : {}) }, ...(exit ? { next: [exit.to] } : {}) };
+  const at = steps.findIndex((s) => s.id === head);
+  runner.steps = [];
+  for (const [i, s] of steps.entries()) {
+    if (i === at) runner.steps.push(run);
+    if (ids.has(s.id)) continue;
+    const t = structuredClone(exit && s.id === exit.to ? others.find((o) => o.id === s.id) : s);
+    for (const k of ['next', 'onError']) if (t[k]) t[k] = t[k].map((x) => (x === head ? run.id : x));
+    for (const r of Object.keys(t.routes ?? {})) t.routes[r] = (t.routes[r] ?? []).map((x) => (x === head ? run.id : x));
+    if (t.params || (exit && s.id === exit.to)) {
+      const params = mapPaths(t, (p) => {
+        const [root, x, ...rest] = p.split('.');
+        if (root === 'upstream' && x === last) return ['upstream', run.id, 'result', ...rest].join('.');
+        if (root === 'previous' && exit && s.id === exit.to) return ['previous', 'result', ...p.split('.').slice(1)].join('.');
+        return p;
+      });
+      if (Object.keys(params).length) t.params = params;
+    }
+    runner.steps.push(t);
+  }
+  if (wf.entry === head) runner.entry = run.id;
+  const notes = [];
+  for (const s of inner) if (s.kind === 'call-function' || s.kind === 'for-each') notes.push(`${said(s.id)} runs a function: in the piece, it is given what the piece is sent, not what started ${wf.name || wf.id}.`);
+  if (exit && byId.get(exit.to)?.kind === 'call-function') notes.push(`${said(exit.to)} runs a function: the step before it is now the piece, whose answer it is given as result.`);
+  return { piece, runner, run, sends, notes: [...new Set(notes)], head, last };
+}
+
 /** True when a value reads the run somewhere (a `$path` not into a blank): in a saved call, such a part must be a blank. */
 export function readsRun(v) {
   if (Array.isArray(v)) return v.some(readsRun);

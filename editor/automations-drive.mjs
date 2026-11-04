@@ -1083,6 +1083,55 @@ try {
       await ev(`document.querySelector('.wfacts [data-act=delete]').click()`); await wait(300);
       ok(await ev(`/It is run by “The morning check” and “The evening check”: that step fails once it is gone/.test(document.querySelector('.menu')?.innerText ?? '')`), 'Delete says who still runs it', await ev(`document.querySelector('.menu')?.innerText`));
       await ev(`[...document.querySelectorAll('.menu button')].find((x) => x.textContent === 'Cancel')?.click()`);
+      // Build 3 (AC2 in Chrome): steps chosen with a shift-press become a piece; the workflow's test answers the same after
+      const G = 'gcheck', shiftOn = (id) => ev(`document.querySelector('#steps .autoview .step[data-id="${id}"] h3').dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }))`);
+      ok((await write({ id: G, name: 'Greet the room', entry: 'start', concurrency: 1, steps: [
+        { id: 'start', name: 'The room', kind: 'transform', params: { output: { room: 'Kitchen' } }, next: ['say'] },
+        { id: 'say', name: 'Say hello', kind: 'transform', params: { output: { line: { $fn: 'text', args: ['Hello ', { $path: 'upstream.start.room' }] } } }, next: ['shout'] },
+        { id: 'shout', name: 'Shout it', kind: 'transform', params: { output: { loud: { $fn: 'upper', args: [{ $path: 'previous.line' }] } } }, next: ['end'] },
+        { id: 'end', name: 'Answer', kind: 'return', params: { value: { $path: 'upstream.shout.loud' } } }] }, { trigger: { type: 'schedule', name: 'Greet at 08:00', enabled: false, schedule: { cron: '0 8 * * *', missedFirePolicy: 'skip' } } })).ok, 'Build 3: a workflow of four steps to group');
+      await b.until(`!!document.querySelector('#autolist .row[data-workflow="${G}"]')`, 8000).catch(() => {});
+      await ev(`document.querySelector('#autolist .row[data-workflow="${G}"]').click()`);
+      await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === '${G}'`, 8000).catch(() => {});
+      const testG = async () => {
+        const prior = (await be('/admin/workflow-defs')).lastRuns?.[G]?.id;
+        if (!(await ev(`!!document.querySelector('#steps .testrow') && !/No sample/.test(document.querySelector('#steps .testrow .samplewords')?.innerText ?? '')`))) {
+          await b.clickSel('#steps [data-act="sample"]');
+          await b.until(`!!document.querySelector('.menu.sample [data-act=keepsample]')`, 5000).catch(() => {});
+          await ev(`document.querySelector('.menu.sample [data-act=keepsample]').click()`);
+        }
+        await b.until(`!document.querySelector('#steps [data-act="test"]')?.disabled`, 8000).catch(() => {});
+        await b.clickSel('#steps [data-act="test"]');
+        await b.until(`!!document.querySelector('.surescrim [data-act=yes]')`, 4000).catch(() => {});
+        await ev(`document.querySelector('.surescrim [data-act=yes]')?.click()`);
+        let last = null;
+        for (let i = 0; i < 60 && (!(last = (await be('/admin/workflow-defs')).lastRuns?.[G]) || last.id === prior); i++) await wait(200);
+        const rec = last ? await be(`/executions/${encodeURIComponent(last.id)}`) : null;
+        return { status: rec?.status, answer: rec?.steps?.find((x) => x.nodeId === 'end')?.outputData?.value };
+      };
+      const before = await testG();
+      ok(before.status === 'success' && before.answer === 'HELLO KITCHEN', 'Build 3: the test before, "HELLO KITCHEN"', before);
+      await shiftOn('start'); await shiftOn('end');
+      await b.until(`!!document.querySelector('#steps [data-group] [data-why]')`, 4000).catch(() => {});
+      ok(await ev(`document.querySelector('#steps [data-act=makepiece]')?.disabled === true && /“Answer” ends the whole workflow/.test(document.querySelector('#steps [data-group] [data-why]')?.textContent ?? '') && document.querySelectorAll('#steps .autoview .step.grouped').length === 2`), 'Build 3: shift-presses choose; a Return chosen is refused in words, Make off', await ev(`document.querySelector('#steps [data-group]')?.innerText`));
+      await ev(`document.querySelector('#steps [data-act=cleargroup]').click()`);
+      await b.clickSel('#steps .autoview .step[data-id="say"] h3'); // picked first, then one shift-press: both chosen
+      await shiftOn('shout');
+      await b.until(`document.querySelectorAll('#steps .autoview .step.grouped').length === 2`, 4000).catch(() => {});
+      ok(await ev(`/^Steps 2 and 3 chosen/.test(document.querySelector('#steps [data-group]')?.innerText ?? '') && document.querySelector('#steps [data-act=makepiece]')?.disabled === false && !document.querySelector('#steps [data-group] [data-why]')`), 'Build 3: the step picked first and one shift-pressed are chosen, Make on', await ev(`document.querySelector('#steps [data-group]')?.innerText`));
+      await ev(`document.querySelector('#steps [data-act=makepiece]').click()`);
+      await b.until(`!!document.querySelector('.menu.makepiece input')`, 4000).catch(() => {});
+      await ev(`(() => { const n = document.querySelector('.menu.makepiece input'); n.value = 'Shout a greeting'; n.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+      ok(await ev(`/It sends the piece what they read from before them: room\./.test(document.querySelector('.menu.makepiece .note')?.textContent ?? '')`), 'Build 3: the form says what the piece will be sent', await ev(`document.querySelector('.menu.makepiece .note')?.textContent`));
+      await ev(`document.querySelector('.menu.makepiece [data-act=makeit]').click()`);
+      const SP = 'shout-a-greeting';
+      for (let i = 0; i < 40 && !(wfOf(SP) && wfOf(G)?.steps?.some((s) => s.kind === 'run-workflow')); i++) await wait(150);
+      ok(JSON.stringify(wfOf(SP)?.steps?.map((s) => s.id)) === '["say","shout","return"]' && wfOf(SP)?.steps?.[0]?.params?.output?.line?.args?.[1]?.$path === 'body.room' && !fileNow().triggers.some((t) => t.target?.name === SP), 'Build 3: the piece in the file, reading the room it is sent, nothing starting it', wfOf(SP));
+      ok(JSON.stringify(wfOf(G)?.steps?.map((s) => s.id)) === '["start","run-workflow","end"]' && JSON.stringify(wfOf(G).steps[1].params) === JSON.stringify({ workflow: SP, send: { room: { $path: 'upstream.start.room' } } }) && wfOf(G).steps[2].params.value.$path === 'upstream.run-workflow.result.loud', 'Build 3: one Run step in their place, sending the room; the Return reads the piece\'s answer', wfOf(G));
+      await b.until(`!!document.querySelector('#steps .autoview .step[data-id="run-workflow"].picked')`, 5000).catch(() => {});
+      ok(await ev(`!!document.querySelector('#steps .autoview .step[data-id="run-workflow"].picked') && !document.querySelector('#steps .autoview .step.grouped') && !document.querySelector('#steps [data-group]')`), 'Build 3: the canvas shows the Run step picked, the choice gone');
+      const after = await testG();
+      ok(after.status === 'success' && after.answer === before.answer, 'AC2 (in Chrome): the test after answers the same', after);
       await shot('p132-bwf013');
     }
   }
