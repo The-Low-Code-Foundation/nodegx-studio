@@ -211,15 +211,16 @@ try {
   await admin('POST', '/admin/triggers', trigDef);
   writeFileSync(join(project, 'nodegx.automations.json'), JSON.stringify({ version: 1, workflows: [{ ...wfDef, concurrency: 1 }], triggers: [trigDef] }, null, 2) + '\n');
   await click('[data-tab=backend]');
-  const listedRow = await until(`(() => { const r = ${P}.querySelector('#autolist .row[data-trigger="nightly-at-2"]'); return r && /^Every day at 02:00/.test(r.innerText.trim()) ? r.innerText.replace(/\\s+/g, ' ').trim() : false; })()`, 15000);
-  ok(listedRow, 'inside the conversation, the trigger is listed in the backend\'s words for its cron, asked across origins', listedRow || await ev(`${P}.getElementById('autolist')?.innerText`));
+  // P132 BWF-010: one row per workflow, what starts it said on it
+  const listedRow = await until(`(() => { const r = ${P}.querySelector('#autolist .row[data-workflow="nightly"]'); return r && !${P}.querySelector('#autolist .row[data-trigger]') && /Started by Every day at 02:00/.test(r.innerText) ? r.innerText.replace(/\\s+/g, ' ').trim() : false; })()`, 15000);
+  ok(listedRow, 'inside the conversation, the workflow is listed with what starts it in the backend\'s words for its cron, asked across origins', listedRow || await ev(`${P}.getElementById('autolist')?.innerText`));
   await click('#autolist .row[data-workflow="nightly"]');
   const drawn = await until(`(() => { const v = ${P}.querySelector('#steps .autoview[data-workflow="nightly"]'); if (!v || /Reading its last run/.test(v.innerText)) return false;
     return { cols: [...v.querySelectorAll('.fncol')].map((c) => [...c.querySelectorAll('.step')].map((s) => s.dataset.id)), wires: v.querySelectorAll('svg.wires path[data-kind]').length, facts: v.querySelector('.fnfacts').innerText }; })()`, 15000);
-  ok(drawn && JSON.stringify(drawn.cols) === '[["pause"],["tidy"]]' && drawn.wires === 1 && /Started by Every day at 02:00/.test(drawn.facts) && /Not run on this backend yet/.test(drawn.facts), 'its workflow draws as two steps, wired, started by the trigger, not run yet', drawn);
+  ok(drawn && JSON.stringify(drawn.cols) === '[["trigger:nightly-at-2"],["pause"],["tidy"]]' && drawn.wires === 2 && /Started by Every day at 02:00/.test(drawn.facts) && /Not run on this backend yet/.test(drawn.facts), 'its workflow draws as what starts it, then two steps, wired, not run yet', drawn);
   await shot('bko-005-hosted-workflow');
-  await click('#autolist .row[data-trigger="nightly-at-2"] .trigswitch');
-  const off = await until(`${P}.querySelector('#autolist .row[data-trigger="nightly-at-2"] .trigswitch')?.getAttribute('aria-checked') === 'false'`, 10000);
+  await click('#autolist .row[data-workflow="nightly"] .trigswitch[data-trigger="nightly-at-2"]');
+  const off = await until(`${P}.querySelector('#autolist .row[data-workflow="nightly"] .trigswitch[data-trigger="nightly-at-2"]')?.getAttribute('aria-checked') === 'false'`, 10000);
   const fileSays = JSON.parse(readFileSync(join(project, 'nodegx.automations.json'), 'utf8')).triggers[0].enabled;
   const backendSays = (await admin('GET', '/admin/triggers/nightly-at-2')).trigger?.enabled;
   ok(off && fileSays === false && backendSays === false, 'switched off inside the conversation: the project\'s file and the backend both say off', { off, fileSays, backendSays });
@@ -329,7 +330,7 @@ try {
     await ev(`[...${P}.querySelectorAll('#datamain button')].find((x) => x.textContent.includes('Delete type')).click()`);
     const delAsked = await yes();
     const gone = await until(`!${P}.querySelector('#types .row[data-type="Note"]')`, 10000);
-    ok(delAsked && gone && !declaredNote(), 'Delete type: asked in Studio\'s card, and the type is gone from the project', { asked: delAsked, gone });
+    ok(delAsked && gone && !declaredNote(), 'Delete type: asked in Studio\'s card, and the type is gone from the project', { asked: delAsked, gone, ...(gone ? {} : { toast: await ev(`${P}.getElementById('toast')?.textContent`), row: await ev(`${P}.querySelector('#types .row[data-type="Note"]')?.innerText`), sure: await ev(`!!${P}.querySelector('.sure')`) }) });
   }
 
   // STU-082: the frame has no allow-downloads, so Export's <a download> saved nothing and the toast said "exported".

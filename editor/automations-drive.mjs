@@ -141,14 +141,15 @@ try {
   // 1. the list
   console.log('check: Workflow → On the backend');
   await b.clickSel('#rail [data-tab=backend]');
-  await b.until(`document.querySelectorAll('#autolist .row').length === 3 && !document.querySelector('#autolist')?.innerText.includes('0 9 * * *')`, 10000);
+  await b.until(`document.querySelectorAll('#autolist .row').length === 2 && !document.querySelector('#autolist')?.innerText.includes('0 9 * * *')`, 10000);
   // STU-093: the Map's words for when it last ran ("just now: it failed") arrive with its words.js
   await b.until(`/last run/.test(document.querySelector('#autolist .row[data-workflow="triage"]')?.innerText ?? '') && !/\\d{4}/.test(document.querySelector('#autolist .row[data-workflow="triage"]')?.innerText ?? '')`, 8000).catch(() => {});
   const listed = await ev(`[...document.querySelectorAll('#autolist .row')].map((r) => ({ trigger: r.dataset.trigger, workflow: r.dataset.workflow, text: r.innerText.replace(/\\s+/g, ' ').trim() }))`);
   const said = (id) => listed.find((r) => r.trigger === id)?.text ?? '';
   ok(/^Every day at 09:00 ?On ?Starts the function sendDigest$/.test(said(dailyId)), 'the daily trigger: "Every day at 09:00", on, starting sendDigest (the backend\'s words for its cron)', said(dailyId));
-  ok(/^When a Task is created ?On ?Starts the workflow Triage a new task · last run (just now|\d+ seconds ago): it failed \((A step failed|Step "Give up" failed)/.test(said(rowsId)), 'the row-change trigger: "When a Task is created", starting the workflow by its name, and how its last fire went (STU-093)', said(rowsId));
-  ok(listed.some((r) => r.workflow === 'triage' && /^Triage a new task Started by When a Task is created · 3 steps · last run (just now|\d+ seconds ago): it failed$/.test(r.text)), 'the workflow, by its name: what starts it, its three steps, and its last run in the Map\'s words (STU-093)', listed);
+  // P132 BWF-010 (P132-TRIGGERROWS): a trigger that starts a workflow is no row of its own; its switch is on the workflow's
+  ok(listed.length === 2 && !listed.some((r) => r.trigger === rowsId) && await ev(`!!document.querySelector('#autolist .row[data-workflow="triage"] .trigswitch[data-trigger="${rowsId}"]')`), 'one row per workflow: the row-change trigger is not listed on its own, its switch is on the workflow\'s row', listed);
+  ok(listed.some((r) => r.workflow === 'triage' && /^Triage a new task ?On ?Started by When a Task is created · 3 steps · last run (just now|\d+ seconds ago): it failed$/.test(r.text)), 'the workflow, by its name: on, what starts it, its three steps, and its last run in the Map\'s words (STU-093)', listed);
   ok(!listed.some((r) => /differs/.test(r.text)), 'the backend agrees with the project on every one');
   await shot('list');
 
@@ -169,8 +170,9 @@ try {
   {
     const v = await view();
     const card = (id) => v?.cards.find((c) => c.id === id);
-    ok(JSON.stringify(v?.cols) === '[["pause"],["notify"],["giveup"]]' && !v.overlap && !v.empty, 'the workflow opens as its steps, left to right from its entry', v?.cols);
-    ok(v?.wires.length === 2 && v.wires.some((w) => w.kind === 'then' && w.from === 'pause' && w.to === 'notify') && v.wires.some((w) => w.kind === 'fail' && w.from === 'notify' && w.to === 'giveup'), 'one wire for its next step, and its error route drawn as a failure', v?.wires);
+    ok(JSON.stringify(v?.cols) === `[["trigger:${rowsId}"],["pause"],["notify"],["giveup"]]` && !v.overlap && !v.empty, 'the workflow opens as what starts it, then its steps, left to right from its entry (BWF-010)', v?.cols);
+    ok(/^When a Task is created/.test(card(`trigger:${rowsId}`)?.text) && v?.wires.some((w) => w.kind === 'then' && w.from === `trigger:${rowsId}` && w.to === 'pause' && w.ran), 'its first card is the trigger, wired to the entry step, lit by the run it started', { card: card(`trigger:${rowsId}`), wires: v?.wires });
+    ok(v?.wires.length === 3 && v.wires.some((w) => w.kind === 'then' && w.from === 'pause' && w.to === 'notify') && v.wires.some((w) => w.kind === 'fail' && w.from === 'notify' && w.to === 'giveup'), 'one wire for its next step, and its error route drawn as a failure', v?.wires);
     ok(/litok/.test(card('pause')?.cls) && /✓ Ran/.test(card('pause')?.text) && /litfail/.test(card('notify')?.cls) && /✗ Failed here/.test(card('notify')?.text), 'its last run: step 1 ran, step 2 is drawn failing', v?.cards);
     ok(/failed at step 2, Tell the owner/.test(v?.facts), 'the run is said failing at step 2, by the step\'s name', v?.facts);
     ok(v?.wires.find((w) => w.from === 'pause')?.ran === true, 'the wire the run crossed into step 2 is lit', v?.wires);
@@ -201,17 +203,13 @@ try {
     ok(log.at(-1)?.startsWith('-|') && /litok/.test(v?.cards.find((c) => c.id === 'pause')?.cls) && /litfail/.test(v?.cards.find((c) => c.id === 'notify')?.cls), 'then it stops, the run lit as before', { last: log.at(-1), cards: v?.cards.map((c) => c.cls) });
     ok(/Play the run/.test(v?.facts), 'and it can be played again', v?.facts);
   }
-  // the trigger's card says its last fire the same way, and opens that run too
-  await ev(`document.querySelector('#autolist .row[data-trigger="${rowsId}"]').click()`);
-  await b.until(`document.querySelector('#steps .autoview')?.dataset.trigger === ${JSON.stringify(rowsId)} && !!document.querySelector('#steps .openrun')`, 8000).catch(() => {});
+  // the trigger's card (BWF-010: the workflow's first) says its last fire the same way
+  await b.until(`!document.querySelector('#steps .flow.playing')`, 8000).catch(() => {});
   {
     const v = await view();
-    ok(/Last fired (just now|\d+ seconds ago): it failed/.test(v?.facts) && /1 time in all/.test(v?.facts), 'the trigger\'s card: when it last fired, how it went, how often', v?.facts);
-    await ev(`document.querySelector('#steps .openrun')?.click()`);
-    ok(await b.until(`!!document.querySelector('#steps .autoview[data-workflow="triage"] .flow.playing')`, 8000).catch(() => false), 'its Open that run opens the workflow, playing');
+    ok(/Last fired (just now|\d+ seconds ago): it failed/.test(v?.cards.find((c) => c.id === `trigger:${rowsId}`)?.text), 'the trigger\'s card: when it last fired and how it went', v?.cards[0]);
     // Richard, 2026-10-31: "why … does it hide the left menu with all the functions? Seems unnecessary"
-    ok(await ev(`!!document.getElementById('autolist').offsetParent && !!document.getElementById('fnlist').offsetParent && !!document.querySelector('#steps .cardnav .back')`), 'the list of workflows and functions stays beside the run it opened, and Back is still there');
-    await b.until(`!document.querySelector('#steps .flow.playing')`, 8000).catch(() => {});
+    ok(await ev(`!!document.getElementById('autolist').offsetParent && !!document.getElementById('fnlist').offsetParent`), 'the list of workflows and functions stays beside the run it opened');
   }
 
   // 4. turned off in Studio
@@ -282,7 +280,7 @@ try {
   await ev(`document.querySelector('.menu .item[data-kind="wait"]').click()`);
   await b.until(`/Step 2 · Wait/.test(document.querySelector('#wfinspect .type')?.innerText ?? '')`, 8000).catch(() => {});
   ok(order(fileNow().workflows[0]) === 'pause wait notify' && order(await beWf()) === 'pause wait notify', 'a step added after another: between it and the next, in the file and on the backend', [order(fileNow().workflows[0]), order(await beWf())]);
-  ok(JSON.stringify(await ev(`[...document.querySelectorAll('#steps .autoview .fncol')].map((c) => [...c.querySelectorAll('.step')].map((x) => x.dataset.id))`)) === '[["pause"],["wait"],["notify"],["giveup"]]', 'and drawn there');
+  ok(JSON.stringify(await ev(`[...document.querySelectorAll('#steps .autoview .fncol')].map((c) => [...c.querySelectorAll('.step')].map((x) => x.dataset.id))`)) === `[["trigger:${rowsId}"],["pause"],["wait"],["notify"],["giveup"]]`, 'and drawn there');
   await ev(`document.querySelector('#wfinspect .head .danger').click()`);
   await b.until(`document.getElementById('wfinspect').hidden`, 8000).catch(() => {});
   await wait(300);
@@ -299,11 +297,33 @@ try {
     ok(t?.type === 'schedule' && t.schedule.cron === '30 2 * * *' && beT?.schedule?.cron === '30 2 * * *' && !('secret' in t), 'with what starts it, every day at 02:30, in both (no secret in the file)', [t, beT]);
     await ev(`document.querySelector('.wfacts [data-act=delete]').click()`); await wait(400);
     ok(await ev(`/still starts it/.test(document.body.innerText)`) && fileNow().workflows.some((w) => w.id === 'nightly-tidy'), 'a workflow a trigger starts is not deleted: the trigger is named first');
-    await ev(`document.querySelector('#autolist .row[data-trigger="${t?.id}"]').click()`); await wait(600);
-    await ev(`document.querySelector('.wfacts [data-act=deltrigger]').click()`); await wait(300);
+    // P132 BWF-010 AC2: what starts it is its first card; deleted from there, the workflow stays, and gets a start back there
+    ok(await ev(`JSON.stringify([...document.querySelector('#steps .autoview .fncol').querySelectorAll('.step')].map((x) => x.dataset.id))`) === JSON.stringify([`trigger:${t?.id}`]), 'a new workflow opens with what starts it as its first card', await ev(`document.querySelector('#steps .autoview .fncol')?.innerText`));
+    await b.clickSel(`#steps .autoview .step[data-id="trigger:${t?.id}"] h3`);
+    await b.until(`!document.getElementById('wfinspect').hidden && !!document.querySelector('#wfinspect [data-act=deltrigger]')`, 5000).catch(() => {});
+    await ev(`document.querySelector('#wfinspect [data-act=deltrigger]').click()`); await wait(300);
     await ev(`document.querySelector('.menu [data-act=confirm]').click()`);
-    await b.until(`!document.querySelector('#autolist .row[data-trigger="${t?.id}"]')`, 8000).catch(() => {});
-    await ev(`document.querySelector('#autolist .row[data-workflow="nightly-tidy"]').click()`); await wait(600);
+    await b.until(`!!document.querySelector('#steps .autoview[data-workflow="nightly-tidy"] .step[data-id="starts"]')`, 8000).catch(() => {});
+    ok(!fileNow().triggers.some((x) => x.id === t?.id) && !(await be('/admin/triggers')).triggers.some((x) => x.id === t?.id) && fileNow().workflows.some((w) => w.id === 'nightly-tidy'), 'its trigger deleted from its card: gone from the file and the backend, the workflow kept');
+    ok(await ev(`(() => { const c = document.querySelector('#steps .autoview[data-workflow="nightly-tidy"] .step[data-id="starts"]'); return !!c && /^Nothing starts it on its own\\s+Another workflow, the agent or a test runs it\\./.test(c.innerText.trim()) && !!c.querySelector('[data-act=addtrigger]') && getComputedStyle(c).opacity === '1'; })()`), 'the workflow stays open, its first card saying nothing starts it, with Add what starts it', await ev(`document.querySelector('#steps .autoview .fncol')?.innerText`));
+    await b.clickSel('#steps .autoview .step[data-id="starts"] [data-act=addtrigger]'); await wait(300);
+    const shownAdd = {};
+    for (const v of ['db-change', 'schedule', 'webhook']) {
+      await ev(`(() => { const s = document.querySelector('.menu.addtrigger select[aria-label="What starts it"]'); s.value = ${JSON.stringify(v)}; s.dispatchEvent(new Event('change')); })()`);
+      shownAdd[v] = await ev(`[...document.querySelectorAll('.menu.addtrigger .field[data-starts]')].filter((f) => f.getClientRects().length).map((f) => f.dataset.starts).join()`);
+    }
+    ok(JSON.stringify(shownAdd) === '{"db-change":"db-change","schedule":"schedule","webhook":"webhook"}' && !(await ev(`[...document.querySelectorAll('.menu.addtrigger select[aria-label="What starts it"] option')].some((o) => o.value === '')`)), 'its form: each choice shows its own fields, and "Nothing" is not offered', shownAdd);
+    await ev(`(() => { const m = document.querySelector('.menu.addtrigger'); const set = (sel, v) => { const el = m.querySelector(sel); el.value = v; el.dispatchEvent(new Event('change')); }; set('select[aria-label="What starts it"]', 'schedule'); set('input[aria-label="The time it runs"]', '03:15'); set('select[aria-label="Which days"]', '1-5'); })()`);
+    await ev(`document.querySelector('.menu.addtrigger [data-act=maketrigger]').click()`);
+    await b.until(`!!document.querySelector('#steps .autoview[data-workflow="nightly-tidy"] .step.fnstart[data-trigger]')`, 8000).catch(() => {});
+    {
+      const t2 = fileNow().triggers.find((x) => x.target?.name === 'nightly-tidy'), beT2 = t2 && (await be(`/admin/triggers/${encodeURIComponent(t2.id)}`)).trigger;
+      ok(t2?.schedule?.cron === '15 3 * * 1-5' && beT2?.schedule?.cron === '15 3 * * 1-5' && t2.enabled === true, 'Add what starts it: Monday to Friday at 03:15, in the file and on the backend', [t2, beT2]);
+      ok(await ev(`JSON.stringify([...document.querySelector('#steps .autoview .fncol').querySelectorAll('.step')].map((x) => x.dataset.id))`) === JSON.stringify([`trigger:${t2?.id}`]) && await ev(`!document.getElementById('wfinspect').hidden && /What starts the workflow/.test(document.getElementById('wfinspect').innerText)`), 'drawn as its first card, picked, its settings open on the right', await ev(`document.querySelector('#steps .autoview .fncol')?.innerText`));
+      await ev(`document.querySelector('#wfinspect [data-act=deltrigger]').click()`); await wait(300);
+      await ev(`document.querySelector('.menu [data-act=confirm]').click()`);
+      await b.until(`!!document.querySelector('#steps .autoview[data-workflow="nightly-tidy"] .step[data-id="starts"]')`, 8000).catch(() => {});
+    }
     await ev(`document.querySelector('.wfacts [data-act=delete]').click()`); await wait(300);
     await ev(`document.querySelector('.menu [data-act=confirm]').click()`);
     await b.until(`!document.querySelector('#autolist .row[data-workflow="nightly-tidy"]')`, 8000).catch(() => {});
@@ -382,19 +402,17 @@ try {
   // came up; neither card answered a click, only a small link did. Both cards answer now, and what starts it has settings
   console.log('check: P132-STEPPANEL, a trigger\'s cards');
   const rowsT = () => fileNow().triggers.find((x) => x.id === rowsId);
-  await ev(`document.querySelector('#autolist .row[data-trigger="${rowsId}"]').click()`);
-  await b.until(`document.querySelector('#steps .autoview')?.dataset.trigger === ${JSON.stringify(rowsId)}`, 8000).catch(() => {});
-  await b.clickSel('#steps .autoview .step[data-id="target"] h3');
-  ok(await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'triage'`, 5000), 'a click on the workflow a trigger starts opens that workflow');
-  await ev(`document.querySelector('#autolist .row[data-trigger="${rowsId}"]').click()`);
-  await b.until(`document.querySelector('#steps .autoview')?.dataset.trigger === ${JSON.stringify(rowsId)}`, 8000).catch(() => {});
-  await b.clickSel('#steps .autoview .step[data-id="trigger"] h3');
+  // P132 BWF-010: a link to the trigger (a run's "Started by", an old address) opens the workflow, the trigger's card picked
+  await ev(`window.__ob.openAuto({ kind: 'trigger', id: ${JSON.stringify(rowsId)} })`);
+  ok(await b.until(`document.querySelector('#steps .autoview')?.dataset.workflow === 'triage' && !!document.querySelector('#steps .autoview .step.picked[data-id="trigger:${rowsId}"]') && !document.getElementById('wfinspect').hidden`, 5000), 'a link to the trigger opens the workflow it starts, its card picked and its settings open');
+  await ev(`document.querySelector('#wfinspect .head button.quiet')?.click()`); await wait(200);
+  await b.clickSel(`#steps .autoview .step[data-id="trigger:${rowsId}"] h3`);
   ok(await b.until(`!document.getElementById('wfinspect').hidden && /What starts the workflow/.test(document.getElementById('wfinspect').innerText) && document.getElementById('wfinspect').getBoundingClientRect().right <= innerWidth + 1`, 5000), 'a click on what starts it opens its settings on the right, on screen', await ev(`document.getElementById('wfinspect').innerText.slice(0, 200)`));
   await ev(`(() => { const x = document.querySelector('#wfinspect input[type=checkbox][value="update"]'); x.checked = true; x.dispatchEvent(new Event('change')); })()`);
   await b.until(`/It watches Task now/.test(document.body.innerText)`, 8000).catch(() => {});
   await wait(300);
   ok(JSON.stringify(rowsT()?.dbChange?.actions) === '["create","update"]' && JSON.stringify((await be(`/admin/triggers/${encodeURIComponent(rowsId)}`)).trigger?.dbChange?.actions) === '["create","update"]', 'a change ticked in its settings: watched in the file and on the backend', rowsT()?.dbChange);
-  ok(await b.until(`!document.getElementById('wfinspect').hidden && document.querySelector('#steps .autoview h2')?.textContent === 'When a Task is created or changed'`, 5000), 'the panel stays open, and the trigger is named by what it now watches', await ev(`document.querySelector('#steps .autoview h2')?.textContent`));
+  ok(await b.until(`!document.getElementById('wfinspect').hidden && document.querySelector('#steps .autoview .step[data-id="trigger:${rowsId}"] h3')?.firstChild?.textContent === 'When a Task is created or changed'`, 5000), 'the panel stays open, and the card names the trigger by what it now watches', await ev(`document.querySelector('#steps .autoview .step[data-id="trigger:${rowsId}"] h3')?.textContent`));
   await ev(`document.querySelector('#autolist .row[data-trigger="${dailyId}"]').click()`);
   await b.until(`document.querySelector('#steps .autoview')?.dataset.trigger === ${JSON.stringify(dailyId)}`, 8000).catch(() => {});
   await b.clickSel('#steps .autoview .step[data-id="trigger"] h3');

@@ -608,6 +608,7 @@
   .trigline { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
   .trigtime { font: inherit; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--ink); }
   .fnflow .step.trigoff { opacity: .55; border-style: dashed; }
+  .fnflow .step.fnstart.nostart { border-style: dashed; border-color: var(--line-2); box-shadow: var(--cardshadow); } /* P132 BWF-010: nothing starts it; its button stays live */
   .fnflow .step.litok { border-color: rgba(22,163,74,.7); }
   .fnflow .step.litfail { border-color: var(--red); box-shadow: 0 0 0 4px rgba(220,38,38,.12); }
   .fnflow .step.litnot { opacity: .5; }
@@ -5374,7 +5375,9 @@ function callersWords(who) {
   const pages = of('page'), runs = [...of('workflow').map((x) => `“${x}”`), ...of('trigger')];
   return [pages.length ? `called on ${list(pages)}` : '', runs.length ? `run by ${list(runs)}` : ''].filter(Boolean).join(' · ');
 }
-const switchOf = (t) => h('button', { class: 'trigswitch', role: 'switch', 'aria-checked': t.enabled !== false, title: t.enabled !== false ? 'On: turn it off, on the backend and in the project' : 'Off: turn it on, on the backend and in the project', onclick: (e) => { e.stopPropagation(); changeTrigger(t.id, { enabled: t.enabled === false }); } }, t.enabled !== false ? 'On' : 'Off');
+/** P132 BWF-010: a trigger that starts a workflow the project has is that workflow's first card, not a page of its own. */
+const foldedTrigger = (t) => { const g = targetOf(t); return g.kind === 'workflow' && autos().workflows.some((w) => w.id === g.name); };
+const switchOf = (t) => h('button', { class: 'trigswitch', 'data-trigger': t.id, role: 'switch', 'aria-checked': t.enabled !== false, title: t.enabled !== false ? 'On: turn it off, on the backend and in the project' : 'Off: turn it on, on the backend and in the project', onclick: (e) => { e.stopPropagation(); changeTrigger(t.id, { enabled: t.enabled === false }); } }, t.enabled !== false ? 'On' : 'Off');
 const startsWords = (t) => { const g = targetOf(t); return `${g.kind === 'workflow' ? 'the workflow' : 'the function'} ${g.kind === 'workflow' ? autos().workflows.find((w) => w.id === g.name)?.name || g.name : g.name}`; };
 function renderAutoList() {
   const box = $('autolist'); box.innerHTML = '';
@@ -5384,7 +5387,9 @@ function renderAutoList() {
   const a = autos(), be = beNow(), q = wfFilter.q.toLowerCase();
   if (a.error) return box.append(h('div', { class: 'hint' }, a.error));
   if (!a.triggers.length && !a.workflows.length) box.append(h('div', { class: 'hint' }, 'No workflows on the backend yet: steps that run there on their own, when a table changes or at a time of day.'));
-  for (const t of a.triggers) {
+  // P132 BWF-010 (P132-TRIGGERROWS): one row per workflow, what starts it said on it; a trigger has a row of its own only
+  // when it starts a cloud function straight (no workflow to sit in), or a workflow the project does not have
+  for (const t of a.triggers.filter((x) => !foldedTrigger(x))) {
     const head = triggerHead(t, be?.triggers.get(t.id)?.scheduleWords);
     if (q && !`${head} ${targetOf(t).name}`.toLowerCase().includes(q)) continue;
     const same = !be || be.words || agrees('trigger', t, be.triggers.get(t.id));
@@ -5394,10 +5399,11 @@ function renderAutoList() {
   for (const w of a.workflows) {
     if (q && !`${w.name ?? ''} ${w.id}`.toLowerCase().includes(q)) continue;
     const same = !be || be.words || agrees('workflow', w, be.workflows.get(w.id));
-    const by = a.triggers.filter((t) => targetOf(t).kind === 'workflow' && targetOf(t).name === w.id).map((t) => triggerHead(t, be?.triggers.get(t.id)?.scheduleWords));
+    const ts = startsOf(w.id), by = ts.map((t) => triggerHead(t, be?.triggers.get(t.id)?.scheduleWords));
+    const trigSame = !be || be.words || ts.every((t) => agrees('trigger', t, be.triggers.get(t.id)));
     const last = lastRunWords('workflow', w.id);
     box.append(h('div', { class: 'row', 'data-workflow': w.id, 'aria-selected': selAuto?.kind === 'workflow' && selAuto.id === w.id, onclick: () => openAuto({ kind: 'workflow', id: w.id }) },
-      h('span', {}, w.name || w.id), h('small', {}, `${by.length ? `Started by ${by.join(' or ')}` : 'No trigger: the agent or a workflow runs it'} · ${(w.steps ?? []).length} step${(w.steps ?? []).length === 1 ? '' : 's'}${same ? '' : ' · the backend’s copy differs'}`, last ? ' · ' : '', lastRunLink(last, () => openAuto({ kind: 'workflow', id: w.id }, null, { play: true }), 'last run'))));
+      h('span', {}, w.name || w.id, ...ts.map((t) => switchOf(t))), h('small', {}, `${by.length ? `Started by ${by.join(' or ')}` : 'Nothing starts it on its own'} · ${(w.steps ?? []).length} step${(w.steps ?? []).length === 1 ? '' : 's'}${same && trigSame ? '' : ' · the backend’s copy differs'}`, last ? ' · ' : '', lastRunLink(last, () => openAuto({ kind: 'workflow', id: w.id }, null, { play: true }), 'last run'))));
   }
   // the file is the truth: what only the backend has is said, not drawn
   const only = be && !be.words ? [...be.triggers.keys()].filter((id) => !a.triggers.some((t) => t.id === id)).length + [...be.workflows.keys()].filter((id) => !a.workflows.some((w) => w.id === id)).length : 0;
@@ -5406,7 +5412,9 @@ function renderAutoList() {
 /** `opts.play`: the run is played once it is read (STU-093: a "last run" link opens the run, not just the workflow). */
 function openAuto(target, from = null, opts = {}) {
   if (!autoEntry(target)) return toast(`The project has no ${target.kind} called ${target.id}`);
-  selAuto = { kind: target.kind, id: target.id, from, play: !!opts.play }; selFn = null; fnBack = []; autoRun = null; selAutoStep = null; autoPlay = null; hideBoltTip();
+  // P132 BWF-010: a trigger that starts a workflow opens that workflow, its card picked (its settings on the right)
+  if (target.kind === 'trigger' && foldedTrigger(autoEntry(target))) return openAuto({ kind: 'workflow', id: targetOf(autoEntry(target)).name }, null, { ...opts, pick: `trigger:${target.id}` });
+  selAuto = { kind: target.kind, id: target.id, from, play: !!opts.play }; selFn = null; fnBack = []; autoRun = null; selAutoStep = opts.pick ?? null; autoPlay = null; hideBoltTip();
   if (beNow()) loadAutoBackend(); // P123-GH-TRIGGERSTALE: a card says what the backend says now, not when the list was first read
   if (tab !== 'backend') switchTab('backend'); else renderWorkflow();
   if (target.kind === 'workflow') { readAutoRun(target.id); if (!autoSamples) loadSamples(); loadAutoTables(target.id); }
@@ -5417,7 +5425,8 @@ async function changeTrigger(id, change, words = null) {
   const j = await r.json().catch(() => ({}));
   if (!r.ok) return toast(j.error ?? `Nothing was changed (${r.status})`);
   files.write(j.file, j.text); persisted[j.file] = j.text; autoText = j.text; autoBe = null;
-  if (change.remove) { selAuto = null; return toast('Trigger deleted, on the backend and in the project'), renderWorkflow(); }
+  // P132 BWF-010: deleted from a workflow's first card, the workflow stays open, now started by nothing (or its other trigger)
+  if (change.remove) { if (selAuto?.kind === 'workflow') selAutoStep = null; else selAuto = null; return toast(`Trigger deleted${BOTH}: the ${selAuto ? 'workflow' : 'function'} stays`), renderWorkflow(); }
   toast(words ?? (change.time ? `It runs at ${hhmm(change.time)} now, on the backend and in the project` : `Turned ${change.enabled ? 'on' : 'off'}, on the backend and in the project`));
   renderWorkflow();
 }
@@ -5612,7 +5621,7 @@ function renderTrigger(t) {
   const headCard = h('div', { class: `step fnstart${on ? '' : ' trigoff'}${selAutoStep === 'trigger' ? ' picked' : ''}`, 'data-id': 'trigger', title: 'What starts it: its settings', onclick: () => pickAutoStep('trigger'), style: `--kind:${FLOW.then}` }, h('div', { class: 'num' }, '1'), h('h3', {}, head, h('span', {}, on ? 'what starts it' : 'off')),
     h('div', { class: 'acts' }), h('div', { class: 'lines' }, ...(t.type === 'db-change' ? [h('span', {}, 'Data type: ', h('code', {}, t.dbChange?.collection ?? '?'))] : t.type === 'schedule' ? [h('span', {}, 'Cron: ', h('code', {}, t.schedule?.cron ?? '?'))] : [h('span', {}, 'At ', h('code', { 'data-hook-url': '' }, hookUrl(t.webhook?.slug ?? '?'))), h('span', {}, t.webhook?.scheme === 'token' ? 'A caller sends its key' : `Signed with ${t.webhook?.scheme ?? 'hmac-sha256'}`)])));
   const open = there ? h('button', { class: 'quiet tiny fnopen', onclick: (e) => { e.stopPropagation(); openTarget(); } }, g.kind === 'function' ? 'Open its steps ↗' : 'Open the workflow ↗') : h('span', { style: 'color:var(--red)' }, `The project has no ${g.kind} called ${g.name}`);
-  const targetCard = h('div', { class: 'step', 'data-id': 'target', 'data-target': g.key, title: g.kind === 'function' ? 'Open its steps' : 'Open the workflow: its steps and their settings', onclick: openTarget, style: `--kind:${KIND_COLOUR.bolt}` }, h('div', { class: 'num' }, '2'), h('h3', {}, g.kind === 'workflow' ? autos().workflows.find((w) => w.id === g.name)?.name || g.name : g.name, h('span', {}, g.kind === 'workflow' ? 'a workflow' : 'a cloud function')),
+  const targetCard = h('div', { class: 'step', 'data-id': 'target', 'data-target': g.key, title: g.kind === 'function' ? 'Open its steps' : 'Open the workflow: its steps and their settings', onclick: openTarget, style: `--kind:${KIND_COLOUR.bolt}` }, h('div', { class: 'num' }, '2'), h('h3', {}, g.kind === 'workflow' ? autos().workflows.find((w) => w.id === g.name)?.name || g.name : `Run ${g.name}`, h('span', {}, g.kind === 'workflow' ? 'a workflow' : 'a cloud function')),
     h('div', { class: 'acts' }), h('div', { class: 'lines' }, open));
   autoFlow(wf, [[headCard], [targetCard]], [{ from: 'trigger', to: 'target', kind: on ? 'then' : 'dead' }]);
 }
@@ -5636,6 +5645,28 @@ function autoStepCard(step, n, lit, wfLabel) {
   return h('div', { class: cls, 'data-id': step.id, 'data-kind': step.kind, title: 'Its settings, and what it took and gave in the last run', onclick: () => pickAutoStep(step.id), style: `--kind:${runsFn ? KIND_COLOUR.bolt : step.kind === 'branch' || step.kind === 'switch' ? KIND_COLOUR.branch : KIND_COLOUR.code}${ports > 1 ? `;min-height:${ports * 34 + 16}px` : ''}` },
     h('div', { class: 'num' }, String(n)), h('h3', {}, title, sub ? h('span', {}, sub) : null), h('div', { class: 'acts' }), h('div', { class: 'lines' }, ...lines));
 }
+/* ---- P132 BWF-010: what starts a workflow is its first card (Richard, 2026-11-03: a trigger listed as a row of its own,
+   opening to two cards, read as a second thing beside the workflow). A press opens its settings on the right, the panel
+   the trigger's page had; a workflow nothing starts says so on that card and is given a start from it. ---- */
+const NOSTART_WORDS = 'Nothing starts it on its own: another workflow, the agent or a test runs it.';
+function triggerLines(t) {
+  const st = beNow()?.triggers.get(t.id)?.status;
+  return [...(t.type === 'db-change' ? [h('span', {}, 'When a ', h('code', {}, t.dbChange?.collection ?? '?'), ` ${(t.dbChange?.actions ?? []).map((a) => ({ create: 'is created', update: 'is changed', delete: 'is deleted' })[a] ?? a).join(' or ')}`)]
+    : t.type === 'schedule' ? (scheduleTime(t.schedule?.cron) ? [] : [h('span', {}, 'Cron: ', h('code', {}, t.schedule?.cron ?? '?'))]) // a time and its days are the card's title already
+      : [h('span', {}, 'At ', h('code', { 'data-hook-url': '' }, hookUrl(t.webhook?.slug ?? '?'))), h('span', {}, t.webhook?.scheme === 'token' ? 'A caller sends its key' : `Signed with ${t.webhook?.scheme ?? 'hmac-sha256'}`)]),
+  st ? h('span', { style: 'color:var(--sub)' }, st.lastFiredAt ? `Last fired ${lastRunWords('trigger', t.id)}` : 'Not fired yet') : null].filter(Boolean);
+}
+function autoTriggerCard(t) {
+  const id = `trigger:${t.id}`, on = t.enabled !== false, head = triggerHead(t, beNow()?.triggers.get(t.id)?.scheduleWords);
+  return h('div', { class: `step fnstart${on ? '' : ' trigoff'}${selAutoStep === id ? ' picked' : ''}`, 'data-id': id, 'data-trigger': t.id, title: 'What starts it: its settings', onclick: () => pickAutoStep(id), style: `--kind:${FLOW.then}` },
+    h('div', { class: 'num' }, icon('bolt')), h('h3', {}, head, h('span', {}, on ? 'what starts it' : 'off')), h('div', { class: 'acts' }), h('div', { class: 'lines' }, ...triggerLines(t)));
+}
+function autoNoTriggerCard(w) {
+  return h('div', { class: 'step fnstart nostart', 'data-id': 'starts', title: 'Nothing starts it on its own', style: `--kind:${FLOW.dead}` },
+    h('div', { class: 'num' }, icon('bolt')), h('h3', {}, 'Nothing starts it on its own'), h('div', { class: 'acts' }),
+    h('div', { class: 'lines' }, h('span', { style: 'color:var(--sub)' }, 'Another workflow, the agent or a test runs it.'),
+      editingUp() ? h('button', { class: 'tiny', 'data-act': 'addtrigger', onclick: (e) => { e.stopPropagation(); addTriggerForm(e, w); } }, icon('plus'), 'Add what starts it') : null));
+}
 function renderAutoWorkflow(w) {
   const L = workflowLayout(w, routeNamesOf), byStep = Object.fromEntries((w.steps ?? []).map((s) => [s.id, s]));
   const lit = autoRun?.run ? stepsOfRun(autoRun.run) : null, label = w.name || w.id;
@@ -5647,7 +5678,7 @@ function renderAutoWorkflow(w) {
   const nameOf = (id) => byStep[id]?.name || (byStep[id]?.ref ? `Run ${byStep[id].ref}` : id);
   const failedRun = autoRun?.run && autoRun.run.status !== 'success' && autoRun.run.status !== 'running';
   wf.append(h('div', { class: 'fnfacts' },
-    h('div', {}, starts.length ? ['Started by ', ...starts.map((t) => h('button', { class: 'quiet tiny startedby', 'data-trigger': t.id, onclick: () => openAuto({ kind: 'trigger', id: t.id }) }, triggerHead(t, beNow()?.triggers.get(t.id)?.scheduleWords)))] : 'No trigger starts it: the agent (or another workflow) runs it.'),
+    h('div', {}, starts.length ? ['Started by ', ...starts.map((t) => h('button', { class: 'quiet tiny startedby', 'data-trigger': t.id, title: 'Its settings, on its card', onclick: () => pickAutoStep(`trigger:${t.id}`) }, triggerHead(t, beNow()?.triggers.get(t.id)?.scheduleWords)))] : NOSTART_WORDS),
     h('div', { class: 'agree' }, agreeWords('workflow', w)),
     h('div', { class: `run ${autoRun?.run ? (failedRun ? 'refused' : 'ran') : ''}` }, autoRun ? autoRun.words ?? runLine(autoRun.run, nameOf) : 'Reading its last run…',
       autoRun?.run ? h('button', { class: 'quiet tiny playrun', title: 'Each step lit in the order it ran, a dot along each wire it crossed', onclick: () => playAutoRun() }, '▶ Play the run') : null),
@@ -5665,10 +5696,17 @@ function renderAutoWorkflow(w) {
       h('span', { style: 'color:var(--dim)' }, autoRun?.run ? 'Click a step: its settings, and what went in and came out in the last run.' : 'Click a step to change it.')]
       : h('span', { style: 'color:var(--dim)' }, beNow()?.words ? 'Start the backend (Data) to change it here: a workflow is changed on the backend and in the project together.' : 'Asking the backend what its steps take…'))));
   let n = 0;
-  const columns = L.columns.map((col) => col.map((id) => autoStepCard(byStep[id], ++n, lit, label)));
+  // P132 BWF-010: what starts it is the first column, left of the entry step and wired to it; a workflow nothing starts
+  // says so there, with a way to give it a start
+  const firstCol = starts.length ? starts.map((t) => autoTriggerCard(t)) : [autoNoTriggerCard(w)];
+  const columns = [firstCol, ...L.columns.map((col) => col.map((id) => autoStepCard(byStep[id], ++n, lit, label)))];
   const ran = (id) => lit?.has(id) && lit.get(id).status !== 'skipped';
   // P132 BWF-001: each way on its own port, named; a "+" on every wire and on every way on with nothing on it yet
   const up = editingUp(), wires = [], stubs = [], kinds = new Set();
+  if (byStep[w.entry]) {
+    for (const t of starts) wires.push({ from: `trigger:${t.id}`, to: w.entry, kind: t.enabled !== false ? 'then' : 'dead', ran: lit ? ran(w.entry) : undefined, title: `${triggerHead(t, beNow()?.triggers.get(t.id)?.scheduleWords)} starts it here` });
+    if (!starts.length) wires.push({ from: 'starts', to: w.entry, kind: 'dead', title: 'Nothing starts it on its own' });
+  }
   for (const s of w.steps ?? []) {
     const ps = autoPorts(s);
     ps.forEach((p, i) => {
@@ -6211,6 +6249,9 @@ function renderAutoStepPanel(panel) {
     return;
   }
   const w = !selFn && selAuto?.kind === 'workflow' ? autoEntry(selAuto) : null;
+  // P132 BWF-010: a trigger's card on the workflow's canvas opens the trigger's settings here
+  const pickedT = w && selAutoStep?.startsWith('trigger:') ? startsOf(w.id).find((t) => `trigger:${t.id}` === selAutoStep) : null;
+  if (pickedT) { $('workflow').classList.add('inspecting'); panel.hidden = false; panel.innerHTML = ''; return triggerPanel(panel, pickedT); }
   if (selAutoStep && !w?.steps?.some((s) => s.id === selAutoStep)) selAutoStep = null;
   const on = !!w && !!selAutoStep;
   $('workflow').classList.toggle('inspecting', on);
@@ -6237,7 +6278,7 @@ function triggerPanel(panel, t) {
       const days = h('select', { 'aria-label': 'Which days' }, ...DAYS.map(([v, words]) => h('option', { value: v, selected: v === dow }, words)));
       const save = () => { const [hh, mm] = (time.value || '').split(':').map(Number); if (!Number.isInteger(hh) || !Number.isInteger(mm)) return; const cron = `${mm} ${hh} * * ${days.value}`; if (cron !== t.schedule.cron) changeTrigger(t.id, { cron }, `It runs ${days.selectedOptions[0].textContent.toLowerCase()} at ${hhmm({ hour: hh, minute: mm })} now${BOTH}`); };
       time.addEventListener('change', save); days.addEventListener('change', save);
-      wrap.append(h('div', { class: 'field' }, h('label', {}, 'At'), time), h('div', { class: 'field' }, h('label', {}, 'On'), days));
+      wrap.append(h('div', { class: 'field' }, h('label', {}, 'At'), time), h('div', { class: 'field' }, h('label', {}, 'Days'), days));
     } else wrap.append(h('div', { class: 'hint' }, 'It runs on a schedule Studio has no words for yet (', h('code', {}, t.schedule?.cron ?? '?'), '): ask the agent to change when.'));
   } else if (t.type === 'db-change') {
     const acts = new Set(t.dbChange?.actions ?? []);
@@ -6256,8 +6297,11 @@ function triggerPanel(panel, t) {
   }
   wrap.append(h('div', { class: 'sechead' }, 'Then'), h('div', { class: 'thenline' }, `It runs ${startsWords(t)}.`));
   const after = h('div', { class: 'after' });
-  if (g.kind === 'workflow' ? autos().workflows.some((w) => w.id === g.name) : !!registry()[g.key]) after.append(h('button', { class: 'primary', onclick: () => (g.kind === 'function' ? openFunction(g.key, { kind: 'auto', auto: { ...selAuto }, title: head }) : openAuto({ kind: 'workflow', id: g.name }, t.id)) }, g.kind === 'function' ? 'Open its steps ↗' : 'Open the workflow ↗'));
-  after.append(h('button', { class: 'quiet danger', onclick: (e) => confirmPop(e, `Delete “${head}”?`, `It stops starting ${startsWords(t)}, on the backend and in the project. ${g.kind === 'workflow' ? 'The workflow stays.' : 'The function stays.'}`, 'Delete it', () => changeTrigger(t.id, { remove: true })) }, icon('trash'), 'Delete the trigger'));
+  // P132 BWF-010: on the workflow's own canvas there is nothing to open, and a second way to start it can be added
+  const onCanvas = selAuto?.kind === 'workflow' && g.kind === 'workflow' && g.name === selAuto.id;
+  if (onCanvas && editingUp()) after.append(h('button', { 'data-act': 'addtrigger', onclick: (e) => addTriggerForm(e, autoEntry(selAuto)) }, icon('plus'), 'Another way to start it'));
+  if (!onCanvas && (g.kind === 'workflow' ? autos().workflows.some((w) => w.id === g.name) : !!registry()[g.key])) after.append(h('button', { class: 'primary', onclick: () => (g.kind === 'function' ? openFunction(g.key, { kind: 'auto', auto: { ...selAuto }, title: head }) : openAuto({ kind: 'workflow', id: g.name }, t.id)) }, g.kind === 'function' ? 'Open its steps ↗' : 'Open the workflow ↗'));
+  after.append(h('button', { class: 'quiet danger', 'data-act': 'deltrigger', onclick: (e) => confirmPop(e, `Delete “${head}”?`, `It stops starting ${startsWords(t)}, on the backend and in the project. ${g.kind === 'workflow' ? 'The workflow stays.' : 'The function stays.'}`, 'Delete it', () => changeTrigger(t.id, { remove: true })) }, icon('trash'), 'Delete the trigger'));
   wrap.append(after);
   panel.append(wrap);
 }
@@ -6266,13 +6310,12 @@ function triggerPanel(panel, t) {
     trigger and all. P132 BWF-001: each Starts-on choice shows its own fields and only those. */
 const hookUrl = (slug) => (backendState.endpoint && backendState.id ? `${backendState.endpoint}/hooks/${encodeURIComponent(backendState.id)}/${slug}` : `/hooks/…/${slug}`);
 const DAYS = [['*', 'Every day'], ['1-5', 'Monday to Friday'], ['0,6', 'Saturday and Sunday'], ['1', 'Mondays']];
-function newAutoForm(e) {
-  closeMenu();
-  if (!editingUp()) return toast(beNow()?.words ?? 'Asking the backend… try again in a moment. A workflow is made on the backend and in the project together.');
-  const fns = callableFns();
-  const menu = popover(e, 'newitem newpage newauto');
-  const name = h('input', { type: 'text', placeholder: 'The morning check, When an order arrives…', 'aria-label': 'Workflow name' });
-  const starts = h('select', { 'aria-label': 'What starts it' }, h('option', { value: 'db-change' }, 'A change to a table'), h('option', { value: 'schedule' }, 'A time'), h('option', { value: 'webhook' }, 'A call from outside (a webhook)'), h('option', { value: '' }, 'Nothing: I or the agent start it'));
+const slugOf = (t) => String(t ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+/** What starts a workflow, as a form's fields: the choice, and each choice's own fields shown alone (P132-STARTSONFORM).
+    `fallback()` names the webhook's address when none is typed. `make()` is the trigger as the backend takes it, or
+    undefined for "Nothing"; `problem()` what stops it being made, in words, or ''. Shared by New and BWF-010's card. */
+function startFields(fallback, { nothing = true } = {}) {
+  const starts = h('select', { 'aria-label': 'What starts it' }, h('option', { value: 'db-change' }, 'A change to a table'), h('option', { value: 'schedule' }, 'A time'), h('option', { value: 'webhook' }, 'A call from outside (a webhook)'), nothing ? h('option', { value: '' }, 'Nothing: I or the agent start it') : null);
   const table = h('select', { 'aria-label': 'Which table' }, ...typeNames().map((t) => h('option', { value: t }, t)));
   const act = h('select', { 'aria-label': 'Which change' }, h('option', { value: 'create' }, 'is created'), h('option', { value: 'update' }, 'is changed'), h('option', { value: 'delete' }, 'is deleted'));
   const time = h('input', { type: 'time', value: '08:00', 'aria-label': 'The time it runs' });
@@ -6280,6 +6323,35 @@ function newAutoForm(e) {
   const hook = h('input', { type: 'text', 'aria-label': 'Its address', placeholder: 'new-order', spellcheck: false });
   const scheme = h('select', { 'aria-label': 'How a caller proves it is allowed' }, h('option', { value: 'token' }, 'A key the caller sends'), h('option', { value: 'hmac-sha256' }, 'A signature (Stripe, GitHub…)'));
   const hookAt = h('div', { class: 'hint', style: 'grid-column:2;word-break:break-all' });
+  const rows = [h('div', { class: 'field', 'data-starts': 'db-change' }, h('label', {}, 'When a'), h('div', { style: 'display:flex;gap:6px' }, table, act)),
+    h('div', { class: 'field', 'data-starts': 'schedule' }, h('label', {}, 'At'), h('div', { style: 'display:flex;gap:6px' }, time, days)),
+    h('div', { class: 'field', 'data-starts': 'webhook' }, h('label', {}, 'Its address'), hook, h('label', {}, 'Allowed'), scheme, hookAt)];
+  const hookSlug = () => slugOf(hook.value || fallback());
+  const f = {
+    starts, rows, inputs: [starts, table, act, time, days, hook, scheme], hookSlug,
+    refresh() { for (const row of rows) row.hidden = row.dataset.starts !== starts.value; hookAt.textContent = hookSlug() ? `It answers a POST at ${hookUrl(hookSlug())}` : ''; },
+    problem() {
+      if (starts.value === 'db-change' && !typeNames().length) return 'The app has no data types yet to watch for a change.';
+      if (starts.value === 'webhook' && !hookSlug()) return 'Its address: the end of the URL a caller posts to.';
+      if (starts.value === 'webhook' && autos().triggers.some((t) => t.webhook?.slug === hookSlug())) return `Another webhook already answers at ${hookSlug()}.`;
+      return '';
+    },
+    make() {
+      const [hh, mm] = (time.value || '08:00').split(':').map(Number), dayWords = days.selectedOptions[0].textContent;
+      return starts.value === 'db-change' ? { type: 'db-change', name: `When a ${table.value} ${act.selectedOptions[0].textContent}`, enabled: true, dbChange: { collection: table.value, actions: [act.value] } }
+        : starts.value === 'schedule' ? { type: 'schedule', name: `${days.value === '*' ? 'Every day' : dayWords} at ${hhmm({ hour: hh, minute: mm })}`, enabled: true, schedule: { cron: `${mm} ${hh} * * ${days.value}`, missedFirePolicy: 'run-once-on-start' } }
+          : starts.value === 'webhook' ? { type: 'webhook', name: `When a call arrives at ${hookSlug()}`, enabled: true, webhook: { slug: hookSlug(), scheme: scheme.value } } : undefined;
+    },
+  };
+  return f;
+}
+function newAutoForm(e) {
+  closeMenu();
+  if (!editingUp()) return toast(beNow()?.words ?? 'Asking the backend… try again in a moment. A workflow is made on the backend and in the project together.');
+  const fns = callableFns();
+  const menu = popover(e, 'newitem newpage newauto');
+  const name = h('input', { type: 'text', placeholder: 'The morning check, When an order arrives…', 'aria-label': 'Workflow name' });
+  const sf = startFields(() => name.value);
   // a workflow has at least one step: a function it runs, any other step, or an end to add steps before
   const others = [...(beNow()?.kinds.values() ?? [])].filter((k) => !k.invokesFunction && !['return', 'stop'].includes(k.kind));
   const fn = h('select', { 'aria-label': 'The function it runs first' },
@@ -6287,23 +6359,17 @@ function newAutoForm(e) {
     others.length ? h('optgroup', { label: 'Or start with' }, ...others.map((k) => h('option', { value: `kind:${k.kind}` }, k.displayName))) : null,
     h('option', { value: '' }, 'Nothing yet: I’ll add its steps'));
   fn.value = fns[0] ?? ''; // a function first when the app has one, else an end to add steps before (never a kind picked for them)
-  const tableRow = h('div', { class: 'field', 'data-starts': 'db-change' }, h('label', {}, 'When a'), h('div', { style: 'display:flex;gap:6px' }, table, act));
-  const timeRow = h('div', { class: 'field', 'data-starts': 'schedule' }, h('label', {}, 'At'), h('div', { style: 'display:flex;gap:6px' }, time, days));
-  const hookRow = h('div', { class: 'field', 'data-starts': 'webhook' }, h('label', {}, 'Its address'), hook, h('label', {}, 'Allowed'), scheme, hookAt);
   const note = h('div', { class: 'note' }), create = h('button', { class: 'primary' }, 'Create');
-  const slugOf = (t) => t.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
   const slug = () => slugOf(name.value);
-  const hookSlug = () => slugOf(hook.value || name.value);
   const check = () => {
-    for (const row of [tableRow, timeRow, hookRow]) row.hidden = row.dataset.starts !== starts.value;
-    hookAt.textContent = hookSlug() ? `It answers a POST at ${hookUrl(hookSlug())}` : '';
-    const id = slug(), taken = autos().workflows.some((w) => w.id === id), hookTaken = starts.value === 'webhook' && autos().triggers.some((t) => t.webhook?.slug === hookSlug());
+    sf.refresh();
+    const id = slug(), taken = autos().workflows.some((w) => w.id === id), problem = sf.problem();
     const first = fn.value.startsWith('kind:') ? kindSpec(fn.value.slice(5))?.displayName : fn.value.replace(/^Cloud Functions\//, '');
-    if (starts.value === 'db-change' && !typeNames().length) note.textContent = 'The app has no data types yet to watch for a change.';
-    else note.textContent = !id ? 'Its name, as the list shows it.' : taken ? `There is already a workflow called ${id}.` : hookTaken ? `Another webhook already answers at ${hookSlug()}.` : fn.value ? `It starts with ${first}; add its other steps on the canvas.` : 'It starts with one step that ends it: add its steps before that one.';
-    create.disabled = !id || taken || hookTaken || (starts.value === 'db-change' && !typeNames().length) || (starts.value === 'webhook' && !hookSlug());
+    const noTypes = sf.starts.value === 'db-change' && !typeNames().length;
+    note.textContent = noTypes ? problem : !id ? 'Its name, as the list shows it.' : taken ? `There is already a workflow called ${id}.` : problem ? problem : fn.value ? `It starts with ${first}; add its other steps on the canvas.` : 'It starts with one step that ends it: add its steps before that one.';
+    create.disabled = !id || taken || !!problem;
   };
-  for (const el of [name, hook, starts, table, fn]) el.addEventListener(el === name || el === hook ? 'input' : 'change', check);
+  for (const el of [name, ...sf.inputs, fn]) el.addEventListener(el.tagName === 'INPUT' && el.type === 'text' ? 'input' : 'change', check);
   name.onkeydown = (ev) => { if (ev.key === 'Enter' && !create.disabled) create.click(); else if (ev.key === 'Escape') closeMenu(); };
   create.onclick = async () => {
     const id = slug(); if (!id) return;
@@ -6312,16 +6378,36 @@ function newAutoForm(e) {
     try { if (fn.value.startsWith('kind:')) firstStep = newAutoStep({ steps: [] }, fn.value.slice(5)); else if (fn.value) firstStep = { id: 'first', kind: 'call-function', ref: fn.value }; }
     catch (err) { return toast(err.message); }
     const wf = { id, name: name.value.trim(), entry: firstStep.id, concurrency: 1, steps: [firstStep] };
-    const [hh, mm] = (time.value || '08:00').split(':').map(Number), dayWords = days.selectedOptions[0].textContent;
-    const trigger = starts.value === 'db-change' ? { type: 'db-change', name: `When a ${table.value} ${act.selectedOptions[0].textContent}`, enabled: true, dbChange: { collection: table.value, actions: [act.value] } }
-      : starts.value === 'schedule' ? { type: 'schedule', name: `${days.value === '*' ? 'Every day' : dayWords} at ${hhmm({ hour: hh, minute: mm })}`, enabled: true, schedule: { cron: `${mm} ${hh} * * ${days.value}`, missedFirePolicy: 'run-once-on-start' } }
-      : starts.value === 'webhook' ? { type: 'webhook', name: `When a call arrives at ${hookSlug()}`, enabled: true, webhook: { slug: hookSlug(), scheme: scheme.value } } : undefined;
+    const trigger = sf.make();
     const j = await saveAutoWf(wf, `${wf.name} made${BOTH}`, trigger ? { trigger } : {});
     if (j) { openAuto({ kind: 'workflow', id }); if (j.hook) hookMade(e, j.hook); }
   };
-  menu.append(h('div', { class: 'h' }, 'New workflow on the backend'), h('div', { class: 'field' }, h('label', {}, 'Name'), name), h('div', { class: 'field' }, h('label', {}, 'Starts on'), starts), tableRow, timeRow, hookRow,
+  menu.append(h('div', { class: 'h' }, 'New workflow on the backend'), h('div', { class: 'field' }, h('label', {}, 'Name'), name), h('div', { class: 'field' }, h('label', {}, 'Starts on'), sf.starts), ...sf.rows,
     h('div', { class: 'field' }, h('label', {}, 'First step'), fn), note, h('div', { class: 'foot' }, h('button', { onclick: () => closeMenu() }, 'Cancel'), create));
   document.body.append(menu); name.focus(); check();
+  dismissOnOutside(menu);
+}
+/** P132 BWF-010: what starts a workflow, given from its first card (or added as a second way): written as New writes one,
+    the workflow saved unchanged with the new trigger, on the backend and in the project together. */
+function addTriggerForm(e, w) {
+  closeMenu();
+  if (!w) return;
+  if (!editingUp()) return toast(beNow()?.words ?? 'Asking the backend… try again in a moment. What starts it is made on the backend and in the project together.');
+  const menu = popover(e, 'newitem newpage newauto addtrigger');
+  const sf = startFields(() => w.name || w.id, { nothing: false });
+  const note = h('div', { class: 'note' }), add = h('button', { class: 'primary', 'data-act': 'maketrigger' }, 'Add it');
+  const check = () => { sf.refresh(); const p = sf.problem(); note.textContent = p || 'It starts the workflow from its first step.'; add.disabled = !!p; };
+  for (const el of sf.inputs) el.addEventListener(el.tagName === 'INPUT' && el.type === 'text' ? 'input' : 'change', check);
+  add.onclick = async () => {
+    const trigger = sf.make(); if (!trigger) return;
+    closeMenu();
+    const j = await saveAutoWf(structuredClone(w), `${trigger.name} starts it now${BOTH}`, { trigger });
+    if (j?.trigger?.id && selAuto?.kind === 'workflow' && selAuto.id === w.id) { selAutoStep = `trigger:${j.trigger.id}`; renderWorkflow(); }
+    if (j?.hook) hookMade(e, j.hook);
+  };
+  menu.append(h('div', { class: 'h' }, `What starts ${w.name || w.id}`), h('div', { class: 'field' }, h('label', {}, 'Starts on'), sf.starts), ...sf.rows, note,
+    h('div', { class: 'foot' }, h('button', { onclick: () => closeMenu() }, 'Cancel'), add));
+  document.body.append(menu); sf.starts.focus(); check();
   dismissOnOutside(menu);
 }
 /** A webhook just made: where it answers and its key, which the backend shows only this once. */
@@ -6349,7 +6435,7 @@ function confirmPop(e, title, words, yes, then) {
 }
 function deleteAutoWf(e, w) {
   const by = autos().triggers.filter((t) => targetOf(t).kind === 'workflow' && targetOf(t).name === w.id);
-  if (by.length) return toast(`${triggerHead(by[0], beNow()?.triggers.get(by[0].id)?.scheduleWords)} still starts it: open that trigger and delete it first, or it would start nothing.`);
+  if (by.length) return toast(`${triggerHead(by[0], beNow()?.triggers.get(by[0].id)?.scheduleWords)} still starts it: press its card, the first on the canvas, and delete it first, or it would start nothing.`);
   confirmPop(e, `Delete “${w.name || w.id}”?`, 'It is taken off the backend and out of the project. Its past runs stay in the backend’s history.', 'Delete it', async () => {
     const j = await saveAutoWf(undefined, `${w.name || w.id} deleted${BOTH}`, { remove: w.id });
     if (j) { selAuto = null; selAutoStep = null; renderWorkflow(); }
