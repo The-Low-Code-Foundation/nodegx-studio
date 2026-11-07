@@ -15,8 +15,8 @@
 # Apple secrets: an ad-hoc build is what Gatekeeper stops after a download, and that is not something to release.
 #
 # Beta S5: macOS is two legs, one per processor, each built on its own hardware so its --smoke opens the very app it
-# keeps — Apple silicon on macos-14, Intel on macos-15-intel (macos-13 is retired; macos-15-intel is GitHub's last
-# x86_64 macOS image). The arch is passed to electron-builder explicitly, never taken from the runner,
+# keeps — Apple silicon on macos-15, Intel on macos-15-intel. GitHub retired macos-14 (arm64 and Intel) on
+# 2026-11-02 (actions/runner-images#15226), after v0.1.0 was built on it, so the arm64 leg moved too. The arch is passed to electron-builder explicitly, never taken from the runner,
 # and ${arch} in build.artifactName keeps the two names apart: NodeGX-Studio-mac-arm64.dmg, NodeGX-Studio-mac-x64.dmg.
 name: package
 
@@ -31,7 +31,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - os: macos-15
             arch: arm64
             app: dist/mac-arm64/NodeGX Studio.app
             bin: dist/mac-arm64/NodeGX Studio.app/Contents/MacOS/NodeGX Studio
