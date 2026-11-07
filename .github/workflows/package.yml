@@ -10,9 +10,14 @@
 # template — and fails unless both report ready.
 #
 # P125-CCN006-NODOWNLOAD: a version tag (v0.1.0, matching package.json) also makes a DRAFT GitHub Release holding the
-# four installers, which a person publishes. nodegx.io/studio/ links them by name through releases/latest/download/,
-# so the names carry no version (package.json build.artifactName). On a tag the macOS leg refuses to build without the
+# installers, which a person publishes. nodegx.io/studio/ links them by name through releases/latest/download/,
+# so the names carry no version (package.json build.artifactName). On a tag the macOS legs refuse to build without the
 # Apple secrets: an ad-hoc build is what Gatekeeper stops after a download, and that is not something to release.
+#
+# Beta S5: macOS is two legs, one per processor, each built on its own hardware so its --smoke opens the very app it
+# keeps — Apple silicon on macos-14, Intel on macos-15-intel (macos-13 is retired; macos-15-intel is GitHub's last
+# x86_64 macOS image). The arch is passed to electron-builder explicitly, never taken from the runner,
+# and ${arch} in build.artifactName keeps the two names apart: NodeGX-Studio-mac-arm64.dmg, NodeGX-Studio-mac-x64.dmg.
 name: package
 
 on:
@@ -27,7 +32,13 @@ jobs:
       matrix:
         include:
           - os: macos-14
+            arch: arm64
+            app: dist/mac-arm64/NodeGX Studio.app
             bin: dist/mac-arm64/NodeGX Studio.app/Contents/MacOS/NodeGX Studio
+          - os: macos-15-intel
+            arch: x64
+            app: dist/mac/NodeGX Studio.app # electron-builder gives x64, its default arch, no suffix
+            bin: dist/mac/NodeGX Studio.app/Contents/MacOS/NodeGX Studio
           - os: windows-latest
             bin: dist/win-unpacked/NodeGX Studio.exe
           - os: ubuntu-latest
@@ -58,13 +69,16 @@ jobs:
           if [ "$GITHUB_REF_TYPE" = tag ] && { [ -z "${CSC_LINK:-}" ] || [ -z "${APPLE_ID:-}" ]; }; then
             echo "::error::a release needs the macOS build signed and notarised: this repository cannot see the Apple secrets"; exit 1
           fi
-          if [ -n "${CSC_LINK:-}" ]; then npm run dist:signed; else echo "no signing secrets: an ad-hoc build"; npm run dist; fi
+          if [ -n "${CSC_LINK:-}" ]; then npm run dist:signed -- --${{ matrix.arch }}; else echo "no signing secrets: an ad-hoc build"; npm run dist -- --${{ matrix.arch }}; fi
+          ls -l dist/NodeGX-Studio-mac-${{ matrix.arch }}.dmg dist/NodeGX-Studio-mac-${{ matrix.arch }}.zip
+          lipo -archs "${{ matrix.bin }}" | tee /dev/stderr | grep -qx '${{ matrix.arch == 'x64' && 'x86_64' || 'arm64' }}'
           if [ -n "${CSC_LINK:-}" ] && [ -n "${APPLE_ID:-}" ]; then
-            spctl -a -vv -t exec "dist/mac-arm64/NodeGX Studio.app" 2>&1 | tee /dev/stderr | grep -q 'source=Notarized Developer ID'
-            xcrun stapler validate "dist/mac-arm64/NodeGX Studio.app"
+            spctl -a -vv -t exec "${{ matrix.app }}" 2>&1 | tee /dev/stderr | grep -q 'source=Notarized Developer ID'
+            xcrun stapler validate "${{ matrix.app }}"
           fi
       - name: the Claude Desktop extension, for Apple silicon and Intel Macs (P128-S3B-MCPBNORELEASE)
-        if: runner.os == 'macOS'
+        # one leg makes both: the same names from two legs would overwrite each other in the release's merged download
+        if: runner.os == 'macOS' && matrix.arch == 'arm64'
         run: |
           npm run mcpb
           npm run mcpb -- --node darwin-x64
@@ -107,7 +121,7 @@ jobs:
         with:
           path: out
           merge-multiple: true
-      - name: a draft release with the four installers and the Desktop extension (a person publishes it)
+      - name: a draft release with the installers and the Desktop extension (a person publishes it)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -115,9 +129,9 @@ jobs:
           [ "$GITHUB_REF_NAME" = "$want" ] || { echo "::error::tag $GITHUB_REF_NAME but package.json says $want"; exit 1; }
           # the extension twice: under a name without the server's version (what nodegx.io links, so a release never
           # breaks the link) and with it (which server a person installed)
-          files=(NodeGX-Studio-mac-arm64.dmg NodeGX-Studio-mac-arm64.zip NodeGX-Studio-win-x64.exe NodeGX-Studio-linux-x86_64.AppImage nodegx-darwin-arm64.mcpb nodegx-darwin-x64.mcpb)
+          files=(NodeGX-Studio-mac-arm64.dmg NodeGX-Studio-mac-arm64.zip NodeGX-Studio-mac-x64.dmg NodeGX-Studio-mac-x64.zip NodeGX-Studio-win-x64.exe NodeGX-Studio-linux-x86_64.AppImage nodegx-darwin-arm64.mcpb nodegx-darwin-x64.mcpb)
           for f in "${files[@]}"; do [ -f "out/$f" ] || { echo "::error::$f is missing"; ls out; exit 1; }; done
           for f in out/nodegx-[0-9]*-darwin-*.mcpb; do [ -f "$f" ] && files+=("${f#out/}"); done
           gh release create "$GITHUB_REF_NAME" --draft --title "NodeGX Studio ${GITHUB_REF_NAME#v}" \
-            --notes "macOS (Apple silicon, signed and notarised), Windows (unsigned: SmartScreen asks once), Linux (AppImage). The Claude Desktop extension: nodegx-darwin-arm64.mcpb (Apple silicon), nodegx-darwin-x64.mcpb (Intel)." \
+            --notes "macOS: NodeGX-Studio-mac-arm64.dmg (Apple silicon) and NodeGX-Studio-mac-x64.dmg (Intel), both signed and notarised. Windows (unsigned: SmartScreen asks once), Linux (AppImage). The Claude Desktop extension: nodegx-darwin-arm64.mcpb (Apple silicon), nodegx-darwin-x64.mcpb (Intel)." \
             "${files[@]/#/out/}"
