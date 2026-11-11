@@ -406,16 +406,17 @@ try {
     'a write whose answer takes 3 s: the recording says it is waiting for the answer, does not stop before it, and holds the list drawing the task after it', { heldWrites, midway, slowCreate, slowDrawn: slowDrawn && { t: slowDrawn.t, sub: slowDrawn.sub.slice(0, 80) }, len3 });
 
   // ---- a run that leaves the page: Sign out on Todo (the Header's click, then Todo's card that logs out and goes to
-  // Sign in) lands on Sign in, whose Did Mount runs. Studio stays on Todo (it follows the app only after a rebuild), and
-  // Sign in's card is a run of its own, not "a signal no workflow on this page starts"
+  // Sign in) lands on Sign in, whose Did Mount runs. Studio follows the app to Sign in (P123-STU-NAVNOTFOLLOWED,
+  // 8503534: until 2026-11-03 it stayed on Todo and this asked for that), and Sign in's card is a run of its own, not
+  // "a signal no workflow on this page starts"
   const signMount = files('Pages/Sign in').nodes.find((n) => n.type === 'Page')?.id;
   const already = files('Pages/Sign in').nodes.find((n) => n.label === 'Already signed in?')?.id;
   await b.clickSel('#recbtn'); await wait(300);
   const signedOut = await b.evaluate(`(() => { const btn = [...${W}.document.querySelectorAll('button')].find(e => e.textContent.trim() === 'Sign out' && e.offsetParent); if (!btn) return false; btn.click(); return true; })()`);
   await b.until(`/^Record/.test(document.getElementById('recbtn').textContent)`, 20000);
   const left = JSON.parse(await b.evaluate(`JSON.stringify({ studio: document.getElementById('pagepick').value, app: ${W}.Noodl.Navigation._noodlRuntime.context.rootComponent.nodeScope.getNodesWithTypeRecursive('Router')[0]._internal.currentPage?.component, mount: __ob.timeline.rows.find((r) => r.link?.card?.node === ${JSON.stringify(signMount)} && r.link.card.port === 'didMount') ?? null, minor: __ob.timeline.rows.filter((r) => r.minor && r.link === null && (r.text.includes('Already signed in?'))).length, runs: __ob.timeline.rows.filter((r) => r.lane === 'workflow' && !r.minor).map((r) => r.text + ' | ' + r.sub) })`));
-  ok(signedOut && left.studio === 'Pages/Todo' && left.app === '/Pages/Sign in' && left.mount && left.mount.link.card.component === 'Pages/Sign in' && /, on Sign in · /.test(left.mount.sub) && left.mount.steps?.some((x) => x.node === already) && left.minor === 0,
-    "a recording that leaves the page: Studio still shows Todo, and Sign in's Did Mount is a run of its own card (\"…, on Sign in\"), its step the branch it reaches", { signedOut, ...left, mount: left.mount && { text: left.mount.text, sub: left.mount.sub, link: left.mount.link } });
+  ok(signedOut && left.studio === 'Pages/Sign in' && left.app === '/Pages/Sign in' && left.mount && left.mount.link.card.component === 'Pages/Sign in' && /^When Sign in: Did Mount · /.test(left.mount.sub) && left.mount.steps?.some((x) => x.node === already) && left.minor === 0,
+    "a recording that leaves the page: Studio follows the app to Sign in, and Sign in's Did Mount is a run of its own card (\"When Sign in: Did Mount\"), its step the branch it reaches", { signedOut, ...left, mount: left.mount && { text: left.mount.text, sub: left.mount.sub, link: left.mount.link, steps: left.mount.steps } });
   if (left.mount) {
     n0 = await shows();
     await b.evaluate(`document.querySelector('#tlrows .tlrow[data-link=${JSON.stringify(`card:${signMount}.didMount`)}]').click()`);
