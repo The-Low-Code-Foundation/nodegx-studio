@@ -35,7 +35,7 @@
     "vendor": "node scripts/vendor.mjs",
     "mcpb": "node scripts/mcpb.mjs",
     "check:vendor": "node scripts/vendor.mjs --check",
-    "check": "node scripts/vendor.mjs --check && node editor/rules-check.mjs && node editor/phrases-check.mjs && node editor/sentence-check.mjs && node editor/pagedata-check.mjs && node editor/reusable-check.mjs && node editor/check.mjs && node editor/data-check.mjs && node editor/shapes-check.mjs && node editor/timeline-check.mjs && node editor/hosted-check.mjs && node editor/fngraph-check.mjs && node editor/functions-check.mjs && node editor/wiring-check.mjs && node editor/automations-check.mjs && node editor/automations-drive.mjs && node import/check.mjs && node import/dictionary-check.mjs && node app/blank-check.mjs && node app/check.mjs && node app/publish-check.mjs && node app/unbuilt-check.mjs && node editor/layouttips-check.mjs",
+    "check": "node scripts/vendor.mjs --check && node lib/patient-fetch-check.mjs && node editor/rules-check.mjs && node editor/phrases-check.mjs && node editor/sentence-check.mjs && node editor/pagedata-check.mjs && node editor/reusable-check.mjs && node editor/check.mjs && node editor/data-check.mjs && node editor/shapes-check.mjs && node editor/timeline-check.mjs && node editor/hosted-check.mjs && node editor/fngraph-check.mjs && node editor/functions-check.mjs && node editor/wiring-check.mjs && node editor/automations-check.mjs && node editor/automations-drive.mjs && node import/check.mjs && node import/dictionary-check.mjs && node app/blank-check.mjs && node app/check.mjs && node app/publish-check.mjs && node app/unbuilt-check.mjs && node editor/layouttips-check.mjs",
     "check:editor": "node editor/check.mjs",
     "check:pagedata": "node editor/pagedata-check.mjs",
     "check:timeline": "node editor/timeline-check.mjs",
@@ -60,7 +60,8 @@
     "package": "electron-builder --dir --publish never -c.mac.identity=-",
     "dist": "electron-builder --publish never -c.mac.identity=-",
     "dist:signed": "electron-builder --publish never",
-    "check:blank": "node app/blank-check.mjs"
+    "check:blank": "node app/blank-check.mjs",
+    "check:patientfetch": "node lib/patient-fetch-check.mjs"
   },
   "dependencies": {
     "@nodegx/backend-kit": "0.1.0",

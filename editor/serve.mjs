@@ -74,6 +74,12 @@ import { createRequire } from 'node:module';
 import { TYPES, phrasesFor } from './phrases.mjs';
 import { CLOUD, scriptTableNames } from './fngraph.mjs';
 import { AUTOMATIONS_FILE, atTime, readAutomations, sampleRun, testRefusal } from './automations.mjs';
+import { patientFetch } from '../lib/patient-fetch.mjs';
+
+// NodeGX P123-GH-ADMINRATE: Studio asks a local backend as its admin for all of Data, Privacy and the Backend tab, and
+// past the backend's 300-a-minute limit every one of those calls (here and in lib/) waits the backend's Retry-After and
+// asks again, instead of handing the person "Rate limit exceeded … Retry in 1s." with no way on.
+globalThis.fetch = patientFetch(globalThis.fetch);
 
 const here = dirname(fileURLToPath(import.meta.url));
 const flag = (name) => {
