@@ -1,17 +1,17 @@
 {
   "nodegx": {
     "repository": "https://github.com/The-Low-Code-Foundation/NodeGX",
-    "commit": "13b6fa32d59c51686823f383b2ece0f8f35b59c9",
-    "committed": "2026-11-02T00:36:59+01:00",
-    "subject": "docs(p125 surfacesunsaid): the round re-run on a dist with CCN-009/010 + PREVIEWCUT: the surfaces said, no limit invented"
+    "commit": "d86840be90d7a81fc6417a38f302387ae8e1698a",
+    "committed": "2026-11-07T23:04:54+01:00",
+    "subject": "docs(board): Beta sprint R1 — the npm half published (seven packages, shasums equal the graded tarballs), S1 met on the registry route; left: the site deploys, Studio 0.1.1, the STUDIO_VERSION flip"
   },
-  "built": "2026-11-01T23:37:19.648Z",
+  "built": "2026-11-11T13:47:57.219Z",
   "esbuild": "0.25.12",
   "npm": {
     "@nodegx/backend-kit": "0.1.0",
     "@nodegx/backend-map": "0.1.7",
-    "@nodegx/mcp": "0.2.9",
-    "@nodegx/preview": "0.2.8"
+    "@nodegx/mcp": "0.2.10",
+    "@nodegx/preview": "0.2.9"
   },
   "sources": 239,
   "files": {

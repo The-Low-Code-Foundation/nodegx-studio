@@ -1,6 +1,6 @@
 {
   "name": "@nodegx/studio",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A Design / Workflow / Data editor for NodeGX apps, on your own machine. Imports apps built on the Bubble™ platform.",
   "license": "GPL-3.0-only",
   "main": "app/main.cjs",
@@ -65,8 +65,8 @@
   "dependencies": {
     "@nodegx/backend-kit": "0.1.0",
     "@nodegx/backend-map": "0.1.7",
-    "@nodegx/mcp": "0.2.9",
-    "@nodegx/preview": "0.2.8"
+    "@nodegx/mcp": "0.2.10",
+    "@nodegx/preview": "0.2.9"
   },
   "devDependencies": {
     "electron": "43.2.0",
